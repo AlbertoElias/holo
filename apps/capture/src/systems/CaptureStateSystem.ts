@@ -24,7 +24,7 @@ export class CaptureStateSystem extends createSystem({ capture: { required: [Cap
     entity.setValue(CaptureSimulation, 'steps', frame.steps);
     entity.setValue(CaptureSimulation, 'elapsedSec', frame.elapsedSec);
     entity.setValue(CaptureSimulation, 'clockMode', c.clockMode());
-    entity.setValue(CaptureSimulation, 'appMode', frame.arSpectator ? 'ar' : resolveAppMode(c));
+    entity.setValue(CaptureSimulation, 'appMode', frame.arCameraAuthor ? 'ar' : resolveAppMode(c));
     entity.setValue(CaptureSimulation, 'xrSession', c.xrEntry.sessionMode);
 
     const character = c.motor.getSnapshot();

@@ -9,8 +9,10 @@ const INITIAL_WORLD_DISTANCE_METERS = 2.2;
 const RECENTER_FRAMES = 36;
 
 /**
- * AR spectator: a transparent background and the recorded world placed at
- * true scale in front of the viewer, on the real floor.
+ * AR: a transparent background over the passthrough. For a phone camera
+ * author, the recorded world is also placed at true scale in front of the
+ * viewer, on the real floor; a headset in passthrough stands in the set as in
+ * VR, so the set stays where it is.
  */
 export class ArSpectator {
   private recenterFramesRemaining = 0;
@@ -27,10 +29,10 @@ export class ArSpectator {
     private readonly embodyOffset: number
   ) {}
 
-  onEntered(): void {
+  onEntered(placeSet: boolean): void {
     this.scene.background = null;
-    this.recenterFramesRemaining = RECENTER_FRAMES;
-    this.placeInFrontOfViewer();
+    this.recenterFramesRemaining = placeSet ? RECENTER_FRAMES : 0;
+    if (placeSet) this.placeInFrontOfViewer();
   }
 
   onExited(): void {

@@ -84,14 +84,16 @@ const CHECK_TIMEOUT_MS: Partial<Record<CheckName, number>> = {
   object: 300000,
   body: 360000,
   face: 360000,
-  avatars: 900000
+  // Seven skeletons × hand, body, passthrough walk, object and face replays: 854 s alone locally before the
+  // passthrough walks, 917 s with them (2026-11-17); the headroom covers a loaded machine.
+  avatars: 1500000
 };
 
 // Wall time in seconds per check on a 4-vCPU CI runner, two checks at a time
-// (CI run 40472119472; avatars is not in CI and keeps its older estimate).
+// (CI run 40472119472; avatars is not in CI: its 920 is local wall time, 2026-11-17).
 // Parallel runs start the longest first and XR_SHARD balances on it. Refresh
 // it on purpose from the xr-checks-shard-*.json timing artifacts.
-const CHECK_COST: Partial<Record<CheckName, number>> = { 'ar-record': 289, face: 100, body: 56, marks: 44, hands: 29, height: 26, ui: 21, terrain: 21, locomotion: 10, 'loco-states': 10, 'held-states': 20, 'desktop-motion': 9, recording: 5, take: 15, bodycam: 40, 'mock-vr': 4, avatars: 120 };
+const CHECK_COST: Partial<Record<CheckName, number>> = { 'ar-record': 289, face: 100, body: 56, marks: 44, hands: 29, height: 26, ui: 21, terrain: 21, locomotion: 10, 'loco-states': 10, 'held-states': 20, 'desktop-motion': 9, recording: 5, take: 15, bodycam: 40, 'mock-vr': 4, avatars: 920 };
 
 const isCheckName = (name: string): name is CheckName => name in CHECKS;
 const args = process.argv.slice(2);

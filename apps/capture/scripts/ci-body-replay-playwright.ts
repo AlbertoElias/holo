@@ -48,6 +48,10 @@ declare global {
 // jitter), strictly: a miss fails the check as `motion <metric>`. The avatars
 // check runs this script on each supported skeleton, so every skeleton is
 // held to the same targets.
+//
+// BODY_REPLAY_SESSION=ar replays the same fixtures in a Quest passthrough
+// session (immersive-ar, not handheld): the headset embodies the performer
+// over the real room exactly as in VR, graded against the ar-quest row.
 
 const STEP_MS = 1000 / 30;
 const baseUrl = process.env.BASE_URL ?? 'https://127.0.0.1:5174/';
@@ -56,6 +60,8 @@ const artifactDir = process.env.XR_TEST_ARTIFACT_DIR ?? 'output/ci-body-replay';
 const videoFrameDir = process.env.BODY_REPLAY_VIDEO === '1' ? path.join(artifactDir, 'video-frames') : null;
 const captureScreenshots = process.env.XR_CAPTURE_SUCCESS_SCREENSHOTS === '1';
 const faultMode = process.env.BODY_REPLAY_FAULTS === '1';
+const passthrough = process.env.BODY_REPLAY_SESSION === 'ar';
+const motionSource = passthrough ? 'ar-quest' : 'vr-body';
 
 // Fault → fixture to replay and the metrics of which at least one must fail.
 const FAULTS = {
@@ -110,8 +116,11 @@ async function replay(fileName: string, { faults = [], video = false, screenshot
     window.__setBodyFaults(list);
   }, faults);
   await waitForIwerRuntime(page);
-  await enterIwerSessionFromButton(page, '#VRButton', {
-    readyCheck: () => JSON.parse(window.render_game_to_text()).mode === 'vr'
+  // A passthrough headset is a performer, so the app reports mode 'vr' there too.
+  await enterIwerSessionFromButton(page, passthrough ? '#ARButton' : '#VRButton', {
+    readyCheck: passthrough
+      ? "(() => { const s = JSON.parse(window.render_game_to_text()); return s.mode === 'vr' && s.ar.sessionMode === 'ar' && !s.ar.cameraAuthor; })()"
+      : () => JSON.parse(window.render_game_to_text()).mode === 'vr'
   });
   if (video) {
     await page.evaluate(() => {
@@ -195,7 +204,7 @@ async function replay(fileName: string, { faults = [], video = false, screenshot
   const motionFrames = framesFromBodySamples(frames, 'avatar');
   const motion = measureMotion(motionFrames);
   const withoutInput = !motionFrames.some((f) => f.input?.leftWrist || f.input?.rightWrist);
-  const motionMisses = judgeMotion(motion, 'vr-body', { withoutInput }).filter((verdict) => !verdict.pass);
+  const motionMisses = judgeMotion(motion, motionSource, { withoutInput }).filter((verdict) => !verdict.pass);
   const report: BodyReport = {
     ...analysis,
     failures: [...analysis.failures, ...motionMisses.map((v) => `motion ${v.metric}: ${v.value === null ? 'not measured' : +v.value.toFixed(3)} (target ${v.target.max !== undefined ? `≤ ${v.target.max}` : `≥ ${v.target.min}`})`)],

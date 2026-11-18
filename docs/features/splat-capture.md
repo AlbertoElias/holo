@@ -38,10 +38,10 @@ touch on an iPhone), Quest VR, Quest passthrough AR and phone AR.
   records the phone's camera path, voice and held marks, in the set's frame.
   Android Chrome only; Safari has no WebXR AR, so an iPhone records on the
   flat page.
-- **Quest passthrough AR does not record.** Any non-handheld AR session is a
-  spectator (`frame.arSpectator`): `ArSpectator` stands the set 2.2 m ahead
-  on the floor and recording returns early. Recording a performer in
-  passthrough is a feature that does not exist yet (Q1).
+- **Quest passthrough AR records a performer** (since 2026-11-17, gap 5 of
+  `natural-avatar-motion.md`). Any non-handheld AR session embodies the
+  performer as VR does, with the set at the real floor's origin; only a
+  handheld phone is a camera author. Q1's prerequisite for 2d is met.
 - **Much of capture leans on the set being meshes**, through
   `avatarRig.worldModel`, and three's `Raycaster` ignores `visible`, so a
   hidden set still answers casts: the desktop floor collider; foot IK
@@ -183,10 +183,11 @@ options are kept for the record.
     the device with the strongest e2e harness.
   - **2b, Quest VR:** the same take in a headset, IWER then the Quest, where
     Spark in a WebXR session (and its reported hang) is first proven; Quest
-    passthrough shows the place as a spectator; the IWSDK AR and VR viewers
+    passthrough shows the place (a performer there since 2026-11-17, so as in
+    VR); the IWSDK AR and VR viewers
     and the R3F `ARView` render the stored place (the floor disc until then).
   - **2c, phone AR (Android):** a camera take in the scan, held marks on it.
-  - **2d, Quest passthrough:** after the passthrough performer feature (Q1).
+  - **2d, Quest passthrough:** after the passthrough performer feature (Q1; landed 2026-11-17).
   - **2e:** *here* alignment (Q2), and "My places" (Q3).
 - (B) Quest VR first: the most immersive, but every check needs IWER or the
   headset, and the contract would be proven where it is hardest to inspect.
@@ -492,7 +493,7 @@ XR viewers moved to 2b; numeric acceptance criteria.
 IWER proves session, input, export and render behaviour, not splat frame
 rate, LoD feel, heat or memory. Physical checks: the Quest 3 in VR (2b:
 frame times with the user's scan, comfort walking in it, the MSAA and
-readback hang) and in passthrough (spectator, 2b; recording, 2d); an
+readback hang) and in passthrough (2b; recording, 2d); an
 Android phone in Chrome (2c: 30 fps, marks on the scan, export time); the
 iPhone for the flat page with a scan (2a) and for viewing the stored place
 in the feed. Until each is run it stays under Unverified in `HANDOFF.md`.

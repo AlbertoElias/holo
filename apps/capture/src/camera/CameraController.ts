@@ -66,10 +66,10 @@ export class CameraController {
 
   constructor(private readonly deps: CameraControllerDeps) {}
 
-  onXrEntered(isAr: boolean): void {
+  onXrEntered(cameraAuthor: boolean): void {
     this.xrInitialHeadCaptured = false;
-    if (isAr) {
-      // AR spectator: cameraRig at origin so the WebXR device pose is used directly.
+    if (cameraAuthor) {
+      // Phone AR camera author: cameraRig at origin so the WebXR device pose is used directly.
       this.deps.cameraRig.position.set(0, 0, 0);
       this.deps.cameraRig.rotation.set(0, 0, 0);
       this.deps.xrCamera.position.set(0, 0, 0);
@@ -94,7 +94,7 @@ export class CameraController {
   // artificial locomotion), so the camera must not dolly it to the avatar.
   update(isVrActive: boolean, isXrPresenting: boolean, deltaSec: number, isAr = false, rigWorldLocked = false): void {
     this.applyCanvasFlip(this.mirrorView && !isVrActive && !isAr && !isXrPresenting && this.desktopViewMode === 'third');
-    // AR spectator: the WebXR device controls the camera directly.
+    // Phone AR camera author: the WebXR device controls the camera directly.
     // Keep cameraRig at origin so the XR pose maps 1:1 to world space.
     if (isAr) {
       this.deps.cameraRig.position.set(0, 0, 0);

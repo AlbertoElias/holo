@@ -24,7 +24,7 @@ export class RoomScaleSystem extends createSystem() {
 
   update(deltaSec: number): void {
     const c = this.capture;
-    if (c.frame.arSpectator) return;
+    if (c.frame.arCameraAuthor) return;
     if (!c.frame.bodyTracking) {
       c.body.displacement.set(0, 0, 0);
       return;

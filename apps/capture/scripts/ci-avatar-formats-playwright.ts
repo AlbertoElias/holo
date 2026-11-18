@@ -23,7 +23,7 @@ import { buildCandidates, generateAvatarFixtures, readGlb, resolveGltf, type Fix
 // every generated fixture loads with ?avatar=, reports its humanoid binding
 // and crouches like the shipped avatar; three export with HOLOIM_humanoid.
 // The geometric fixtures (bone axes, bind pose, facing, scale) then run the
-// hand and body replays unchanged, two rigs run the object grip, and one
+// hand and body replays unchanged (and one walk in Quest passthrough), two rigs run the object grip, and one
 // non-RPM rig with eye bones (VRM 0.x, facing -Z) runs the face check.
 const baseUrl = process.env.BASE_URL ?? 'https://127.0.0.1:5174/';
 const artifactDir = process.env.XR_TEST_ARTIFACT_DIR ?? 'output/ci-avatars';
@@ -365,6 +365,12 @@ for (const fixture of fixtures.filter((f) => !bindOnly && REPLAYED.includes(f.na
     XR_AVATAR_URL: avatar, XR_TEST_ARTIFACT_DIR: path.join(dir, 'body'), XR_REPLAY_ONLY: process.env.XR_AVATAR_BODY_REPLAYS ?? 'walk-forward,crouch'
   })) {
     fail(fixture.name, 'body replay failed');
+  }
+  // Quest passthrough embodies the performer like VR: one walk graded against the ar-quest row.
+  if (!await runChild(`${fixture.name}: passthrough body replay (walk-forward)`, 'scripts/ci-body-replay-playwright.ts', {
+    XR_AVATAR_URL: avatar, XR_TEST_ARTIFACT_DIR: path.join(dir, 'body-ar'), XR_REPLAY_ONLY: 'walk-forward', BODY_REPLAY_SESSION: 'ar'
+  })) {
+    fail(fixture.name, 'passthrough body replay failed');
   }
 }
 for (const fixture of fixtures.filter((f) => !bindOnly && OBJECT_ON.includes(f.name))) {

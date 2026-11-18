@@ -27,7 +27,7 @@ export class VrLocomotionSystem extends createSystem() {
 
   update(deltaSec: number): void {
     const c = this.capture;
-    if (c.frame.arSpectator) return;
+    if (c.frame.arCameraAuthor) return;
     const loco = c.locomotion;
     if (!c.frame.vrActive) {
       // The session ended: a stick held at the end is let go, so nothing walks on in the next one.

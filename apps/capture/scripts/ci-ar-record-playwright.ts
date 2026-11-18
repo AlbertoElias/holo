@@ -55,7 +55,8 @@ import {
 //                     positive control: Recenter works again once nothing is busy.
 //   ended-at-start    the XR session ends while Record waits on the microphone: no take, no live tracks.
 //   empty-set         the default (empty) scene: Record is refused, nothing downloads.
-//   quest-passthrough Quest 3 (world-space) AR: spectator; Record refused (twice), no take.
+//   quest-passthrough Quest 3 (world-space) AR: a performer as in VR (no camera author, no dock); the avatar
+//                     follows a 1 m head walk and Record makes one avatar take.
 //   interaction-undefined  a phone whose interactionMode is undefined: treated like a headset.
 //   marks-a/marks-b   slice 4, at a 412x915 portrait phone, the same prepared set and bracket, under two
 //                     placements: Record by the dock, then with the head still: a one-frame tap on the bracket
@@ -131,7 +132,6 @@ const FAKE_MIC_ARGS = ['--use-fake-ui-for-media-stream', '--use-fake-device-for-
 const SILENT_NOTICE = 'No microphone: this take is silent.';
 const SETTLE_NOTICE = 'Wait for the set to settle before recording.';
 const RECENTER_NOTICE = 'Stop recording to recenter.';
-const HEADSET_NOTICE = 'Only a phone records in AR; a headset in passthrough watches.';
 const EMPTY_NOTICE = 'Nothing to record: no part of the set is near.';
 
 const PHASES = [
@@ -160,7 +160,6 @@ type ArState = {
   sessionMode: string | null;
   worldPosition: { x: number; y: number; z: number };
   cameraAuthor: boolean;
-  spectator: boolean;
   performerHidden: boolean;
   placementSettled: boolean;
   interactionMode: string | null;
@@ -358,6 +357,8 @@ async function openPage(run: Run, options: OpenOptions): Promise<Page> {
     url.searchParams.set('sceneScale', '1');
   }
   if (options.object) url.searchParams.set('object', OBJECT_URL);
+  // XR_AVATAR_URL: the same phases on another avatar (the avatars check sets it per fixture).
+  if (process.env.XR_AVATAR_URL) url.searchParams.set('avatar', process.env.XR_AVATAR_URL);
   for (const trayUrl of options.trayUrls ?? []) url.searchParams.append('tray', trayUrl);
   await page.goto(url.href, { waitUntil: 'networkidle' });
   await waitForPageFunctions(page, ['advanceTime', 'render_game_to_text', '__toggleRecording', '__arWorldFrame', '__setManualClock']);
@@ -1154,34 +1155,70 @@ async function emptySetPhase(run: Run): Promise<PhaseReport> {
   }
 }
 
-/** A non-phone AR session (Quest passthrough, or a device with no interactionMode): Record is refused. */
+/** The JSON chunk of a GLB: its animations' channel count and the names of the nodes they drive. */
+function glbAnimation(glb: Buffer): { channels: number; nodes: string[] } {
+  const length = glb.readUInt32LE(12);
+  const json = JSON.parse(glb.subarray(20, 20 + length).toString('utf8')) as { nodes?: Array<{ name?: string }>; animations?: Array<{ channels: Array<{ target: { node?: number } }> }> };
+  const channels = (json.animations ?? []).flatMap((animation) => animation.channels);
+  return { channels: channels.length, nodes: [...new Set(channels.map((c) => json.nodes?.[c.target.node ?? -1]?.name ?? ''))] };
+}
+
+/**
+ * A non-phone AR session (Quest passthrough, or a device with no interactionMode) embodies the performer as VR
+ * does: no camera author and no phone dock, the avatar follows the walking head, and Record makes an avatar take.
+ */
 async function headsetPhase(run: Run, phase: 'quest-passthrough' | 'interaction-undefined'): Promise<PhaseReport> {
   const report: PhaseReport = { phase, failures: [], notes: {}, ar: {}, takes: [] };
   const page = await openPage(run, { phone: phase === 'interaction-undefined' ? 'interaction-unset' : false, scene: true });
   try {
+    // A headset take in a test build posts its raw input to the dev sink; keep it out of fixtures/input-recordings.
+    await page.route('**/__holoim/input-recordings*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{"path":"(discarded by the ar-record check)"}' }));
     await enterAr(page);
     const ar = await arOf(page);
     report.ar.entered = ar;
-    if (ar.cameraAuthor) report.failures.push('camera author mode on');
-    if (!ar.spectator) report.failures.push('not a spectator in AR');
-    if (ar.performerHidden) report.failures.push('performer hidden in a spectator session');
-    if (ar.micHeld) report.failures.push('microphone held open in a spectator session');
+    if (ar.cameraAuthor) report.failures.push('camera author mode on in a headset session');
+    if (ar.performerHidden) report.failures.push('performer hidden in a headset session');
+    if (ar.micHeld) report.failures.push('microphone held open before Record');
     report.failures.push(...(await noDockFailures(page)));
     const expectedMode = phase === 'quest-passthrough' ? 'world-space' : null;
     if (ar.interactionMode !== expectedMode) report.failures.push(`interactionMode ${ar.interactionMode}, expected ${expectedMode}`);
-    for (const press of ['first', 'second'] as const) {
-      await toggle(page);
-      for (let i = 0; i < 8; i += 1) {
-        await advance(page, STEP_MS);
-        await pageTimePasses(page, 150);
-      }
-      const after = await arOf(page);
-      report.ar[`${press}Record`] = after;
-      if (after.recordingState !== 'idle') report.failures.push(`${press} Record: recordingState ${after.recordingState}, expected idle`);
-      if (press === 'first' && after.notice !== HEADSET_NOTICE) report.failures.push(`${press} Record: notice ${JSON.stringify(after.notice)}, expected ${JSON.stringify(HEADSET_NOTICE)}`);
-      if (after.takeKind === 'camera' || after.cameraSamples > 0) report.failures.push(`${press} Record: a camera take began (kind ${after.takeKind}, ${after.cameraSamples} samples)`);
+
+    await startRecording(page);
+    report.ar.recording = await arOf(page);
+    if (report.ar.recording.takeKind === 'camera') report.failures.push('a camera take began in a headset session');
+    // Walk the head 1 m forward (the phone phases' walk): the solved body must follow it.
+    const frame = toMatrix(await worldFrame(page));
+    const hips: Array<[number, number, number]> = [];
+    for (let i = 0; i < WALK_STEPS; i += 1) {
+      const room = setToRoom(frame, walkPose(i));
+      await setHeadPose(page, room.position, room.quaternion);
+      await nextXrFrame(page);
+      await advance(page, STEP_MS);
+      const body = await page.evaluate(() => window.__sampleBody());
+      if (i === 0 && !body.active) report.failures.push('the body solver is not driving the avatar');
+      hips.push(body.bones.hips as [number, number, number]);
     }
-    await expectDownloadCount(page, report, 0);
+    const moved = Math.hypot(hips.at(-1)![0] - hips[0]![0], hips.at(-1)![2] - hips[0]![2]);
+    report.notes.hipsTravelM = round(moved);
+    if (moved < 0.5) report.failures.push(`the avatar's hips moved ${round(moved)} m while the head walked 1 m`);
+    await showCanvasOnly(page).catch(() => undefined);
+    await screenshot(page, `${phase}-performer.png`, report);
+
+    const download = expectDownload(page, 30000);
+    await toggle(page);
+    const saved = await advanceUntilDownload(page, download);
+    report.ar.stopped = await arOf(page);
+    if (!saved) {
+      report.failures.push('no GLB downloaded after Stop');
+      return report;
+    }
+    const glb = await saveDownload(saved, phase, report);
+    if (!saved.suggestedFilename().startsWith('avatar-recording-')) report.failures.push(`filename ${saved.suggestedFilename()} is not an avatar-recording-*`);
+    const animation = glbAnimation(await readFile(glb));
+    report.notes.takeChannels = animation.channels;
+    if (animation.channels < 20) report.failures.push(`the take animates ${animation.channels} channels, expected the avatar's skeleton`);
+    if (!animation.nodes.some((name) => /hips/i.test(name))) report.failures.push(`no channel drives the hips (${animation.nodes.slice(0, 8).join(', ')}...)`);
+    await expectDownloadCount(page, report, 1);
     return report;
   } finally {
     await page.context().close();

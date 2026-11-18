@@ -20,7 +20,7 @@ export class BodyPoseSystem extends createSystem() {
     const c = this.capture;
     const frame = c.frame;
     const character = frame.character;
-    if (frame.arSpectator || !character) return;
+    if (frame.arCameraAuthor || !character) return;
     const { body, input, avatar } = c;
     c.animator.update({
       deltaSec,

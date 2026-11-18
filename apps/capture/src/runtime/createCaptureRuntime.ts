@@ -126,7 +126,8 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
   const body = new BodyTracking(avatar, config.avatarForwardOffset);
   const heightFit = new HeightFit({
     ui,
-    isRealVrPresenting: () => tracking.isXrPresenting() && xrEntry.sessionMode === 'vr' && !tracking.mock.enabled,
+    // VR, or a headset in passthrough AR (it embodies the performer as VR does); never a phone camera author.
+    isRealVrPresenting: () => tracking.isXrPresenting() && xrEntry.sessionMode !== 'none' && !capture.frame.arCameraAuthor && !tracking.mock.enabled,
     isRecordingSizeLocked: () => recording.isSizeLocked
   });
   const recording = new RecordingSession({
@@ -142,7 +143,6 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       history.capped = false;
     },
     isCameraAuthor: () => capture.frame.arCameraAuthor,
-    recordRefusal: () => (capture.frame.arSpectator && !capture.frame.arCameraAuthor ? 'Only a phone records in AR; a headset in passthrough watches.' : null),
     isPlacementSettled: () => capture.ar.isSettled(),
     setFrame: stage.worldGroup,
     deliverTake: postFlow.deliverTake,
@@ -208,7 +208,8 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
   });
   // Recenter, from the AR control or the phone dock: refused while a take is starting, recording or exporting.
   const recenterAr = (): void => {
-    if (xrEntry.sessionMode !== 'ar' || !tracking.isXrPresenting()) return;
+    // Only a camera author's set is placed in the room; a headset in passthrough stands on it as in VR.
+    if (!capture.frame.arCameraAuthor) return;
     if (recording.isTakeBusy()) {
       ui.flashNotice('Stop recording to recenter.');
       return;
@@ -301,7 +302,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       getBodyYaw: () => body.solver.bodyYaw,
       getHud: () => vrChrome.root
     }),
-    frame: { deltaSec: 0, elapsedSec: 0, steps: 0, xrPresenting: false, arSpectator: false, arCameraAuthor: false, vrActive: false, bodyTracking: false, character: null },
+    frame: { deltaSec: 0, elapsedSec: 0, steps: 0, xrPresenting: false, arCameraAuthor: false, vrActive: false, bodyTracking: false, character: null },
     clockMode: () => loop.clockMode
   };
   world.globals.capture = capture;

@@ -95,12 +95,13 @@ it from the item below instead of duplicating its status here.
   size and frame rate on a phone. Slice 1, the viewer's render end, is in
   [`docs/features/archive/splat-place.md`](docs/features/archive/splat-place.md). Owned by
   [`docs/features/splat-capture.md`](docs/features/splat-capture.md).
-- [ ] Record a performer in Quest passthrough AR: today any non-handheld AR
-  session is a spectator (`frame.arSpectator`), so a headset in passthrough
-  records nothing. Needs its own brief (the body, the floor and the
-  microphone in passthrough). Split capture's slice 2d, the place in
-  passthrough, waits on it (the user, 2026-11-10, Q1 of
-  [`docs/features/splat-capture.md`](docs/features/splat-capture.md)).
+- [x] Record a performer in Quest passthrough AR (2026-11-17, gap 5 of
+  [`docs/features/natural-avatar-motion.md`](docs/features/natural-avatar-motion.md),
+  the user's call): a non-handheld AR session now embodies the performer
+  exactly as VR does (same body solver, chrome and Record, the set at the
+  real floor's origin) and records avatar takes; only a handheld phone is a
+  camera author. Split capture's slice 2d, the place in passthrough, is
+  unblocked (Q1 of [`docs/features/splat-capture.md`](docs/features/splat-capture.md)).
 - [x] Only one `verify:pr` runs at a time across worktrees (user, 2026-11-10;
   delivered 2026-11-12 on `infra/ci-reliability`). `scripts/verify-lock.ts`
   holds a loopback listener on port 39417 (the kernel frees it however the
@@ -456,8 +457,9 @@ session, not a child of the review.
 - [ ] Props in AR capture, with real-floor and WebXR `plane-detection`
   colliders: cut from
   [`docs/features/archive/object-physics.md`](docs/features/archive/object-physics.md) by its
-  design review on 2026-10-27, because a headset in passthrough and a phone AR
-  camera take are spectators that never handle props. Start once AR recording
+  design review on 2026-10-27, because a phone AR camera take never handles
+  props (a headset in passthrough is a performer since 2026-11-17, but props
+  there are unverified against the real floor). Start once AR recording
   carries objects.
 - [ ] Select one `IDEA-###` from [`docs/product/IDEAS.md`](docs/product/IDEAS.md) for a bounded PRD;
   do not begin implementation until the user outcome
