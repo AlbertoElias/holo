@@ -396,14 +396,14 @@ export interface AttendSchedule {
 /** A listening nod: down by `deg` and back over `cycle` seconds, the second of two smaller. */
 export const ATTEND_NOD = { cycle: 0.5, second: 0.65 } as const;
 const NOD_FIRST: Range = [1.2, 2.6];
-const NOD_EVERY: Range = [2.2, 4.5];
+const NOD_EVERY: Range = [1.6, 3.2];
 const NOD_DEG: Range = [6, 10];
 const NOD_DOUBLE = 0.4;
 /** Hands together: how long to ease, hold and stay apart (seconds), and where (per arm length, from the hips, in the body frame). */
 export const ATTEND_ARMS = { ease: 0.8, height: 0.28, forward: 0.3, apart: 0.07 } as const;
 const ARMS_FIRST: Range = [1.0, 2.5];
 const ARMS_HOLD: Range = [2.5, 5.0];
-const ARMS_APART: Range = [1.5, 3.5];
+const ARMS_APART: Range = [0.6, 1.4];
 /** Facing someone: the other's head within this many degrees of straight ahead gives the whole layer; past the second, none. */
 export const ATTEND_FACING = { full: 35, none: 55 } as const;
 

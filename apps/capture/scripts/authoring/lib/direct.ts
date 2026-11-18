@@ -59,19 +59,19 @@ const GRIP_OPEN = 0.25;
 /** A put's object settles from where the hand let it go to upright on its place over this long. */
 const PUT_SETTLE = 0.2;
 /** Gestures (`beats.ts` GESTURES): degrees and metres at strength 1. */
-const NOD_DEG = 12;
-const SHAKE = { yawDeg: 20, dipDeg: 5, fade: 0.35 } as const;
+const NOD_DEG = 26;
+const SHAKE = { yawDeg: 40, dipDeg: 6, fade: 0.25 } as const;
 const SHRUG = { shoulderDeg: 14, headRollDeg: 5 } as const;
 const WAVE_SWING = 0.055;
-const RUB_ROLL_DEG = 9;
+const RUB_ROLL_DEG = 15;
 /** Where a gesture's hand goes, from its shoulder per arm length (out, up, forward in the body frame). */
-const GESTURE_HAND = { shrug: [0.38, -0.72, 0.38], wave: [0.38, 0.12, 0.25], rub: [0.1, -0.58, 0.48] } as const;
+const GESTURE_HAND = { shrug: [0.38, -0.72, 0.38], wave: [0.38, 0.12, 0.25], rub: [0.22, -0.3, 0.62] } as const;
 /** Hand to chest: the palm this far in front of the chest bone (metres), toward the other side. */
 const CHEST_HAND = { forward: 0.13, across: 0.04, down: 0.02 } as const;
 /** States: head pitch down and roll, spine lean forward and shoulders up (degrees); how much of the head turns to an `at`. */
 const STATE_POSE = {
   noticing: { pitch: -4, roll: 0, spine: -2.5, shoulders: 3, head: 0.7 },
-  concerned: { pitch: 10, roll: 6, spine: 5, shoulders: 4, head: 0.5 }
+  concerned: { pitch: 14, roll: 8, spine: 7, shoulders: 6, head: 0.5 }
 } as const;
 /** A shrug's face: brows up, the lower lip pushed up. */
 const SHRUG_FACE: Partial<Record<FaceChannel, number>> = { browInnerUp: 0.4, browOuterUpLeft: 0.45, browOuterUpRight: 0.45, mouthShrugLower: 0.5, mouthPressLeft: 0.2, mouthPressRight: 0.2 };
@@ -1168,7 +1168,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
         add(shoulder.clone().add(bodyVec(out * (x * L + swing), y * L, z * L)), e, toward, 1);
       } else if (d.name === 'rub') {
         const [x, y, z] = GESTURE_HAND.rub;
-        add(shoulder.add(bodyVec(out * x * L, y * L, z * L)), e, bodyUp(a).lerp(inward, 0.5).normalize(), 0.4);
+        add(shoulder.add(bodyVec(out * x * L, y * L, z * L)), e, bodyUp(a).lerp(inward, 0.15).normalize(), 0.1);
       } else if (d.name === 'hand-to-chest') {
         const chest = (a.humanoid.bone('upperChest') ?? a.humanoid.bone('chest') ?? a.humanoid.bone('spine')!).getWorldPosition(new THREE.Vector3());
         add(chest.add(bodyVec(-out * CHEST_HAND.across, -CHEST_HAND.down, CHEST_HAND.forward)), e, bodyVec(0, 0, -1), 0.4);
@@ -1423,7 +1423,7 @@ function lookTarget(cast: Cast[], c: Cast, t: number, flat: boolean, by: 'head' 
   let share = 0.6;
   // A rub looks at its hand, a state or a wave with an `at` at that; a directed look, blended after, wins.
   const implied = (d: Direction): { p: THREE.Vector3; share: number } | undefined => {
-    if (d.kind === 'gesture' && d.name === 'rub') { const p = c.seen.get(`${d.side ?? 'right'}Hand`); return p ? { p: p.clone(), share: 0.55 } : undefined; }
+    if (d.kind === 'gesture' && d.name === 'rub') { const p = c.seen.get(`${d.side ?? 'right'}Hand`); return p ? { p: p.clone(), share: 0.8 } : undefined; }
     if (d.kind === 'gesture' && d.name === 'wave' && d.at !== undefined) return { p: pointOf(cast, c.spec, d.at), share: 0.6 };
     if (d.kind === 'state' && d.at !== undefined) return { p: pointOf(cast, c.spec, d.at), share: STATE_POSE[d.name].head };
     return undefined;
