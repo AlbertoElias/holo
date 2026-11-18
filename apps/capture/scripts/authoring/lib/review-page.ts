@@ -14,9 +14,16 @@
  *   the card's own camera, in CSS pixels of the card canvas; per recorded
  *   object, its box the same way.
  * - `close(i, view)`: renders performer `i` with the viewer's renderer and
- *   scene from a camera placed by `view`, returns a JPEG data URL.
+ *   scene from a camera placed by `view`, returns a JPEG data URL (and,
+ *   with `view.faceBox`, the face's box: brow line to chin when `init` had
+ *   regions, else every vertex a face shape moves).
  * - `bodies()`: world head and hips per performer and each recorded
  *   object's world box, for planning `view`.
+ * - `regions(i)`: when `init` was given the audition's face regions
+ *   (`lib/face-geometry.ts`), performer `i`'s brow line top, chin bottom
+ *   and each eye's opening projected with the card's camera, CSS px.
+ *   `close(i, { …view, regions: true })` returns the same in output pixels
+ *   with the OKLab lightness of the render at each brow vertex.
  */
 import { tokens } from '@holoim/design-tokens';
 
@@ -29,7 +36,7 @@ export const REVIEW_PAGE = String.raw`
     leftHand: /left_?hand$/i, rightHand: /right_?hand$/i,
     leftFoot: /left_?foot$/i, rightFoot: /right_?foot$/i
   };
-  const state = { probe: null, performers: [], objects: [] };
+  const state = { probe: null, performers: [], objects: [], regions: null };
   const V = () => new (state.probe.camera.position.constructor)();
   const vertex = (mesh, i, out) => {
     mesh.getVertexPosition ? mesh.getVertexPosition(i, out) : out.fromBufferAttribute(mesh.geometry.attributes.position, i);
@@ -47,9 +54,49 @@ export const REVIEW_PAGE = String.raw`
       for (let i = 0; i < n; i += step) each(vertex(m, i, v));
     });
   };
+  // The audition's regions name meshes as the avatar file does; three makes repeated names unique.
+  const meshOf = (p, set) => {
+    let found = null;
+    p.wrapper.traverse((o) => {
+      if (!found && o.isMesh && o.name.replace(/_\d+$/, '') === set.mesh && o.geometry.attributes.position.count === set.count) found = o;
+    });
+    if (!found) throw new Error('no mesh ' + set.mesh + ' with ' + set.count + ' vertices in ' + p.name);
+    return found;
+  };
+  const surface = (p, s, out) => {
+    const m = meshOf(p, s), a = V(), b = V(), c = V();
+    vertex(m, s.tri[0], a); vertex(m, s.tri[1], b); vertex(m, s.tri[2], c);
+    return out.copy(a).multiplyScalar(1 - s.uv[0] - s.uv[1]).addScaledVector(b, s.uv[0]).addScaledVector(c, s.uv[1]);
+  };
+  // Region points, each projected by project(world) → [x, y].
+  const regionPoints = (i, project) => {
+    const p = state.performers[i], r = state.regions;
+    if (!r) throw new Error('init was given no regions');
+    const v = V();
+    const each = (sets) => sets.flatMap((s) => { const m = meshOf(p, s); return s.idx.map((k) => project(vertex(m, k, v))); });
+    const browLine = each(r.browLine), chin = each(r.chin);
+    const eyes = {};
+    for (const [side, e] of Object.entries(r.eyes || {})) eyes[side] = { top: project(surface(p, e.top, v)), bottom: project(surface(p, e.bottom, v)) };
+    return {
+      browTop: browLine.length ? Math.min(...browLine.map((q) => q[1])) : null,
+      chinBottom: chin.length ? Math.max(...chin.map((q) => q[1])) : null,
+      eyes,
+      brow: each(r.brow)
+    };
+  };
+  // sRGB bytes to OKLab lightness, 0..1.
+  const lightness = (r8, g8, b8) => {
+    const lin = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+    const r = lin(r8), g = lin(g8), b = lin(b8);
+    const l = Math.cbrt(0.4122214708 * r + 0.5363335811 * g + 0.0514459719 * b);
+    const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+    const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+    return 0.2104542553 * l + 0.793617785 * m - 0.0040720958 * s;
+  };
   const frames = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
   window.__review = {
-    init(url) {
+    init(url, regions) {
+      state.regions = regions || null;
       const entry = Object.entries(window.__feedProbes).find(([k]) => k.endsWith(url));
       if (!entry) throw new Error('no probe for ' + url);
       state.probe = entry[1];
@@ -129,6 +176,15 @@ export const REVIEW_PAGE = String.raw`
         })
       };
     },
+    regions(i) {
+      const cam = state.probe.camera;
+      cam.updateMatrixWorld();
+      state.probe.model.updateWorldMatrix(true, true);
+      const rect = state.probe.renderer.domElement.getBoundingClientRect();
+      const out = regionPoints(i, (w) => { const s = w.clone().project(cam); return [((s.x + 1) / 2) * rect.width, ((1 - s.y) / 2) * rect.height]; });
+      delete out.brow;
+      return { ...out, pixelRatio: state.probe.renderer.getPixelRatio() };
+    },
     bodies() {
       state.probe.model.updateWorldMatrix(true, true);
       const cam = state.probe.camera.position;
@@ -185,7 +241,12 @@ export const REVIEW_PAGE = String.raw`
         ctx.fillText(view.label, px / 2, px * 1.15);
       }
       let face = null;
-      if (view.faceBox) {
+      if (view.faceBox && state.regions) {
+        // With the audition's regions, the face box runs from the brow line to the chin, as on the card.
+        const q = regionPoints(i, (w) => { const s = w.clone().project(cam); return [((s.x + 1) / 2) * view.width, ((1 - s.y) / 2) * view.height]; });
+        const xs = q.brow.map((b) => b[0]);
+        if (xs.length && q.browTop !== null && q.chinBottom !== null) face = [Math.min(...xs), q.browTop, Math.max(...xs), q.chinBottom];
+      } else if (view.faceBox) {
         const p = state.performers[i];
         const v = V();
         for (const f of p.face) for (const k of f.idx) {
@@ -194,10 +255,19 @@ export const REVIEW_PAGE = String.raw`
           face = face ? [Math.min(face[0], x), Math.min(face[1], y), Math.max(face[2], x), Math.max(face[3], y)] : [x, y, x, y];
         }
       }
+      let regions = null;
+      if (view.regions) {
+        regions = regionPoints(i, (w) => { const s = w.clone().project(cam); return [((s.x + 1) / 2) * view.width, ((1 - s.y) / 2) * view.height]; });
+        const px = ctx.getImageData(0, 0, view.width, view.height).data;
+        regions.browL = regions.brow.map(([x, y]) => {
+          const k = (Math.min(view.height - 1, Math.max(0, Math.round(y))) * view.width + Math.min(view.width - 1, Math.max(0, Math.round(x)))) * 4;
+          return Math.round(lightness(px[k], px[k + 1], px[k + 2]) * 1000) / 1000;
+        });
+      }
       r.setSize(size.x, size.y, false);
       r.setPixelRatio(prev.pr);
       r.setClearColor(colour || 0x000000, prev.alpha);
-      return { image: out.toDataURL('image/jpeg', 0.9), face };
+      return { image: out.toDataURL('image/jpeg', 0.9), face, regions };
     }
   };
 })();
