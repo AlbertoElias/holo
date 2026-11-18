@@ -2,12 +2,15 @@
  * Directs a take from a beat sheet: solves it on each performer's avatar and
  * writes a hologram GLB (plus the sheet beside it and an acting report).
  *
- *   node --conditions=development --import tsx scripts/authoring/direct.ts <sheet.json> [--out take.glb] [--style flat|directed] [--against earlier.glb]
+ *   node --conditions=development --import tsx scripts/authoring/direct.ts <sheet.json> [--out take.glb] [--style flat|directed] [--against earlier.glb] [--avatar spec]
  *
  * A performer's `avatar` is a path relative to the sheet, `stock` (the shipped
  * avatar) or `fixture:<name>` (one of the generated avatar-format fixtures).
  * An object's `source` is a GLB path relative to the sheet or
  * `polyhaven:<id>` (packed by the API, cached under output/authoring/objects).
+ * A beat's `say` and the sheet's `sounds` are written as `KHR_audio`, each
+ * padded to the clip and looping with it; `--avatar <spec>` recasts every
+ * performer onto one avatar (a one-performer sheet on another body).
  * The build fails when a held object or a put lands off its mark: a grip more
  * than 1 cm or 5° off, a put more than 1 cm off or 3° from upright, or an aim
  * more than 10° off its target.
@@ -25,6 +28,7 @@ import { solveTake, type ObjectReport, type SolvedTake } from './lib/direct.ts';
 import { describeAttend, describeLife } from './lib/life.ts';
 import { loadSources, type LoadedSource } from './lib/props.ts';
 import { parseGlb } from './lib/gltf-read.ts';
+import { addAudio, padAndEncode, prepareEffects, prepareLine, probeSeconds, type AudioSource, type Effect, type Line } from './lib/sound.ts';
 import { writeTake } from './lib/write-glb.ts';
 
 const OUTPUT = fileURLToPath(new URL('../../output/authoring/', import.meta.url));
@@ -40,12 +44,12 @@ export async function resolveAvatar(spec: string, sheetFile: string): Promise<st
   return resolve(dirname(sheetFile), spec);
 }
 
-export async function loadSheet(sheetFile: string): Promise<{ sheet: BeatSheet; avatars: Map<string, LoadedAvatar>; sources: Map<string, LoadedSource> }> {
+export async function loadSheet(sheetFile: string, avatarOverride?: string): Promise<{ sheet: BeatSheet; avatars: Map<string, LoadedAvatar>; sources: Map<string, LoadedSource> }> {
   const sheet = JSON.parse(await readFile(sheetFile, 'utf8')) as BeatSheet;
   const problems = validateSheet(sheet);
   if (problems.length) throw new Error(`${basename(sheetFile)}:\n  ${problems.join('\n  ')}`);
   const avatars = new Map<string, LoadedAvatar>();
-  for (const p of sheet.performers) avatars.set(p.id, await loadAvatar(await resolveAvatar(p.avatar, sheetFile)));
+  for (const p of sheet.performers) avatars.set(p.id, await loadAvatar(await resolveAvatar(avatarOverride ?? p.avatar, avatarOverride ? join(process.cwd(), 'x') : sheetFile)));
   const sources = await loadSources(sheet.objects ?? {}, sheetFile, join(OUTPUT, 'objects'));
   return { sheet, avatars, sources };
 }
@@ -77,14 +81,24 @@ export interface BuildResult {
   readonly channels: number;
   readonly seconds: number;
   readonly bytes: number;
+  readonly lines: readonly Line[];
+  readonly effects: readonly Effect[];
+  /** Each audio source as written: its onset and the decoded length of the padded file (s). */
+  readonly audio: readonly { name: string; onset: number; seconds: number; padded: number; bytes: number; file: string }[];
 }
 
-export async function build(sheetFile: string, out?: string, style?: BeatSheet['style']): Promise<BuildResult> {
+export async function build(sheetFile: string, out?: string, style?: BeatSheet['style'], avatarOverride?: string): Promise<BuildResult> {
   const started = performance.now();
-  const loaded = await loadSheet(sheetFile);
+  const loaded = await loadSheet(sheetFile, avatarOverride);
   const sheet: BeatSheet = style ? { ...loaded.sheet, style } : loaded.sheet;
   const { avatars, sources } = loaded;
-  const take = solveTake(sheet, avatars, sources);
+  const soundCache = join(OUTPUT, 'sound');
+  const lines: Line[] = [];
+  for (const b of sheet.beats) if (b.say) lines.push(await prepareLine(b, sheetFile, soundCache));
+  const speech = new Map<string, { at: number; lips: Line['lips'] }[]>();
+  for (const l of lines) speech.set(l.performer, [...(speech.get(l.performer) ?? []), { at: l.at, lips: l.lips }]);
+  const take = solveTake(sheet, avatars, sources, speech);
+  const effects = await prepareEffects(take, sheetFile, soundCache);
   const written = await writeTake(take, {
     author: 'HoloIM direction',
     title: sheet.title,
@@ -92,11 +106,36 @@ export async function build(sheetFile: string, out?: string, style?: BeatSheet['
   });
   const file = out ?? join(OUTPUT, `${basename(sheetFile, '.json')}.glb`);
   await mkdir(dirname(file), { recursive: true });
-  await writeFile(file, written.glb);
+  // Sound: every source padded to the clip and looping with it (brief, decision 0).
+  const clip = take.times[take.times.length - 1] ?? sheet.duration;
+  const audioDir = `${file.replace(/\.glb$/, '')}.audio`;
+  if (lines.length || effects.length) await mkdir(audioDir, { recursive: true });
+  const sourcesOut: AudioSource[] = [];
+  const audio: BuildResult['audio'][number][] = [];
+  const nodeOf = (on: string): number => {
+    const [who, part] = on.split('.');
+    const n = part === 'head' ? written.heads.find((h) => h.id === who)?.node : written.objects.find((o) => o.id === on)?.node;
+    if (n === undefined) throw new Error(`no node for a sound on ${on}`);
+    return n;
+  };
+  for (const [name, src, onset, on, gain, kind] of [
+    ...lines.map((l) => [`say-${l.beat}`, l, l.at, `${l.performer}.head`, l.gain, 'voice'] as const),
+    ...effects.map((e) => [`sound-${e.id}`, e, e.at, e.on, e.gain, 'effect'] as const)
+  ]) {
+    const padded = join(audioDir, `${name}.webm`);
+    const bytes = padAndEncode(src.file, onset, clip, padded);
+    const seconds = probeSeconds(padded);
+    if (Math.abs(seconds - clip) > 1 / take.fps) throw new Error(`${name}: the padded source is ${seconds.toFixed(3)} s, not the clip's ${clip.toFixed(3)} s`);
+    if (onset + src.seconds > clip + 1e-3) console.warn(`  ${name} runs ${(onset + src.seconds - clip).toFixed(2)} s past the take's end: cut there`);
+    sourcesOut.push({ name, bytes, node: nodeOf(on), gain, kind });
+    audio.push({ name, onset, seconds: src.seconds, padded: seconds, bytes: bytes.byteLength, file: padded });
+  }
+  const glb = addAudio(written.glb, sourcesOut, [...lines.map((l) => l.credit), ...effects.map((e) => e.credit)]);
+  await writeFile(file, glb);
   // The sheet as solved (with any --style override), beside the take.
   await writeFile(`${file.replace(/\.glb$/, '')}.beats.json`, `${JSON.stringify(sheet, null, 2)}\n`);
   if (take.props.length) await writeFile(`${file.replace(/\.glb$/, '')}.objects.json`, `${JSON.stringify(take.objects, null, 2)}\n`);
-  return { out: file, take, channels: written.channels, seconds: (performance.now() - started) / 1000, bytes: written.glb.byteLength };
+  return { out: file, take, channels: written.channels, seconds: (performance.now() - started) / 1000, bytes: glb.byteLength, lines, effects, audio };
 }
 
 async function main(): Promise<void> {
@@ -108,13 +147,15 @@ async function main(): Promise<void> {
   const style = flag('--style') as BeatSheet['style'] | undefined;
   if (style && style !== 'flat' && style !== 'directed') { console.error('--style is flat or directed'); process.exit(2); }
   const against = flag('--against');
+  const avatar = flag('--avatar');
   const sheetFile = args[0];
   if (!sheetFile) {
-    console.error('usage: direct.ts <sheet.json> [--out take.glb] [--style flat|directed] [--against earlier.glb]');
+    console.error('usage: direct.ts <sheet.json> [--out take.glb] [--style flat|directed] [--against earlier.glb] [--avatar spec]');
     process.exit(2);
   }
-  const r = await build(sheetFile, out, style);
+  const r = await build(sheetFile, out, style, avatar);
   console.log(`${basename(r.out)}: ${r.take.tracks.length} performer(s), ${r.take.times.length} frames at ${r.take.fps} fps, ${r.channels} channels, ${(r.bytes / 1e6).toFixed(1)} MB, built in ${r.seconds.toFixed(1)} s`);
+  for (const a of r.audio) console.log(`  ${a.name}: ${a.seconds.toFixed(2)} s from ${a.onset.toFixed(2)} s, padded to ${a.padded.toFixed(3)} s, ${(a.bytes / 1e3).toFixed(0)} KB`);
   for (const t of r.take.tracks) for (const reach of t.reaches) {
     console.log(`  ${t.spec.id} reach ${reach.beat} (${reach.side}): palm ${(reach.targetDistance * 1000).toFixed(1)} mm from target, asked ${(reach.stopShort * 1000).toFixed(0)} mm` +
       (reach.targetDistance - reach.stopShort > 0.02 && reach.outOfReach > 0.01 ? `; out of reach even leaning: move the performers closer or add a step` : ''));

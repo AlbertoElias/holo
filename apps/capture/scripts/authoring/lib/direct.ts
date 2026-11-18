@@ -17,6 +17,7 @@ import { resetPose, type LoadedAvatar } from './avatar.ts';
 import { FACE_MIXES, GESTURES, STATE_FACES, envelope, gestureCycle, holdingsOf, pointObjects, resolveTiming, validateSheet, type BeatSheet, type Direction, type Holding, type ObjectSpec, type PerformerSpec, type Place, type Point, type Resolved, type Side } from './beats.ts';
 import { FINGERS, HAND_SHAPES, blendPose, shapePose, type FingerName, type HandPose } from './hands.ts';
 import { armRestOffset, bodyUp, hangArm, moveBoneWorld, orientHand, plantFeet, restElbowHint, rotateBoneWorld, solveArm, toWorld, turnBody, TURN_SHARE } from './pose.ts';
+import { speakingAt, visemesAt, type LineLips } from './lips.ts';
 import { busy, faceAt, fidgetAt, GLANCE_BLINK_DEG, glanceAt, glanceChest, LIFE_FIDGET, LIFE_SIGH, LIFE_WEIGHT, lifeSchedule, MASK_PAD, MASKED_BY, postureAt, sighAt, weightAt, attendArmsAt, attendGate, attendNodAt, attendSchedule, ATTEND_ARMS, type AttendSchedule, type LifeSchedule } from './life.ts';
 import { buildProp, propWorld, type LoadedSource, type Prop } from './props.ts';
 import { isPlace, measureBody, resolvePlace, type Body, type PlaceFrame } from './stage.ts';
@@ -169,13 +170,18 @@ interface Cast {
   /** Per reach: the most its palm fell short of its goal after leaning (metres). */
   readonly shortfall: Map<Resolved, number>;
   readonly morphing: { node: THREE.Object3D; meshes: THREE.Mesh[] }[];
+  /** The performer's spoken lines (`lips.ts`), in take time. */
+  readonly speech: readonly Speech[];
 }
+
+/** A spoken line's lips, starting at take time `at`. */
+export interface Speech { readonly at: number; readonly lips: LineLips }
 
 const yawQuat = (deg: number) => new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), deg * DEG);
 /** Degrees about +Y that a rotation turns +Z to. */
 const yawOf = (q: THREE.Quaternion): number => { const z = new THREE.Vector3(0, 0, 1).applyQuaternion(q); return Math.atan2(z.x, z.z) / DEG; };
 
-export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources: ReadonlyMap<string, LoadedSource> = new Map()): SolvedTake {
+export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources: ReadonlyMap<string, LoadedSource> = new Map(), speech: ReadonlyMap<string, readonly Speech[]> = new Map()): SolvedTake {
   const problems = validateSheet(sheet);
   if (problems.length) throw new Error(`beat sheet: ${problems.join('; ')}`);
   stage.marks.clear();
@@ -223,7 +229,7 @@ export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, 
       attend: life && spec.attend !== false ? attendSchedule(spec.seed ?? index + 1, sheet.duration + 1) : undefined, dirs, touched: { left: [], right: [] },
       turnDeg: new Map(), stepWorld: new Map(), fixed: { next: 0, yaw: spec.facing }, ankles0,
       feetMid0: ankles0.left.clone().add(ankles0.right).multiplyScalar(0.5),
-      seen: new Map(), seenBefore: new Map(), seenAt: { t: -Infinity, before: -Infinity }, shortfall: new Map(), morphing
+      seen: new Map(), seenBefore: new Map(), seenAt: { t: -Infinity, before: -Infinity }, shortfall: new Map(), morphing, speech: speech.get(spec.id) ?? []
     };
   });
   // A hand someone reaches to keeps still while they do (its fidget would move what they touch).
@@ -1324,9 +1330,16 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
     const e = Math.max(0, env(r, t, flat)) * (d.strength ?? 1);
     for (const [k, v] of Object.entries(shape) as [FaceChannel, number][]) weights[k] = Math.min(1, (weights[k] ?? 0) + v * e);
   }
+  // A spoken line: its visemes over everything, and life's face gives way while it plays.
+  let speaking = 0;
+  for (const sp of c.speech) {
+    const lt = t - sp.at;
+    speaking = Math.max(speaking, speakingAt(sp.lips, lt));
+    for (const [ch, v] of Object.entries(visemesAt(sp.lips, lt)) as [FaceChannel, number][]) weights[ch] = Math.min(1, Math.max(weights[ch] ?? 0, v));
+  }
   if (life) {
     // Life's face (a sigh's mouth and brows, the mouth settling under a weight shift, a brow flash as a glance comes back), under any directed expression.
-    const k = 1 - busy(c.dirs, t, MASKED_BY.face);
+    const k = (1 - busy(c.dirs, t, MASKED_BY.face)) * (1 - speaking);
     if (k > 0) for (const [ch, v] of Object.entries(faceAt(c.events, t, glanceK)) as [FaceChannel, number][]) weights[ch] = Math.min(1, (weights[ch] ?? 0) + v * k);
   }
   const liveSample = life ? c.live.sample(t, dt, 0) : undefined;

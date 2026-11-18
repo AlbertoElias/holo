@@ -40,6 +40,8 @@ export interface WrittenTake {
   readonly channels: number;
   /** Node index of each performer's wrapper. */
   readonly performers: { id: string; node: number; name: string }[];
+  /** Node index of each performer's head bone, where a voice is heard from. */
+  readonly heads: { id: string; node: number }[];
   /** Node index of each object's wrapper. */
   readonly objects: { id: string; node: number }[];
 }
@@ -54,6 +56,7 @@ export async function writeTake(take: SolvedTake, provenance: Provenance): Promi
   const times = doc.createAccessor('time').setType('SCALAR').setArray(new Float32Array(take.times)).setBuffer(buffer);
   let channels = 0;
   const wrappers: { id: string; node: GNode; name: string }[] = [];
+  const heads: { id: string; node: GNode }[] = [];
   let humanBones: Map<string, GNode> | undefined;
 
   for (const [index, track] of take.tracks.entries()) {
@@ -111,6 +114,9 @@ export async function writeTake(take: SolvedTake, provenance: Provenance): Promi
       if (node && moves(w.values, w.targets, EPS_WEIGHT)) add(node, 'weights', w.values);
     }
     if (index === 0) humanBones = humanBoneNodes(track, nodeOf);
+    const headBone = track.avatar.bind.get('head')?.bone;
+    const headNode = headBone ? nodeOf(headBone) : undefined;
+    if (headNode) heads.push({ id: track.spec.id, node: headNode });
   }
 
   const objectNodes: { track: PropTrack; node: GNode }[] = [];
@@ -156,7 +162,7 @@ export async function writeTake(take: SolvedTake, provenance: Provenance): Promi
       json.extensionsUsed = [...new Set([...(json.extensionsUsed ?? []), HUMANOID])];
     }
   });
-  return { glb, channels, performers: wrappers.map((w) => ({ id: w.id, node: nodes.indexOf(w.node), name: w.name })), objects: objectNodes.map((o) => ({ id: o.track.prop.id, node: nodes.indexOf(o.node) })) };
+  return { glb, channels, performers: wrappers.map((w) => ({ id: w.id, node: nodes.indexOf(w.node), name: w.name })), heads: heads.map((h) => ({ id: h.id, node: nodes.indexOf(h.node) })), objects: objectNodes.map((o) => ({ id: o.track.prop.id, node: nodes.indexOf(o.node) })) };
 }
 
 const round3 = (v: number): number => Math.round(v * 1000) / 1000;
