@@ -1120,6 +1120,69 @@ shown muted and without the verse; then the same question after orbiting.
 The goodbye is one fixture for it, not the aim. Slice 1b's review protocol
 is its method.
 
+#### Slice 3 as a command (2026-11-18)
+
+Decided by the agent in the owner's absence on 2026-11-18, for the owner to
+review. All under `apps/capture/scripts/authoring/`; nothing under `src/`.
+
+**What it is.** `six-second-test.ts prepare <sheet.json> [--avatars stock,house-base]`
+builds the sheet twice per avatar, `--style flat` and `--style directed`,
+with every performer on that avatar (the house base is
+`public/gltf/models/house-base.glb`, the sheet's `avatar` field), and runs
+`review.ts` on each take with three additive options: `--until 6` (only
+the first six seconds), `--card-only` (no close views, no video: the card
+framing alone, as the feed shows it) and `--orbit 90` (the same moments again
+from a camera swung 90° about the cast, at the card's distance and field of
+view, in a 360-px crop). Each take then gets a code, a blind folder of
+frames and a reader brief that carries no style, avatar or intent
+(`blind/<code>/`), and the key stays in `manifest.json`. The author (an agent
+session, since the readers are subagents) gives each blind folder to three
+fresh Sonnet readers who see frames only, asks the card question first and
+the orbit question second, then gives each take's three accounts to one
+fresh grader who has the sheet's beat intents but not which take is which.
+`six-second-test.ts score <dir>` reads the answers and grades, and writes
+`report.json` and `report.md`: each take scored against the sheet's intent
+and the pass bar below, per avatar.
+
+**The question.** "What is happening, and what does the person feel?"
+(`what do the people feel` for two). The first six seconds, muted, no
+verse, caption or title. Card framing first, then the orbit.
+
+**Scoring.** The grader marks each beat of the sheet that falls in the first
+six seconds `yes` (the account names it, in any words), `partly` or `no`,
+with the reader's words as evidence. The beat score is the mean over beats
+(yes 1, partly 0.5). Two beats are named in the sheet as the point of the
+piece and graded on their own: for the goodbye, the **hesitation** (she
+reaches to stop him and stops herself) and the **feeling** (she wants him to
+stay, and lets him go sad). The sheet's sidecar `<sheet>.six-second.json` names them
+(`hesitation: [beat ids]`, `feeling: [beat ids]`), so `lib/beats.ts` is not
+touched; without one, the tool refuses.
+
+A reader **names the hesitation** when the mean mark over the hesitation beats
+is at least 0.5 and at least one of them is `yes`; **names the feeling** when
+the mean over the feeling beats is at least 0.5. Both are computed from the
+marks, not judged again. The goodbye's sidecar is `hesitation: r-reach, r-stop`
+and `feeling: r-look, r-after, r-end`.
+
+**The pass bar (fixed before the first run; not changed after it).** For each
+avatar, on the card framing:
+
+1. the directed take's hesitation is named by at least 2 of 3 readers;
+2. the directed take's feeling is named by at least 2 of 3 readers;
+3. the directed take's beat score is at least 0.15 above the flat take's
+   (the flat take "scores lower", with a margin that is not noise);
+4. the directed take's beat score is at least 0.5.
+
+After the orbit, reported and not a pass condition on its own, except:
+5. the directed take's orbit beat score is no more than 0.15 below its card
+   score (orbiting does not destroy the reading).
+
+A take that fails a row fails; the report says which row and what the readers
+said. A pass is not the owner's verdict: the owner watches the directed take
+muted and records theirs in the evidence section. Nothing is loosened to pass.
+The readers are fallible and few (three): a result of 2 of 3 is a reading,
+not a measurement, and the report says so.
+
 ### Slice 4: a person's take as input (joins the phone mandate)
 
 Starts only when the motion owner lands camera driving on `main` behind
@@ -1416,7 +1479,10 @@ is not in a take's undo history; changing the look again is its undo.
   first performer only; see the framing note in slice 1 below.)
 - [ ] The six-second test: fresh critics shown only the muted directed take
   name the hesitation; the flat take scores lower; the owner's verdict is
-  recorded. Orbiting is tested as a second question.
+  recorded. Orbiting is tested as a second question. Tool built and run on
+  `goodbye` (2026-11-18): **the bar is not met**, the directed take does not
+  beat the flat one; see "Slice 3 evidence" below. Stays open for the owner
+  and for a rework of the directed acting.
 - [x] Revising one beat changes only that span in the report, and rebuilds
   in under 30 s. Evidence: slice 1 below.
 - [x] Slice 1b's review loop: a review command writes a pack (H.264 video
@@ -1675,7 +1741,7 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
 - One pipeline check: a directed take on two avatars through upload and
   render, with the stop-short distance and the viewer's anchors read back.
 - `check_usdz_tools.sh` by hand on the two-character piece.
-- The six-second test's critic answers and the owner's verdict.
+- The owner's verdict on the six-second test, and what to change after its FAIL on `goodbye`.
 - Proof video under ignored `output/`.
 
 ### Slice 0 evidence (2026-11-13)
@@ -2635,6 +2701,35 @@ the first, because the mixer looped; the chest joint fell back differently
 on import and recast; the untouched check was circular; edit overlap
 depended on list order; leg length was measured two ways; hold lengths
 were one frame short.
+
+### Slice 3 evidence (2026-11-18, run by the agent in the owner's absence)
+
+`six-second-test.ts prepare sheets/goodbye.json --avatars stock,house-base`,
+twelve fresh Sonnet readers (three per take, frames only, blind codes), four
+fresh Sonnet graders (one per take), then `score`. Report:
+`apps/capture/output/authoring/six-second/goodbye/report.md` (ignored). The bar
+above was fixed before the run and not changed after it.
+
+| avatar | style | beat score, card | hesitation | feeling | beat score, orbit |
+|---|---|---|---|---|---|
+| stock | directed | 0.26 | 1/3 | 0/3 | 0.24 |
+| stock | flat | 0.29 | 3/3 | 0/3 | 0.30 |
+| house-base | directed | 0.42 | 3/3 | 0/3 | 0.38 |
+| house-base | flat | 0.47 | 3/3 | 2/3 | 0.50 |
+
+**Result: FAIL on both avatars.** The directed take is 0.03 (stock) and 0.05
+(house base) *below* the flat one, under the 0.5 floor, and its feeling is named
+by 0 of 3 readers. Orbiting passes (the reading survives the swing, drops of
+0.02 and 0.04), and the house base reads better than the stock avatar in both
+styles. Readers of every take saw a quiet, tender parting with a touch, and
+none saw "she stops herself before touching him" or "he turns away to leave" as
+such: they read one figure reaching and touching a shoulder, then both standing.
+Readers also could not tell which of two near-identical figures is "he"; the
+graders marked by who reached. Three readers per take is a reading, not a
+measurement, and one grader per take is a single judge. Open question for the
+owner: whether the directed acting needs to change, or the sheet's beats
+(restraint and a turn-away) need a staging the card framing can show. The
+result is recorded as measured; the bar was not loosened.
 
 ## Physical-device limits
 

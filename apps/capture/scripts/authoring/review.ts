@@ -79,6 +79,12 @@ export interface ReviewOptions {
   readonly out?: string;
   readonly step?: number;
   readonly fps?: number;
+  /** Only the first `until` seconds of the take. */
+  readonly until?: number;
+  /** The card framing alone: no close views and no video. */
+  readonly cardOnly?: boolean;
+  /** Also render the card's moments from a camera swung this many degrees about the cast (`sheet-orbit-NN.jpg`, `orbit/`). */
+  readonly orbit?: number;
 }
 
 export interface OnScreen {
@@ -219,8 +225,10 @@ export async function review(take: string, options: ReviewOptions = {}): Promise
   const step = options.step ?? 0.2;
   const fps = options.fps ?? 30;
   const frameDir = join(out, 'frames');
+  const orbitDir = join(out, 'orbit');
   await rm(reader, { recursive: true, force: true });
   await rm(frameDir, { recursive: true, force: true });
+  await rm(orbitDir, { recursive: true, force: true });
   await mkdir(join(frameDir, 'card'), { recursive: true });
   await mkdir(reader, { recursive: true });
 
@@ -236,8 +244,9 @@ export async function review(take: string, options: ReviewOptions = {}): Promise
     const { page } = open;
     await page.addScriptTag({ content: REVIEW_PAGE });
     init = await page.evaluate((u) => (window as unknown as { __review: { init(u: string): Init } }).__review.init(u), open.url);
-    const frames = Math.floor(init.duration * fps + 1e-6) + 1;
-    const times = Array.from({ length: frames }, (_, i) => Math.min(init.duration, i / fps));
+    const span = Math.min(init.duration, options.until ?? init.duration);
+    const frames = Math.floor(span * fps + 1e-6) + 1;
+    const times = Array.from({ length: frames }, (_, i) => Math.min(span, i / fps));
     const R = (fn: string, ...a: unknown[]) => page.evaluate(([f, args]) => (window as unknown as { __review: Record<string, (...x: unknown[]) => unknown> }).__review[f as string]!(...(args as unknown[])), [fn, a] as const);
 
     // Pass 1: the card as it plays (its camera follows frame to frame), and where each body is.
@@ -252,7 +261,8 @@ export async function review(take: string, options: ReviewOptions = {}): Promise
 
     const acts = actedOn(sheetData, init.performers.map((x) => x.name), init.objects);
     // Pass 2: a close view per performer, its camera smoothed over a second so it does not hide small movement.
-    for (let p = 0; p < init.performers.length; p += 1) {
+    const closed = options.cardOnly ? 0 : init.performers.length;
+    for (let p = 0; p < closed; p += 1) {
       const dir = join(frameDir, `close-${p}`);
       await mkdir(dir, { recursive: true });
       const plan = bodies.map((b, f) => {
@@ -267,9 +277,27 @@ export async function review(take: string, options: ReviewOptions = {}): Promise
         await dataUrlTo(join(dir, `${String(f).padStart(4, '0')}.jpg`), shot.image);
       }
     }
+    // The card's moments again from a camera swung about the cast: its centre is the mean of every performer's head-to-hips midpoint,
+    // the camera keeps the card's height, distance and field of view, and is turned `orbit` degrees about the vertical through that centre.
+    const orbitFrames = options.orbit === undefined ? [] : Array.from({ length: Math.floor(span / step + 1e-6) + 1 }, (_, k) => Math.min(frames - 1, Math.round(k * step * fps)));
+    if (options.orbit !== undefined) {
+      await mkdir(orbitDir, { recursive: true });
+      const turn = (options.orbit * Math.PI) / 180;
+      for (const f of orbitFrames) {
+        const b = bodies[f]!;
+        const mids = b.performers.map((q) => [(q.head[0] + q.hips[0]) / 2, (q.head[1] + q.hips[1]) / 2, (q.head[2] + q.hips[2]) / 2] as Vec);
+        const centre: Vec = [mids.reduce((a, m) => a + m[0], 0) / mids.length, mids.reduce((a, m) => a + m[1], 0) / mids.length, mids.reduce((a, m) => a + m[2], 0) / mids.length];
+        const dx = b.camera[0] - centre[0]; const dz = b.camera[2] - centre[2];
+        const position: Vec = [centre[0] + dx * Math.cos(turn) + dz * Math.sin(turn), b.camera[1], centre[2] - dx * Math.sin(turn) + dz * Math.cos(turn)];
+        await R('seek', times[f]);
+        const shot = await R('close', 0, { position, target: centre, fov: init.fov, width: PHONE.width * CARD_PIXEL_RATIO, height: PHONE.height * CARD_PIXEL_RATIO, background: BACKGROUND, label: `${times[f]!.toFixed(2)} s` }) as { image: string };
+        await dataUrlTo(join(orbitDir, `${String(f).padStart(4, '0')}.jpg`), shot.image);
+      }
+    }
     await open.close();
 
     // The video: card and close views side by side, at the take's real speed.
+    if (!options.cardOnly) {
     const inputs = ['-framerate', String(fps), '-i', join(frameDir, 'card', '%04d.jpg')];
     const scales = ['[0]scale=-2:1080[c0]'];
     for (let p = 0; p < init.performers.length; p += 1) {
@@ -278,6 +306,7 @@ export async function review(take: string, options: ReviewOptions = {}): Promise
     }
     const stack = init.performers.length ? `;${Array.from({ length: init.performers.length + 1 }, (_, i) => `[c${i}]`).join('')}hstack=inputs=${init.performers.length + 1}[v]` : ';[c0]null[v]';
     ffmpeg([...inputs, '-filter_complex', scales.join(';') + stack, '-map', '[v]', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '20', '-r', String(fps), '-movflags', '+faststart', join(reader, 'review.mp4')]);
+    }
 
     // Frame sheets every `step` s: the card cropped to the cast at true device pixels, and each close view.
     const pr = init.pixelRatio;
@@ -294,7 +323,7 @@ export async function review(take: string, options: ReviewOptions = {}): Promise
       ? [Math.max(0, box[0]! - pad), Math.max(0, box[1]! - pad), Math.min(PHONE.width, box[2]! + pad), Math.min(PHONE.height, box[3]! + pad)].map((v) => Math.round(v * pr))
       : [0, 0, PHONE.width * pr, PHONE.height * pr];
     const cardCrop = [crop[0]!, crop[1]!, crop[2]! - crop[0]!, crop[3]! - crop[1]!];
-    const picks = Array.from({ length: Math.floor(init.duration / step + 1e-6) + 1 }, (_, k) => Math.min(frames - 1, Math.round(k * step * fps)));
+    const picks = Array.from({ length: Math.floor(span / step + 1e-6) + 1 }, (_, k) => Math.min(frames - 1, Math.round(k * step * fps)));
     const browser = await chromium.launch({ headless: true });
     const sheetPage = await browser.newPage();
     await sheetPage.setContent('<html><body></body></html>');
@@ -306,10 +335,17 @@ export async function review(take: string, options: ReviewOptions = {}): Promise
       const n = String(s).padStart(2, '0');
       await sheet(sheetPage, join(reader, `sheet-card-${n}.jpg`), chunk.map((f) => ({ file: join(frameDir, 'card', `${String(f).padStart(4, '0')}.jpg`), label: `${times[f]!.toFixed(2)} s`, crop: cardCrop })),
         cardCrop[2]!, cardCrop[3]!, `card framing, true size on a phone (${PHONE.width}×${PHONE.height} CSS px at ${pr}×), ${span}`);
-      for (let p = 0; p < init.performers.length; p += 1) {
+      for (let p = 0; p < closed; p += 1) {
         await sheet(sheetPage, join(reader, `sheet-close-${p}-${n}.jpg`), chunk.map((f) => ({ file: join(frameDir, `close-${p}`, `${String(f).padStart(4, '0')}.jpg`), label: `${times[f]!.toFixed(2)} s` })),
           360, 360, `close view, performer ${p + 1}, ${span}`);
       }
+    }
+    // The orbit: the same moments, 360 px square around the cast's centre (true device pixels, cropped from the card-sized frame).
+    const orbitCrop = [0, Math.round((PHONE.height * pr - 360 * 1.6) / 2), PHONE.width * pr, Math.round(360 * 1.6)];
+    for (let s = 0; s * perSheet < orbitFrames.length; s += 1) {
+      const chunk = orbitFrames.slice(s * perSheet, (s + 1) * perSheet);
+      await sheet(sheetPage, join(reader, `sheet-orbit-${String(s).padStart(2, '0')}.jpg`), chunk.map((f) => ({ file: join(orbitDir, `${String(f).padStart(4, '0')}.jpg`), label: `${times[f]!.toFixed(2)} s`, crop: orbitCrop })),
+        360, 360, `the same moments from a camera swung ${options.orbit} degrees around the cast, ${times[chunk[0]!]!.toFixed(2)}–${times[chunk.at(-1)!]!.toFixed(2)} s`);
     }
     await browser.close();
 
@@ -326,7 +362,7 @@ export async function review(take: string, options: ReviewOptions = {}): Promise
         const faces = cards.map((c) => c.performers[p]!.face).filter((b): b is [number, number, number, number] => Boolean(b)).map((b) => b[3] - b[1]);
         const bodiesPx = cards.map((c) => { const q = c.performers[p]!.points; const feet = [q.leftFoot, q.rightFoot].filter(Boolean).map((x) => x![1]); return q.headTop && feet.length ? Math.max(...feet) - q.headTop[1] : 0; });
         const travel: OnScreen['performers'][number]['travelPerSecond'][number][] = [];
-        for (let from = 0; from < init.duration - 1e-6; from += 1) {
+        for (let from = 0; from < span - 1e-6; from += 1) {
           const fs = times.map((t, i) => [t, i] as const).filter(([t]) => t >= from && t < from + 1).map(([, i]) => i);
           const far = (k: string) => { const s = cards[fs[0]!]!.performers[p]!.points[k]; return s ? Math.max(...fs.map((i) => dist2(cards[i]!.performers[p]!.points[k]!, s))) : 0; };
           const head = round(far('head'));
