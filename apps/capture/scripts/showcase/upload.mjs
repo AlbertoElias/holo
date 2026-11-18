@@ -1,8 +1,8 @@
-import { execFileSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
+
+import { checkAccount, findCredential, insecureTarget, setupHint as hint, uploadHologram, waitForPreview } from './lib/upload.mjs';
 
 // Uploads built showcase holograms through the viewer API's normal upload
 // route, so they appear in the feed like any recorded take.
@@ -36,10 +36,6 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const outDir = path.resolve(here, '../../../../output/showcase');
-// A piece converts in under a minute on a laptop and in several on
-// production's shared CPU, where a timed-out conversion is retried later.
-const PREVIEW_WAIT_MS = 300_000;
-const PREVIEW_POLL_MS = 2_000;
 
 const args = process.argv.slice(2);
 const apiIndex = args.indexOf('--api');
@@ -52,95 +48,42 @@ if (!api || (names.length === 0 && !whoamiOnly)) {
   process.exit(1);
 }
 
-const KEYCHAIN_SERVICE = process.env.HOLOIM_KEYCHAIN_SERVICE || 'holoim-agent-upload';
 const apiUrl = new URL(api);
 const apiHost = apiUrl.host.toLowerCase();
-const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(apiUrl.hostname.toLowerCase());
-
-/** The Keychain's agent token for this host, or null. Read into memory only. */
-function keychainToken() {
-  if (process.platform !== 'darwin') return null;
-  try {
-    const value = execFileSync('security', ['find-generic-password', '-s', KEYCHAIN_SERVICE, '-a', apiHost, '-w'], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore']
-    }).trim();
-    return value || null;
-  } catch {
-    return null; // no entry for this host
-  }
-}
-
-const credential = process.env.HOLOIM_SESSION
-  ? { token: process.env.HOLOIM_SESSION, source: 'HOLOIM_SESSION' }
-  : (() => {
-      const token = keychainToken();
-      return token ? { token, source: `the Keychain (${KEYCHAIN_SERVICE}, ${apiHost})` } : null;
-    })();
-if (credential && apiUrl.protocol !== 'https:' && !loopback) {
-  console.error(`refusing to send a token to ${apiUrl.origin} over plain http; use https.`);
+const credential = findCredential(apiUrl);
+const insecure = insecureTarget(apiUrl, credential);
+if (insecure) {
+  console.error(insecure);
   process.exit(1);
 }
 const authHeaders = credential ? { authorization: `Bearer ${credential.token}` } : {};
-const setupHint = `scripts/agent-upload-token.sh setup ${apiUrl.origin} --email <agent account email>`;
+const setupHint = hint(apiUrl);
 
 if (credential) {
-  const response = await fetch(new URL('/api/auth/me', api), { headers: authHeaders, redirect: 'error' });
-  if (response.status === 401) {
-    console.error(
-      credential.source === 'HOLOIM_SESSION'
-        ? 'The API refused HOLOIM_SESSION (signed out or expired). Sign in again, or unset it to use the Keychain token.'
-        : `The API refused the agent token from ${credential.source} (revoked or never registered). Nothing was uploaded. Set up a new one with: scripts/agent-upload-token.sh revoke ${apiUrl.origin}; ${setupHint}`
-    );
+  const checked = await checkAccount(apiUrl, credential);
+  if (checked.error) {
+    console.error(checked.error);
     process.exit(1);
   }
-  if (!response.ok) {
-    console.error(`checking the account: ${response.status} ${await response.text()}`);
-    process.exit(1);
-  }
-  const account = await response.json();
-  console.error(`uploading as ${account.displayName} (token from ${credential.source})`);
+  console.error(`uploading as ${checked.account.displayName} (token from ${credential.source})`);
 } else {
   console.error(`no token for ${apiHost}: uploading anonymously, which only a test API with TEST_OPEN_UPLOADS accepts. For an account: ${setupHint}`);
 }
 if (whoamiOnly) process.exit(0);
 
-/** The preview's last status: `ready`, `failed`, or what it still was when the wait ran out. */
-async function waitForPreview(id) {
-  const deadline = Date.now() + PREVIEW_WAIT_MS;
-  for (;;) {
-    const response = await fetch(new URL(`/api/holograms/${id}`, api));
-    if (!response.ok) throw new Error(`reading hologram ${id}: ${response.status} ${await response.text()}`);
-    const dto = await response.json();
-    if (dto.usdzStatus === 'ready' || dto.usdzStatus === 'failed' || Date.now() >= deadline) return dto;
-    await sleep(PREVIEW_POLL_MS);
-  }
-}
-
 const withoutPreview = [];
 for (const name of names) {
   const { meta } = await import(`./${name}.mjs`);
   const bytes = await readFile(path.join(outDir, `${meta.slug}.glb`));
-  const form = new FormData();
-  form.set('hologramName', meta.name);
-  form.set('submittedBy', meta.submittedBy);
-  form.set('quickLookEnabled', String(quickLook));
-  form.set('file', new Blob([bytes], { type: 'model/gltf-binary' }), `${meta.slug}.glb`);
-  const response = await fetch(new URL('/api/holograms', api), {
-    method: 'POST',
-    body: form,
-    headers: authHeaders,
-    redirect: 'error'
-  });
-  const body = await response.text();
-  if (!response.ok) {
-    console.error(`${name}: ${response.status} ${body}`);
+  const uploaded = await uploadHologram({ api, authHeaders, name: meta.name, submittedBy: meta.submittedBy, bytes, filename: `${meta.slug}.glb`, quickLook });
+  if (uploaded.error) {
+    console.error(`${name}: ${uploaded.error}`);
     process.exit(1);
   }
-  const dto = JSON.parse(body);
+  const dto = uploaded.dto;
   const report = { scene: name, id: dto.id, hologramName: dto.hologramName, sizeBytes: dto.sizeBytes, url: dto.url };
   if (quickLook) {
-    const preview = await waitForPreview(dto.id);
+    const preview = await waitForPreview(api, dto.id);
     Object.assign(report, { usdzStatus: preview.usdzStatus, usdzUrl: preview.usdzUrl });
     if (preview.usdzStatus !== 'ready') withoutPreview.push(`${name} (${preview.usdzStatus})`);
   }

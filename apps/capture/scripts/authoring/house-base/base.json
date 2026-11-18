@@ -1,0 +1,211 @@
+{
+  "$comment": "The house base (slice 2c of docs/features/directed-performance.md): every value that shapes it, so the base is re-made by `house-base.ts`, never edited by hand. The look follows the owner's pick, soft clay (2026-11-18), from Astra's `clay-turnaround.png`, `base-finishes.png` and `clay-traits.png`; colours are linear, converted from sRGB read off the sheets' lit midtones (`sheetSRGB`). What the build cannot match is in the brief's 2c evidence.",
+  "name": "house-base",
+  "finish": "clay",
+  "height": 1.7,
+  "macro": {
+    "gender": 0.5,
+    "age": 0.5,
+    "muscle": 0.5,
+    "weight": 0.5,
+    "proportions": 0.5,
+    "height": 0.5,
+    "cupsize": 0.5,
+    "firmness": 0.5,
+    "race": {
+      "asian": 0.333,
+      "caucasian": 0.333,
+      "african": 0.334
+    }
+  },
+  "targets": {
+    "head-round": 0.9
+  },
+  "neutral": {
+    "$comment": "Face units baked into the neutral face, as weights (eyeBlink is compensated so it still closes).",
+    "eyeWideLeft": 0.5,
+    "eyeWideRight": 0.5
+  },
+  "proportions": {
+    "$comment": "Scales about a pivot, weighted by the MPFB mixamo weights of the bones named, so the rig is fitted to the scaled mesh and no bone is ever scaled. head: about the neck joint; eyes: about each eyeball, falling off from inner to outer (eye radii); hands: about the wrist.",
+    "head": {
+      "scale": 1.4,
+      "neckShare": 0.35
+    },
+    "eyes": {
+      "scale": 1.5,
+      "inner": 1.0,
+      "outer": 4.5
+    },
+    "hands": {
+      "scale": 1.15
+    }
+  },
+  "gains": {
+    "$comment": "Each face unit's offsets are multiplied by its gain after the proportions, to reach the audition bar's millimetres at card size (lib/audition-bar.ts). 1 when omitted.",
+    "browInnerUp": 3.1,
+    "browDownLeft": 2.6,
+    "browDownRight": 2.6,
+    "browOuterUpLeft": 2.05,
+    "browOuterUpRight": 2.05,
+    "eyeWideLeft": 1.8,
+    "eyeWideRight": 1.8,
+    "eyeSquintLeft": 1.9,
+    "eyeSquintRight": 1.9,
+    "mouthFrownLeft": 2.0,
+    "mouthFrownRight": 2.0,
+    "mouthStretchLeft": 1.6,
+    "mouthStretchRight": 1.6
+  },
+  "brows": {
+    "$comment": "Each brow is a ribbon just in front of the skin above its eye, in eye radii from the eyeball centre: x from the inner to the outer end, the lower edge at the inner end, its rise toward the outer end, the arch, the thickness (tapering toward the outer end by taper), how far in front of the skin (lift, m) and its segments.",
+    "inner": 0.55,
+    "outer": 1.4,
+    "low": 1.55,
+    "rise": 0.05,
+    "thick": 0.6,
+    "arch": 0.25,
+    "taper": 0.45,
+    "lift": 0.0022,
+    "segments": 14
+  },
+  "eye": {
+    "$comment": "Eyeballs: a share of MPFB's eye helper radius, no bigger than the skin in front of the eye's centre less lidGap (m), set back by back (m); the iris and pupil as angles (radians) from the eye's forward pole.",
+    "radiusShare": 0.98,
+    "lidGap": 0.0008,
+    "iris": 0.65,
+    "pupil": 0.3,
+    "back": 0.001
+  },
+  "colours": {
+    "skin": [
+      0.672,
+      0.216,
+      0.08
+    ],
+    "brow": [
+      0.061,
+      0.026,
+      0.017
+    ],
+    "lips": [
+      0.578,
+      0.15,
+      0.076
+    ],
+    "mouth": [
+      0.127,
+      0.021,
+      0.01
+    ],
+    "sclera": [
+      0.871,
+      0.807,
+      0.716
+    ],
+    "iris": [
+      0.223,
+      0.08,
+      0.013
+    ],
+    "pupil": [
+      0.002,
+      0.002,
+      0.002
+    ],
+    "top": [
+      0.761,
+      0.552,
+      0.392
+    ],
+    "trousers": [
+      0.076,
+      0.084,
+      0.107
+    ],
+    "shoes": [
+      0.127,
+      0.051,
+      0.025
+    ]
+  },
+  "roughness": 0.65,
+  "lips": {
+    "$comment": "The lips: an ellipse through the mouth corners (the vertices mouthSmile moves most), its width and its heights above and below the corners relative to the corners' half-distance, seen from the front; faces deeper than depth (m) behind the corners are left alone. Faces in it turned toward the front (facing: -normal.y) and no deeper than inside (m) behind the corners are lips, the rest the mouth, which draws the mouth line.",
+    "width": 0.95,
+    "above": 0.42,
+    "below": 0.42,
+    "depth": 0.06,
+    "facing": 0.0,
+    "inside": 0.004
+  },
+  "mouthBag": {
+    "$comment": "A dark ellipsoid behind the lips (MPFB's mouth opens onto the hollow head): its centre behind the mouth corners (back, m, +Y is back) and below them (drop, m), its radii relative to the corners' half-distance, shrunk until it lies inside the skin by margin (m).",
+    "back": 0.02,
+    "drop": 0.008,
+    "radii": [
+      0.95,
+      0.7,
+      0.8
+    ],
+    "margin": 0.002
+  },
+  "browShapes": {
+    "$comment": "The brow shapes fade out below a band above each eye, from `from` to `to` eye radii above its centre, so they move the brow and leave the lids to the lid shapes.",
+    "from": 0.9,
+    "to": 1.2
+  },
+  "sheetSRGB": {
+    "$comment": "sRGB read off clay-turnaround.png's front view (lit midtones); `colours` is these in linear.",
+    "skin": [
+      214,
+      128,
+      80
+    ],
+    "brow": [
+      70,
+      45,
+      35
+    ],
+    "lips": [
+      200,
+      108,
+      78
+    ],
+    "mouth": [
+      100,
+      40,
+      25
+    ],
+    "sclera": [
+      240,
+      232,
+      220
+    ],
+    "iris": [
+      130,
+      80,
+      30
+    ],
+    "pupil": [
+      8,
+      8,
+      8
+    ],
+    "top": [
+      226,
+      196,
+      168
+    ],
+    "trousers": [
+      78,
+      82,
+      92
+    ],
+    "shoes": [
+      100,
+      64,
+      44
+    ]
+  }
+}
