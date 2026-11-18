@@ -2327,7 +2327,7 @@ worktree's ignored `output/house-base-2c/mixes-side-by-side.jpg`.
 
 ### Slice 6 evidence (2026-11-18)
 
-`publish-check.ts` (12 of 12 rows pass; report in
+`publish-check.ts` (14 of 14 rows pass; report in
 `output/authoring/publish-check/report.json`): a local API with open uploads
 off (anonymous POST answers 401), an agent token registered through
 `agent-token.ts`, and `goodbye.json` directed and published. "The goodbye"
