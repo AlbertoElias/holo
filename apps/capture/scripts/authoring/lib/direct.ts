@@ -14,10 +14,10 @@ import { LivenessFace } from '../../../src/face/LivenessFace.ts';
 import type { JointName, MotionFrame, Vec3 } from '../../lib/motion-quality.ts';
 import type { FaceGaze, FaceWeights } from '../../../src/face/faceTypes.ts';
 import { resetPose, type LoadedAvatar } from './avatar.ts';
-import { EXPRESSIONS, envelope, holdingsOf, pointObjects, resolveTiming, validateSheet, type BeatSheet, type Direction, type Holding, type ObjectSpec, type PerformerSpec, type Place, type Point, type Resolved, type Side } from './beats.ts';
+import { FACE_MIXES, GESTURES, STATE_FACES, envelope, gestureCycle, holdingsOf, pointObjects, resolveTiming, validateSheet, type BeatSheet, type Direction, type Holding, type ObjectSpec, type PerformerSpec, type Place, type Point, type Resolved, type Side } from './beats.ts';
 import { FINGERS, HAND_SHAPES, blendPose, shapePose, type FingerName, type HandPose } from './hands.ts';
 import { armRestOffset, bodyUp, hangArm, moveBoneWorld, orientHand, plantFeet, restElbowHint, rotateBoneWorld, solveArm, toWorld, turnBody, TURN_SHARE } from './pose.ts';
-import { busy, faceAt, fidgetAt, GLANCE_BLINK_DEG, glanceAt, glanceChest, LIFE_FIDGET, LIFE_SIGH, LIFE_WEIGHT, lifeSchedule, MASK_PAD, MASKED_BY, postureAt, sighAt, weightAt, type LifeSchedule } from './life.ts';
+import { busy, faceAt, fidgetAt, GLANCE_BLINK_DEG, glanceAt, glanceChest, LIFE_FIDGET, LIFE_SIGH, LIFE_WEIGHT, lifeSchedule, MASK_PAD, MASKED_BY, postureAt, sighAt, weightAt, attendArmsAt, attendGate, attendNodAt, attendSchedule, ATTEND_ARMS, type AttendSchedule, type LifeSchedule } from './life.ts';
 import { buildProp, propWorld, type LoadedSource, type Prop } from './props.ts';
 import { isPlace, measureBody, resolvePlace, type Body, type PlaceFrame } from './stage.ts';
 
@@ -58,6 +58,26 @@ const GRIP_CLOSE = 0.2;
 const GRIP_OPEN = 0.25;
 /** A put's object settles from where the hand let it go to upright on its place over this long. */
 const PUT_SETTLE = 0.2;
+/** Gestures (`beats.ts` GESTURES): degrees and metres at strength 1. */
+const NOD_DEG = 26;
+const SHAKE = { yawDeg: 40, dipDeg: 6, fade: 0.25 } as const;
+const SHRUG = { shoulderDeg: 14, headRollDeg: 5 } as const;
+const WAVE_SWING = 0.055;
+const RUB_ROLL_DEG = 15;
+/** Where a gesture's hand goes, from its shoulder per arm length (out, up, forward in the body frame). */
+const GESTURE_HAND = { shrug: [0.38, -0.72, 0.38], wave: [0.38, 0.12, 0.25], rub: [0.22, -0.3, 0.62] } as const;
+/** Hand to chest: the palm this far in front of the chest bone (metres), toward the other side. */
+const CHEST_HAND = { forward: 0.13, across: 0.04, down: 0.02 } as const;
+/** States: head pitch down and roll, spine lean forward and shoulders up (degrees); how much of the head turns to an `at`. */
+const STATE_POSE = {
+  noticing: { pitch: -4, roll: 0, spine: -2.5, shoulders: 3, head: 0.7 },
+  concerned: { pitch: 14, roll: 8, spine: 7, shoulders: 6, head: 0.5 }
+} as const;
+/** A shrug's face: brows up, the lower lip pushed up. */
+const SHRUG_FACE: Partial<Record<FaceChannel, number>> = { browInnerUp: 0.4, browOuterUpLeft: 0.45, browOuterUpRight: 0.45, mouthShrugLower: 0.5, mouthPressLeft: 0.2, mouthPressRight: 0.2 };
+const RUB_HAND = { low: { thumb: 0.5, index: 0.45, middle: 0.66 }, high: { thumb: 0.75, index: 0.62, middle: 0.5 }, ring: 0.7, little: 0.74, spread: 0.05 } as const;
+const CHEST_PALM: HandPose = { curl: { thumb: 0.15, index: 0.1, middle: 0.12, ring: 0.16, little: 0.2 }, spread: 0.2 };
+const CLASP_HAND: HandPose = { curl: { thumb: 0.3, index: 0.35, middle: 0.4, ring: 0.45, little: 0.5 }, spread: 0.08 };
 
 export interface PerformerTrack {
   readonly spec: PerformerSpec;
@@ -76,6 +96,8 @@ export interface PerformerTrack {
   readonly motion: MotionFrame[];
   /** The performer's life events (`life.ts`); undefined when the take has no life. */
   readonly life?: LifeSchedule;
+  /** Attending life (`life.ts`), drawn when the take has life; plays only while facing someone. */
+  readonly attend?: AttendSchedule;
 }
 
 /** The motion-quality joints, by the humanoid bone each is read from (as capture's body samples). */
@@ -127,6 +149,7 @@ interface Cast {
   readonly live: LivenessFace;
   readonly seed: number;
   readonly events: LifeSchedule;
+  readonly attend: AttendSchedule | undefined;
   readonly dirs: Resolved[];
   /** Other performers' reaches to this performer's left or right arm or hand, which hold that hand's life still. */
   readonly touched: Record<Side, Resolved[]>;
@@ -177,7 +200,9 @@ export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, 
     a.frame.position.set(spec.at[0], 0, spec.at[1]);
     a.frame.quaternion.copy(yawQuat(spec.facing));
     a.frame.updateMatrixWorld(true);
-    const dirs = sheet.beats.filter((b) => b.performer === spec.id).flatMap((b) => b.directions.map((d) => {
+    const dirs = sheet.beats.filter((b) => b.performer === spec.id).flatMap((b) => b.directions.map((d0) => {
+      // A hand gesture is the right hand's unless it names one (so it masks only that hand's life).
+      const d: Direction = d0.kind === 'gesture' && GESTURES[d0.name].hand && !d0.side ? { ...d0, side: 'right' } : d0;
       const r = resolveTiming(b, d);
       return flat ? { ...r, start: r.at, anticipation: 0 } : r;
     })).sort((x, y) => x.start - y.start);
@@ -194,7 +219,8 @@ export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, 
     });
     return {
       spec, a, live: new LivenessFace(spec.seed ?? 0x5eed + index * 7919), seed: spec.seed ?? index + 1,
-      events: lifeSchedule(spec.seed ?? index + 1, sheet.duration + 1), dirs, touched: { left: [], right: [] },
+      events: lifeSchedule(spec.seed ?? index + 1, sheet.duration + 1),
+      attend: life && spec.attend !== false ? attendSchedule(spec.seed ?? index + 1, sheet.duration + 1) : undefined, dirs, touched: { left: [], right: [] },
       turnDeg: new Map(), stepWorld: new Map(), fixed: { next: 0, yaw: spec.facing }, ankles0,
       feetMid0: ankles0.left.clone().add(ankles0.right).multiplyScalar(0.5),
       seen: new Map(), seenBefore: new Map(), seenAt: { t: -Infinity, before: -Infinity }, shortfall: new Map(), morphing
@@ -224,7 +250,7 @@ export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, 
     const translations = new Map<THREE.Object3D, Float32Array>();
     for (const o of c.a.rest.keys()) { rotations.set(o, new Float32Array(frames * 4)); translations.set(o, new Float32Array(frames * 3)); }
     const weights = new Map(c.morphing.map((m) => [m.node, { targets: m.meshes[0]!.morphTargetInfluences!.length, values: new Float32Array(frames * m.meshes[0]!.morphTargetInfluences!.length), meshes: m.meshes }]));
-    return { spec: c.spec, avatar: c.a, rotations, translations, weights, root: { position: new Float32Array(frames * 3), rotation: new Float32Array(frames * 4) }, reaches: [], motion: [], ...(life ? { life: c.events } : {}) };
+    return { spec: c.spec, avatar: c.a, rotations, translations, weights, root: { position: new Float32Array(frames * 3), rotation: new Float32Array(frames * 4) }, reaches: [], motion: [], ...(life ? { life: c.events } : {}), ...(c.attend ? { attend: c.attend } : {}) };
   });
   const props: PropTrack[] = [...stage.props.values()].map((st) => ({ prop: st.prop, position: new Float32Array(frames * 3), rotation: new Float32Array(frames * 4), holdings: st.holdings }));
 
@@ -745,6 +771,8 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
   a.frame.quaternion.copy(yawQuat(rootYaw));
   a.frame.updateMatrixWorld(true);
   const twist = (leadYaw - rootYaw) * DEG;
+  // Attending life plays as much as the upper body faces another performer.
+  const attendK = life && !flat && c.attend ? attendFacing(cast, c, leadYaw) : 0;
 
   // 2. Feet in stage space: steps move them (lead foot arcs), whole turns pivot them about their midpoint.
   const feet = { left: c.ankles0.left.clone(), right: c.ankles0.right.clone() };
@@ -857,6 +885,35 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
       }
     }
   }
+  {
+    // A shrug lifts the shoulders; a state settles the body into its attitude (the head drops with a forward lean).
+    let shoulders = 0;
+    let spine = 0;
+    for (const r of c.dirs) {
+      const d = r.direction;
+      if (d.kind === 'gesture' && d.name === 'shrug') shoulders += SHRUG.shoulderDeg * env(r, t, flat) * (d.strength ?? 1);
+      else if (d.kind === 'state') {
+        const e = env(r, t, flat) * (d.strength ?? 1);
+        shoulders += STATE_POSE[d.name].shoulders * e;
+        spine += STATE_POSE[d.name].spine * e;
+      }
+    }
+    const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(bodyQ);
+    if (shoulders !== 0) for (const s of SIDES) {
+      const b = a.humanoid.bone(`${s}Shoulder`);
+      if (b) rotateBoneWorld(b, new THREE.Quaternion().setFromAxisAngle(fwd, (s === 'left' ? -1 : 1) * shoulders * DEG));
+    }
+    if (spine !== 0) {
+      const axis = new THREE.Vector3().crossVectors(bodyUp(a), fwd).normalize();
+      let carry = 0;
+      for (const [name, k] of LEAN_SHARE) {
+        const b = a.humanoid.bone(name);
+        if (!b) { carry += k; continue; }
+        rotateBoneWorld(b, new THREE.Quaternion().setFromAxisAngle(axis, spine * DEG * (k + carry)));
+        carry = 0;
+      }
+    }
+  }
   if (postureLean !== 0) {
     // The posture's lean, spread up the spine; the neck takes most of it back so the gaze stays level.
     const axis = new THREE.Vector3().crossVectors(bodyUp(a), new THREE.Vector3(0, 0, 1).applyQuaternion(bodyQ)).normalize();
@@ -949,6 +1006,51 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
       rotateBoneWorld(bone, new THREE.Quaternion().setFromAxisAngle(side, -pitch * k));
     }
   }
+  {
+    // Gestures, states and attending nods in the head, on top of any look, about the head as it now faces.
+    let pitch = 0;
+    let yaw = 0;
+    let roll = 0;
+    for (const r of c.dirs) {
+      const d = r.direction;
+      if (d.kind === 'state') {
+        const e = env(r, t, flat) * (d.strength ?? 1);
+        pitch += STATE_POSE[d.name].pitch * e;
+        roll += STATE_POSE[d.name].roll * e;
+        continue;
+      }
+      if (d.kind !== 'gesture') continue;
+      const e = env(r, t, flat);
+      if (e === 0) continue;
+      const k = d.strength ?? 1;
+      if (d.name === 'nod' || d.name === 'head-shake') {
+        const cyc = gestureCycle(d, r.attack)!;
+        const tau = t - r.at - cyc.from;
+        const on = tau > 0 && tau < Math.min(cyc.count * cyc.cycle, r.attack + r.hold - cyc.from); // a shorter authored hold ends the repeats with it
+        const wave = (2 * Math.PI * tau) / cyc.cycle;
+        if (d.name === 'nod') pitch += NOD_DEG * k * (0.3 * e + (on ? 0.7 * (0.5 - 0.5 * Math.cos(wave)) * (tau < cyc.cycle ? 1 : 0.7) : 0));
+        else {
+          pitch += SHAKE.dipDeg * k * e;
+          if (on) yaw += SHAKE.yawDeg * k * Math.sin(wave) * (1 - SHAKE.fade * tau / (cyc.count * cyc.cycle)) * clamp01(e);
+        }
+      } else if (d.name === 'shrug') roll += SHRUG.headRollDeg * k * e;
+    }
+    if (attendK > 0) pitch += attendNodAt(c.attend!, t) * attendK * (1 - busy(c.dirs, t, MASKED_BY.nod));
+    if (pitch !== 0 || yaw !== 0 || roll !== 0) {
+      const head = a.humanoid.bone('head')!;
+      const neck = a.humanoid.bone('neck');
+      const q = head.getWorldQuaternion(new THREE.Quaternion());
+      const up = bodyUp(a);
+      const side = new THREE.Vector3(1, 0, 0).applyQuaternion(q);
+      const ahead = new THREE.Vector3(0, 0, 1).applyQuaternion(q);
+      for (const [bone, k] of [[neck, 0.4], [head, neck ? 0.6 : 1]] as const) {
+        if (!bone) continue;
+        if (yaw) rotateBoneWorld(bone, new THREE.Quaternion().setFromAxisAngle(up, yaw * DEG * k));
+        if (pitch) rotateBoneWorld(bone, new THREE.Quaternion().setFromAxisAngle(side, pitch * DEG * k));
+        if (roll) rotateBoneWorld(bone, new THREE.Quaternion().setFromAxisAngle(ahead, roll * DEG * k));
+      }
+    }
+  }
   if (life) {
     // The head is never quite still: a slow drift, less while it holds a look.
     const head = a.humanoid.bone('head')!;
@@ -968,6 +1070,19 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
   //    with the palm to a point short of a target, the fist to a grip, or a held object to its place;
   //    then the hand turned to the grip, the place, or to aim what it holds.
   const torsoYaw = twist * TURN_SHARE.slice(0, 4).reduce((s, [, w]) => s + w, 0);
+  const torsoQ = bodyQ.clone().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), torsoYaw));
+  const bodyVec = (x: number, y: number, z: number): THREE.Vector3 => new THREE.Vector3(x, y, z).applyQuaternion(torsoQ);
+  // Attending: now and then the hands come loosely together in front (both or neither).
+  let clasp = 0;
+  let claspOver: Side = 'right';
+  if (attendK > 0) {
+    const arms = attendArmsAt(c.attend!, t);
+    if (arms.k > 0) {
+      const free = Math.min(...SIDES.map((s) => (1 - busy(c.dirs, t, MASKED_BY.arms, s)) * (1 - busy(c.touched[s], t, { reach: 1 })) * (1 - (gripOf(c.spec.id, s, t)?.weight ?? 0))));
+      clasp = arms.k * attendK * free;
+      claspOver = arms.over;
+    }
+  }
   for (const s of SIDES) {
     // The wrist's rest offset from the shoulder, turned with the torso and the body.
     const local = armRestOffset(a, s);
@@ -976,11 +1091,13 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
     local.applyAxisAngle(new THREE.Vector3(0, 1, 0), torsoYaw);
     const rest = toWorld(a, local).sub(toWorld(a, new THREE.Vector3()));
     // A hanging hand that fidgets lifts a little (the elbow bends) while its fingers move.
-    const fidget = life ? handFree(c, s, t, held?.weight ?? 0) * fidgetAt(c.events, s, t) : 0;
+    const fidget = life ? handFree(c, s, t, held?.weight ?? 0) * (1 - clasp) * fidgetAt(c.events, s, t) : 0;
     if (life) rest.addScaledVector(bodyUp(a), ARM_BREATH * Math.sin(breathT) + LIFE_FIDGET.lift * fidget);
     let w = 0;
     let goal: THREE.Vector3 | undefined;
     let palm: THREE.Vector3 | undefined;
+    // How far the elbow takes the rig's reaching bend (out): less for a hand kept near the body.
+    let elbowOut = 1;
     let effector: (out: THREE.Vector3) => THREE.Vector3 = (out) => (a.hands[s] ? a.hands[s]!.palmCenter(out) : a.arms[s].hand.getWorldPosition(out));
     const turns: { r: Resolved; e: number }[] = [];
     for (const r of c.dirs) {
@@ -1022,6 +1139,46 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
       const p = palmKind === 'up' ? up : palmKind === 'down' ? up.clone().negate() : palmKind === 'in' ? new THREE.Vector3(s === 'left' ? -1 : 1, 0, 0).applyQuaternion(bodyQ) : towards;
       palm = palm ? palm.lerp(p, clamp01(e)).normalize() : p.clone();
     }
+    // Gestures (and attending's hands together), blended in the same way.
+    const add = (g: THREE.Vector3, e: number, p: THREE.Vector3, elbow: number): void => {
+      goal = goal ? goal.lerp(g, clamp01(e)) : g;
+      w = goal === g ? e : Math.max(w, e);
+      palm = palm ? palm.lerp(p, clamp01(e)).normalize() : p.clone();
+      elbowOut = Math.min(elbowOut, lerp(1, elbow, clamp01(e)));
+    };
+    const out = s === 'left' ? 1 : -1;
+    const L = a.arms[s].upperLength + a.arms[s].lowerLength;
+    const inward = new THREE.Vector3(-out, 0, 0).applyQuaternion(bodyQ);
+    for (const r of c.dirs) {
+      const d = r.direction;
+      if (d.kind !== 'gesture' || !(d.name === 'shrug' ? !held : GESTURES[d.name].hand && d.side === s)) continue;
+      const e = env(r, t, flat);
+      if (e === 0) continue;
+      const k = d.strength ?? 1;
+      const shoulder = a.arms[s].upperArm.getWorldPosition(new THREE.Vector3());
+      if (d.name === 'shrug') {
+        const [x, y, z] = GESTURE_HAND.shrug;
+        add(shoulder.add(bodyVec(out * x * L, y * L, z * L)), e * Math.min(1, k), bodyUp(a), 0.3);
+      } else if (d.name === 'wave') {
+        const [x, y, z] = GESTURE_HAND.wave;
+        const cyc = gestureCycle(d, r.attack)!;
+        const tau = t - r.at - cyc.from;
+        const swing = tau > 0 && tau < Math.min(cyc.count * cyc.cycle, r.attack + r.hold - cyc.from) ? Math.sin((2 * Math.PI * tau) / cyc.cycle) * WAVE_SWING * k : 0;
+        const toward = d.at !== undefined ? pointOf(cast, c.spec, d.at).sub(shoulder).normalize() : bodyVec(0, 0, 1);
+        add(shoulder.clone().add(bodyVec(out * (x * L + swing), y * L, z * L)), e, toward, 1);
+      } else if (d.name === 'rub') {
+        const [x, y, z] = GESTURE_HAND.rub;
+        add(shoulder.add(bodyVec(out * x * L, y * L, z * L)), e, bodyUp(a).lerp(inward, 0.15).normalize(), 0.1);
+      } else if (d.name === 'hand-to-chest') {
+        const chest = (a.humanoid.bone('upperChest') ?? a.humanoid.bone('chest') ?? a.humanoid.bone('spine')!).getWorldPosition(new THREE.Vector3());
+        add(chest.add(bodyVec(-out * CHEST_HAND.across, -CHEST_HAND.down, CHEST_HAND.forward)), e, bodyVec(0, 0, -1), 0.4);
+      }
+    }
+    if (clasp > 0) {
+      const hips = a.humanoid.bone('hips')!.getWorldPosition(new THREE.Vector3());
+      const over = s === claspOver ? 0.02 : 0;
+      add(hips.add(bodyVec(out * ATTEND_ARMS.apart * L / 2, ATTEND_ARMS.height * L, ATTEND_ARMS.forward * L + over)), clasp, inward, 0.25);
+    }
     hangArm(a, s, rest);
     a.frame.updateMatrixWorld(true);
     const hand = a.hands[s];
@@ -1035,7 +1192,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
       const toward = restNormal.clone().lerp(palm!, clamp01(w)).normalize();
       const wrist = a.arms[s].hand.getWorldPosition(new THREE.Vector3()).add(point.clone().sub(restAt));
       // The elbow turns from hanging (back) to the rig's reaching bend (out) as the arm lifts.
-      const elbowHint = restElbowHint(a, s).lerp(a.arms[s].elbowHintLocal, clamp01(w)).normalize();
+      const elbowHint = restElbowHint(a, s).lerp(a.arms[s].elbowHintLocal, clamp01(w) * elbowOut).normalize();
       const at = new THREE.Vector3();
       // The elbow swung about the shoulder-to-hand line (the upper arm's rotation), in the avatar's frame.
       const solveWith = (swivel: number, withTurns: readonly { r: Resolved; e: number }[]): void => {
@@ -1104,11 +1261,36 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
       }
       pose = { curl, spread: lerp(pose.spread, target.spread, env(r, t, false)) };
     }
+    // Gestures shape the hand: open for a shrug or a wave, flat on the chest, fingertips rubbing (the wrist rolling a little with them).
+    let rubRoll = 0;
+    for (const r of c.dirs) {
+      const d = r.direction;
+      if (d.kind !== 'gesture' || !(d.name === 'shrug' ? !held : GESTURES[d.name].hand && d.side === s)) continue;
+      const e = clamp01(env(r, t, false));
+      if (e === 0) continue;
+      let target: HandPose = HAND_SHAPES.open;
+      if (d.name === 'hand-to-chest') target = CHEST_PALM;
+      else if (d.name === 'rub') {
+        const cyc = gestureCycle(d, r.attack)!;
+        const tau = t - r.at - cyc.from;
+        const on = tau > 0 && tau < Math.min(cyc.count * cyc.cycle, r.attack + r.hold - cyc.from); // a shorter authored hold ends the repeats with it
+        const u = on ? 0.5 - 0.5 * Math.cos((2 * Math.PI * tau) / cyc.cycle) : 0;
+        const { low, high } = RUB_HAND;
+        target = { curl: { thumb: lerp(low.thumb, high.thumb, u), index: lerp(low.index, high.index, u), middle: lerp(low.middle, high.middle, u), ring: RUB_HAND.ring, little: RUB_HAND.little }, spread: RUB_HAND.spread };
+        if (on) rubRoll += Math.sin((2 * Math.PI * tau) / cyc.cycle) * RUB_ROLL_DEG * e * (d.strength ?? 1);
+      }
+      pose = blendPose(pose, target, e);
+    }
+    if (clasp > 0) pose = blendPose(pose, CLASP_HAND, clasp);
+    if (rubRoll !== 0) {
+      const forearm = a.arms[s].hand.getWorldPosition(new THREE.Vector3()).sub(a.arms[s].foreArm.getWorldPosition(new THREE.Vector3())).normalize();
+      rotateBoneWorld(a.arms[s].hand, new THREE.Quaternion().setFromAxisAngle(forearm, rubRoll * DEG));
+    }
     if (life) {
       const curl = { ...pose.curl } as Record<FingerName, number>;
       const still = 1 - 0.7 * (held?.weight ?? 0);
       // A hanging hand fidgets now and then: the fingers curl a little more one after another, and the forearm rolls.
-      const free = handFree(c, s, t, held?.weight ?? 0);
+      const free = handFree(c, s, t, held?.weight ?? 0) * (1 - clasp);
       FINGERS.forEach((finger, i) => {
         curl[finger] += still * 0.025 * Math.sin((2 * Math.PI * t) / (2.7 + i * 0.37) + phase + i * 1.3) + still * 0.012 * Math.sin((2 * Math.PI * t) / 1.1 + i);
         if (free > 0) curl[finger] += free * LIFE_FIDGET.curl * fidgetAt(c.events, s, t, FINGER_ORDER[finger] * LIFE_FIDGET.stagger);
@@ -1131,7 +1313,15 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
     const d = r.direction;
     if (d.kind !== 'expression') continue;
     const e = Math.max(0, env(r, t, flat)) * (d.strength ?? 1);
-    const shape = typeof d.shape === 'string' ? EXPRESSIONS[d.shape] : d.shape;
+    const shape: Partial<Record<FaceChannel, number>> = typeof d.shape === 'string' ? FACE_MIXES[d.shape] : d.shape;
+    for (const [k, v] of Object.entries(shape) as [FaceChannel, number][]) weights[k] = Math.min(1, (weights[k] ?? 0) + v * e);
+  }
+  // A state's face, and a shrug's.
+  for (const r of c.dirs) {
+    const d = r.direction;
+    const shape = d.kind === 'state' ? STATE_FACES[d.name] : d.kind === 'gesture' && d.name === 'shrug' ? SHRUG_FACE : undefined;
+    if (!shape || (d.kind !== 'state' && d.kind !== 'gesture')) continue;
+    const e = Math.max(0, env(r, t, flat)) * (d.strength ?? 1);
     for (const [k, v] of Object.entries(shape) as [FaceChannel, number][]) weights[k] = Math.min(1, (weights[k] ?? 0) + v * e);
   }
   if (life) {
@@ -1231,20 +1421,44 @@ function lookTarget(cast: Cast[], c: Cast, t: number, flat: boolean, by: 'head' 
   let point: THREE.Vector3 | undefined;
   let weight = 0;
   let share = 0.6;
-  for (const r of c.dirs) {
+  // A rub looks at its hand, a state or a wave with an `at` at that; a directed look, blended after, wins.
+  const implied = (d: Direction): { p: THREE.Vector3; share: number } | undefined => {
+    if (d.kind === 'gesture' && d.name === 'rub') { const p = c.seen.get(`${d.side ?? 'right'}Hand`); return p ? { p: p.clone(), share: 0.8 } : undefined; }
+    if (d.kind === 'gesture' && d.name === 'wave' && d.at !== undefined) return { p: pointOf(cast, c.spec, d.at), share: 0.6 };
+    if (d.kind === 'state' && d.at !== undefined) return { p: pointOf(cast, c.spec, d.at), share: STATE_POSE[d.name].head };
+    return undefined;
+  };
+  const ordered = [...c.dirs.filter((r) => r.direction.kind !== 'look'), ...c.dirs.filter((r) => r.direction.kind === 'look')];
+  for (const r of ordered) {
     const d = r.direction;
-    if (d.kind !== 'look') continue;
+    const im = d.kind === 'look' ? undefined : implied(d);
+    if (d.kind !== 'look' && !im) continue;
     // The eyes lead the head by a few frames and arrive faster.
     const e = by === 'eyes'
       ? env({ ...r, start: r.start - 0.06, at: r.at - 0.06, attack: Math.min(r.attack, 0.12), hold: r.hold + r.attack - Math.min(r.attack, 0.12) + 0.06 }, t, flat)
       : env(r, t, flat);
     if (e === 0) continue;
-    const p = pointOf(cast, c.spec, d.at);
+    const p = im ? im.p : pointOf(cast, c.spec, (d as Extract<Direction, { kind: 'look' }>).at);
     point = point ? point.lerp(p, clamp01(e)) : p;
     weight = point === p ? e : Math.max(weight, e);
-    share = d.head ?? 0.6;
+    share = im ? im.share : (d as Extract<Direction, { kind: 'look' }>).head ?? 0.6;
   }
   return point ? { point, weight, share } : undefined;
+}
+
+/** How much attending life plays: the strongest `attendGate` over the other performers' heads off the upper body's facing, as last solved. */
+function attendFacing(cast: Cast[], c: Cast, yaw: number): number {
+  const me = c.seen.get('head') ?? c.a.frame.position;
+  let k = 0;
+  for (const o of cast) {
+    if (o === c) continue;
+    const h = o.seen.get('head') ?? new THREE.Vector3(o.spec.at[0], 0, o.spec.at[1]);
+    const dx = h.x - me.x;
+    const dz = h.z - me.z;
+    if (dx * dx + dz * dz < 1e-6) continue;
+    k = Math.max(k, attendGate(wrapDeg(Math.atan2(dx, dz) / DEG - yaw)));
+  }
+  return k;
 }
 
 function mixGaze(a: FaceGaze, b: FaceGaze, f: number): FaceGaze {
