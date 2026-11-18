@@ -276,8 +276,11 @@ turn and a clink on its put.
 
 1. **The voice is local Kokoro, not a supplied file** (the parent session's
    instruction, ahead of slice 1b): `local:af_heart`, Kokoro-82M through
-   kokoro-js 1.2.1, model `onnx-community/Kokoro-82M-v1.0-ONNX` at revision
-   `1939ad2a`, q8, its file checked by sha256 after the fetch. Licences:
+   kokoro-js 1.2.1, model `onnx-community/Kokoro-82M-v1.0-ONNX` q8, its
+   file checked by sha256 against revision `1939ad2a` on every build that
+   speaks (kokoro-js cannot request a revision, so a changed upstream model
+   fails the build rather than being pinned away; the transitive packages
+   float within kokoro-js's ranges, in the ignored cache). Licences:
    kokoro-js, the weights and voices, `@huggingface/transformers` and
    phonemizer Apache-2.0; onnxruntime-node MIT; the phonemiser runs eSpeak
    NG, **GPL-3.0**, as WASM in a separate process from the ignored cache
@@ -311,44 +314,87 @@ turn and a clink on its put.
 
 | Check | Stock avatar | House base |
 |---|---|---|
-| Sources decoded (`speech-report.ts`) | voice and clink each 10.500 s = clip; voice sounds from 4.90 s, clink at 8.40 s (the put) | same |
+| Sources decoded (`speech-report.ts`) | voice and clink each 10.500 s = clip; the line's first sound at 4.600 s, its beat's cue (+0 ms; placed by its first voiced sound, past Kokoro's 0.3 s lead-in), clink at 8.40 s (the put) | same |
 | Mouth onset vs. sound, per phrase | mouth leads 33 ms, 33 ms | leads 33 ms, 67 ms |
 | Mouth in the pause, share of speaking | 0 to 3 % | 0 to 2 % |
 | Mouth follows loudness (Pearson r) | 0.52 | 0.54 |
 | Mouth opening p90 while speaking | 5.5 mm | 18.3 mm |
 
 - Feed card, local API (`viewer-check.ts --audio`): after unmute, the card's
-  sound heard at 4.97 to 5.95 s, 6.38 to 7.44 s and 8.47 to 8.62 s take time;
-  each sound 72 ms after its place in the file (the recorder's start, the
+  sound heard at 4.67 to 5.65 s, 6.08 to 7.26 s and 8.47 to 8.63 s take time;
+  each sound 68 ms after its place in the file (the recorder's start, the
   same for both).
 - Quick Look (`glb_to_usdz.py`, `inspect_usdz.py`, `check_usdz_tools.sh`:
   passed): `audio_0` under `…/Neck/Head`, `audio_1` under the recorded
-  object, both spatial, 10.508 s, looping from the stage; jaw and mouth-open
-  weights above 0.1 from 4.87 to 7.47 s, 0 in the pause at 6.15 s.
+  object, both spatial, 10.508 s, looping from the stage; facial weights
+  carried within 3e-6 of the GLB; both avatars pass, rerun on the final take.
 - The eight existing sheets build byte-identical to `214e3b0a`; a take with
   sound builds byte-identical twice (bit-exact WebM).
-- Frame readers: see "Frame readers" below.
+- Frame readers: three fresh Sonnet readers per avatar, each given only four
+  face sheets (2.0 to 9.8 s, a 720 px face view `review.ts` now renders for
+  takes with sound) and asked, per still, whether the lips are parted; no
+  times or sound spans given. Scored against the voiced spans (bar set
+  beforehand: two of three see the mouth open in most voiced stills and
+  closed in most silent ones):
+
+  | Avatar | Voiced stills open | Silent stills closed | Bar |
+  |---|---|---|---|
+  | House base | 11/12, 11/12, 11/12 | 23/28, 23/28, 23/28 | passes |
+  | Stock | 1/12, 1/12, 1/12 (2 to 4 unsure) | 28/28 each | fails |
+
+  On the house base the five open silent stills (5.80, 7.20 to 7.80 s) are
+  the beat's `smile`, which parts this face's lips over its teeth; the lips
+  channel itself measures 0 mm in the pause and after the line
+  (`speech-report.ts`). On the stock avatar the mouth moves (5.5 mm p90,
+  r 0.52) but too little to read: it has no viseme shapes, and the shared
+  fallback in `packages/avatar-face/src/fallbacks.ts` (also used by the
+  runtime, so not retuned here) opens only `jawOpen` at 0.1 to 0.7. Decided
+  by the agent in the owner's absence (2026-11-18): the house base is the
+  slice's lip-sync avatar; a stronger no-viseme fallback is a follow-up.
+
+**Review findings folded in** (independent verifier and code review, fresh
+contexts): the line was 0.3 s late by the voice's lead-in silence, and
+nothing checked it (now placed by its first voiced sound, and
+`speech-report.ts` checks each line within a frame of its beat); the
+revision pin was silently ignored by kokoro-js (now described as it is:
+a sha256 check); temporary files leaked from `speech-report.ts`; the line
+cache ignored the model revision; the lips' phonemiser used American
+English for every voice; a negative `delay` desynchronised voice and
+lips (now refused). Kept as limits: one sound per place, so one line per
+performer per take (README); an unknown Kokoro voice fails at synthesis,
+not validation.
 
 **Follow-ups:** the house base misses `tallest-bar`'s aim and put (88.5°)
 with or without sound, a pre-existing house-base solve issue; captions
-(slice 2); an audio-only lip path for takes without text (slice 5).
+(slice 2); an audio-only lip path for takes without text (slice 5); a
+stronger lip fallback for avatars without viseme shapes (`mouthLowerDown`,
+`mouthUpperUp` with `jawOpen`, in `packages/avatar-face`), since the stock
+avatar's lips read as closed; an unknown Kokoro voice to fail at validation,
+and a sound past the clip end to fail rather than warn.
 
 ## Acceptance criteria (slice 1a)
 
-- [ ] A beat sheet with a `say` line (a supplied file) and a `sound` on a
+- [x] A beat sheet with a `say` line (a supplied file) and a `sound` on a
       put produces a GLB whose sources are each as long as the clip, whose
       voice, decoded with ffmpeg and as the viewer schedules it, starts
       within one frame of its beat on the head emitter, and whose effect
-      plays on the object at the put, once.
+      plays on the object at the put, once. (+0 ms; clink at 8.40 s.)
 - [ ] Viseme onsets within ±80 ms of the hand-labelled phones; the lip
       distance under the written threshold on at least 90 % of *p*, *b* and
-      *m*, on the stock avatar and the house base.
+      *m*, on the stock avatar and the house base. (Not met as written:
+      no hand labels, by the agent's decision above; onsets lead the sound
+      by 33 to 67 ms on both avatars, closure not measured.)
 - [ ] Two of three frame-only readers say the figure speaks and the mouth
-      closes between phrases.
-- [ ] The USDZ holds the voice prim placed under the head, the effect under
+      closes between phrases. (House base: 3/3 see it speak, but the beat's
+      smile keeps the lips parted through the 0.3 s pause; stock: 0/3. See
+      "Frame readers".)
+- [x] The USDZ holds the voice prim placed under the head, the effect under
       the object, and non-zero mouth blend-shape weights during the lines.
 - [ ] Every fetched tool and asset is pinned by sha256, with its licence
-      recorded; nothing paid, no key, no production upload.
+      recorded; nothing paid, no key, no production upload. (Partly: the
+      model file is checked by sha256; kokoro-js is pinned by version,
+      and its npm dependencies, eSpeak NG's WASM among them, float within
+      its ranges.)
 
 ## Failure cases considered
 
@@ -383,11 +429,11 @@ with or without sound, a pre-existing house-base solve issue; captions
 
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
-| Voice and effect timing | `direct.ts` on a test sheet, then a timing report from the GLB | pending |
-| Intelligibility | the whisper.cpp round trip on five lines | pending |
-| Lips | a viseme report (onsets, closures) on two avatars; frame readers | pending |
-| Quick Look | `apps/viewer-api/tools/check_usdz_tools.sh` | pending |
-| Feed playback | `review.ts` on the take against a local API | pending |
+| Voice and effect timing | `direct.ts` on a test sheet, then a timing report from the GLB | slice 1a: `speech-report.ts`, line +0 ms on its beat, clink on the put |
+| Intelligibility | the whisper.cpp round trip on five lines | not in slice 1a (one line; slice 1b) |
+| Lips | a viseme report (onsets, closures) on two avatars; frame readers | slice 1a: onsets, pauses and r on both avatars; readers (see "Frame readers") |
+| Quick Look | `apps/viewer-api/tools/check_usdz_tools.sh` | slice 1a: passed, convert and inspect on both takes |
+| Feed playback | `review.ts` on the take against a local API | slice 1a: `viewer-check.ts --audio`, heard 68 ms after the file |
 
 ## Physical-device limits
 
