@@ -37,11 +37,10 @@ export interface CaptureFrame {
   steps: number;
   // Written by XrSessionSystem.
   xrPresenting: boolean;
-  // An AR session presents: only the spectator runs; later systems skip.
-  arSpectator: boolean;
-  // The AR session is a handheld camera author (strict handheld
-  // check, decided once on entry). Still `arSpectator` for every
-  // system that returns early; only recording and diagnostics look past it.
+  // The AR session is a handheld camera author (strict handheld check,
+  // decided once on entry): the phone films the set, the performer is
+  // hidden, and the performer systems skip. A headset in passthrough AR is
+  // not one: it embodies the performer exactly as VR does.
   arCameraAuthor: boolean;
   // VR embodiment, from a real session or the mock pose hook.
   vrActive: boolean;

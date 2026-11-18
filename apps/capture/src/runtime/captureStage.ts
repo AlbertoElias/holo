@@ -12,7 +12,7 @@ export interface CaptureStage {
   world: World;
   scene: THREE.Scene;
   renderer: THREE.WebGLRenderer;
-  // Environment and avatar; AR spectator placement moves it.
+  // Environment and avatar; phone AR placement moves it.
   worldGroup: THREE.Group;
   // Dollies tracking space; parents the XR camera, controllers and hands.
   cameraRig: THREE.Group;
@@ -91,7 +91,7 @@ function removeCompetingSdkSystems(world: World): void {
   // duplicate capture's avatar hands, so they never load.
   disableSdkInputVisuals(world);
   // Would clear the background and clear alpha in AR, duplicating capture's AR
-  // spectator; capture lights its scene itself.
+  // background (ArSpectator); capture lights its scene itself.
   world.unregisterSystem(EnvironmentSystem);
   world.unregisterSystem(LightSystem);
   // Spatial playback with wall-clock AudioParam ramps, which throw under

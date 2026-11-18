@@ -21,7 +21,6 @@ export class RecordingSystem extends createSystem() {
       c.screenHolds.step(c.frame.elapsedSec);
       return;
     }
-    if (c.frame.arSpectator) return;
     const held = c.frame.vrActive
       ? c.headsetHolds.update({ timeSec: c.frame.elapsedSec, presenting: c.frame.xrPresenting && !c.tracking.mock.enabled, recording: c.recording.recorder.isEnabled(), camera: c.stage.xrCamera })
       : c.headsetHolds.update({ timeSec: c.frame.elapsedSec, presenting: false, recording: false, camera: c.stage.xrCamera });

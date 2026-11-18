@@ -21,7 +21,7 @@ export class CalibrationSystem extends createSystem() {
 
   update(deltaSec: number): void {
     const c = this.capture;
-    if (c.frame.arSpectator) return;
+    if (c.frame.arCameraAuthor) return;
     c.terrainLegs.restore();
     c.avatar.restoreCrouchPose();
     this.updateHeightFit(deltaSec);

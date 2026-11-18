@@ -11,7 +11,6 @@ export class DiagnosticsSystem extends createSystem() {
 
   update(): void {
     const c = this.capture;
-    if (c.frame.arSpectator && !c.frame.arCameraAuthor) return;
     c.diagnostics.update();
   }
 }

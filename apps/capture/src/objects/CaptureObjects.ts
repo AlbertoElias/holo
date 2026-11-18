@@ -203,7 +203,7 @@ export class CaptureObjects {
   }
 
   /**
-   * One step of a spectator session (AR): nothing is held or reached for any more, and the props settle
+   * One step of a phone AR camera-author session: nothing is held or reached for any more, and the props settle
    * where physics puts them, so a prop carried at entry does not hang in the air for the take.
    */
   spectate(deltaSec: number): void {

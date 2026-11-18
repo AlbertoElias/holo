@@ -83,7 +83,6 @@ export function renderCaptureTextState(c: CaptureContext): string {
       worldPosition: { x: stage.worldGroup.position.x, y: stage.worldGroup.position.y, z: stage.worldGroup.position.z },
       // Camera author mode (docs/features/archive/ar-recording.md), for the AR recording check.
       cameraAuthor: c.frame.arCameraAuthor,
-      spectator: c.frame.arSpectator,
       performerHidden: !avatar.avatarRoot.visible,
       placementSettled: c.ar.isSettled(),
       interactionMode: (stage.renderer.xr.getSession() as (XRSession & { interactionMode?: string }) | null)?.interactionMode ?? null,

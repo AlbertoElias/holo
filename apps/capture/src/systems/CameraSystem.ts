@@ -15,7 +15,7 @@ export class CameraSystem extends createSystem() {
   update(deltaSec: number): void {
     const c = this.capture;
     const frame = c.frame;
-    if (frame.arSpectator) return;
+    if (frame.arCameraAuthor) return;
     const rigWorldLocked = c.body.active && !c.body.solver.faults.has('rig-follows-avatar');
     c.camera.holdLookHeight = c.objects.isReachActive();
     c.avatar.refreshFirstPersonClip();

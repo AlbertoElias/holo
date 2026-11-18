@@ -14,7 +14,7 @@ export class FaceSystem extends createSystem() {
 
   update(deltaSec: number): void {
     const c = this.capture;
-    if (c.frame.arSpectator) return;
+    if (c.frame.arCameraAuthor) return;
     c.face.update({
       timeSec: c.frame.elapsedSec,
       deltaSec,

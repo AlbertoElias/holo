@@ -20,12 +20,6 @@ interface RecordingSessionDeps {
   onTakeStart: () => void;
   /** The AR session authors a camera take (docs/features/archive/ar-recording.md): decided once per session. */
   isCameraAuthor: () => boolean;
-  /**
-   * Why Record is refused in this session, or null: with camera takes on, an
-   * AR session that is not a phone (a headset in passthrough) spectates and
-   * records nothing.
-   */
-  recordRefusal: () => string | null;
   /** The set's placement has finished its entry frames. */
   isPlacementSettled: () => boolean;
   /** The group whose local frame a camera take is recorded in. */
@@ -165,11 +159,6 @@ export class RecordingSession {
   }
 
   private async start(): Promise<void> {
-    const refusal = this.deps.recordRefusal();
-    if (refusal) {
-      this.deps.ui.flashNotice(refusal, NOTICE_MS);
-      return;
-    }
     if (this.deps.isCameraAuthor()) {
       await this.startCamera();
       return;

@@ -21,10 +21,9 @@ export class ObjectSystem extends createSystem() {
 
   update(): void {
     const c = this.capture;
-    if (c.frame.arSpectator) {
+    if (c.frame.arCameraAuthor) {
       // A phone camera author places tray items where its centre ray lands, in this step, before the camera is recorded.
-      // A headset in passthrough only watches: no summon.
-      if (c.frame.arCameraAuthor) c.phoneChrome.stepPlacement(c.frame.elapsedSec);
+      c.phoneChrome.stepPlacement(c.frame.elapsedSec);
       // Whatever the desktop held or reached for when the session began is let go, not frozen mid-air.
       c.objects.spectate(c.frame.deltaSec);
       return;

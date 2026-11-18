@@ -82,8 +82,8 @@ hands-only.
 | VR body, every skeleton (worst of 7 fixtures × 5 rows) | 2.0 cm (walk, every fixture) / 5.4% (twisted T-pose, ramp) · 0.0 · 0.1 | 34 | 0% | 1.2 mm (crouch) | — | pass |
 | VR hands, real Quest 3 recording (each of the 7 `avatars` skeletons) | — | — | 0% (was unmeasured: hand samples carried no elbows) | 1.1 (2.9) mm (base 1.4) | wrist p95 0.2 cm (base **3.0**), latency 0, jerk 0.99 (base 1.03) | pass (gap 4 done) |
 | VR hands, IWER | — | — | 0% | 0.5 (1.9) mm | wrist 0.0 cm, latency 0, jerk 1.00 | pass |
-| Quest passthrough AR | unmeasured (same body solver as VR; to confirm) | | | | | gap |
-| Phone AR | unmeasured (avatar placed and driven from the phone; to confirm) | | | | | gap |
+| Quest passthrough AR (body replay in an IWER `immersive-ar` session, each of the 7 `avatars` skeletons × 5 rows) | worst 2.0 cm (walk, every fixture) / 5.4% (twisted T-pose, ramp) · 0.0 · 0.1; same per row as VR (was **frozen**: the performer never moved, 0% of frames solved) | 34 | 0% | 1.2 mm (crouch) | — (body replays carry no hand input; the hand rows cover the same solver) | pass (gap 5 done) |
+| Phone AR | no avatar by design: the phone is a camera author (performer hidden, camera path, voice and marks), the user's call 2026-11-17; its camera path is graded by `ar-record` (0 cm, 0° off the script) | — | — | — | — | n/a |
 
 Jitter at or under the input floor is the tracker's, not the solver's; the
 target there is "no worse than input".
@@ -196,8 +196,19 @@ by today's instrument, so each pair differs only by the solver.
    same before and after. Trade-off: on an overreach the avatar's forearm
    visibly lengthens, up to 8%; the end of the recording's 7-19% overreach
    still misses by 4-5 cm on 7 frames, under the p95.
-5. **AR sources measured.** Add Quest AR and phone AR rows to the existing AR
-   checks; fix only if they miss.
+5. **Done (2026-11-17): AR sources measured.** Measuring showed no AR mode
+   drove the avatar: any AR session was a spectator, so a headset in
+   passthrough watched a frozen performer and recorded nothing. The user
+   decided (2026-11-17): Quest passthrough embodies and records the
+   performer now (tracked parts match the person, the rest is inferred as in
+   VR); phone AR stays a camera author with no avatar. A non-handheld AR
+   session now runs the VR path over the transparent background: the same
+   body solver, VR chrome and Record (avatar takes), with the set at the
+   real floor's origin rather than placed 2.2 m ahead. Every passthrough
+   row equals its VR row on all 7 skeletons, strict as `ar-quest`; the
+   Unreal cm walking eye error stays 4.2 cm (small steps), so no margin is
+   spent. Trade-off: the microphone is released at passthrough entry and
+   asked again at Record, as in VR.
 
 Each gap ends with: its row meeting target, the source's guard turned strict,
 and a before/after proof video (ignored `output/`, H.264 MP4, never committed).
@@ -226,7 +237,7 @@ report passes on it.
 - [x] Camera row has measured body and aim numbers, behind `?input=camera`. Body, ray, feet and latency meet on all 17 skeletons; aim misses at 34.4° for the measured reason in gap 2, accepted as rough aim (Decision 4).
 - [x] VR body walk/ramp/turn rows meet target; strict in the body replay (2026-11-14, gap 3; crouch and small steps too).
 - [x] Real-headset wrist p95 ≤ 2 cm (2026-11-17, gap 4): 0.2 cm on all 7 skeletons (was 3.0), strict in the hand replay.
-- [ ] Quest AR and phone AR rows measured; any miss fixed.
+- [x] Quest AR and phone AR rows measured; any miss fixed (2026-11-17, gap 5): Quest passthrough embodies the performer and meets every body target on all 7 skeletons, strict as `ar-quest`; phone AR has no avatar by design (camera author).
 - [ ] Each gap closes with a before/after proof video sent to the user.
 - [ ] Every supported skeleton meets each row's target: the desktop and VR motion checks grade each avatar fixture the `avatars` check loads (`scripts/ci-avatar-formats-playwright.ts`: reoriented axes, A-pose, T-pose, twisted T-pose, VRM 0 facing −Z, Z-up, Unreal centimetres), not only the default avatar (user direction, 2026-11-14). VR part done (2026-11-14): all 5 VR body rows meet target on all 7 fixtures; both VR hand rows too (2026-11-17, gap 4). Camera part done (17 skeletons, gap 2). Desktop part pending.
 
@@ -261,6 +272,10 @@ report passes on it.
    8.6° median at best (target 3.5°). The camera avatar ships with rough aim
    and does not promise precise pointing; the body, head and fingers are
    still held to target. Gap 2 closed with every target but aim on all 17 skeletons.
+5. **AR (2026-11-17).** "With AR, the avatar should move based on the
+   person's movement too": a Quest in passthrough embodies and records the
+   performer now, as in VR; phone AR stays a camera author with no avatar,
+   and its row closes as "no avatar by design".
 
 ## Design review (2026-11-13, `design-reviewer`, Opus)
 
@@ -287,7 +302,7 @@ report passes on it.
 | VR body rows, every skeleton | `XR_AVATAR_ONLY=<fixture> XR_AVATAR_BODY_REPLAYS='crouch,small-steps,turn,walk-forward,walk-ramp' pnpm --filter @holoim/capture run test:xr:avatars`, one fixture per run (all five rows take ~200 s a fixture; the default run replays walk-forward and crouch) | 2026-11-14: all 7 fixtures pass every row, strict |
 | Hand rows | `pnpm --filter @holoim/capture run test:xr:hands` (strict `vr-hands` motion grading; the `avatars` check runs it per skeleton) | gap 4 (2026-11-17): every target met on all 7 skeletons, joint limits measured from the sampled body |
 | Camera row | `pnpm --filter @holoim/capture run bodycam:report <clip> <config> --avatars all` (or `--from-landmarks`); lean guard in `test:xr:bodycam` | every target but aim on 17 skeletons (2026-11-14) |
-| AR rows | existing AR checks with body sampling | pending |
+| AR rows | `BODY_REPLAY_SESSION=ar pnpm --filter @holoim/capture run test:xr:body` (the 5 body fixtures in passthrough, strict `ar-quest`); the `avatars` check grades one passthrough walk per skeleton; `test:xr:ar-record` quest-passthrough and interaction-undefined: no camera author, no dock, hips follow a 1 m head walk (0.9 m), Record makes one avatar take (141 channels) | gap 5 (2026-11-17): every row passes on all 7 skeletons; 18/18 `ar-record` phases pass |
 
 ## Physical-device limits
 

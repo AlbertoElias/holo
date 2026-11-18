@@ -26,7 +26,7 @@ export class MovementSystem extends createSystem() {
   update(deltaSec: number): void {
     const c = this.capture;
     const frame = c.frame;
-    if (frame.arSpectator) return;
+    if (frame.arCameraAuthor) return;
     const { motor, input, body, avatar, config } = c;
 
     // A flat-screen reach's step in is a displacement, not input: it moves the avatar without counting as walking.

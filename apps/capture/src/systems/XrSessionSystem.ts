@@ -9,8 +9,9 @@ import { type CaptureContext, captureContext } from './captureContext';
 export class XrSessionSystem extends createSystem() {
   private capture!: CaptureContext;
   private inArSession = false;
-  // Decided once per AR session on entry: a strictly handheld
-  // session. A headset in passthrough, or a browser that does not say, is a spectator.
+  // Decided once per AR session on entry: a strictly handheld session is a
+  // camera author. A headset in passthrough, or a browser that does not say,
+  // embodies the performer as VR does, over the passthrough.
   private cameraAuthor = false;
   private session: XRSession | null = null;
   private referenceSpace: XRReferenceSpace | null = null;
@@ -42,12 +43,11 @@ export class XrSessionSystem extends createSystem() {
     if (transition.exited) this.onExited();
 
     frame.xrPresenting = c.tracking.isXrPresenting();
-    frame.arSpectator = isAr && frame.xrPresenting;
-    frame.arCameraAuthor = frame.arSpectator && this.cameraAuthor;
+    frame.arCameraAuthor = isAr && frame.xrPresenting && this.cameraAuthor;
     // The AR tap asked for the microphone before it knew whether a session
     // would start; a refused request leaves it open with nothing to use it.
     if (!frame.xrPresenting && c.recording.isMicHeld() && !this.world.sessionRequestPending) c.recording.releaseHeldMic();
-    if (frame.arSpectator) {
+    if (frame.arCameraAuthor) {
       c.ui.publishMode('ar');
       c.camera.update(false, true, deltaSec, true);
       c.ar.update();
@@ -80,42 +80,38 @@ export class XrSessionSystem extends createSystem() {
     const c = this.capture;
     this.inArSession = isAr;
     this.bindSession();
-    if (isAr) {
-      c.ar.onEntered();
-      this.cameraAuthor = isHandheldSession(this.session, { strict: true });
+    this.cameraAuthor = isAr && isHandheldSession(this.session, { strict: true });
+    // Passthrough clears the background; only a camera author's set is placed in the room.
+    if (isAr) c.ar.onEntered(this.cameraAuthor);
+    if (this.cameraAuthor) {
       // The idle performer is not in a camera take; it comes back on exit.
-      if (this.cameraAuthor) {
-        c.avatar.avatarRoot.visible = false;
-        c.phoneChrome.show();
-      } else {
-        c.recording.releaseHeldMic();
-        // A headset in passthrough AR gets Find on the wrist.
-        c.vrChrome.show('ar');
-      }
+      c.avatar.avatarRoot.visible = false;
+      c.phoneChrome.show();
     } else {
-      c.vrChrome.show();
+      // VR, or a headset in passthrough AR: the same embodied performer, the
+      // same chrome (passthrough sets only the chip's opacity) and the same takes.
+      if (isAr) c.recording.releaseHeldMic();
+      c.vrChrome.show(isAr ? 'ar' : 'vr');
       c.hands.resetRuntimeState();
       c.heightFit.calibration.reset();
       c.crouch.resetBaseline();
       c.body.onXrEntered();
       c.input.onXrEntered();
     }
-    c.camera.onXrEntered(isAr);
+    c.camera.onXrEntered(this.cameraAuthor);
   }
 
   private onExited(): void {
     const c = this.capture;
     const exitingAr = this.inArSession;
+    const cameraAuthor = this.cameraAuthor;
     this.inArSession = false;
+    this.cameraAuthor = false;
     this.unbindSession();
-    if (exitingAr) {
-      if (this.cameraAuthor) c.recording.endCameraTake();
+    if (cameraAuthor) {
+      c.recording.endCameraTake();
       c.phoneChrome.hide();
-      this.cameraAuthor = false;
       c.avatar.avatarRoot.visible = true;
-      c.recording.releaseHeldMic();
-      c.ar.onExited();
-      c.vrChrome.hide();
     } else {
       c.vrChrome.hide();
       c.hands.resetRuntimeState();
@@ -124,6 +120,10 @@ export class XrSessionSystem extends createSystem() {
       // Normal frame restoration removes the crouch pose before the mixer runs.
       c.crouch.release();
       c.input.onXrExited();
+    }
+    if (exitingAr) {
+      c.recording.releaseHeldMic();
+      c.ar.onExited();
     }
     c.camera.onXrExited();
   }

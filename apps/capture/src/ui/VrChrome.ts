@@ -52,7 +52,7 @@ interface VrChromeDeps {
   getOpenTrace: () => { startSec: number; onSide?: VrHandSide } | null;
 }
 
-/** VR carries the whole chrome; passthrough AR (the spectator) carries Find only. */
+/** VR and passthrough AR carry the same chrome; passthrough only raises the chip's opacity. */
 export type ChromeMode = 'vr' | 'ar';
 
 /** After a commit the finger is still pulling back from chrome, not pointing. */
@@ -180,7 +180,7 @@ export class VrChrome {
     if (mode !== this.mode) this.dockKey = '';
     this.mode = mode;
     this.find?.setChipOpacity(this.chipOpacity());
-    this.placePanel = mode === 'vr';
+    this.placePanel = true;
     this.closeFind();
     this.presentedFrames = 0;
     this.build();
@@ -345,8 +345,8 @@ export class VrChrome {
     });
     this.updatePanel(camera, state, recording);
     this.updateFind(camera, state);
-    // Rings and the summon glyph at the open tray's miniatures; only in a headset, never in passthrough (a spectator does not summon).
-    this.traySignifiers?.update(camera, this.shown, this.mode === 'vr', state.tray, this.root);
+    // Rings and the summon glyph at the open tray's miniatures.
+    this.traySignifiers?.update(camera, this.shown, true, state.tray, this.root);
     this.updatePoke(state.handedness);
     // While a take runs, a ray shows only on the chrome a take keeps: stop, and Find with its panel.
     this.rays?.update((hand) => this.deps.renderer.xr.isPresenting && Boolean(this.deps.tracking.getChromeInput(hand).targetRay) && (!recording || shownInTake(this.rayHit(hand))));
@@ -458,7 +458,7 @@ export class VrChrome {
       this.dock?.dispose();
       const record: DockAction = { id: 'record', glyph: 'record', label: 'Record', onSelect: () => this.deps.toggleRecording() };
       const find: DockAction = { id: 'find', glyph: 'find', label: 'Find an object', onSelect: () => this.openFind() };
-      this.dock = new HandDock(this.deps.world, { kind: 'hand', space: this.wristAnchor, ownPointerIds: handPointerIds(this.deps.world, carrier), palm: [0, -1, 0] }, this.mode === 'vr' ? [record, find] : [find], {
+      this.dock = new HandDock(this.deps.world, { kind: 'hand', space: this.wristAnchor, ownPointerIds: handPointerIds(this.deps.world, carrier), palm: [0, -1, 0] }, [record, find], {
         input,
         drawOverBody: true,
         canCommit: (action, pointerId) => (action.id === 'find' ? this.canFind(pointerId) : this.canRecord(pointerId)),
@@ -468,7 +468,7 @@ export class VrChrome {
       this.dockKey = key;
     }
     this.wristTracked = this.placeWristAnchor(carrier);
-    this.dock!.setVisible(this.wristTracked && (this.mode === 'ar' || chromeVisible('record', recording)));
+    this.dock!.setVisible(this.wristTracked && chromeVisible('record', recording));
     // Find stays on the wrist during a take (tray-everywhere): the author searches mid-sentence.
     this.dock!.setActionVisible('find', true);
     this.dock!.setRecording(recording);
@@ -539,7 +539,7 @@ export class VrChrome {
       panel.place(camera);
       this.placePanel = false;
     }
-    panel.setVisible(this.mode === 'vr' && !this.placePanel && !this.findOpen && chromeVisible('settings', recording));
+    panel.setVisible(!this.placePanel && !this.findOpen && chromeVisible('settings', recording));
     panel.setRow('refit', {
       text: state.heightFit.pending ? 'Hold still…' : state.heightFit.enabled ? 'Refit height' : 'Refit after the take',
       enabled: state.heightFit.enabled && !state.heightFit.pending
