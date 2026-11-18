@@ -4,7 +4,7 @@ Tools for `docs/features/directed-performance.md`: read what a take does,
 check whether an avatar can act, direct a take from a beat sheet into an
 ordinary hologram GLB, and review whether it reads. Run everything from `apps/capture` with
 `node --conditions=development --import tsx`; output goes to the ignored
-`output/authoring/`.
+`output/authoring/` (recorded takes: `output/take-input/`).
 
 | Script | What it does |
 |---|---|
@@ -12,6 +12,10 @@ ordinary hologram GLB, and review whether it reads. Run everything from `apps/ca
 | `avatar-audition.ts <avatar.glb\|.gltf> [--geometry] [--out dir] [--json out.json]` | Grades any avatar against the audition bar (`lib/audition-bar.ts`): one row per bar with its measured value and pass or fail, in `audition.json` (below). Exits 1 when a binding row fails. |
 | `direct.ts <sheet.json> [--out take.glb] [--style flat\|directed] [--against earlier.glb]` | Solves the beat sheet on each performer's avatar, writes the GLB and the sheet beside it (and, with objects, `<take>.objects.json`), prints each reach's stop-short distance, each grip, put and aim's miss, and the acting report. Exits 1 when a grip, put or aim misses past its limit (the files are still written). |
 | `house-base.ts [--params file] [--out file.glb] [--blender path] [--install-mpfb]` | Makes the house base avatar (slice 2c) from CC0 parts in headless Blender: fetches MPFB 2.0.18 and the faceunits01 pack at pinned sha256 into `output/authoring/house-base/cache/`, runs `house-base/build.py` with every value from `house-base/base.json`, and writes `public/gltf/models/house-base.glb` with its credits in `asset.copyright` and the scene's `holoimAvatar` extras. Change the look in `base.json`, never in the GLB. Re-runs give the same geometry, but Blender may order the eye and mouth triangles differently, so the sha256 can change. |
+| `import-take.ts <recorded.glb> [--out dir] [--fps n]` | Turns a capture-recorded GLB into the tool's own take (`lib/take.ts`, `<name>.take.json`): bone rotations away from bind, the hips' path, face channels and measures, resampled to 30 fps, with the beats found in its motion. Writes `<name>.import.md`. |
+| `recast-take.ts <take.json\|recorded.glb> --to <avatar> [--to …] [--out dir]` | Plays the take on each avatar (`stock`, `fixture:<name>` or a path) as an ordinary hologram GLB, and writes `<name>.recast.md` / `.json`: what survives and what is lost (hips, feet, limbs, wrist placement, face, gaze), against rotation-only retargeting on the same avatar. |
+| `edit-take.ts <edit.json> [--to <avatar>] [--out dir]` | Applies an edit file (`lib/edit.ts`: retime, hold, look) to a take, writes the edited take and both the original and edited takes on the avatar, and `<name>.edit.md` / `.json`. Exits 1 when a frame outside the edits differs from the recording. |
+| `compare-takes.ts <person.glb> <agent.glb> [--out dir]` | The acting report and motion numbers (beats, hold stillness, hand speed, hesitations, head range, travel) on two takes side by side, in `<a>-vs-<b>.compare.md` / `.json`. |
 | `review.ts <take.glb> [--sheet take.beats.json] [--out dir] [--step 0.2] [--fps 30]` | Plays the take in viewer-web and writes a review pack (below): a real-time H.264 video at feed-card size and a close view per performer, frame sheets every `--step` s, the acting report, the face's height and per-second travel on the card, and a comparison to fill in. Same ports as `viewer-check.ts`. |
 | `viewer-check.ts <take.glb> [--video out.mp4] [--frames dir] [--report out.json]` | Uploads the take to a local test API, opens it in a viewer-web test build and reads what plays: moving bones, fingers and face shapes per performer, which performer holds the humanoid the viewer anchors on, and each recorded object (meshes, whether it moves, its credit). `--video` records it as H.264; `--frames` saves twelve paused stills at exact take times. Uses ports 3341 and 3214 (`VIEWER_CHECK_API_PORT`, `VIEWER_CHECK_WEB_PORT`). |
 
@@ -166,6 +170,45 @@ an object while a beat names it, and while it is held. `on-screen.json`
 gives each object's size on the card. The 1c reader who saw the pointer
 aimed at nothing was given stills cropped to the cast, a fault in the review
 tool, not in the viewer (fixed).
+
+## A recorded take as input
+
+Slice 4a of the brief: a person's take, recorded by capture, becomes
+something the tool can play on another avatar and edit by beat, without any
+change to capture or the recording format.
+
+```
+node --conditions=development --import tsx scripts/authoring/import-take.ts output/ci-pointing/headset-open-fist-pinch-point-wave-reach.glb
+node --conditions=development --import tsx scripts/authoring/recast-take.ts output/take-input/headset-open-fist-pinch-point-wave-reach.take.json --to stock --to fixture:unreal-cm
+node --conditions=development --import tsx scripts/authoring/edit-take.ts scripts/authoring/takes/headset-reach.edit.json
+node --conditions=development --import tsx scripts/authoring/direct.ts scripts/authoring/takes/headset-reach.agent.json --out output/take-input/headset-reach.agent.glb
+node --conditions=development --import tsx scripts/authoring/compare-takes.ts <recorded.glb> output/take-input/headset-reach.agent.glb
+```
+
+The recorded inputs come from the repository's own checks, not a device:
+`pnpm --filter @holoim/capture run test:xr:pointing` (with
+`XR_REPLAY_ONLY=open-fist`) writes the owner's headset hand take, and
+`test:xr:bodycam` the camera-driven one. The example edit file names its
+take by a path relative to itself; point it at the recorded GLB you have.
+
+- **The take** (`lib/take.ts`): bind poses come from the skins (a recorded
+  file's nodes hold its last pose, not bind). Frames at either end where a
+  bone jumps faster than 4 m/s (the recorder starting or stopping) are
+  trimmed. Beats are found from motion: a hold is at least 0.4 s with both
+  wrists under 0.18 m/s and the head turning under 25 °/s.
+- **Recast** (`lib/recast.ts`): each bone turns away from the target's bind
+  by the take's rotation, after lining the target's bind limb up with the
+  recording avatar's; the hips follow the take's path scaled by leg length.
+  `hips: 'fixed'` is rotation-only retargeting (capture's `retargetClips`),
+  the baseline the loss report compares against. A recast GLB is marked
+  `synthetic` like any authored take, with the recording as its source.
+- **Edits** (`lib/edit.ts`): `retime` plays a span (seconds or a beat id)
+  over a new duration; `hold` freezes the take at a time for `add` seconds,
+  filled with life from `lib/life.ts` (breath, glances, sighs, blinks, eased
+  in and out) unless `life` is false; `look` turns the head (and a share of
+  neck and chest, and the eyes) toward a yaw and pitch over a span, eased.
+  Edits may not overlap. Everything outside them is the recording's own
+  frames, shifted in time, checked frame by frame.
 
 ## Reviewing a take
 

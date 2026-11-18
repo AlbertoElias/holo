@@ -1055,6 +1055,69 @@ recording path for the mandate sessions to agree to when this slice
 starts. Two declared performers in one file is a format extension and
 would be its own brief.
 
+#### Slice 4a: a recorded take as input, with no change to capture (2026-11-18)
+
+Camera driving landed on `main` behind `?input=camera`
+(`apps/capture/src/bodycam/`; `archive/natural-avatar-motion.md` is
+Complete), so slice 4 starts. It is split in two, decided by the agent in
+the owner's absence on 2026-11-18, for the owner to review: 4a builds what
+needs no change to `apps/capture/src/` or to the recording format; 4b is
+what needs the recording owners.
+
+**Built in 4a** (scripts under `apps/capture/scripts/authoring/`):
+
+1. **Import** (`import-take.ts`): reads any capture-recorded GLB and turns
+   the declared performer into the tool's own representation, a
+   `*.take.json`: per frame, each humanoid bone's rotation away from its
+   bind pose in the body frame, the hips' path, the face as the canonical
+   channels (of 67: 52 ARKit and the visemes) the recording avatar has shapes
+   for, and the
+   performer's measures; plus the take's own beats, found from motion (moves
+   and holds, each with where the head looks). Bind poses come from the
+   skins, because a recorded file's nodes hold its last pose.
+2. **Recast** (`recast-take.ts`): plays that take on another avatar that
+   binds: the stock, the avatar-format fixtures, any GLB. The hips' path is
+   scaled by leg length; each limb's bind direction is matched first (the
+   T-pose/A-pose correction `retargetClips.ts` makes for the arms). A loss
+   report states in numbers what does not survive: hips travel (and what a
+   rotation-only move, as `retargetClips.ts` does, would lose), foot
+   contacts (skate, float, penetration from `motion-quality.ts`, source
+   against recast), and face detail (channels the recording never kept,
+   channels the new avatar cannot show, gaze without eyes).
+3. **Edit by beat** (`edit-take.ts`): a small edit file retimes a span,
+   lengthens a hold and redirects a look, naming the take's beats or times.
+   Everything outside the edited spans plays exactly as recorded (shifted in
+   time where a retime moves it), checked frame by frame. A lengthened hold
+   is filled by idle life from `lib/life.ts`'s schedule (breath, glances,
+   sighs, blinks), so it does not freeze; a weight shift would move the hips
+   and feet the recording planted, so the hold does not shift weight.
+4. **The same report on both** (`compare-takes.ts`): the acting report and
+   motion numbers on a person's take and on an agent-directed take of the
+   same action, side by side: when each move starts and peaks, how many
+   hesitations (velocity dips) a move has, how still a hold is, how far the
+   hips and chest carry weight.
+
+The inputs are takes the repository's own checks record (no device): the
+owner's Quest 3 hand recording replayed through capture (open, fist,
+point, pinch, wave, reach, 9.3 s), the camera-driven take from
+`ci-bodycam-playwright.ts` (`?input=camera`, a committed landmark stream)
+and the phone selfie take from the phone journey's check.
+
+**Left for 4b, which needs the recording owners** (the motion owner and
+the phone capture mandate):
+
+- keeping the raw 52 face channels in the recording, beside the routed
+  weights on the recording avatar's shapes, so a recast face is not limited
+  by the avatar the person recorded on;
+- keeping hand goals (tracked wrists and fingertips, and what a hand
+  touched) so a recast can re-solve reaches and contacts by IK on the new
+  body rather than copy rotations;
+- two declared performers in one file (IDEA-084), a format extension and
+  its own brief.
+
+4b changes the recording format, so it waits for both owners to agree;
+4a's loss report is the case for it.
+
 ### Slice 5: likeness from a photo (deferred)
 
 The second finish moved into slice 2 (2f) on 2026-11-17. What is left is
@@ -2264,6 +2327,60 @@ glasses ring (clay look, above), and a smaller head fails the face box.
 What would meet it is a face made for big eyes: decision 7's option A, a
 commission, which is spend and so the owner's. The side-by-side is the
 worktree's ignored `output/house-base-2c/mixes-side-by-side.jpg`.
+
+### Slice 4a evidence (2026-11-18)
+
+Commands from `apps/capture` (each writes its report under the ignored
+`output/take-input/`; the README's "A recorded take as input" lists them).
+Inputs are the takes the repository's checks record: the owner's Quest 3
+hand take replayed through capture (`test:xr:pointing`, `open-fist`), the
+camera-driven take (`test:xr:bodycam`) and the phone selfie take.
+
+1. **Import** (`import-take.ts`). Headset: 275 frames at 30 fps from a
+   9.23 s recording at 63 fps, 54 humanoid bones, 21 of 52 ARKit channels
+   (only the blinks move), the hips 0.28 m below standing: the owner sat.
+   The recorder's start and stop snaps (a wrist at 25 m/s) are trimmed,
+   one frame at each end. Nine beats found (five moves, four holds). The
+   camera take's two head turns read as holds at ±30° yaw, the phone
+   selfie as a single hold (it animates two bones).
+2. **Recast** (`recast-take.ts`, headset take onto the stock, the
+   `unreal-cm` fixture and the house base). On the stock and `unreal-cm`
+   the limbs match to 0.4° p95 and the hips keep their 0.038 m travel and
+   0.279 m drop. The house base (legs 0.868 of the source, bind arms 41°
+   off) keeps the hips scaled (0.242 m drop) with the wrists 4.2% of an
+   arm off where the performer's were. Rotation-only retargeting, as
+   `retargetClips.ts` does today, loses all hips travel and the drop: the
+   feet float 28.1 cm (24.3 cm on the house base). Lost on every target:
+   31 of 52 face channels, dropped at record time; any contact or hand
+   goal, which the recording never had; on `unreal-cm` (no eye bones, no
+   gaze shapes), the gaze.
+3. **Edit by beat** (`edit-take.ts scripts/authoring/takes/headset-reach.edit.json`):
+   a 1.5 s hold in the open hands, filled with life (a glance and breath),
+   the point retimed from 1.2 s to 2.4 s, and the head turned to yaw −35°
+   during the wave (the recording looks at −5.9°; the edited take reaches
+   −35.0°). The 193 frames outside the edits match the recording to
+   0.0008° (the take's rounding), 0 mm and 0 face weight, checked against
+   the edit file's own time map.
+4. **Person and agent** (`compare-takes.ts` on the recording and on
+   `takes/headset-reach.agent.json`, the same action directed). The agent
+   cannot say the pinch, the wave or the crouch. Side by side, the person
+   raises the hands at 0.37 s (the agent's arms first move at 3.57 s,
+   because a hand shape moves only the fingers), peaks at 0.78 m/s (agent
+   2.17), has 7 hesitations inside moves (agent 0), and holds the head
+   within 2.1° of yaw (agent 43°, from life's glances). Holds take the
+   same share of time (0.52 against 0.53), but the person's longest is
+   2.33 s and the agent's 1.17 s. Read as direction for slice 3: the
+   vocabulary lacks raising the hands to show them, a wave and a pinch,
+   and its moves are faster and cleaner than a person's.
+
+Readers: READERS-PENDING
+
+The code review in a fresh context found seven issues, all fixed before
+merge: the bind and take floors used different rules; the last frame read
+the first, because the mixer looped; the chest joint fell back differently
+on import and recast; the untouched check was circular; edit overlap
+depended on list order; leg length was measured two ways; hold lengths
+were one frame short.
 
 ## Physical-device limits
 
