@@ -15,13 +15,14 @@
  */
 import { basename } from 'node:path';
 
-import { Document, NodeIO, type Node as GNode } from '@gltf-transform/core';
+import { Document, NodeIO, type Accessor as GAccessor, type Node as GNode } from '@gltf-transform/core';
 import { dedup, mergeDocuments } from '@gltf-transform/functions';
+import * as THREE from 'three';
 import { assertHoloimObjects, formatCredit, HOLOIM_CREDIT_EXTRAS_KEY, HOLOIM_OBJECTS_EXTENSION, HOLOIM_OBJECTS_VERSION, RECORDED_OBJECT_NODE_NAME, type HoloimObjects } from '@holoim/objects';
-import type * as THREE from 'three';
 
 import type { PerformerTrack, PropTrack, SolvedTake } from './direct.ts';
 import { partGeometry } from './props.ts';
+import type { Effect, Keys, ObjectChange, SolvedWorld } from './world.ts';
 
 const HUMANOID = 'HOLOIM_humanoid';
 const EPS_ROTATION = 1e-5;
@@ -44,7 +45,7 @@ export interface WrittenTake {
   readonly objects: { id: string; node: number }[];
 }
 
-export async function writeTake(take: SolvedTake, provenance: Provenance): Promise<WrittenTake> {
+export async function writeTake(take: SolvedTake, provenance: Provenance, world?: SolvedWorld): Promise<WrittenTake> {
   const io = new NodeIO();
   const doc = new Document();
   const buffer = doc.createBuffer();
@@ -113,33 +114,66 @@ export async function writeTake(take: SolvedTake, provenance: Provenance): Promi
     if (index === 0) humanBones = humanBoneNodes(track, nodeOf);
   }
 
-  const objectNodes: { track: PropTrack; node: GNode }[] = [];
+  /** A track on its own key times (a world change's), stepping or linear. */
+  const keyed: Keyed = (node, path, input, values, interpolation = 'LINEAR') => {
+    const output = doc.createAccessor(`${node.getName()}.${path}`).setType(path === 'rotation' ? 'VEC4' : 'VEC3').setArray(new Float32Array(values)).setBuffer(buffer);
+    const sampler = doc.createAnimationSampler().setInput(input).setOutput(output).setInterpolation(interpolation);
+    animation.addSampler(sampler).addChannel(doc.createAnimationChannel().setTargetNode(node).setTargetPath(path).setSampler(sampler));
+    channels += 1;
+  };
+  const keyTimes = (values: Float32Array): GAccessor => doc.createAccessor('time').setType('SCALAR').setArray(new Float32Array(values)).setBuffer(buffer);
+  const duration = take.times[take.times.length - 1] ?? 0;
+  /** Presence as a STEP scale track on a node: 0 outside the spans. Nothing when present all through. */
+  const presenceTrack = (node: GNode, spans: readonly { start: number; end: number }[]): void => {
+    if (spans.length === 1 && spans[0]!.start <= 0 && spans[0]!.end >= duration) return;
+    const keys: [number, number][] = [[0, 0]];
+    for (const sp of spans) { keys.push([sp.start, 1]); if (sp.end < duration) keys.push([sp.end, 0]); }
+    // A later key at the same time wins (an object present from 0).
+    const merged = keys.filter((k, i) => !(keys[i + 1] && keys[i + 1]![0] === k[0]));
+    node.setScale(merged[0]![1] ? [1, 1, 1] : [0, 0, 0]);
+    keyed(node, 'scale', keyTimes(new Float32Array(merged.map((k) => k[0]))), new Float32Array(merged.flatMap((k) => [k[1], k[1], k[1]])), 'STEP');
+  };
+
+  const objectNodes: { track: PropTrack; node: GNode; change?: ObjectChange }[] = [];
   for (const track of take.props) {
+    const change = world?.changes.get(track.prop.id);
     const node = await writeObject(doc, io, scene, buffer, track, (node, path, values) => {
       const output = doc.createAccessor(`${track.prop.id}.${path}`).setType(path === 'rotation' ? 'VEC4' : 'VEC3').setArray(new Float32Array(values)).setBuffer(buffer);
       const sampler = doc.createAnimationSampler().setInput(times).setOutput(output).setInterpolation('LINEAR');
       animation.addSampler(sampler).addChannel(doc.createAnimationChannel().setTargetNode(node).setTargetPath(path).setSampler(sampler));
       channels += 1;
-    });
-    objectNodes.push({ track, node });
+    }, change && { change, keyed, keyTimes, times, presenceTrack });
+    objectNodes.push({ track, node, ...(change ? { change } : {}) });
+  }
+  const effectNodes: { effect: Effect; node: GNode }[] = [];
+  for (const effect of world?.effects ?? []) {
+    if (!effect.nodes.length) continue;
+    effectNodes.push({ effect, node: writeEffect(doc, scene, buffer, effect, keyed, keyTimes, presenceTrack) });
   }
 
   await doc.transform(dedup({ propertyTypes: ['Texture', 'Material'] }));
   let glb: Uint8Array = await io.writeBinary(doc);
   const nodes = doc.getRoot().listNodes();
-  const duration = take.times[take.times.length - 1] ?? 0;
   const first = take.tracks[0]?.spec.id;
-  const objects: HoloimObjects | undefined = objectNodes.length ? assertHoloimObjects({
+  const objects: HoloimObjects | undefined = objectNodes.length || effectNodes.length ? assertHoloimObjects({
     version: HOLOIM_OBJECTS_VERSION,
-    objects: objectNodes.map(({ track, node }) => ({
+    objects: [...objectNodes.map(({ track, node, change }) => ({
       node: nodes.indexOf(node),
       name: track.prop.name,
       origin: 'prepared',
       source: { name: sourceName(track.prop.spec.source) ?? `sheet:${track.prop.id}`, ...(track.prop.source ? { sha256: track.prop.source.loaded.sha256 } : {}) },
-      presence: [{ start: 0, end: round3(duration) }],
+      presence: change?.presence ?? [{ start: 0, end: round3(duration) }],
       // HOLOIM_objects holds are the recorded avatar's: the first performer's.
       holds: track.holdings.filter((h) => h.performer === first).map((h) => ({ hand: h.side, start: round3(h.from), end: round3(Math.min(h.to, duration)) }))
-    }))
+    })), ...effectNodes.map(({ effect, node }) => ({
+      node: nodes.indexOf(node),
+      name: effect.name,
+      // Placed during the take, by the direction rather than a hand.
+      origin: 'summoned' as const,
+      source: { name: `effect:${effect.kind}` },
+      presence: effect.presence,
+      holds: []
+    }))]
   }) : undefined;
   const credits = [...new Set(take.props.flatMap((t) => (t.prop.credit ? [formatCredit(t.prop.credit)] : [])))];
   glb = patchJson(glb, (json) => {
@@ -165,7 +199,18 @@ const round3 = (v: number): number => Math.round(v * 1000) / 1000;
 const sourceName = (source: string | undefined): string | undefined => (source === undefined || source.startsWith('polyhaven:') ? source : basename(source));
 
 /** One object: its wrapper (rest pose = first frame; tracks only if it moves), and its parts or its source model. */
-async function writeObject(doc: Document, io: NodeIO, scene: ReturnType<Document['createScene']>, buffer: ReturnType<Document['createBuffer']>, track: PropTrack, add: (node: GNode, path: 'translation' | 'rotation', values: Float32Array) => void): Promise<GNode> {
+type Keyed = (node: GNode, path: 'translation' | 'rotation' | 'scale', input: GAccessor, values: Float32Array, interpolation?: 'LINEAR' | 'STEP') => void;
+
+/** What a world change needs to write an object's response. */
+interface ChangeWriter {
+  readonly change: ObjectChange;
+  readonly keyed: Keyed;
+  readonly keyTimes: (values: Float32Array) => GAccessor;
+  readonly times: GAccessor;
+  readonly presenceTrack: (node: GNode, spans: readonly { start: number; end: number }[]) => void;
+}
+
+async function writeObject(doc: Document, io: NodeIO, scene: ReturnType<Document['createScene']>, buffer: ReturnType<Document['createBuffer']>, track: PropTrack, add: (node: GNode, path: 'translation' | 'rotation', values: Float32Array) => void, cw?: ChangeWriter): Promise<GNode> {
   const { prop } = track;
   const wrapper = doc.createNode(RECORDED_OBJECT_NODE_NAME)
     .setTranslation(Array.from(track.position.subarray(0, 3)) as [number, number, number])
@@ -174,6 +219,22 @@ async function writeObject(doc: Document, io: NodeIO, scene: ReturnType<Document
   scene.addChild(wrapper);
   if (moves(track.position, 3, EPS_TRANSLATION)) add(wrapper, 'translation', track.position);
   if (moves(track.rotation, 4, EPS_ROTATION)) add(wrapper, 'rotation', continuous(track.rotation));
+  // A changing object's shape hangs from a node of its own between the wrapper and the shape (slice 1f).
+  let holder = wrapper;
+  if (cw) {
+    if (cw.change.presence) cw.presenceTrack(wrapper, cw.change.presence);
+    const pose = cw.change.pose;
+    holder = doc.createNode(`${prop.id}-change`);
+    wrapper.addChild(holder);
+    if (pose) {
+      holder.setTranslation(Array.from(pose.translation.subarray(0, 3)) as [number, number, number])
+        .setRotation(Array.from(pose.rotation.subarray(0, 4)) as [number, number, number, number])
+        .setScale(Array.from(pose.scale.subarray(0, 3)) as [number, number, number]);
+      if (moves(pose.translation, 3, EPS_TRANSLATION)) cw.keyed(holder, 'translation', cw.times, pose.translation);
+      if (moves(pose.rotation, 4, EPS_ROTATION)) cw.keyed(holder, 'rotation', cw.times, continuous(pose.rotation));
+      if (moves(pose.scale, 3, EPS_TRANSLATION)) cw.keyed(holder, 'scale', cw.times, pose.scale);
+    }
+  }
 
   if (prop.source) {
     const src = await io.readBinary(new Uint8Array(prop.source.loaded.bytes));
@@ -187,27 +248,75 @@ async function writeObject(doc: Document, io: NodeIO, scene: ReturnType<Document
     const model = doc.createNode(`${prop.id}-model`)
       .setScale([prop.source.scale, prop.source.scale, prop.source.scale])
       .setTranslation(prop.source.offset.toArray() as [number, number, number]);
-    wrapper.addChild(model);
+    holder.addChild(model);
     for (const r of roots) model.addChild(map.get(r) as GNode);
     return wrapper;
   }
 
-  const mesh = doc.createMesh(prop.id);
-  for (const [i, part] of prop.parts.entries()) {
+  // One copy of the shape per colour it takes; a copy shows (STEP scale) only in its spans.
+  const variants = cw?.change.variants ?? [{ colors: prop.parts.map((p) => p.color), spans: [] as [number, number][] }];
+  const geometry = prop.parts.map((part) => {
     const g = partGeometry(part);
-    const position = g.getAttribute('position')!.array as Float32Array;
-    const normal = g.getAttribute('normal')!.array as Float32Array;
-    const index = g.getIndex()!.array;
-    const material = doc.createMaterial(`${prop.id}-${part.name ?? i}`).setBaseColorFactor([...part.color, 1] as [number, number, number, number]).setRoughnessFactor(0.8).setMetallicFactor(0);
-    const primitive = doc.createPrimitive()
-      .setAttribute('POSITION', doc.createAccessor().setType('VEC3').setArray(new Float32Array(position)).setBuffer(buffer))
-      .setAttribute('NORMAL', doc.createAccessor().setType('VEC3').setArray(new Float32Array(normal)).setBuffer(buffer))
-      .setIndices(doc.createAccessor().setType('SCALAR').setArray(new Uint16Array(index)).setBuffer(buffer))
-      .setMaterial(material);
-    mesh.addPrimitive(primitive);
+    const out = {
+      position: doc.createAccessor().setType('VEC3').setArray(new Float32Array(g.getAttribute('position')!.array as Float32Array)).setBuffer(buffer),
+      normal: doc.createAccessor().setType('VEC3').setArray(new Float32Array(g.getAttribute('normal')!.array as Float32Array)).setBuffer(buffer),
+      index: doc.createAccessor().setType('SCALAR').setArray(new Uint16Array(g.getIndex()!.array)).setBuffer(buffer)
+    };
     g.dispose();
+    return out;
+  });
+  for (const [k, variant] of variants.entries()) {
+    const suffix = k === 0 ? '' : `-${k + 1}`;
+    const mesh = doc.createMesh(`${prop.id}${suffix}`);
+    for (const [i, part] of prop.parts.entries()) {
+      const material = doc.createMaterial(`${prop.id}-${part.name ?? i}${suffix}`).setBaseColorFactor([...variant.colors[i]!, 1] as [number, number, number, number]).setRoughnessFactor(0.8).setMetallicFactor(0);
+      mesh.addPrimitive(doc.createPrimitive()
+        .setAttribute('POSITION', geometry[i]!.position).setAttribute('NORMAL', geometry[i]!.normal).setIndices(geometry[i]!.index)
+        .setMaterial(material));
+    }
+    const node = doc.createNode(`${prop.id}${suffix}`).setMesh(mesh);
+    holder.addChild(node);
+    if (cw && variants.length > 1) cw.presenceTrack(node, variant.spans.map(([start, end]) => ({ start, end })));
   }
-  wrapper.addChild(doc.createNode(prop.id).setMesh(mesh));
+  return wrapper;
+}
+
+const SPHERE = (): THREE.BufferGeometry => new THREE.SphereGeometry(0.5, 10, 7);
+const DISC = (): THREE.BufferGeometry => new THREE.CylinderGeometry(0.5, 0.5, 0.002, 32).translate(0, 0.001, 0);
+
+/** A pour, burst or drift: a summoned wrapper at the origin, present in its spans, with one keyed node per mote sharing a mesh per colour. */
+function writeEffect(doc: Document, scene: ReturnType<Document['createScene']>, buffer: ReturnType<Document['createBuffer']>, effect: Effect, keyed: Keyed, keyTimes: (v: Float32Array) => GAccessor, presenceTrack: (node: GNode, spans: readonly { start: number; end: number }[]) => void): GNode {
+  const wrapper = doc.createNode(RECORDED_OBJECT_NODE_NAME);
+  scene.addChild(wrapper);
+  presenceTrack(wrapper, effect.presence);
+  const meshes = new Map<string, ReturnType<Document['createMesh']>>();
+  const meshFor = (shape: 'sphere' | 'disc', color: readonly [number, number, number]): ReturnType<Document['createMesh']> => {
+    const key = `${shape}:${color.join(',')}`;
+    const hit = meshes.get(key);
+    if (hit) return hit;
+    const g = shape === 'sphere' ? SPHERE() : DISC();
+    const material = doc.createMaterial(`${effect.id}-${meshes.size + 1}`).setBaseColorFactor([...color, 1] as [number, number, number, number]).setRoughnessFactor(shape === 'sphere' ? 0.25 : 0.95).setMetallicFactor(0);
+    const mesh = doc.createMesh(`${effect.id}-${shape}`).addPrimitive(doc.createPrimitive()
+      .setAttribute('POSITION', doc.createAccessor().setType('VEC3').setArray(new Float32Array(g.getAttribute('position')!.array as Float32Array)).setBuffer(buffer))
+      .setAttribute('NORMAL', doc.createAccessor().setType('VEC3').setArray(new Float32Array(g.getAttribute('normal')!.array as Float32Array)).setBuffer(buffer))
+      .setIndices(doc.createAccessor().setType('SCALAR').setArray(new Uint16Array(g.getIndex()!.array)).setBuffer(buffer))
+      .setMaterial(material));
+    g.dispose();
+    meshes.set(key, mesh);
+    return mesh;
+  };
+  for (const n of effect.nodes) {
+    const node = doc.createNode(n.name).setMesh(meshFor(n.shape, n.color));
+    wrapper.addChild(node);
+    const k: Keys = n.keys;
+    if (k.translation) node.setTranslation(Array.from(k.translation.subarray(0, 3)) as [number, number, number]);
+    if (k.rotation) node.setRotation(Array.from(k.rotation.subarray(0, 4)) as [number, number, number, number]);
+    if (k.scale) node.setScale(Array.from(k.scale.subarray(0, 3)) as [number, number, number]);
+    const input = keyTimes(k.times);
+    if (k.translation) keyed(node, 'translation', input, k.translation);
+    if (k.rotation) keyed(node, 'rotation', input, k.rotation);
+    if (k.scale) keyed(node, 'scale', input, k.scale);
+  }
   return wrapper;
 }
 

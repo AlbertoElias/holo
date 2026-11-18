@@ -1,0 +1,31 @@
+{
+  "title": "World test",
+  "intent": "A test of every world line but the pour: she gestures at a lamp, it appears with a burst, glows warmer while sparks drift up, then rises, shrinks and disappears.",
+  "duration": 7,
+  "performers": [
+    { "id": "p", "avatar": "stock", "at": [0, 0], "facing": 0, "seed": 7 }
+  ],
+  "objects": {
+    "table": { "name": "Table", "shape": "box", "size": [0.5, 0.75, 0.4], "color": "#6b4a32", "at": { "of": "p", "forward": 0.6 }, "facing": "p.hips" },
+    "lamp": { "name": "Lamp", "on": "table", "parts": [
+      { "shape": "cylinder", "size": [0.1, 0.02, 0.1], "color": "#333333" },
+      { "shape": "sphere", "size": [0.14, 0.14, 0.14], "at": [0, 0.02, 0], "color": "#c8c8b8" }
+    ] }
+  },
+  "beats": [
+    { "id": "look", "performer": "p", "at": 0.5, "hold": 5.5, "intent": "She looks at the table.", "directions": [
+      { "kind": "look", "at": "table.top", "head": 0.6 } ] },
+    { "id": "summon", "performer": "p", "at": 1.0, "hold": 1.0, "intent": "She points at the table.", "directions": [
+      { "kind": "hand", "side": "right", "shape": "point" },
+      { "kind": "reach", "side": "right", "at": "table.top", "stopShort": 0.25, "palm": "down" } ] }
+  ],
+  "world": [
+    { "kind": "change", "object": "lamp", "when": 0, "show": false },
+    { "kind": "change", "object": "lamp", "when": "summon", "show": true },
+    { "kind": "burst", "at": "lamp.center", "when": "summon" },
+    { "kind": "change", "object": "lamp", "when": 2.5, "over": 1.2, "color": "#ffcf6a" },
+    { "kind": "drift", "at": "lamp.top", "when": 2.5, "until": 4.5 },
+    { "kind": "change", "object": "lamp", "when": 4.6, "over": 1.0, "lift": 0.25, "scale": 0.5, "color": "#ffcf6a" },
+    { "kind": "change", "object": "lamp", "when": 6.2, "show": false }
+  ]
+}

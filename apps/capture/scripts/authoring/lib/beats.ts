@@ -140,6 +140,43 @@ export interface PerformerSpec {
   readonly attend?: boolean;
 }
 
+/** When a world change happens: seconds, a beat id (its start) or `<beat>.end`. */
+export type Cue = number | string;
+
+/** An object's shape as a change leaves it: turned about its origin (degrees, XYZ), scaled, lifted (metres), in one colour. */
+export interface ChangeState {
+  readonly turn?: readonly [number, number, number];
+  readonly scale?: number | readonly [number, number, number];
+  readonly lift?: number;
+  readonly color?: Color;
+}
+
+/**
+ * Visible change in the set, computed after the solve from the objects'
+ * tracks and written as plain node animation (slice 1f).
+ */
+export type WorldChange =
+  | {
+      readonly kind: 'pour'; readonly object: string;
+      /** Where the drops land; default the target of the aim that points the object. */ readonly onto?: Point;
+      /** Degrees below the horizontal the tool axis must point before water leaves; default 0. */ readonly tilt?: number;
+      /** Drops a second at full flow; default 60. */ readonly rate?: number;
+      /** Metres a second the water leaves the tip along the axis; default 0.8. */ readonly speed?: number;
+      readonly color?: Color;
+      /** A drop's width in metres; default 0.012. */ readonly size?: number;
+      /** The wet patch where it lands: its radius in metres, or false; default 0.06. */ readonly wet?: boolean | number;
+    }
+  | { readonly kind: 'burst'; readonly at: Point; readonly when: Cue; readonly count?: number; readonly spread?: number; readonly life?: number; readonly color?: Color; readonly size?: number }
+  | { readonly kind: 'drift'; readonly at: Point; readonly when: Cue; readonly until: Cue; readonly count?: number; readonly rise?: number; readonly spread?: number; readonly life?: number; readonly color?: Color; readonly size?: number }
+  | (ChangeState & {
+      readonly kind: 'change'; readonly object: string; readonly when: Cue;
+      /** Seconds the change takes; default 1.5. */ readonly over?: number;
+      /** How it starts; default how the change before left it (or as the sheet made it). */ readonly from?: ChangeState;
+      /** A colour change's steps; default 4. */ readonly steps?: number;
+      /** Disappear (false) or appear (true, absent before) at the cue; nothing else then. */ readonly show?: boolean;
+    });
+export type WorldChangeKind = WorldChange['kind'];
+
 export interface BeatSheet {
   readonly title: string;
   /** What a viewer should come away with from the whole piece. The review compares a fresh reader's account against it. */
@@ -154,6 +191,8 @@ export interface BeatSheet {
   readonly marks?: Readonly<Record<string, readonly [number, number, number] | Place>>;
   readonly objects?: Readonly<Record<string, ObjectSpec>>;
   readonly beats: readonly Beat[];
+  /** Visible change in the set: water, particles, an object responding. */
+  readonly world?: readonly WorldChange[];
 }
 
 export const EXPRESSIONS = {
@@ -303,6 +342,16 @@ export function beatSpan(beat: Beat): { from: number; to: number } {
   const rs = beat.directions.map((d) => resolveTiming(beat, d));
   if (!rs.length) return { from: beat.at, to: beat.at };
   return { from: Math.max(0, Math.min(...rs.map((r) => r.start))), to: Math.max(...rs.map((r) => r.persistent ? r.at + r.attack + r.settle : r.end)) };
+}
+
+/** A cue's time in seconds, or undefined when it names no beat. */
+export function cueTime(sheet: BeatSheet, cue: Cue): number | undefined {
+  if (typeof cue === 'number') return cue;
+  const end = cue.endsWith('.end');
+  const beat = sheet.beats.find((b) => b.id === (end ? cue.slice(0, -4) : cue));
+  if (!beat) return undefined;
+  const span = beatSpan(beat);
+  return end ? span.to : beat.at;
 }
 
 /** Names an object answers to after a dot: the built-in anchors, its named parts, its named anchors. */
@@ -572,7 +621,118 @@ export function validateSheet(sheet: BeatSheet): string[] {
       }
     }
   }
+  problems.push(...worldProblems(sheet, holdings));
   return problems;
+}
+
+const WORLD_KINDS: readonly WorldChangeKind[] = ['pour', 'burst', 'drift', 'change'];
+
+function worldProblems(sheet: BeatSheet, holdings: readonly Holding[]): string[] {
+  const problems: string[] = [];
+  const objects = sheet.objects ?? {};
+  const ids = new Set(Object.keys(objects));
+  // A world point is read from the objects' tracks after the solve: an object point, a numeric mark or [x, y, z].
+  const point = (p: Point | undefined, where: string): void => {
+    if (p === undefined) return;
+    if (Array.isArray(p)) { if (p.length !== 3 || p.some((x) => typeof x !== 'number' || !Number.isFinite(x))) problems.push(`${where}: [x, y, z] in metres`); return; }
+    if (typeof p !== 'string') { problems.push(`${where}: a place is not allowed here; name an object point, a numeric mark or [x, y, z]`); return; }
+    const dot = p.indexOf('.');
+    if (dot < 0) {
+      const m = sheet.marks?.[p];
+      if (!m) problems.push(`${where}: no mark ${p}`);
+      else if (!Array.isArray(m)) problems.push(`${where}: mark ${p} is a place; name an object point, a numeric mark or [x, y, z]`);
+      return;
+    }
+    const head = p.slice(0, dot);
+    if (!ids.has(head)) { problems.push(`${where}: ${head} is not an object (a performer point moves with the solve)`); return; }
+    if (!anchorNames(objects[head]!).includes(p.slice(dot + 1))) problems.push(`${where}: ${head} has no point ${p.slice(dot + 1)}`);
+  };
+  const cue = (c: Cue | undefined, where: string): number | undefined => {
+    if (c === undefined) { problems.push(`${where}: needs a cue (seconds, a beat id or <beat>.end)`); return undefined; }
+    const t = cueTime(sheet, c);
+    if (t === undefined) problems.push(`${where}: no beat ${String(c).replace(/\.end$/, '')}`);
+    else if (!(t >= 0 && t <= sheet.duration)) problems.push(`${where}: ${t.toFixed(2)} s is outside the take (0 to ${sheet.duration} s)`);
+    return t;
+  };
+  const positive = (v: number | undefined, where: string): void => { if (v !== undefined && !(typeof v === 'number' && v > 0)) problems.push(`${where}: above 0`); };
+  const color = (c: Color | undefined, where: string): void => {
+    if (c === undefined) return;
+    if (typeof c === 'string') { if (!/^#[0-9a-fA-F]{6}$/.test(c)) problems.push(`${where}: a colour is #rrggbb or [r, g, b]`); }
+    else if (!Array.isArray(c) || c.length !== 3 || c.some((x) => !(x >= 0 && x <= 1))) problems.push(`${where}: [r, g, b] in 0..1`);
+  };
+  const state = (s: ChangeState | undefined, where: string, sourced: boolean, keys: readonly string[] = ['turn', 'scale', 'lift', 'color']): void => {
+    if (!s) return;
+    for (const k of Object.keys(s)) if (!keys.includes(k)) problems.push(`${where}: no ${k} (${keys.join(', ')})`);
+    if (s.turn !== undefined && (!Array.isArray(s.turn) || s.turn.length !== 3 || s.turn.some((x) => !Number.isFinite(x)))) problems.push(`${where} turn: three degrees`);
+    if (s.scale !== undefined) {
+      const v = typeof s.scale === 'number' ? [s.scale] : s.scale;
+      if (!Array.isArray(v) || (v.length !== 1 && v.length !== 3) || v.some((x) => !(x > 0))) problems.push(`${where} scale: a number or three, each above 0`);
+    }
+    if (s.lift !== undefined && !Number.isFinite(s.lift)) problems.push(`${where} lift: metres`);
+    color(s.color, `${where} color`);
+    if (s.color !== undefined && sourced) problems.push(`${where}: a sourced model keeps its own materials; a colour change needs parts`);
+  };
+  const shows = new Map<string, { t: number; show: boolean }[]>();
+  for (const [i, w] of (sheet.world ?? []).entries()) {
+    const where = `world ${i + 1} (${w.kind})`;
+    if (!WORLD_KINDS.includes(w.kind)) { problems.push(`${where}: no kind ${w.kind} (${WORLD_KINDS.join(', ')})`); continue; }
+    if (w.kind === 'pour') {
+      const spec = objects[w.object];
+      if (!spec) { problems.push(`${where}: no object ${w.object}`); continue; }
+      if (!spec.tool) problems.push(`${where}: ${w.object} has no tool axis to pour from`);
+      point(w.onto, `${where} onto`);
+      if (w.onto === undefined && !aimTargetOf(sheet, holdings, w.object)) problems.push(`${where}: nothing aims ${w.object}; give onto`);
+      positive(w.rate, `${where} rate`); positive(w.speed, `${where} speed`); positive(w.size, `${where} size`);
+      if (typeof w.wet === 'number') positive(w.wet, `${where} wet`);
+      if (w.tilt !== undefined && !(w.tilt > -90 && w.tilt < 90)) problems.push(`${where} tilt: degrees between -90 and 90`);
+      color(w.color, `${where} color`);
+    } else if (w.kind === 'burst' || w.kind === 'drift') {
+      if (w.at === undefined) problems.push(`${where}: needs at`);
+      point(w.at, `${where} at`);
+      const from = cue(w.when, `${where} when`);
+      if (w.kind === 'drift') {
+        const to = cue(w.until, `${where} until`);
+        if (from !== undefined && to !== undefined && !(to > from)) problems.push(`${where}: until comes after when`);
+        positive(w.rise, `${where} rise`);
+      }
+      if (w.count !== undefined && !(Number.isInteger(w.count) && w.count > 0 && w.count <= 400)) problems.push(`${where} count: a whole number from 1 to 400`);
+      positive(w.spread, `${where} spread`); positive(w.life, `${where} life`); positive(w.size, `${where} size`);
+      color(w.color, `${where} color`);
+    } else {
+      const spec = objects[w.object];
+      if (!spec) { problems.push(`${where}: no object ${w.object}`); continue; }
+      const t = cue(w.when, `${where} when`);
+      const sourced = spec.source !== undefined;
+      if (w.show !== undefined) {
+        if (typeof w.show !== 'boolean') problems.push(`${where} show: true or false`);
+        if (w.turn !== undefined || w.scale !== undefined || w.lift !== undefined || w.color !== undefined || w.from !== undefined || w.over !== undefined || w.steps !== undefined) problems.push(`${where}: a show cue changes nothing else; give the change its own line`);
+        if (t !== undefined) shows.set(w.object, [...(shows.get(w.object) ?? []), { t, show: w.show }]);
+        continue;
+      }
+      state(w, where, sourced, ['kind', 'object', 'when', 'over', 'from', 'steps', 'turn', 'scale', 'lift', 'color']);
+      state(w.from, `${where} from`, sourced);
+      if (w.over !== undefined && !(w.over >= 0)) problems.push(`${where} over: seconds, 0 or more`);
+      if (w.steps !== undefined && !(Number.isInteger(w.steps) && w.steps >= 2 && w.steps <= 12)) problems.push(`${where} steps: a whole number from 2 to 12`);
+      if (t !== undefined && t + (w.over ?? 1.5) > sheet.duration + 1e-6) problems.push(`${where}: ends at ${(t + (w.over ?? 1.5)).toFixed(2)} s, after the take (${sheet.duration} s)`);
+    }
+  }
+  for (const [object, cues] of shows) {
+    const sorted = [...cues].sort((a, b) => a.t - b.t);
+    for (let k = 1; k < sorted.length; k += 1) if (sorted[k]!.show === sorted[k - 1]!.show) problems.push(`world: ${object} is shown (or hidden) twice in a row at ${sorted[k]!.t.toFixed(2)} s`);
+    if (holdings.some((h) => h.object === object)) problems.push(`world: ${object} is held; a held object does not appear or disappear`);
+  }
+  return problems;
+}
+
+/** The point the first aim of an object points at (who holds it then, by the holdings), if any. */
+export function aimTargetOf(sheet: BeatSheet, holdings: readonly Holding[], object: string): Point | undefined {
+  for (const b of sheet.beats) for (const d of b.directions) {
+    if (d.kind !== 'aim') continue;
+    const r = resolveTiming(b, d);
+    const h = holdings.find((x) => x.performer === b.performer && x.side === d.side && x.from <= r.start && r.start <= x.to);
+    if (h?.object === object) return d.at;
+  }
+  return undefined;
 }
 
 const SHAPES: readonly Shape[] = ['box', 'cylinder', 'cone', 'sphere'];

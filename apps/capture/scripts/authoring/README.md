@@ -224,6 +224,50 @@ gives each object's size on the card. The 1c reader who saw the pointer
 aimed at nothing was given stills cropped to the cast, a fault in the review
 tool, not in the viewer (fixed).
 
+## Change in the world
+
+A sheet's `world` lists what changes in the set, one line each:
+
+- `{ "kind": "pour", "object": "can" }`: drops leave a held tool's tip while
+  its axis points below `tilt` (degrees under the horizontal, 0), more of
+  them the further it tips (`rate` 60 a second at full flow), at `speed`
+  0.8 m/s along the axis, and fall under gravity to land where the aim
+  points (`onto`, else the target of the beat that aims that object).
+  Each drop is a stretched `size` 0.012 m bead (`color` a pale water blue).
+  `wet` (0.06 m, or `false`) leaves a darker disc on the surface that grows as
+  water lands and stays to the end.
+- `{ "kind": "burst", "at", "when" }`: `count` 24 sparks thrown `spread`
+  0.25 m out over the upper half, gone within `life` 1.2 s.
+- `{ "kind": "drift", "at", "when", "until" }`: `count` 12 motes released
+  between the two cues, each rising `rise` 0.3 m over about `life` 2 s.
+- `{ "kind": "change", "object", "when" }`: the object turns (`turn`
+  `[x, y, z]` degrees), scales (`scale`, one number or three), lifts (`lift`
+  m) or changes colour (`color`, in `steps` 4) over `over` 1.5 s, eased, from
+  `from` (or where its last change left it) to the state the line names.
+  What a line leaves out returns to how the sheet made the object, so
+  `{ "when": 5.3, "from": { "turn": [36, 0, 16] } }` stands a slumped plant
+  back up. A line with `show` (`true` or `false`) and nothing else makes the
+  object appear or disappear at its cue.
+
+A cue is seconds, a beat id (its `at`) or `<beat>.end`. A point is an
+object's anchor, a mark or `[x, y, z]`. The build prints a line per change
+(how many drops, where they land, the colour steps, when the object is
+present) and fails on a cue outside the take, a pour with no tool axis, a
+held object made to appear or disappear, or a colour change on a sourced
+model (it keeps its own materials).
+
+Everything is node animation, so it plays on the card, in AR and in
+Quick Look: each pour, burst or drift is a summoned `RecordedObject` whose
+children are the drops or motes (a pour's drops take turns on about sixteen
+nodes, keyed on the take's own frames, which keeps the Quick Look readback
+within its time limit), and a changing object gains a
+`<id>-change` node between its wrapper and its shape. Quick Look cannot
+blend a colour: a colour change is `steps` copies of the shape, one shown at
+a time, so it changes in visible steps everywhere. Drops are rigid beads,
+not a fluid; nothing splashes or soaks in beyond the wet disc.
+`sheets/world-test.json` exercises every line but the pour; `watering.json`
+pours.
+
 ## A recorded take as input
 
 Slice 4a of the brief: a person's take, recorded by capture, becomes
@@ -327,10 +371,8 @@ minute; `node packages/tooling-testing/src/preview.mjs <dir>` (from the
 repository root) tiles them.
 
 Not covered by these tools yet (`docs/features/directed-performance.md`,
-"Not covered yet"): change in the world (water, a plant that responds),
-handing an object between performers, collisions, and publishing.
-A take is published like a showcase piece, with
-`scripts/showcase/upload.mjs`.
+"Not covered yet"): handing an object between performers and collisions.
+Publishing is `publish.ts` ("Publishing a take" above).
 
 ## The file
 

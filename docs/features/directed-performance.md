@@ -735,6 +735,91 @@ authors to add a beat (the default fails every two-hander that forgets).
 
 **Evidence:** "Slice 1e evidence", below.
 
+### Slice 1f: change in the world (2026-11-18)
+
+"Not covered yet" item 5. Built under `apps/capture/scripts/authoring/`
+only (`lib/beats.ts` additively, a new `lib/world.ts`, `lib/write-glb.ts`,
+`direct.ts`'s printout, the watering sheet); nothing under
+`apps/capture/src/**`, the viewer, the API or `@holoim/objects` changes.
+The set's change is plain glTF node animation (translation, rotation,
+scale, STEP presence), which the viewer's mixer plays unfiltered and the
+USDZ converter bakes (`glb_to_usdz.py` carries node TRS and turns a scale
+of 0 into USD visibility); no morph target, material animation or new
+extension is used.
+
+**What.** A sheet may give `world`: a list of changes, one line each, the
+rest defaulted.
+
+1. **Poured.** `{ "kind": "pour", "object": "can" }`: while the object's
+   tool axis points below the horizontal (`tilt`, default 0°), drops leave
+   its tip (`rate` 60 a second at full tilt, fewer near the threshold),
+   fall under gravity from the tip's speed along the axis, and land on
+   `onto` (default: the target of the `aim` that points that object),
+   scattered over a third of the wet patch. Each drop is a small blue
+   (`color`) stretched sphere, along its velocity, present only in flight.
+   Drops take turns on a pool of nodes (about 15 are in flight at once),
+   keyed on the take's frames: one node per drop (132 in watering) took
+   the Quick Look readback (`inspect_usdz.py`) 314 s against the tool
+   check's 180 s limit; pooled, it is 16 nodes and 115 channels.
+   Where they land, a wet patch (`wet`, default on, radius 0.06 m) grows
+   with the water landed and stays to the end, darker than the part it
+   lies on.
+2. **Particles.** `{ "kind": "burst", "at": <point>, "when": <cue> }`:
+   `count` (24) seeded motes fly out to `spread` (0.25 m) and shrink away
+   over `life` (1.2 s). `{ "kind": "drift", "at", "when", "until" }`:
+   motes rise slowly (`rise` 0.3 m) and fade, a few at a time, over the span.
+3. **An object responds.** `{ "kind": "change", "object": "plant",
+   "when": <cue>, "over": 1.5, "from": { "turn": [24, 0, 8], "scale":
+   [1, 0.8, 1], "color": "#8a8a45" } }`: the object's shape turns about
+   its own origin (the bottom centre), scales, lifts (`lift`, metres)
+   and changes colour from `from` to the change's own values (default:
+   as the sheet made it), eased over `over`. Colour is a swap in `steps`
+   (4) whole-object copies, since neither glTF without an extension nor
+   Quick Look animates a material. `"show": false` makes it disappear at
+   the cue and `"show": true` appear (absent before), with the object's
+   `HOLOIM_objects` presence spans written to match. A change ends at the
+   state it names; what it leaves out returns to as-made, so a later
+   change restates a colour it keeps.
+
+A cue is seconds, a beat id (its start) or `<beat>.end`. Points are
+object points (`pot.soil`), numeric marks or `[x, y, z]`; a performer
+point or a place is refused, since the change is computed after the
+solve from the objects' tracks. Each pour, burst and drift is one
+`summoned` `RecordedObject` (source `effect:<kind>`) whose presence spans
+cover its motes, so the viewer's cast-only framing leaves it out; a
+sheet without `world` writes the same file as before.
+
+**What Quick Look cannot show:** a colour fades only in its steps; drops
+are separate rigid nodes, not a fluid; nothing splashes or soaks in.
+
+**Rejected:** a morph-target stream (one long mesh deformed per frame:
+heavier on the deformed extent budget, B-057, which counts every frame);
+`KHR_animation_pointer` colour (the converter and Quick Look drop it);
+a particle extension the viewer would have to learn.
+
+**Acceptance.**
+
+- `sheets/watering.json` revised: the plant starts wilted and perks up
+  after the water lands; the pour leaves a wet patch. It builds with no
+  miss, and the converter's extent load (`publish.ts --check`) stays under
+  budget.
+- **Blind reading, bar set before running:** three fresh Sonnet readers,
+  each given only the review pack's `reader/` folder (never the sheet),
+  describe the piece. It passes when at least 2 of 3 say water was poured
+  (pours, waters, watering, water, drops, stream, sprinkles) and at least
+  2 of 3 say the plant changed (perks up, lifts, straightens, revives,
+  stands up, grows, greener, healthier). Not tuned past two tries; a
+  failure is reported.
+- `viewer-check` on the card frames the piece with the water in view; the
+  Quick Look check (`check_usdz_tools.sh`) passes on it, its readback
+  matching every node's world transform (drops' visibility as scale 0, the
+  plant's change node) at the sampled times. `sheets/world-test.json`
+  (burst, drift, colour, lift, appear and disappear) passes the same two.
+- **Nothing else moves:** `rest`, `expressions`, `gestures`,
+  `defaults-test` and `goodbye` write byte-identical GLBs to `main`'s.
+
+**Evidence:** "Slice 1f evidence", below.
+
 ### Slice 2: the avatar flow (designed and approved 2026-11-17; 2a built)
 
 The owner's 2026-11-17 direction, as an 80/20. The 2026-11-13 plan for one
