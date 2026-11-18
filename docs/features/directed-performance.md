@@ -11,7 +11,12 @@ log (props, sets, publishing, gestures) now leads "Not covered yet". Slice 1c
 build is published (the owner published the slice 1b watering take). The
 owner lifted the hold on the house avatar on 2026-11-17: slice 2 is now
 the avatar flow, approved by the owner on 2026-11-17 ("Approve all",
-open decision 5); 2a and 2b come next, and nothing in it is built yet.  
+open decision 5); 2a and 2b come next, and nothing in it is built yet.
+Slice 1e (gestures, states and the profile hold) built 2026-11-18 while
+the owner was away: the profile hold now reads as alive (2 of 3 readers),
+and four of six gestures and one of two states read blind (nod, head
+shake, rub and concerned do not; open decision 8 records the agent's
+calls for review).  
 **Layer:** event (the acted body is the hologram's raw material; see
 `docs/product/concepts/what-a-hologram-is.md`)
 
@@ -654,6 +659,82 @@ owner answered "Yes, accept" (2026-11-17). **Life is accepted**
 (evidence: "Face in idle life" in slice 1d's evidence); the profile-hold
 follow-up stays open.
 
+### Slice 1e: gestures, states and the profile hold (2026-11-18)
+
+"Not covered yet" items 4 and 12. Built under `apps/capture/scripts/authoring/`
+only (`lib/beats.ts` additively, `lib/direct.ts`, `lib/life.ts`, a new sheet);
+nothing under `apps/capture/src/**`, the viewer or the API changes, and no
+existing expression mix value changes.
+
+**What.**
+
+1. **Gestures by name.** One direction, `{ "kind": "gesture", "name": … }`,
+   with defaults for everything else: `nod`, `head-shake`, `shrug`, `wave`
+   (a small wave, optionally `at` someone), `rub` (rub something between
+   the thumb and fingers, the eyes on the hand), `hand-to-chest`. A hand
+   gesture takes `side` (default right); a repeated one takes `count`;
+   every one takes `strength` and the usual timing. Each layers over idle
+   life the way directions already do: it masks the life channels it
+   uses (a wave that hand's fidget), within its span plus 0.4 s. As built,
+   every gesture also masks the glances, so the eyes stay on the gesture,
+   and the shrug takes over the life face too.
+2. **States by name.** `{ "kind": "state", "name": "noticing" | "concerned" }`
+   for as long as the beat holds: a body and head attitude plus a face mix
+   (new face-mix names `noticing` and `concerned`, in `STATE_FACES`, which
+   `FACE_MIXES` joins to `EXPRESSIONS` so an `expression` can name them
+   too; `EXPRESSIONS` itself is untouched, for the avatar-flow branch that
+   tunes it). *Noticing*: a quick
+   orienting turn of the head to `at` if given, the head and chest come up,
+   the eyes widen, and the body goes still (glances, fidgets and the
+   attending layer give way). *Concerned*: the head drops and tilts, the
+   upper back rounds forward, the shoulders draw up a little, the brows
+   knit and the lips press; glances go on, smaller.
+3. **The profile hold: attending life, a default.** A performer facing
+   another (head within 35° of straight ahead, eased out by 55°) gets a
+   second seeded layer over slice 1d's events, drawn from its seed on new
+   streams (so no existing event moves): small listening nods (one or two,
+   6 to 10°, every 1.6 to 3.2 s), and the arms changing posture now and
+   then, from hanging to the hands loosely together in front of the waist
+   and back (held 2.5 to 5 s, apart 0.6 to 1.4 s; both gaps were tightened
+   from 2.2 to 4.5 s and 1.5 to 3.5 s after the first blind reading, see
+   the evidence). Both are motions in the plane a side view
+   sees, which slice 1d's lateral weight shifts and yaw glances are not.
+   It gives way to every direction that moves the head or the hands, to a
+   held object and to being reached for, as life does. `attend: false` on
+   a performer turns it off.
+
+**Rejected:** larger amplitude of slice 1d's events (failed twice); event
+density keyed to a hold's length (breaks the seed-only schedule); asking
+authors to add a beat (the default fails every two-hander that forgets).
+
+**Acceptance.**
+
+- A new sheet `sheets/gestures.json` exercises every gesture and state,
+  each with a neutral rest between, builds with no miss, and its acting
+  report shows the bones each one moves.
+- **Blind reading, bar set before running:** three fresh Sonnet reader
+  subagents, each given only the review pack's `reader/` folder (frames,
+  video, its README; never the sheet), describe each time span. A gesture
+  or state passes when at least 2 of 3 readers name it or a listed synonym
+  (nod: nod, yes, agree; head shake: shake, no, disagree; shrug: shrug,
+  "don't know"; wave: wave, hello, goodbye, greet; rub: rubs or feels
+  something between fingers, fingertips, texture; hand to chest: hand on
+  chest or heart; noticing: notices, something catches the eye, alert,
+  turns to look, startled; concerned: worried, concerned, troubled,
+  uneasy, anxious). The slice passes when all six gestures pass and at
+  least one state does; a failing state is reported, not tuned past two
+  tries.
+- **The profile hold:** `defaults-test.json` rebuilt, reviewed, and read by
+  three fresh readers who see only its reader folder; at least 2 of 3 call
+  the held ending (4.4 to 8 s) alive rather than frozen or mostly frozen.
+- **Nothing else moves:** `rest`, `watering` and `expressions` (no
+  performer faces another) keep identical acting reports and life
+  printouts; `defaults-test` changes only by the attending layer, and its
+  reach still lands within a millimetre of before; every body target still
+  passes on every take.
+
+**Evidence:** "Slice 1e evidence", below.
+
 ### Slice 2: the avatar flow (designed and approved 2026-11-17; 2a built)
 
 The owner's 2026-11-17 direction, as an 80/20. The 2026-11-13 plan for one
@@ -1220,7 +1301,12 @@ and 7 (its evidence, below); the second 1c piece added item 13.
 4. **Gestures and states with no direction.** No nod or head shake, no
    "rub the soil between the fingers", no "concerned" or "noticing"
    expression. "The soil is dry" was staged as looking at a fingertip, and
-   read as checking a watch.
+   read as checking a watch. **Partly met in slice 1e (2026-11-18):** all
+   six gestures and both states are directable by name. Wave, shrug,
+   hand to chest and noticing read blind; nod, head shake, rub and
+   concerned do not. The GLB moves as asked (the shake swings ±20° in the
+   head every 0.8 s), but readers judge 0.2 s stills, about two per swing.
+   Still open: a way for a quick head or finger motion to read.
 5. **Change in the world.** No water, particles or plant response: the
    reader saw "no water" and "the plant looks the same".
 6. **Performer-relative placement.** Marks are absolute metres guessed from
@@ -1250,9 +1336,11 @@ and 7 (its evidence, below); the second 1c piece added item 13.
     owner judged the slice 1d video on 2026-11-17: "its a lot better" and
     "theres something in the mouth and eyebrows thats missing, but almost
     there". With the face layer from decision 6 (A), the owner accepted
-    life on the face video: "Yes, accept" (2026-11-17). Still open: two
-    people in profile through a long held ending read as mostly frozen to
-    readers; authors give a profile hold a beat for now.
+    life on the face video: "Yes, accept" (2026-11-17). **Met in slice 1e
+    (2026-11-18), narrowly:** with attending life (listening nods and the
+    hands coming together), two of three fresh readers call the held
+    ending of `defaults-test` alive ("Nobody is frozen"); the third still
+    says "mostly frozen to lightly alive".
 
 13. **A far object shrinks the performer.** The card frames every recorded
     object, so each widens the dome, and nothing caps it in an authoring
@@ -1562,6 +1650,23 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
    least sure of neutral against holding something back. So a 7-of-7 design
    for the four now exists to aim the base's face at. The decision itself
    is unchanged and still the owner's.
+
+8. **Slice 1e's calls** (decided by the agent in the owner's absence on
+   2026-11-18, for the owner to review; each is one constant or one
+   option, and reversible):
+   - The two state faces are new mix names in `STATE_FACES`, joined into
+     `FACE_MIXES`; `EXPRESSIONS` is untouched for the avatar-flow branch.
+   - Attending life is on by default for a performer facing another;
+     `attend: false` turns it off. It changes `goodbye` and
+     `defaults-test` (slice 1e evidence).
+   - The attending gaps were tightened once after the first blind
+     reading: nods every 1.6 to 3.2 s (was 2.2 to 4.5), arms apart 0.6 to
+     1.4 s (was 1.5 to 3.5).
+   - The head and rub gestures were made larger and slower twice (nod
+     26°, three 0.8 s cycles; shake ±40° yaw, three 0.8 s cycles; rub
+     five 0.4 s cycles, hand at chest height in view; concerned pitch 14°,
+     roll 8°). They still do not read in stills (evidence); the next idea
+     is a change to the reading medium, not more size.
 
 ## Test plan and evidence
 
@@ -2094,7 +2199,74 @@ as alive in the after clip?", the owner answered **"Yes, accept"**
 
 **Follow-ups.** A directed `weight` direction rolls the pelvis so the free
 hip rises (sign opposite to life's); a profile hold needs a beat or a different idea
-(open).
+(answered by slice 1e's attending life).
+
+### Slice 1e evidence (2026-11-18)
+
+**Build.** `sheets/gestures.json` (one performer, 25 s: wave 1.0 s, nod
+4.2, head shake 6.3, shrug 8.7, noticing 11.1 toward a mark at her side,
+rub 14.2, hand to chest 17.7, concerned 20.8) builds with no miss, and
+its acting report shows each gesture's bones moving in its span. The
+capture typecheck passes.
+
+**Nothing else moves.** Rebuilt from their `sheets/` paths, `rest`,
+`watering` and `expressions` are byte-identical to `main`. `defaults-test`
+changes only by the attending layer (with `attend: false` it is
+identical to before): the reach still lands 19.6 mm from its target
+(asked 20, the same as before), and every body target passes. The p99
+pose acceleration rises from 5.7 to 8.8 (a) and from 3.4 to 8.4 (b), from
+the nods and the hands coming together. `goodbye` also changes, because
+its two performers face each other. Her p99 pose acceleration rises from
+8.1 to 11.5 (no attending vs attending), and every body target passes. His foot skate (2.4 cm max) is the same without
+attending.
+
+**The profile hold** (bar: 2 of 3 call 4.4 to 8 s alive). Readers each
+saw only the reader folder.
+
+In the first try every reader called 4.4 to 6 s alive, so the quotes
+are on 6 to 8 s, the part that had read as frozen.
+
+| Try | Readers on 6 to 8 s | Result |
+|---|---|---|
+| Attending, first gaps | "mostly frozen", "mostly frozen", mixed | fail |
+| Gaps tightened (nods 1.6 to 3.2 s, arms apart 0.6 to 1.4 s) | "Mostly alive … Nobody is frozen"; "Mostly alive … minimal but not frozen"; "Mostly frozen to lightly alive" | **pass, 2/3** |
+
+In the passing take, a nods at 2.3, 5.4 and 7.4 s and b at 1.9, 4.0 and
+5.8 s (double). Their hands come together at 1.0 to 6.1 s and 6.8 to
+11.5 s (a), and at 2.0 to 6.7 s and 7.4 to 13.3 s (b).
+
+**Gestures and states** (bar: each needs 2 of 3 naming it or a synonym;
+all six gestures and at least one state must pass). Three fresh readers
+per try, nine in all.
+
+| | Try 0 (as designed) | Try 1 (larger) | Try 2 (larger, slower) |
+|---|---|---|---|
+| wave | 3/3 | 3/3 | 2/3 |
+| nod | 0/3 ("a slight dip") | 0/3 | 0/3 ("tilts slightly") |
+| head shake | 0/3 | 0/3 | 0/3 (one slow turn aside) |
+| shrug | 3/3 | 3/3 | 2/3 |
+| rub | 0/3 (hand on the hip) | 0/3 (checks a wrist) | 0/3 (looks at the forearm) |
+| hand to chest | 3/3 | 3/3 | 3/3 |
+| noticing | 3/3 | 2/3 | 3/3 |
+| concerned | 0/3 | 0/3 | 0/3 |
+
+**The bar is not met.** Four of six gestures and one of two states pass.
+Two tuning tries are spent, so the failures are reported, as the
+acceptance asks. To rule out a bug, the shipped GLB was sampled through
+the shake: the head's yaw swings +22, -24, +19, -21, +18, -18° at 0.4 s
+half-cycles from 6.4 to 8.6 s. In the close stills, 6.6 s and 6.8 s face
+opposite ways. Every reader still described it as one slow turn. Each
+0.8 s swing falls on about four 0.2 s stills, two on a side, so a shake
+looks like a held turn and a nod like a dip. Finger rolling is below
+card scale. These are motions a viewer sees in the video. A reader who
+judges stills does not see them, so the reading medium needs changing
+(a denser strip for a span, or a motion trace), and not the sizes.
+Concerned is a quiet posture with a face mix the stock avatar cannot
+show at card size (decision 2).
+
+**Kept:** sizes from try 2 (agent decision 8). They pass the same
+items as try 0 (wave and shrug drop from 3/3 to 2/3, still passing), and
+a slower, larger nod and shake are closer to what a person does on video.
 
 ### Slice 2a evidence (2026-11-17)
 
