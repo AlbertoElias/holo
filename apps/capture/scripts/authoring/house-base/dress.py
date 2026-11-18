@@ -83,18 +83,56 @@ def dijkstra(n, adj, sources):
     return d
 
 
-def smooth(P, adj, pinned, iters, lam=0.5):
-    """Umbrella smoothing over the mesh graph, pinned vertices held."""
+def smooth(P, adj, pinned, iters, lam=0.5, mu=None):
+    """Umbrella smoothing over the mesh graph, pinned vertices held. With `mu` (negative), Taubin's
+    alternating steps: bumps go but the shape keeps its volume, where plain smoothing shrinks a tube."""
     src = np.concatenate([np.full(len(n), i) for i, n in enumerate(adj)]).astype(int)
     dst = np.concatenate([np.array([j for j, _ in n], dtype=int) for n in adj])
     deg = np.bincount(src, minlength=len(P)).astype(float)
     free = (~pinned) & (deg > 0)
     P = P.copy()
     for _ in range(iters):
-        acc = np.zeros_like(P)
-        np.add.at(acc, src, P[dst])
-        mean = acc / np.maximum(deg, 1)[:, None]
-        P[free] += lam * (mean[free] - P[free])
+        for k in ((lam,) if mu is None else (lam, mu)):
+            acc = np.zeros_like(P)
+            np.add.at(acc, src, P[dst])
+            mean = acc / np.maximum(deg, 1)[:, None]
+            P[free] += k * (mean[free] - P[free])
+    return P
+
+
+def hang(P, P0, used_dom, _unused, toMesh, rig, spec):
+    """Trouser legs fall straight: below the knee each leg's cloth stands off its axis at least as far as
+    it did higher up (from the knee down), so the calf and the ankle no longer show through."""
+    H = spec["hang"]
+    for chain in H["chains"]:
+        a = np.array(toMesh @ rig.data.bones[chain[0]].head_local)
+        b = np.array(toMesh @ rig.data.bones[chain[-1]].head_local)
+        axis = b - a
+        L = float(np.linalg.norm(axis))
+        axis /= L
+        idx = np.array([i for i, d in enumerate(used_dom) if d in chain])
+        if not len(idx):
+            continue
+        rel = P[idx] - a
+        t = rel @ axis / L
+        radial = rel - np.outer(rel @ axis, axis)
+        r = np.linalg.norm(radial, axis=1)
+        ref = np.cross(axis, (0.0, 0.0, 1.0) if abs(axis[2]) < 0.9 else (1.0, 0.0, 0.0))
+        ref /= np.linalg.norm(ref)
+        ang = np.arctan2(radial @ np.cross(axis, ref), radial @ ref)
+        nb, nt = H["angleBins"], H["heightBins"]
+        ab = ((ang + math.pi) / (2 * math.pi) * nb).astype(int) % nb
+        tb = np.clip((t * nt).astype(int), 0, nt - 1)
+        top = np.full((nb, nt), 0.0)
+        np.maximum.at(top, (ab, tb), r)
+        k0 = int(H["fromKnee"] * nt)
+        for j in range(k0 + 1, nt):  # down the leg: never in from what is above
+            top[:, j] = np.maximum(top[:, j], top[:, j - 1])
+        # The bins' neighbours round the leg share, so the cloth does not facet.
+        top = (np.roll(top, 1, 0) + 2 * top + np.roll(top, -1, 0)) / 4
+        want = np.where(tb > k0, top[ab, tb], r)
+        grow = np.maximum(want - r, 0.0)[:, None] * (radial / np.maximum(r, 1e-6)[:, None])
+        P[idx] = P[idx] + grow
     return P
 
 
@@ -107,6 +145,7 @@ def garments(human, rig, slots, G):
     polys = [list(p.vertices) for p in me.polygons]
     mat = np.array([p.material_index for p in me.polygons])
     full = mesh_bvh(V, polys)  # the body before anything is removed: what the garments stay outside of
+    toMesh = human.matrix_world.inverted() @ rig.matrix_world
     names = {g.index: g.name for g in human.vertex_groups}
     bones = {b.name for b in rig.data.bones}
     dom = []
@@ -160,13 +199,16 @@ def garments(human, rig, slots, G):
         pinned[taper] = True
         ease = smooth(ease[:, None], adj, pinned, 8)[:, 0]  # spread over the surface, so it has no steps
         P = P0 + NRM[used] * ease[:, None]
+        if "hang" in spec:
+            P = hang(P, P0, gdom, None, toMesh, rig, spec)
         for _ in range(spec["rounds"]):
-            P = smooth(P, adj, pinned, spec["smooth"])
+            P = smooth(P, adj, pinned, spec["smooth"], mu=spec["taubin"])
             for i in range(n):
                 if ease[i] <= 1e-5:
                     continue
                 for bvh, want in [(full, spec["clear"] * ease[i])] + [(b, extra) for b, extra in outside]:
-                    hit, nrm, _, _ = bvh.find_nearest(Vector(P[i]))
+                    # Only a surface within reach pushes: the trousers' waist is nearest to the neck too.
+                    hit, nrm, _, _ = bvh.find_nearest(Vector(P[i]), spec["reach"])
                     if hit is None:
                         continue
                     if (Vector(P[i]) - hit).dot(nrm) < want:

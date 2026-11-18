@@ -369,15 +369,29 @@
       "gapShare": 0.4,
       "smooth": 14,
       "rounds": 6,
-      "clear": 0.6
+      "clear": 0.6,
+      "taubin": -0.53,
+      "reach": 0.06,
+      "hang": {
+        "$comment": "The jumper falls from the chest: from `fromKnee` (share of chest to hips) down, the cloth stands off the spine's line as far as it does higher up. Decided by the agent in the owner's absence on 2026-11-18, for review.",
+        "chains": [
+          [
+            "Spine2",
+            "Spine1",
+            "Spine",
+            "Hips"
+          ]
+        ],
+        "fromKnee": 0.2,
+        "angleBins": 32,
+        "heightBins": 30
+      }
     },
     "trousers": {
       "easeBody": 0.016,
       "easeLimb": 0.02,
       "taper": 0.05,
       "taperAt": [
-        "LeftLeg",
-        "RightLeg",
         "LeftFoot",
         "RightFoot",
         "Spine",
@@ -392,12 +406,34 @@
       "gapShare": 0.4,
       "smooth": 14,
       "rounds": 6,
-      "clear": 0.6
+      "clear": 0.6,
+      "taubin": -0.53,
+      "hang": {
+        "$comment": "Straight legs: from `fromKnee` (share of hip to foot) down, the cloth stands off the leg's line as far as it does higher up. Decided by the agent in the owner's absence on 2026-11-18, for review.",
+        "chains": [
+          [
+            "LeftUpLeg",
+            "LeftLeg",
+            "LeftFoot"
+          ],
+          [
+            "RightUpLeg",
+            "RightLeg",
+            "RightFoot"
+          ]
+        ],
+        "fromKnee": 0.45,
+        "angleBins": 24,
+        "heightBins": 40
+      },
+      "reach": 0.06
     },
     "collar": {
-      "$comment": "The jumper's neckline: round the neck, faces below a plane through the neck's base (raised `raise` m), tilting down to the front by `tilt` (m per m), are jumper; above it, skin.",
+      "$comment": "The jumper's neckline: across the shoulders (|x| under `halfWidth` m, from `below` m under the neck's base up), faces below a plane through the neck's base (raised `raise` m), tilting down to the front by `tilt` (m per m), are jumper; above it, skin.",
       "raise": 0.006,
-      "tilt": 0.45
+      "tilt": 0.45,
+      "halfWidth": 0.17,
+      "below": 0.12
     }
   },
   "hair": {

@@ -558,11 +558,12 @@ for poly in human.data.polygons:
 cl = P["garments"]["collar"]
 neck_v = np.array([v.co[:] for v in human.data.vertices if vbone[v.index] == "Neck"])
 z0, y0 = float(neck_v[:, 2].min()) + cl["raise"], float(neck_v[:, 1].mean())
-NECK = ("Neck", "Spine2", "LeftShoulder", "RightShoulder")
+# By position, not by bone: the bone vote is not mirror-symmetric round the shoulders, so the plane rules
+# over every skin or cloth face across the shoulders' width from a little below it up.
 for poly in human.data.polygons:
-    if poly.index >= n_body_polys or not all(vbone[i] in NECK for i in poly.vertices):
-        continue
     c = poly.center
+    if poly.index >= n_body_polys or abs(c.x) > cl["halfWidth"] or c.z < z0 - cl["below"]:
+        continue
     if slots[poly.material_index] in ("skin", "top"):
         poly.material_index = slots.index("top" if c.z < z0 + cl["tilt"] * (c.y - y0) else "skin")
 
