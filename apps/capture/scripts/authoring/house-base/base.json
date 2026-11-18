@@ -21,61 +21,180 @@
   "targets": {
     "head-round": 0.9
   },
-  "neutral": {
-    "$comment": "Face units baked into the neutral face, as weights (eyeBlink is compensated so it still closes).",
-    "eyeWideLeft": 0.5,
-    "eyeWideRight": 0.5
-  },
   "proportions": {
-    "$comment": "Scales about a pivot, weighted by the MPFB mixamo weights of the bones named, so the rig is fitted to the scaled mesh and no bone is ever scaled. head: about the neck joint; eyes: about each eyeball, falling off from inner to outer (eye radii); hands: about the wrist.",
+    "$comment": "Scales about a pivot, weighted by the MPFB mixamo weights of the bones named, so the rig is fitted to the scaled mesh and no bone is ever scaled. head: about the neck joint; hands: about the wrist.",
     "head": {
       "scale": 1.4,
       "neckShare": 0.35
-    },
-    "eyes": {
-      "scale": 1.5,
-      "inner": 1.0,
-      "outer": 4.5
     },
     "hands": {
       "scale": 1.15
     }
   },
-  "gains": {
-    "$comment": "Each face unit's offsets are multiplied by its gain after the proportions, to reach the audition bar's millimetres at card size (lib/audition-bar.ts). 1 when omitted.",
-    "browInnerUp": 3.1,
-    "browDownLeft": 2.6,
-    "browDownRight": 2.6,
-    "browOuterUpLeft": 2.05,
-    "browOuterUpRight": 2.05,
-    "eyeWideLeft": 1.8,
-    "eyeWideRight": 1.8,
-    "eyeSquintLeft": 1.9,
-    "eyeSquintRight": 1.9,
-    "mouthFrownLeft": 2.0,
-    "mouthFrownRight": 2.0,
-    "mouthStretchLeft": 1.6,
-    "mouthStretchRight": 1.6
-  },
-  "brows": {
-    "$comment": "Each brow is a ribbon just in front of the skin above its eye, in eye radii from the eyeball centre: x from the inner to the outer end, the lower edge at the inner end, its rise toward the outer end, the arch, the thickness (tapering toward the outer end by taper), how far in front of the skin (lift, m) and its segments.",
-    "inner": 0.55,
-    "outer": 1.4,
-    "low": 1.55,
-    "rise": 0.05,
-    "thick": 0.6,
-    "arch": 0.25,
-    "taper": 0.45,
-    "lift": 0.0022,
-    "segments": 14
-  },
-  "eye": {
-    "$comment": "Eyeballs: a share of MPFB's eye helper radius, no bigger than the skin in front of the eye's centre less lidGap (m), set back by back (m); the iris and pupil as angles (radians) from the eye's forward pole.",
-    "radiusShare": 0.98,
-    "lidGap": 0.0008,
-    "iris": 0.65,
-    "pupil": 0.3,
-    "back": 0.001
+  "face": {
+    "$comment": "The stylised face (decided by the agent on 2026-11-18, the owner away, for the owner to review; decision 7 of docs/features/directed-performance.md), drawn from the clay sheets: lengths in metres, angles in degrees unless named.",
+    "skinUnits": {
+      "$comment": "The faceunits01 units kept on the skin, with their gains; every other face shape is authored on the parts below.",
+      "jawOpen": 1.0,
+      "jawForward": 1.0,
+      "jawLeft": 1.0,
+      "jawRight": 1.0,
+      "cheekPuff": 1.0
+    },
+    "jawMask": {
+      "$comment": "The jaw units fade out from `from` below the mouth up to `to` below it, so they move the chin and leave the mouth to the mouth's own shapes.",
+      "from": 0.03,
+      "to": 0.01
+    },
+    "smooth": {
+      "$comment": "The front of the face as a depth map on a grid of `grid` cells (m), halfWidth either side of the midline and from `above` the eyes to `below` them: holes up to about twice `holes` across filled, bumps up to about twice `bumps` across taken off (morphological windows of 2\u00b7round(x/grid)+1 cells), blurred by sigma; applied in the `core` ellipse about the eyes' midline, `centre` below eye height, fading out from `fade` of it. A vertex within `tolerance` of the front surface goes onto the smoothed one, one further behind keeps its depth less that. Only head vertices in front of y frontOf move.",
+      "grid": 0.0015,
+      "halfWidth": 0.12,
+      "above": 0.08,
+      "below": 0.16,
+      "holes": 0.012,
+      "bumps": 0.02,
+      "sigma": 0.008,
+      "frontOf": -0.05,
+      "core": {
+        "centre": -0.02,
+        "x": 0.08,
+        "above": 0.08,
+        "below": 0.12,
+        "fade": 0.7
+      },
+      "tolerance": 0.003
+    },
+    "eyes": {
+      "$comment": "Each eye's centre `x` from the midline at eye height, its radius, its centre `depth` eye radii behind the smoothed skin; the iris and pupil as angles (radians) from the forward pole.",
+      "x": 0.047,
+      "radius": 0.024,
+      "depth": 0.45,
+      "iris": 0.62,
+      "pupil": 0.3
+    },
+    "lids": {
+      "$comment": "Shells about each eye (radius in eye radii), `columns` across, from the edge angle (up from straight ahead) to the back angle in `rows`; the upper lid's rows within `lash` degrees of its edge are the dark lash line. shapes: the edge angles [upper, lower] each shape moves to (null: that lid stays). A shape's targets go out along their radius as far as needed for every vertex's straight path to stay `clear` eye radii from the centre.",
+      "columns": 13,
+      "upper": {
+        "radius": 1.08,
+        "edge": 8,
+        "back": 160,
+        "rows": 8,
+        "lash": 20
+      },
+      "lower": {
+        "radius": 1.05,
+        "edge": -50,
+        "back": -160,
+        "rows": 6
+      },
+      "shapes": {
+        "eyeBlink": [
+          -60,
+          -40
+        ],
+        "eyeSquint": [
+          -5,
+          -20
+        ],
+        "eyeWide": [
+          80,
+          -68
+        ],
+        "cheekSquint": [
+          null,
+          -32
+        ]
+      },
+      "clear": 1.03
+    },
+    "brows": {
+      "$comment": "In eye radii from the eye centre: x from the inner to the outer end, the lower edge at the inner end, its rise toward the outer end, the arch, the thickness (tapering toward the outer end); lift (m) in front of the skin; segments along and rows across.",
+      "inner": 0.9,
+      "outer": 1.2,
+      "low": 1.6,
+      "rise": 0.05,
+      "arch": 0.25,
+      "thick": 0.72,
+      "taper": 0.4,
+      "lift": 0.0025,
+      "segments": 14,
+      "rows": 3
+    },
+    "browShapes": {
+      "$comment": "Moves (m) in the face's plane, then back onto the skin: browDown lowers the inner end by downInner and the outer by downOuter and draws it in by downIn; browInnerUp raises the inner end and draws it out; browOuterUp raises the outer end.",
+      "downInner": 0.026,
+      "downOuter": 0.0,
+      "downIn": 0.009,
+      "innerUp": 0.024,
+      "innerOut": 0.002,
+      "outerUp": 0.024
+    },
+    "nose": {
+      "$comment": "An ellipsoid (radii, m) `at` of the way from the eyes down to the mouth, `out` of it in front of the skin; noseSneer lifts it.",
+      "at": 0.5,
+      "radii": [
+        0.007,
+        0.006,
+        0.0065
+      ],
+      "out": 0.6,
+      "sneer": 0.003
+    },
+    "mouth": {
+      "$comment": "A dark shape on the skin, `columns` across, halfWidth across, thick at the middle (the corners keep `corner` of it), lift in front of the skin, `raise` above the mouth corners the faceunits find.",
+      "columns": 17,
+      "halfWidth": 0.034,
+      "thick": 0.007,
+      "corner": 0.25,
+      "lift": 0.003,
+      "raise": 0.0
+    },
+    "mouthShapes": {
+      "$comment": "Moves (m) of the mouth's edges in the face's plane unless named. smile: the corners up and out, the middle open, the teeth row dropping `teeth` (a fraction) of the way; frown: the corners down and out; stretch: the corners out and a little down; press: the corners out, the lips thinner, the corners down; lowerDown / upperUp: the lower lip down, the upper up; dimple: the corners back into the cheek; funnel: the corners in, the lips apart up and down; pucker: the corners in and the mouth forward (depth); roll: corners in, the rolled lip thinner and down; shrug: the lower lip up; side: mouthLeft/Right across; jawSide, jawForward (depth) and jawOpen: the mouth following the jaw units.",
+      "smile": {
+        "up": 0.022,
+        "out": 0.01,
+        "open": 0.02,
+        "teeth": 0.45
+      },
+      "frown": {
+        "down": 0.022,
+        "out": 0.004
+      },
+      "stretch": {
+        "out": 0.016,
+        "down": 0.002
+      },
+      "press": {
+        "out": 0.006,
+        "thin": 0.0015,
+        "down": 0.006
+      },
+      "lowerDown": 0.006,
+      "upperUp": 0.006,
+      "dimple": 0.004,
+      "funnel": {
+        "in": 0.015,
+        "up": 0.007,
+        "down": 0.008
+      },
+      "pucker": {
+        "in": 0.012,
+        "forward": 0.006
+      },
+      "roll": {
+        "in": 0.0055,
+        "down": 0.002,
+        "thin": 0.0015
+      },
+      "shrug": 0.003,
+      "side": 0.006,
+      "jawSide": 0.006,
+      "jawForward": 0.004,
+      "jawOpen": 0.02
+    }
   },
   "colours": {
     "skin": [
@@ -88,15 +207,10 @@
       0.026,
       0.017
     ],
-    "lips": [
-      0.578,
-      0.15,
-      0.076
-    ],
     "mouth": [
-      0.127,
-      0.021,
-      0.01
+      0.03,
+      0.008,
+      0.005
     ],
     "sclera": [
       0.871,
@@ -127,34 +241,19 @@
       0.127,
       0.051,
       0.025
+    ],
+    "teeth": [
+      0.871,
+      0.807,
+      0.716
+    ],
+    "lash": [
+      0.012,
+      0.006,
+      0.004
     ]
   },
   "roughness": 0.65,
-  "lips": {
-    "$comment": "The lips: an ellipse through the mouth corners (the vertices mouthSmile moves most), its width and its heights above and below the corners relative to the corners' half-distance, seen from the front; faces deeper than depth (m) behind the corners are left alone. Faces in it turned toward the front (facing: -normal.y) and no deeper than inside (m) behind the corners are lips, the rest the mouth, which draws the mouth line.",
-    "width": 0.95,
-    "above": 0.42,
-    "below": 0.42,
-    "depth": 0.06,
-    "facing": 0.0,
-    "inside": 0.004
-  },
-  "mouthBag": {
-    "$comment": "A dark ellipsoid behind the lips (MPFB's mouth opens onto the hollow head): its centre behind the mouth corners (back, m, +Y is back) and below them (drop, m), its radii relative to the corners' half-distance, shrunk until it lies inside the skin by margin (m).",
-    "back": 0.02,
-    "drop": 0.008,
-    "radii": [
-      0.95,
-      0.7,
-      0.8
-    ],
-    "margin": 0.002
-  },
-  "browShapes": {
-    "$comment": "The brow shapes fade out below a band above each eye, from `from` to `to` eye radii above its centre, so they move the brow and leave the lids to the lid shapes.",
-    "from": 0.9,
-    "to": 1.2
-  },
   "sheetSRGB": {
     "$comment": "sRGB read off clay-turnaround.png's front view (lit midtones); `colours` is these in linear.",
     "skin": [
@@ -167,15 +266,10 @@
       45,
       35
     ],
-    "lips": [
-      200,
-      108,
-      78
-    ],
     "mouth": [
-      100,
-      40,
-      25
+      48,
+      20,
+      12
     ],
     "sclera": [
       240,
@@ -206,6 +300,16 @@
       100,
       64,
       44
+    ],
+    "teeth": [
+      240,
+      232,
+      220
+    ],
+    "lash": [
+      28,
+      20,
+      16
     ]
   }
 }
