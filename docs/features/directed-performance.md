@@ -820,6 +820,25 @@ a particle extension the viewer would have to learn.
 
 **Evidence:** "Slice 1f evidence", below.
 
+### Slice 1g: a stream that reads at card size (2026-11-18)
+
+Slice 1f's follow-up. All three readers saw the pour, but called the
+stream "thin" and "hard to see at card size". At 16 mm wide it is about 2
+px on the card, and its pale blue sits on the teal background. Built only
+in `lib/world.ts` (the pour's defaults and drop shape) and
+`sheets/watering.json`. No new nodes: the levers are the drops' width,
+their stretch along the fall, and their colour against the background.
+
+**Acceptance.**
+- The watering sheet builds with no miss.
+- `publish.ts --check` stays valid within the extent budget.
+- `check_usdz_tools.sh` passes all four cases.
+- Every other sheet stays byte-identical to `main`, because no other sheet pours.
+- On a fresh blind reading of frames only, 2 of 3 readers say water was
+  poured and 2 of 3 say the plant changed, as before. At least 2 of 3 also
+  see the stream at card size without calling it thin or hard to see.
+- Two tuning tries at most, then report.
+
 ### Slice 2: the avatar flow (designed and approved 2026-11-17; 2a built)
 
 The owner's 2026-11-17 direction, as an 80/20. The 2026-11-13 plan for one
