@@ -125,9 +125,11 @@ export async function writeTake(take: SolvedTake, provenance: Provenance, world?
   const duration = take.times[take.times.length - 1] ?? 0;
   /** Presence as a STEP scale track on a node: 0 outside the spans. Nothing when present all through. */
   const presenceTrack = (node: GNode, spans: readonly { start: number; end: number }[]): void => {
-    if (spans.length === 1 && spans[0]!.start <= 0 && spans[0]!.end >= duration) return;
+    // Spans are rounded to the millisecond and the take's times are float32: an end within 1 ms of the last frame is the end.
+    const toEnd = (end: number): boolean => end >= duration - 1e-3;
+    if (spans.length === 1 && spans[0]!.start <= 0 && toEnd(spans[0]!.end)) return;
     const keys: [number, number][] = [[0, 0]];
-    for (const sp of spans) { keys.push([sp.start, 1]); if (sp.end < duration) keys.push([sp.end, 0]); }
+    for (const sp of spans) { keys.push([sp.start, 1]); if (!toEnd(sp.end)) keys.push([sp.end, 0]); }
     // A later key at the same time wins (an object present from 0).
     const merged = keys.filter((k, i) => !(keys[i + 1] && keys[i + 1]![0] === k[0]));
     node.setScale(merged[0]![1] ? [1, 1, 1] : [0, 0, 0]);

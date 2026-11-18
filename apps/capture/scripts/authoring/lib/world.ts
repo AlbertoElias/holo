@@ -187,6 +187,8 @@ export function solveWorld(sheet: BeatSheet, take: SolvedTake): SolvedWorld {
       lines.push(`${id} from ${w.object}: no water; its tool never points more than ${tilt}° below the horizontal`);
       return { id, kind: 'pour', name: 'Water', presence: [{ start: 0, end: 0 }], nodes };
     }
+    // Launched in order, but a longer fall can land later than the drop after it.
+    landings.sort((a, b) => a.t - b.t);
     const aim = pointAt(onto, frameAt(landings[0]!.t));
     const spread = Math.max(...landings.map((l) => Math.hypot(l.at.x - aim.x, l.at.z - aim.z)));
     const lastLanding = landings[landings.length - 1]!.t;

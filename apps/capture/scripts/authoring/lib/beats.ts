@@ -673,6 +673,7 @@ function worldProblems(sheet: BeatSheet, holdings: readonly Holding[]): string[]
     if (s.color !== undefined && sourced) problems.push(`${where}: a sourced model keeps its own materials; a colour change needs parts`);
   };
   const shows = new Map<string, { t: number; show: boolean }[]>();
+  const moves = new Map<string, { t: number; end: number }[]>();
   for (const [i, w] of (sheet.world ?? []).entries()) {
     const where = `world ${i + 1} (${w.kind})`;
     if (!WORLD_KINDS.includes(w.kind)) { problems.push(`${where}: no kind ${w.kind} (${WORLD_KINDS.join(', ')})`); continue; }
@@ -681,7 +682,12 @@ function worldProblems(sheet: BeatSheet, holdings: readonly Holding[]): string[]
       if (!spec) { problems.push(`${where}: no object ${w.object}`); continue; }
       if (!spec.tool) problems.push(`${where}: ${w.object} has no tool axis to pour from`);
       point(w.onto, `${where} onto`);
-      if (w.onto === undefined && !aimTargetOf(sheet, holdings, w.object)) problems.push(`${where}: nothing aims ${w.object}; give onto`);
+      if (w.onto === undefined) {
+        const aimed = aimTargetOf(sheet, holdings, w.object);
+        // The water lands on its aim's target, which must stay put like any world point.
+        if (!aimed) problems.push(`${where}: nothing aims ${w.object}; give onto`);
+        else point(aimed, `${where} (its aim's target; give onto)`);
+      }
       positive(w.rate, `${where} rate`); positive(w.speed, `${where} speed`); positive(w.size, `${where} size`);
       if (typeof w.wet === 'number') positive(w.wet, `${where} wet`);
       if (w.tilt !== undefined && !(w.tilt > -90 && w.tilt < 90)) problems.push(`${where} tilt: degrees between -90 and 90`);
@@ -713,8 +719,13 @@ function worldProblems(sheet: BeatSheet, holdings: readonly Holding[]): string[]
       state(w.from, `${where} from`, sourced);
       if (w.over !== undefined && !(w.over >= 0)) problems.push(`${where} over: seconds, 0 or more`);
       if (w.steps !== undefined && !(Number.isInteger(w.steps) && w.steps >= 2 && w.steps <= 12)) problems.push(`${where} steps: a whole number from 2 to 12`);
+      if (t !== undefined) moves.set(w.object, [...(moves.get(w.object) ?? []), { t, end: t + (w.over ?? 1.5) }]);
       if (t !== undefined && t + (w.over ?? 1.5) > sheet.duration + 1e-6) problems.push(`${where}: ends at ${(t + (w.over ?? 1.5)).toFixed(2)} s, after the take (${sheet.duration} s)`);
     }
+  }
+  for (const [object, spans] of moves) {
+    const sorted = [...spans].sort((a, b) => a.t - b.t);
+    for (let k = 1; k < sorted.length; k += 1) if (sorted[k]!.t < sorted[k - 1]!.end - 1e-6) problems.push(`world: ${object} changes again at ${sorted[k]!.t.toFixed(2)} s, before the change before it ends (${sorted[k - 1]!.end.toFixed(2)} s)`);
   }
   for (const [object, cues] of shows) {
     const sorted = [...cues].sort((a, b) => a.t - b.t);
