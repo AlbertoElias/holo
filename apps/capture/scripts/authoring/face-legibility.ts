@@ -81,7 +81,7 @@ async function main(): Promise<void> {
   const sheet = JSON.parse(await readFile(sheetFile, 'utf8')) as BeatSheet;
   const performer = sheet.performers[0];
   if (!performer) throw new Error(`${sheetFile}: no performer`);
-  const { regions } = faceGeometry(await loadAvatar(await resolveAvatar(performer.avatar, sheetFile)));
+  const { regions } = faceGeometry(await loadAvatar(await resolveAvatar(performer.avatar, sheetFile, performer.look)));
   const peaks = sheet.beats.map((b) => {
     if (!b.directions[0]) throw new Error(`beat ${b.id}: no directions; give each beat one expression`);
     const r = resolveTiming(b, b.directions[0]);

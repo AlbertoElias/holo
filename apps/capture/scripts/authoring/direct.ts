@@ -5,7 +5,8 @@
  *   node --conditions=development --import tsx scripts/authoring/direct.ts <sheet.json> [--out take.glb] [--style flat|directed] [--against earlier.glb] [--avatar spec]
  *
  * A performer's `avatar` is a path relative to the sheet, `stock` (the shipped
- * avatar) or `fixture:<name>` (one of the generated avatar-format fixtures).
+ * avatar), `fixture:<name>` (one of the generated avatar-format fixtures) or
+ * `house:clay` (the house base, dressed in the performer's `look` card).
  * An object's `source` is a GLB path relative to the sheet or
  * `polyhaven:<id>` (packed by the API, cached under output/authoring/objects).
  * A beat's `say` and the sheet's `sounds` are written as `KHR_audio`, each
@@ -19,11 +20,14 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { parseLook, type LookCard } from '@holoim/avatar-look';
+
 import { generateAvatarFixtures, SHIPPED_AVATAR } from '../lib/avatar-fixtures.ts';
 import { judgeMotion, measureMotion } from '../lib/motion-quality.ts';
 import { actingReport, diffTakes, summarize } from './acting-report.ts';
 import { loadAvatar, type LoadedAvatar } from './lib/avatar.ts';
-import { validateSheet, type BeatSheet } from './lib/beats.ts';
+import { HOUSE_AVATAR, validateSheet, type BeatSheet } from './lib/beats.ts';
+import { dressedFile, HOUSE_BASE } from './lib/house-look.ts';
 import { solveTake, type ObjectReport, type SolvedTake } from './lib/direct.ts';
 import { describeAttend, describeLife } from './lib/life.ts';
 import { loadSources, type LoadedSource } from './lib/props.ts';
@@ -34,8 +38,9 @@ import { writeTake } from './lib/write-glb.ts';
 
 const OUTPUT = fileURLToPath(new URL('../../output/authoring/', import.meta.url));
 
-export async function resolveAvatar(spec: string, sheetFile: string): Promise<string> {
+export async function resolveAvatar(spec: string, sheetFile: string, look?: LookCard): Promise<string> {
   if (spec === 'stock') return SHIPPED_AVATAR;
+  if (spec === HOUSE_AVATAR) return look ? dressedFile(parseLook(look)) : HOUSE_BASE;
   if (spec.startsWith('fixture:')) {
     const name = spec.slice('fixture:'.length);
     const file = join(OUTPUT, 'fixtures', `${name}.glb`);
@@ -50,7 +55,7 @@ export async function loadSheet(sheetFile: string, avatarOverride?: string): Pro
   const problems = validateSheet(sheet);
   if (problems.length) throw new Error(`${basename(sheetFile)}:\n  ${problems.join('\n  ')}`);
   const avatars = new Map<string, LoadedAvatar>();
-  for (const p of sheet.performers) avatars.set(p.id, await loadAvatar(await resolveAvatar(avatarOverride ?? p.avatar, avatarOverride ? join(process.cwd(), 'x') : sheetFile)));
+  for (const p of sheet.performers) avatars.set(p.id, await loadAvatar(await resolveAvatar(avatarOverride ?? p.avatar, avatarOverride ? join(process.cwd(), 'x') : sheetFile, avatarOverride ? undefined : p.look)));
   const sources = await loadSources(sheet.objects ?? {}, sheetFile, join(OUTPUT, 'objects'));
   return { sheet, avatars, sources };
 }

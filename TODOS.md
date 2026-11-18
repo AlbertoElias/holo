@@ -188,7 +188,12 @@ it from the item below instead of duplicating its status here.
   (5, 5, 5 of 7; holding back and looking down still swap). 2c is not
   complete: the audition's turn row (the right arm in the torso, a body
   issue also on the earlier base) still fails, and the motion owner's
-  report is pending.
+  report is pending. 2d (traits) was built on 2026-11-18 with the owner
+  away, for review: three builds, loose garments, hair and glasses, the
+  dressing package used by `direct.ts`, and the poem pair from cards; every
+  trait value passes the audition except the turn row, which the loose
+  garments made worse (47 to 52, was 33; the stance fix waits on the motion
+  owner, then the garments' side ease). Next: 2f (ink).
   Owned by
   [`docs/features/directed-performance.md`](docs/features/directed-performance.md).
 - [ ] Make all avatar movement look completely natural, in XR and 2D
