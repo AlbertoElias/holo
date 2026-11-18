@@ -62,7 +62,7 @@ export async function renderTier(avatar: string, regions: FaceRegions, outDir: s
       await call(page, 'init', open.url, regions);
       await call(page, 'seek', AT);
       await call(page, 'seek', AT); // twice: the card's camera damps toward its framing
-      const r = await call(page, 'regions', 0) as { browTop: number | null; chinBottom: number | null; eyes: Record<string, { top: Pt; bottom: Pt }>; pixelRatio: number };
+      const r = await call(page, 'regions', 0) as { browTop: number | null; chinBottom: number | null; eyes: Record<string, { top: Pt; bottom: Pt }>; faceCentre: [number, number, number] | null; pixelRatio: number };
       const box = await open.card.boundingBox();
       const canvas = await page.evaluate(() => { const c = document.querySelector('.feed-card canvas')?.getBoundingClientRect(); return c ? [c.x, c.y] as const : null; });
       await open.card.screenshot({ path: join(outDir, 'card.png') });
@@ -71,10 +71,11 @@ export async function renderTier(avatar: string, regions: FaceRegions, outDir: s
       const faceBoxDevicePx = r.browTop !== null && r.chinBottom !== null ? Math.round((r.chinBottom - r.browTop) * r.pixelRatio * 10) / 10 : null;
       const eyes = Object.entries(r.eyes).map(([side, e]) => ({ side, devicePx: Math.hypot(e.bottom[0] - e.top[0], e.bottom[1] - e.top[1]) * r.pixelRatio }));
 
-      // A front close-up for the brow's lightness, the face about half the frame.
+      // A front close-up for the brow's lightness, the face about half the frame, aimed at the face's centre
+      // (brow to chin) so a larger or smaller head keeps its brows in frame; else just above the head bone.
       const body = await call(page, 'bodies') as { performers: { head: [number, number, number] }[] };
       const head = body.performers[0]!.head;
-      const target: [number, number, number] = [head[0], head[1] + 0.06, head[2] + 0.06];
+      const target: [number, number, number] = r.faceCentre ? [r.faceCentre[0], r.faceCentre[1], r.faceCentre[2]] : [head[0], head[1] + 0.06, head[2] + 0.06];
       const close = await call(page, 'close', 0, { position: [target[0], target[1], target[2] + 0.7], target, fov: 20, width: CLOSE, height: CLOSE, background: BACKGROUND, regions: true }) as { image: string; regions: { browL: number[] } };
       await writeFile(join(outDir, 'brow.jpg'), Buffer.from(close.image.slice(close.image.indexOf(',') + 1), 'base64'));
       const L = close.regions.browL;

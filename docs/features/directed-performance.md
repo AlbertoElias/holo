@@ -754,7 +754,7 @@ the avatar and misplace the eye (2e changes this with the motion owner).
 | Lip shapes (`mouthPress*`, `mouthPucker`, `mouthFunnel`, `mouthRoll*`) | 1 mm | each at least **4 mm** | press 1.3, roll 2.8 mm: fail |
 | The other non-gaze ARKit channels (cheeks, nose, jaw sideways, tongue) | not barred | at least 1 mm, reported | reported |
 | Left and right | not checked | each pair within 15% of each other | within 3%: passes |
-| **Brow visibility** (new) | none | of the vertices the brow shapes move by 1 mm or more, at least **90% visible** from the card's camera, at neutral and at `browInnerUp` 1, with every other mesh (glasses, hair) as an occluder | 75%, the hair hides the rest: fails |
+| **Brow visibility** (new) | none | of the vertices the brow shapes move by 1 mm or more, at least **90% visible** from the card's camera, at neutral and at `browInnerUp` 1, with every other mesh (glasses, hair) as an occluder except the meshes the brow shapes move (the brow itself) | 75%, the hair hides the rest: fails |
 | **Brow contrast** (new, per finish) | none | in a front render at card framing, the brow region differs from the skin around it by at least **0.25 in OKLab L** | 0.353: passes |
 | **Eyes at the card** (new) | none | the neutral eye opening at least **3 device px** on the phone card | 2.7–2.9 px: fails |
 | **Face against accessories** (new) | none | no face vertex more than 2 mm inside a glasses or hair mesh at any channel at 1 (the smile's squint against the glasses, seen in 1b) | 9 vertices up to 4 mm into the hair: fails |
@@ -972,6 +972,65 @@ versioned with the bars it must meet.
 
 The owner returns the sheets; 2b records the pick here and keeps the files
 in the ignored `output/avatar-sheets/` of the main checkout.
+
+**Sheets returned (2026-11-18).** The owner returned Astra's sheets; they
+are in the main checkout's ignored `output/avatar-sheets/`: nine PNGs
+(`base-finishes`; `<finish>-turnaround` and `<finish>-expressions` for
+clay, ink and light; `clay-traits`; `clay-poem-pair`) and Astra's
+`blind-reading-test.zip`. The lead checked them against the request
+above: every sheet is there at the asked size, every trait value is drawn
+and labelled, and the brows are clear. The owner has not picked a finish
+yet (open decision 1), so no look work starts.
+
+**The owner's pick (2026-11-18): "Clay, then ink."** Asked which finishes
+the base build takes its look from, the owner picked soft clay first and ink
+line second; light is not picked. 2c takes its proportions, colours and
+surface from `clay-turnaround.png`, `base-finishes.png` and
+`clay-traits.png`; ink (2f) waits until clay is through.
+
+The lead ran Astra's blind test with three fresh Sonnet readers at 40 px.
+No finish passes the 5-of-7 bar:
+
+| Finish | Reader 1 | Reader 2 | Reader 3 |
+|---|---|---|---|
+| clay | 3 | 7 | 4 |
+| ink | 5 | 7 | 4 |
+| light | 3 | 3 | 4 |
+
+Smile, sad and determined read reliably; the misses fall among neutral,
+hopeful, holding something back and looking down. That is the same
+confusion the 3D base showed in 2c (see open decision 7). The readers were
+AI models; Astra's protocol asks for people, so this is evidence, not the
+protocol's verdict. At the owner's request the lead drafted a revision
+request to Astra for those four expressions
+(`output/avatar-sheets/astra-revision-request.md` in the main checkout),
+which went to Astra.
+
+**Round 2 of the expression sheets (2026-11-18).** Astra redrew the four
+expressions; the new sheets are in the main checkout's ignored
+`output/avatar-sheets/round-2/`:
+- `clay-expressions.png`, `ink-expressions.png` and
+  `light-expressions.png`, each 5000 × 950;
+- `expression-revision.zip`;
+- `blind-reading-test.zip`, with a new shuffle and key.
+
+These round 2 sheets are now the reference for neutral, hopeful, holding
+something back and looking down. The other expressions still come from
+round 1.
+
+The lead reran Astra's blind test with three fresh Sonnet readers. Each saw
+only its own three 40 px pages, in Astra's rotation order. Every reader
+named all 7 on every finish:
+
+| Finish | Round 1 (readers 1, 2, 3) | Round 2 (readers 1, 2, 3) |
+|---|---|---|
+| clay | 3, 7, 4 | 7, 7, 7 |
+| ink | 5, 7, 4 | 7, 7, 7 |
+| light | 3, 3, 4 | 7, 7, 7 |
+
+All three readers said the pair they were least sure of was neutral against
+holding something back. As in round 1, the readers were AI models, while
+Astra's protocol asks for people.
 
 ### Slice 3: the six-second test (general; after slice 1b)
 
@@ -1205,8 +1264,8 @@ audition scripts, the house base's source and its exported avatar files
 
 ## Open decisions for the user
 
-1. **House style:** picked from the slice 2 sheets (2b). Nothing to
-   answer until they exist.
+1. **House style:** answered 2026-11-18: "Clay, then ink" (slice 2b,
+   "The owner's pick"). Light is not picked.
 2. **Faces at card size** (numbers in slice 1b's evidence). On the stock
    avatar only the smile reads, at any size from 8 to 96 device px, so
    framing is not the limit. The options are:
@@ -1329,6 +1388,57 @@ for reading". Slice 2 starts only when the user decides on it from the
 reading recorded in slice 1's evidence. **Lifted on 2026-11-17** ("yes,
 lift the hold"); slice 2 is now the avatar flow, approved the same day
 (decision 5).
+
+7. **The house base's face (asked 2026-11-18, slice 2c; answered the same
+   day).** The owner's answer, in their words: "Yes, match the sheets"
+   (asked: "Rework the base's expressions to match Astra's round 2 sheets
+   now?", against commissioning a face). So:
+   - the base's face is not commissioned;
+   - the expression mixes (`EXPRESSIONS` in `lib/beats.ts`, which every
+     avatar shares) are reworked to the round 2 sheets, clay first;
+   - the base's blind reading is then run again as 2c's gate.
+
+   Outcome (2026-11-18): the mixes were reworked and the gate missed twice
+   more (1, 3, 4 and then 2, 1, 4 of 7; slice 2c evidence, "The round 2
+   mixes and the gate"). The face, not the mixes, is the limit: the base's
+   eyes and mouth are one or two device pixels at 40 px, where the sheet's
+   eyes span half the face. Matching needs a face made for big eyes, which
+   is option A (spend), so it is back with the owner. **Decided by the agent
+   in the owner's absence on 2026-11-18, for the owner to review:** the
+   reworked mixes, the scripts and the base land on `main` with the base
+   reachable only through `?avatar=` and beat sheets, marked here as not
+   yet passing 2c; `DEFAULT_AVATAR_URL` is unchanged. Reverting is one
+   commit (the mixes) and one file (the base).
+
+   The question as first asked: The adapted
+   MPFB base passes every face row of the audition but not the blind
+   reading. After two rounds, three readers each scored 5, 3, 3 and then
+   3, 1, 1 of 7. Options:
+   - A. Commission the face (a sculpted head with blendshapes made for the
+     card), keeping the generated body and rig. It costs money, and
+     `house-base.ts` already takes everything else.
+   - B. Make the expression mixes in `lib/beats.ts` stronger for every
+     avatar, then read again. It costs nothing, but it changes how the stock
+     and every directed piece act.
+   - C. Wait for the style sheets (2b) and redo the face from them.
+
+   Recommended: B first, because it is cheap and tests whether the mixes
+   are the limit, then A if a third reading still misses.
+
+   Evidence since (2026-11-18): Astra's drawn sheets, the ideal the base
+   would copy, blur the same four expressions at 40 px (neutral, hopeful,
+   holding something back, looking down; three AI readers per finish, see
+   slice 2b, "Sheets returned"). So the expression designs, not the
+   modelled face, look like the cause: commissioning a face (A) or redoing
+   it from the sheets (C) would likely meet the same misses. The readers
+   were AI models, not the people Astra's protocol asks for.
+
+   Round 2 (2026-11-18): Astra redrew those four, and the redrawn sheets
+   read 7 of 7 for every reader on every finish, again with three AI readers
+   at 40 px (slice 2b, "Round 2 of the expression sheets"). The readers were
+   least sure of neutral against holding something back. So a 7-of-7 design
+   for the four now exists to aim the base's face at. The decision itself
+   is unchanged and still the owner's.
 
 ## Test plan and evidence
 
@@ -1930,6 +2040,230 @@ parent frame (follow-up below).
 (`vrm0-minus-z`: the left hand at −X). Bind data, reach targets and
 direction may be mirrored for such avatars; owner: the slice that next
 directs a VRM 0 avatar.
+
+### Slice 2c evidence (2026-11-18): stopped at the blind gate (base landed, not yet passing)
+
+**Status: not done.** The base passes every face row of the audition. It
+fails the blind reading in two rounds, so work stopped as the slice
+requires. Commissioning the face is the owner's decision (open decision
+below). The base is on `main` (2026-11-18), reachable only through
+`?avatar=` and beat sheets and not yet passing 2c, by the agent's
+decision in the owner's absence (decision 7).
+
+**The base.** `house-base.ts` makes `public/gltf/models/house-base.glb`
+(1.60 MB, under the 1.8 MB budget) in headless Blender, and every value
+comes from `house-base/base.json`. Its parts and credits are in
+`asset.copyright` and in the scene's `holoimAvatar` extras:
+
+- the MakeHuman human from MPFB 2.0.18 (CC0 output; GPL-3.0 add-on, pinned by sha256);
+- the 52 ARKit face shapes from faceunits01 (CC0, pinned by sha256);
+- the ribbon brows, the eyeballs, the lips and the clay materials, made by
+  `build.py` (the project's own).
+
+No generated hair or clothing yet. The base has a bald head, a plain top,
+trousers and shoes. The proportions are a 1.55× head, 1.5× eyes and
+1.12× hands, and the brows are never covered. The rig and channels are
+the stock's: 53 bones and the ARKit face set, driven by `direct.ts`
+(directed takes of `expressions` and `watering`).
+
+**Audition** (round 1, the base on the branch): 81 rows, all pass except:
+
+- `turn.armR-in-torso`: 38 vertices, up to 28.1 mm. It is binding, and
+  the stock fails it the same way (32, 26.9 mm). The vertices are at the
+  shoulder and armpit, and no macro or proportion change moved them, so
+  the row tests the point-cloud check, not this mesh. Owner: the motion owner.
+- `other.tongueOut`: 0 mm, reported only (no tongue).
+
+The key values:
+
+| Rows | Values |
+|---|---|
+| Brows | browInnerUp 12.3, browDown 11.7, browOuterUp 9.4 mm |
+| Lids | wide 13.5, squint 13.4 mm; blink closes |
+| Jaw and mouth corners | jaw 39.4 mm; smile 21.4, frown 15.9, stretch 15.5 mm |
+| Lip shapes | press 11.3, pucker 11.7, funnel 8, roll 7.5 mm |
+| Brow visibility | 100% |
+| The card render | brow contrast 0.366; eye opening 4.2 device px; face box 42.8 device px |
+
+On the phone card in `review.ts`, the face is 54.3 device px (the stock's is 30.9).
+
+**Blind reading at card size** (`face-legibility.ts`, 42 device px,
+`sheets/expressions.json`; one Opus and two Sonnet readers, each fresh;
+the list of names came with a one-line gloss each):
+
+| Round | Change | Readers (of 7) |
+|---|---|---|
+| 1 | as above | 5, 3, 3 |
+| 2 | smaller eye scale (1.4) with a wider falloff, browDown gain 2.6, mouthPress 1.7, jawOpen 0.5, lighter lips | 3, 1, 1 |
+
+Only the smile read for every reader. Held, resolve and neutral were
+confused with each other, and hope with eyes-down and sad. At round 1 the
+eye-scale falloff left a ring that reads as glasses at card size, and the
+dark lips read as an open mouth. Round 2 removed both, and the score
+fell. The committed base has since taken the clay look and a doubled
+`browDown` gain (below). The weak expressions are mixes of
+channels at 0.25–0.6 (`EXPRESSIONS` in `lib/beats.ts`), so a channel can
+pass its millimetres at 1 and still move too little in the mix. Making
+those mixes stronger would change every avatar, so that is not 2c's to
+do.
+
+**Other findings.**
+
+- **Reach.** The 1.55× head takes height from a 1.7 m figure: the
+  shoulders are 1.25 m (the stock's 1.44 m) and the arms 7 cm shorter. In
+  the watering take two reaches stop 17.5 mm and 23.1 mm short (stock
+  under 1 mm), within `direct.ts`'s limits.
+- **Quick Look.** `check_usdz_tools.sh` cannot run its material challenge
+  on the base. The challenge needs two materials with embedded base-colour
+  textures, and the clay base has colour factors and no UVs. The stock's
+  expressions take passes all four cases. A base needs UVs and a texture,
+  or the check needs a factor-only path.
+- **The build.** It gives the same geometry on each run, but Blender can
+  order the eye and mouth triangles differently, so the sha256 can change.
+
+**Measure fixes found on the way** (in this branch; the stock's rows are
+unchanged by them):
+
+- the eye radius now spans every mesh the eye bone carries (it took the pupil);
+- brow visibility no longer counts the brow's own meshes as occluders (the
+  bar's row above is updated);
+- the close-up aims at the face's centre and drops brow samples outside the frame.
+
+**Revisit when the style sheets (2b) arrive:** the head, eye and hand
+scales, the brow shape and colour, the lips and their colour, the skin and
+clothing colours, and the height the head takes from the body (reach).
+Hair and clothing are still to be generated. (Done for clay on 2026-11-18;
+see "The clay look" below.)
+
+#### The clay look (2026-11-18)
+
+After the owner picked "Clay, then ink" (slice 2b), the base took its look
+from Astra's `clay-turnaround.png`, `base-finishes.png` and
+`clay-traits.png`. Every value is in `house-base/base.json`; the sRGB values
+read from the sheets' lit midtones are kept there as `sheetSRGB`, beside the
+linear `colours` the build uses.
+
+- **Colours:**
+  - skin is terracotta, sRGB 214, 128, 80 (it was a pale tan);
+  - the brows are dark brown;
+  - the lips are close to the skin, as drawn;
+  - the eyes have warm whites and amber-brown irises;
+  - the jumper is oatmeal, the trousers slate and the shoes brown.
+- **Surface:** roughness 0.65 (was 0.85) for the soft clay sheen.
+- **Head:**
+  - scale 1.4 (was 1.55), toward the sheet's head of about 1/7.2 of the
+    height;
+  - `head-round` 0.9 (was 0.4) for the sheet's rounder skull.
+- **Brows:** higher and thicker, as drawn: `low` 1.55, `thick` 0.6,
+  `outer` 1.4.
+- **Hands:** 1.15.
+- **Eyes:** the iris is larger (0.65 rad).
+- **Eye falloff:** eased (inner 1.0, outer 4.5), so the scaled eye region no
+  longer leaves the ring that read as glasses.
+- **Two build fixes in `build.py`:**
+  - Both eyeballs now take the smaller fitted size. With the eyes scaled up,
+    the lids' nearest vertex differed by side, and the eyeballs came out at
+    18.5 and 26.7 mm.
+  - A face split evenly between two garments, or between a garment and the
+    neck, is now cloth, and toe tips weighted to no rig bone are now shoe.
+    This removes the strip of skin at the waist and the bare toes.
+
+The audition passes 79 of 81 rows. The same two miss as before:
+`turn.armR-in-torso` (33 vertices, up to 28.2 mm), which the stock also
+fails, and `tongueOut`, which is reported only. Key values:
+
+| Row | Value | Bar |
+|---|---|---|
+| browInnerUp | 14.6 mm | ≥ 8 |
+| browDown | 12.1 mm | ≥ 8 |
+| eyeWide / eyeSquint | 12.7 / 12.8 mm | ≥ 8 |
+| mouthSmile | 16.5 mm | ≥ 14 |
+| jawOpen | 37.1 mm | ≥ 15 |
+| brow visibility | 100% | ≥ 90% |
+| brow contrast | 0.332 L | ≥ 0.25 |
+| eye opening | 4.1 device px | ≥ 3 |
+| face box | 40.4 device px | ≥ 40 |
+| file size | 1.60 MB | ≤ 1.8 |
+
+The blind reading was not rerun: decision 7 is open, and a revision of the
+four confused expressions has been asked of Astra.
+
+**What the build cannot match from the clay sheets:**
+
+- **Clothing.** The jumper, trousers and shoes are colour regions painted on
+  the body. They are skin-tight, show the chest, and the collar edge is
+  uneven. The sheet's loose jumper, straight wide trousers and modelled
+  shoes need garment meshes, which slice 2c leaves to generation (still not
+  done).
+- **Eye size.**
+  - The sheet's eyes are about twice life size; the base's are 15 mm
+    eyeballs in MPFB's sockets.
+  - The eyeball is fitted to the nearest lid vertex.
+  - Scaling the eye region past 1.5 brings back the glasses ring (tried at
+    1.7).
+  - Matching the sheet needs a face with sockets and lids made for big eyes:
+    the commissioned face of decision 7 (A), or a new eye region.
+- **The head and the face box.**
+  - The sheet's head is smaller than the base's.
+  - At the sheet's proportions the brow-to-chin height would be about
+    177 mm. That is 36 device px on the card, under the bar's 40.
+  - Head 1.4 with raised brows is the smallest head that passes, at
+    40.4 px, with almost no margin.
+- **Face detail:**
+  - the sheet's large ears;
+  - the soft cheeks and blush;
+  - the eyelid lines and lashes;
+  - the thin smiling mouth (the sheet's neutral face smiles);
+  - the clay's fine surface texture (the base has no textures or UVs).
+- **Body:**
+  - The sheet's figure is flat-chested and narrow-hipped under loose
+    clothes.
+  - The MPFB macros at 0.5 give a mixed body that tight painted clothes
+    show.
+  - Garments would hide this; the macros are left for the trait builds
+    (2d).
+
+The side-by-side of the sheet and the base is in the worktree's ignored
+`output/house-base-2c/clay-side-by-side.jpg`.
+
+#### The round 2 mixes and the gate (2026-11-18)
+
+Decision 7 was answered "Yes, match the sheets", so `EXPRESSIONS` in
+`lib/beats.ts` now follows Astra's round 2 clay sheet:
+
+- **Hopeful:** inner and outer brows high, eyes wide, the mouth a little
+  open, no smile.
+- **Holding something back:** lips pressed and rolled in, inner brows a
+  little raised, lids a little lowered. A first try with the sheet's
+  lowered brows read as determined to every reader.
+- **Looking down:** lids lowered and the irises low (`eyeLookDown`).
+  `FaceRig.apply` leaves `eyeLook*` out of the morphs, so `direct.ts` now
+  adds an expression's eye-look channels to the gaze it passes in.
+- **Determined:** brows fully down, eyes narrowed, mouth pressed.
+- **Sad:** a little stronger. **Smile** is unchanged.
+
+The mixes are shared, so the stock and every directed piece act the same
+way; the stock read only a smile before (3 of 7) and has no brows to show.
+The base's `browDown` gain went from 1.3 to 2.6 (12.1 to 23.9 mm), because
+determined barely moved the brows at card size. The audition still passes
+79 of 81 rows (the same two misses as above; face box 41.2 device px).
+
+The blind reading at 40 px, three fresh AI readers each round:
+
+| Round | Scores | What read |
+|---|---|---|
+| 1 | 1, 3, 4 of 7 | smile 3 of 3; holding back read as determined, determined as neutral |
+| 2 (stronger brows, new holding back) | 2, 1, 4 of 7 | determined 3 of 3; looking down, hopeful and smile mixed up |
+
+**The gate is not met, and the face is the limit.** At 40 px the base's
+eyes are a pixel or two and its mouth barely more, while the sheet's eyes
+span about half the face and its smile the full jaw. The cues that carry
+the sheet (wide or lowered lids, iris position, open mouth) are below what
+the card shows on this face. Scaling the eyes further brings back the
+glasses ring (clay look, above), and a smaller head fails the face box.
+What would meet it is a face made for big eyes: decision 7's option A, a
+commission, which is spend and so the owner's. The side-by-side is the
+worktree's ignored `output/house-base-2c/mixes-side-by-side.jpg`.
 
 ## Physical-device limits
 
