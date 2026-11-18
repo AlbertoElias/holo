@@ -113,11 +113,30 @@
           "foot": "right",
           "by": [
             0,
-            0.55
+            0.9
           ],
           "follow": true,
-          "attack": 0.5,
-          "settle": 0.4
+          "attack": 0.7,
+          "settle": 0.5
+        }
+      ]
+    },
+    {
+      "id": "h-walk",
+      "performer": "him",
+      "at": 2.75,
+      "note": "He keeps walking.",
+      "directions": [
+        {
+          "kind": "step",
+          "foot": "left",
+          "by": [
+            0,
+            0.7
+          ],
+          "follow": true,
+          "attack": 0.7,
+          "settle": 0.5
         }
       ]
     },
@@ -136,7 +155,8 @@
           "stopShort": 0.16,
           "palm": "toward",
           "attack": 0.7,
-          "settle": 1.1
+          "settle": 1.1,
+          "anticipation": 0.5
         },
         {
           "kind": "weight",
