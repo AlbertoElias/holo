@@ -101,6 +101,7 @@ function parseTrackName(trackName: string): { nodeName: string; property: 'posit
 export class LocomotionAnimator {
   private mixer: THREE.AnimationMixer | null = null;
   private lowerBodyNames: ReadonlySet<string> | undefined;
+  private armNames: ReadonlySet<string> | undefined;
   private rootMotionNames: ReadonlySet<string> | undefined;
   private readonly actionsByProfile: Record<LocomotionProfile, Partial<Record<LocomotionState, THREE.AnimationAction>>> = {
     'desktop-full': {},
@@ -168,9 +169,11 @@ export class LocomotionAnimator {
    */
   attachClips(root: THREE.Object3D, ownClips: THREE.AnimationClip[], humanoid?: HumanoidSkeleton, retargeted: readonly THREE.AnimationClip[] = []): void {
     this.lowerBodyNames = undefined;
+    this.armNames = undefined;
     this.rootMotionNames = undefined;
     if (humanoid) {
       this.lowerBodyNames = LocomotionAnimator.boneKeys(humanoid, LOWER_BODY_BONES);
+      this.armNames = LocomotionAnimator.boneKeys(humanoid, VRM_HUMANOID_BONES.filter((b) => /Shoulder|Arm|Hand|Thumb|Index|Middle|Ring|Little/.test(b)));
       this.rootMotionNames = new Set([...LocomotionAnimator.boneKeys(humanoid, ['hips']), 'armature', 'root']);
     }
     const own = !humanoid || LocomotionAnimator.usesOwnClips(ownClips, humanoid);
@@ -541,7 +544,8 @@ export class LocomotionAnimator {
       .map((track) => track.clone())
       .map((track) => this.trimWalkLoopTail(track, isWalkClip))
       // A walk keyed at a few poses with straight-line blends jerks the feet at every key; play it as a smooth loop.
-      .map((track) => (isWalkClip && profile === 'desktop-full' ? LocomotionAnimator.smoothLoop(track, clip.duration) : track));
+      .map((track) => (isWalkClip && profile === 'desktop-full' ? LocomotionAnimator.smoothLoop(track, clip.duration) : track))
+      .map((track) => (isIdleClip && profile === 'desktop-full' ? LocomotionAnimator.holdFirstKey(track, clip.duration) : track));
     if (tracks.length === 0) return undefined;
     const processed = new THREE.AnimationClip(clip.name, -1, tracks);
     processed.resetDuration();
@@ -557,12 +561,25 @@ export class LocomotionAnimator {
       return false;
     }
     if (profile === 'desktop-full') {
-      // The desktop body stands at rest: the idle's sway would move the hand, eyes and shoulders the desktop reach,
-      // carry, set-down and prop placement are tuned from (docs/features/realistic-avatar-motion.md, follow-ups).
-      // The idle's legs drive the VR lower body.
-      return !isIdleClip;
+      // On desktop the idle only lowers the arms (holdFirstKey); its legs drive the VR lower body instead, and its
+      // torso and head lean would move the shoulder and eyes the desktop reach, carry and aim are tuned from.
+      if (isIdleClip) return parts.property === 'quaternion' && this.isArmTarget(parts.nodeName);
+      return true;
     }
     return parts.property === 'quaternion' && this.isLowerBodyTarget(parts.nodeName);
+  }
+
+  /**
+   * The track held at its first key for the whole clip. The desktop arms stand in the idle's pose (down, on any rest
+   * pose, so a T-pose avatar does not swing them down when it starts walking) but without its sway, which would move
+   * the hand the desktop reach, carry and set-down are tuned from (docs/features/realistic-avatar-motion.md,
+   * follow-ups). Two keys, so the clip keeps a nonzero duration to loop over.
+   */
+  private static holdFirstKey(track: THREE.KeyframeTrack, duration: number): THREE.KeyframeTrack {
+    const size = track.getValueSize();
+    const first = Array.from(track.values.slice(0, size));
+    const TrackType = track.constructor as new (name: string, times: number[], values: number[]) => THREE.KeyframeTrack;
+    return new TrackType(track.name, [0, Math.max(duration, 1 / 30)], [...first, ...first]);
   }
 
   /**
@@ -675,6 +692,12 @@ export class LocomotionAnimator {
   private isRootMotionTarget(nodeName: string): boolean {
     if (this.rootMotionNames) return this.rootMotionNames.has(nodeName);
     return ROOT_MOTION_TARGETS.some((target) => nodeName === target || nodeName.endsWith(target));
+  }
+
+  /** Shoulders, arms, hands and fingers: by canonical bone with a humanoid, else by the shipped rig's names. */
+  private isArmTarget(nodeName: string): boolean {
+    if (this.armNames) return this.armNames.has(nodeName);
+    return /(shoulder|arm|hand)/i.test(nodeName) && !/armature/i.test(nodeName);
   }
 
   private isLowerBodyTarget(nodeName: string): boolean {

@@ -40,7 +40,10 @@ it from the item below instead of duplicating its status here.
   foot pitch/roll to the slope sampled under heel and toe, pelvis drop to the
   lower foot, and the walk's knee swing (p99 77° against the CMU source's
   57–66°), and an allocation-free `TerrainLegSolver` (it still makes per-frame
-  temporaries). Slice 1 replaced only Idle and Walk.
+  temporaries), and the desktop Idle's upper-body sway (slice 1 keeps the
+  desktop body at rest; letting the Idle move the hand and eyes needs the
+  desktop reach, carry, set-down and prop placement retuned). Slice 1 replaced
+  only Idle and Walk.
 
 - [x] "The way down", version 2 (agent-authored, 2026-11-12): the same
   introspection, made to go inside and hit harder. Version 1 (scene

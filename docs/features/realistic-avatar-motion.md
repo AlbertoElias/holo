@@ -49,7 +49,14 @@ procedural gait.
   motion capture database (free for any use, raw data not resold), from the
   original ASF/AMC takes. Walk: subject 07 take 12, frames 8–35, one step
   mirrored onto the other leg so both legs walk the same step. Idle: 113_21,
-  frames 165–315. Loops are cut at left heel strikes, in place, seams closed.
+  frames 165–315, its sway scaled to 0.4 and re-faced (the take stands ~100°
+  off its walk heading). Loops are cut at left heel strikes, in place, seams
+  closed. On desktop the Idle only holds the arms, still, at its first frame
+  (down on any rest pose, so a T-pose avatar does not swing them down when it
+  starts walking): its sway, torso and head lean moved the hand, shoulders and
+  eyes the desktop reach, carry, set-down and aim are tuned from (holding the
+  carry pose over it, or blending the arms or the whole upper body back to
+  bind, still broke those checks). The Idle drives the VR lower body.
 - `scripts/mocap/amc-to-dump.ts` (ASF/AMC → JSON) and
   `scripts/build-mocap-clips.ts` (JSON → the shipped avatar's clips, then
   `build-locomotion-library.ts` rebuilds `locomotion.glb`). Sources and dumps
@@ -71,7 +78,8 @@ procedural gait.
 **Deferred to a follow-up slice** (recorded in `TODOS.md`): directional
 (back/strafe) and crouch mocap clips with phase-synced blending; foot
 pitch/roll to the terrain normal and heel sampling; pelvis drop to the lower
-foot; the remaining knee-swing excess (walk p99 77° against the source's
+foot; the desktop Idle's upper-body sway (needs the desktop reach, carry,
+set-down and prop placement retuned to read a moving hand and eye); the remaining knee-swing excess (walk p99 77° against the source's
 57–66°); an allocation-free leg solver (slice 1 removed its per-probe raycasts,
 but `TerrainLegSolver` still makes Vector3/Quaternion temporaries each frame).
 
