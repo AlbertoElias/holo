@@ -7,8 +7,9 @@
  *
  * It fetches the pinned parts into the ignored `output/authoring/house-base/cache/`
  * and checks their sha256: MPFB 2.0.18 (the Blender add-on that makes the
- * MakeHuman human; GPL-3.0, its output CC0) and the faceunits01 pack (the
- * 52 ARKit face shapes, CC0). Blender (5.x) runs `house-base/build.py`
+ * MakeHuman human; GPL-3.0, its output CC0) and the faceunits01 pack (ARKit
+ * face shapes, CC0; the base keeps its jaw and cheek units, and its stylised
+ * face's other shapes are built in `build.py`). Blender (5.x) runs `house-base/build.py`
  * headless; MPFB must be installed in it as the `user_default` extension at
  * the pinned version (`--install-mpfb` installs it from the checked zip).
  * The credits `build.py` records go into `asset.copyright` and the scene's

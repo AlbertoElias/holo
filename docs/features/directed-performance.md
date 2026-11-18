@@ -1621,6 +1621,23 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
    yet passing 2c; `DEFAULT_AVATAR_URL` is unchanged. Reverting is one
    commit (the mixes) and one file (the base).
 
+   **Then, decided by the agent in the owner's absence on 2026-11-18, for
+   the owner to review:** a face for big eyes built in `house-base.ts`, with
+   no spend, instead of a commission (A). The body, joints and build
+   settings stay (the eye bones move to the new eyes). The head is reshaped into a stylised clay-sheet face:
+   - eyes about a quarter of the face wide, with a big iris and visible white;
+   - upper lids with a lash line;
+   - thick separate brows;
+   - a wide dark mouth;
+   - a simple nose.
+
+   Its face shapes are authored for it on the channels the base already
+   declared. The shared mixes are unchanged. It passes the blind reading at
+   5, 5 and 5 of 7 (slice 2c evidence, "The stylised face"). The base stays
+   behind `?avatar=`, and `DEFAULT_AVATAR_URL` is unchanged. Reverting is
+   the face block of `house-base/base.json`, `house-base/build.py` and the
+   base file.
+
    The question as first asked: The adapted
    MPFB base passes every face row of the audition but not the blind
    reading. After two rounds, three readers each scored 5, 3, 3 and then
@@ -2559,6 +2576,75 @@ glasses ring (clay look, above), and a smaller head fails the face box.
 What would meet it is a face made for big eyes: decision 7's option A, a
 commission, which is spend and so the owner's. The side-by-side is the
 worktree's ignored `output/house-base-2c/mixes-side-by-side.jpg`.
+
+#### The stylised face (2026-11-18): the blind gate met
+
+Decided by the agent with the owner away, for the owner to review
+(decision 7): rather than commission a face, `build.py` reshapes the head
+into one made for big eyes, in the clay sheet's style. All its values are
+in the `face` block of `base.json`. The body, joints and build settings are
+unchanged, apart from the eye bones, which now sit at the new eyes. The ears
+are MPFB's own, unchanged.
+
+- **The front of the face** is smoothed through a depth map, which takes
+  off MPFB's lip and nose creases.
+- **The eyes** are spheres at x ±47 mm with a 24 mm radius, a big iris and
+  white around it.
+- **The lids** are shells over each eye, with a dark lash line on the
+  upper lid. Their shapes move the lid edge, pushed out so a part-way blink
+  never cuts into the eye. The blink is mostly the upper lid: at the 0.55
+  of looking down, the eye reads lowered, not as a slit.
+- **The brows** are separate dark ribbons well above the eyes. Down makes a
+  V, and inner-up and outer-up raise them.
+- **The nose** is a small ball.
+- **The mouth** is a dark three-row shape with teeth, carrying every mouth
+  shape (smile, frown, press, roll, funnel, pucker and the jaw's).
+
+The skin keeps only faceunits01's jaw and cheek units. The shared mixes
+in `lib/beats.ts` are unchanged.
+
+The blind reading at card size (`blind-05.jpg`, 43 device px; the phone
+card is 42.8 to 44.8): `face-legibility.ts` on `sheets/expressions.json`
+re-pointed at the base, three fresh AI readers each round. From f5 on,
+each round's answers and scores are in `readers.json` beside its
+`key.json`, in the worktree's ignored
+`output/authoring/house-base/face/<round>/`.
+
+| Round | Scores | What changed, what read |
+|---|---|---|
+| f1 | 2, 2, 3 of 7 | first face; smile, sad and hopeful clear |
+| f2 to f4 | 4, 2, 3 and 3, 3, 4 | lids no longer cut the eye; V brows (determined 3 of 3) |
+| f5 | 5, 3, 7 | lower neutral lid; held and looking down swap |
+| f6, f7 | 3, 3, 3 and 4, 4, 3 | wider hope brows, thinner held mouth: worse, all readers alike |
+| f8 | not read | checked at 96 px only: the held mouth had vanished, so it was reverted |
+| f9 | 5, 5, 4 | blink mostly the upper lid; held mouth as in f5 |
+| **f10** | **5, 5, 5** | held mouth corners tucked down |
+
+**The gate is met.** Every reader in f10 reads smiling, sad, determined,
+hopeful and neutral, and swaps holding something back with looking down.
+So those two are still the weak pair. Holding back has a 0.2 blink in the
+shared mix, and its pressed mouth is small at 40 px.
+
+- **Audition.** 60 of 61 rows pass:
+  - brows 23 to 25.6 mm, brow contrast 0.3;
+  - lids wide 27.6 and squint 9.7 mm, eye opening 4.3 device px;
+  - corners 18.2 to 23.1, jaw 45.5, lips 6.8 to 17.5;
+  - symmetry 0;
+  - face box 41.8 device px;
+  - 1.1 MB, under 1.8 MB.
+
+  The miss is `turn.armR-in-torso` (33), which the earlier base also fails
+  identically: a body issue, not the face. So 2c is not complete, and the
+  base stays behind `?avatar=`.
+- **Card.** The review pack gives the face 44.8 device px on the phone
+  card, against the stock's 31. Its pack (`output/authoring/review/house-face-f10/`)
+  and the stock's (`stock-expr/`) are in the worktree's ignored `output/`.
+- **Quick Look.** `check_usdz_tools.sh` still cannot run its material
+  challenge (no textures; see above). The f10 take converts with
+  `glb_to_usdz.py` (4.2 MB USDZ). `inspect_usdz.py` passes, and
+  `usdchecker --arkit` reports success.
+- **Not done:** the motion owner's report on the base, and people (not AI)
+  as readers.
 
 ### Slice 6 evidence (2026-11-18)
 
