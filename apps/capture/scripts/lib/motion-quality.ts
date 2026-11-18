@@ -28,6 +28,10 @@ export type MotionFrame = {
   aimRay?: Vec3 | undefined;
   // Direction to a measured target from the fingertip (unit), when known.
   aimTarget?: Vec3 | undefined;
+  // The input holds the avatar still (desktop keys released, settled): jitter is
+  // judged on these frames instead of where each joint happens to be still, since
+  // a living idle (breathing, weight shifts) is never still for long.
+  held?: boolean;
 };
 export type MotionSource = 'vr-body' | 'vr-hands' | 'ar-quest' | 'ar-phone' | 'camera' | 'desktop' | 'authored';
 
@@ -82,7 +86,11 @@ export const MOTION_TARGETS: Record<MotionSource, Targets> = {
   'ar-quest': { ...HUMAN_FEET, jitterP95Mm: { max: 2 }, wristErrorP95Cm: { max: 1.5 }, latencyMs: { max: 0 }, jerkRatio: { max: 1.2 } },
   'ar-phone': { ...HUMAN_FEET, jitterP95Mm: { max: 2 } },
   camera: { ...HUMAN_FEET, jitterP95Mm: { max: 8 }, rayJitterP95Deg: { max: 3.5 }, aimErrorMedianDeg: { max: 3.5 }, latencyMs: { max: 100 } },
-  desktop: { ...HUMAN_FEET, jitterP95Mm: { max: 2 } },
+  // Desktop plays recorded human motion at a brisk 1.8 m/s, and pops grow with pace: the original
+  // CMU walks (scripts/mocap/amc-to-dump.ts) read 34 at 1.3 m/s (02_01), 43 at 1.5 (07_01), 46 at
+  // 1.9 (08_01) and 54 at 2.2 (07_12), so desktop pops sit at the human walk of its pace. Its held
+  // jitter is the idle's life, not noise: CMU 113_21 standing still reads 4.1 mm; the target is under it.
+  desktop: { ...HUMAN_FEET, popP99MS2: { max: 46 }, jitterP95Mm: { max: 3 } },
   // A take solved from a directed beat sheet (docs/features/directed-performance.md): no input to follow, so bodies only.
   authored: { ...HUMAN_FEET, jitterP95Mm: { max: 2 } }
 };
@@ -350,14 +358,29 @@ function stillWindows(frames: MotionFrame[], speedAt: (i: number) => number | nu
   return windows.filter(([a, b]) => b - a >= 3);
 }
 
+// Runs of flagged frames, [start, end). The smoother is fit inside each run
+// only, so it never reaches into the motion before or after it.
+function runs(flags: boolean[]) {
+  const out: Array<[number, number]> = [];
+  let start = -1;
+  for (let i = 0; i <= flags.length; i++) {
+    if (flags[i] && start < 0) start = i;
+    if (!flags[i] && start >= 0) {
+      if (i - start >= 3) out.push([start, i]);
+      start = -1;
+    }
+  }
+  return out;
+}
+
 // The joint's own smooth path at frame i: a least-squares quadratic over
 // ±radius frames, centred on i (a Savitzky-Golay smoother) and fit against
 // timestamps, so unevenly stepped frames do not bend it. Noise departs from
 // it; a held joint that settles or drifts along a curve does not, where it
 // would from a plain moving mean.
-function smoothPath(series: Vec3[], times: number[], radius: number, i: number): Vec3 {
-  const lo = Math.max(0, i - radius);
-  const hi = Math.min(series.length - 1, i + radius);
+function smoothPath(series: Vec3[], times: number[], radius: number, i: number, bounds: [number, number] = [0, series.length]): Vec3 {
+  const lo = Math.max(bounds[0], i - radius);
+  const hi = Math.min(bounds[1] - 1, i + radius);
   let s0 = 0, s1 = 0, s2 = 0, s3 = 0, s4 = 0;
   const t0 = [0, 0, 0], t1 = [0, 0, 0], t2 = [0, 0, 0];
   // In units of the mean frame step, which keeps the normal equations well scaled.
@@ -405,12 +428,13 @@ function jitter(frames: MotionFrame[]) {
   const deviations: number[] = [];
   const rayDeviations: number[] = [];
   const times = frames.map((f) => f.timeSec);
+  const heldWindows = frames.some((f) => f.held !== undefined) ? runs(frames.map((f) => f.held === true)) : null;
   for (const name of JITTER_JOINTS) {
     const series = frames.map((f) => f.joints[name]);
-    for (const [a, b] of stillWindows(frames, heldSpeed(series))) {
+    for (const [a, b] of heldWindows ?? stillWindows(frames, heldSpeed(series))) {
       if (series.slice(a, b).some((p) => !p)) continue;
       const full = series as Vec3[];
-      for (let i = a; i < b; i++) deviations.push(len(sub(full[i]!, smoothPath(full, times, radius, i))));
+      for (let i = a; i < b; i++) deviations.push(len(sub(full[i]!, smoothPath(full, times, radius, i, heldWindows ? [a, b] : undefined))));
     }
   }
   // Rays: the same definition in degrees, where the ray is held (angular

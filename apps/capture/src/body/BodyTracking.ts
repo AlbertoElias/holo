@@ -10,6 +10,8 @@ import { type BodyFault, type BodyHeadInput, type GroundSampler, VrBodySolver } 
 export const HEAD_TRACKING_JUMP_METERS = 0.5;
 
 // Avatar bones reported by sample(), by sample key; the first bone the rig has wins.
+const DOWN = new THREE.Vector3(0, -1, 0);
+
 const BODY_SAMPLE_BONES: ReadonlyArray<readonly [string, readonly HumanoidBoneRef[]]> = [
   ['head', ['head']],
   ['headTop', ['headTip']],
@@ -51,6 +53,9 @@ export class BodyTracking {
   readonly prevHeadLocal = new THREE.Vector3();
   hasPrevHeadLocal = false;
   private readonly raycaster = new THREE.Raycaster();
+  private readonly groundRay = new THREE.Raycaster();
+  private readonly groundRayOrigin = new THREE.Vector3();
+  private readonly groundInstance = new THREE.Matrix4();
   readonly groundSampler: GroundSampler;
 
   constructor(private readonly avatar: AvatarRig, avatarForwardOffset: number) {
@@ -81,6 +86,24 @@ export class BodyTracking {
     for (const fault of faults) this.solver.faults.add(fault as BodyFault);
   }
 
+  /** The highest upward-facing surface within 0.5 m above `at` (its height plus the motor's 1 cm skin), by raycast. */
+  private raycastGround(at: Vec3Tuple, outNormal: THREE.Vector3): number | undefined {
+    const world = this.avatar.worldModel;
+    if (!world) return undefined;
+    this.groundRay.set(this.groundRayOrigin.set(at[0], at[1] + 0.5, at[2]), DOWN);
+    this.groundRay.far = Infinity;
+    for (const hit of this.groundRay.intersectObject(world, true)) {
+      if (!hit.face || (hit.object as THREE.SkinnedMesh).isSkinnedMesh) continue;
+      outNormal.copy(hit.face.normal).transformDirection(hit.object.matrixWorld);
+      if (hit.instanceId !== undefined) {
+        (hit.object as THREE.InstancedMesh).getMatrixAt(hit.instanceId, this.groundInstance);
+        outNormal.copy(hit.face.normal).transformDirection(this.groundInstance.premultiply(hit.object.matrixWorld));
+      }
+      if (outNormal.y > 0) return hit.point.y + 0.01;
+    }
+    return undefined;
+  }
+
   /** One frame of the VR body for fidelity checks, in world space. */
   sample(rig: THREE.Object3D, pose: XrHeadPose): BodySample {
     const tuple = (v: THREE.Vector3): Vec3Tuple => [v.x, v.y, v.z];
@@ -99,7 +122,10 @@ export class BodyTracking {
     for (const key of ['root', 'leftAnkle', 'rightAnkle', 'leftToe', 'rightToe'] as const) {
       const at = key === 'root' ? tuple(root) : bones[key];
       if (!at) continue;
-      const y = avatar.sampleTerrainYAt(at[0], at[2], this.raycaster, normal);
+      // The root stands on what the motor stands on. A foot's ground is any upward face within half a metre
+      // over it (the leg solver's reach, not a ledge overhead), found by a plain raycast so the check does not
+      // share the leg solver's height index.
+      const y = key === 'root' ? avatar.sampleTerrainYAt(at[0], at[2], this.raycaster, normal) : this.raycastGround(at, normal);
       if (y !== undefined) ground[key] = { y: y - 0.01, normal: tuple(normal) };
     }
     const debug = this.solver.getDebugSnapshot();

@@ -26,6 +26,7 @@ import type { CapturePlace } from '../place/CapturePlace';
 import { RecordingSession } from '../recording/RecordingSession';
 import { activeCamera, type CaptureContext } from '../systems/captureContext';
 import { registerCaptureSystems } from '../systems';
+import { samplePoseCost } from '../systems/BodyPoseSystem';
 import type { CaptureUiBridge } from '../ui/captureUiBridge';
 import { PointCrosshair } from '../ui/PointCrosshair';
 import { UIStateStore } from '../ui/UIStateStore';
@@ -447,6 +448,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
         __respawnCharacter: () => motor.respawn(),
         __sampleHands: () => hands.sample(),
         __sampleBody: () => body.sample(cameraRig, tracking.getHeadPose()),
+        __samplePoseCost: (reset) => samplePoseCost(reset),
         __setBodyFaults: (faults) => body.setFaults(faults),
         __setHandOverlay: (enabled) => capture.diagnostics.setHandOverlay(enabled),
         __setHeightEvidenceView: (enabled) => capture.diagnostics.setHeightEvidenceView(enabled),
