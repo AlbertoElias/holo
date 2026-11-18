@@ -729,7 +729,10 @@ function worldProblems(sheet: BeatSheet, holdings: readonly Holding[]): string[]
   }
   for (const [object, cues] of shows) {
     const sorted = [...cues].sort((a, b) => a.t - b.t);
-    for (let k = 1; k < sorted.length; k += 1) if (sorted[k]!.show === sorted[k - 1]!.show) problems.push(`world: ${object} is shown (or hidden) twice in a row at ${sorted[k]!.t.toFixed(2)} s`);
+    for (let k = 1; k < sorted.length; k += 1) {
+      if (sorted[k]!.t === sorted[k - 1]!.t) problems.push(`world: ${object} is shown and hidden at the same time (${sorted[k]!.t.toFixed(2)} s)`);
+      else if (sorted[k]!.show === sorted[k - 1]!.show) problems.push(`world: ${object} is shown (or hidden) twice in a row at ${sorted[k]!.t.toFixed(2)} s`);
+    }
     if (holdings.some((h) => h.object === object)) problems.push(`world: ${object} is held; a held object does not appear or disappear`);
   }
   return problems;

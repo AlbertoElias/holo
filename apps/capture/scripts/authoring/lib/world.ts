@@ -204,7 +204,7 @@ export function solveWorld(sheet: BeatSheet, take: SolvedTake): SolvedWorld {
         const t = take.times[f]!;
         const r = wetRadius * Math.sqrt(landings.filter((l) => l.t <= t).length / landings.length);
         times[f - f0] = t;
-        scale.set([r * 2, 1, r * 2], (f - f0) * 3);
+        scale.set(r > 0 ? [r * 2, 1, r * 2] : [0, 0, 0], (f - f0) * 3); // all three zero: the converter's absence
         pointAt(onto, f).add(new THREE.Vector3(0, 0.0015, 0)).toArray(translation, (f - f0) * 3);
       }
       const under = surfaceColor(onto) ?? [0.3, 0.22, 0.15];
@@ -316,7 +316,7 @@ export function solveWorld(sheet: BeatSheet, take: SolvedTake): SolvedWorld {
       if (sameColors(a, b)) { timeline.push({ t: seg.t0, colors: a }); continue; }
       for (let k = 0; k < seg.steps; k += 1) {
         const u = k / (seg.steps - 1);
-        timeline.push({ t: seg.t0 + ((seg.t1 - seg.t0) * k) / seg.steps, colors: a.map((c, i) => c.map((x, j) => x + (b[i]![j]! - x) * u) as unknown as Rgb) });
+        timeline.push({ t: seg.t0 + ((seg.t1 - seg.t0) * k) / seg.steps, colors: u === 1 ? b : a.map((c, i) => c.map((x, j) => x + (b[i]![j]! - x) * u) as unknown as Rgb) });
       }
     }
     const variants: ObjectChange['variants'] = [];

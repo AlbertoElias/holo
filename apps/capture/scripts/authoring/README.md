@@ -253,8 +253,17 @@ A cue is seconds, a beat id (its `at`) or `<beat>.end`. A point is an
 object's anchor, a mark or `[x, y, z]`. The build prints a line per change
 (how many drops, where they land, the colour steps, when the object is
 present) and fails on a cue outside the take, a pour with no tool axis, a
-held object made to appear or disappear, or a colour change on a sourced
-model (it keeps its own materials).
+held object made to appear or disappear, a colour change on a sourced
+model (it keeps its own materials), a pour aimed at a performer point or a
+place (give `onto`), an object that changes again before its last change
+ends, or one shown and hidden at the same time. A pour whose tool never
+tips far enough only says so (`no water`).
+
+Limits: a world point follows its object's own track, not its change, so
+a drift at `lamp.top` after the lamp lifts starts where the lamp was, and
+an object `on` a changing one does not follow the change. A drop aims at
+where its target is when it leaves the spout. Unknown keys are refused
+only on `change` lines.
 
 Everything is node animation, so it plays on the card, in AR and in
 Quick Look: each pour, burst or drift is a summoned `RecordedObject` whose
