@@ -236,7 +236,7 @@ A sheet's `world` lists what changes in the set, one line each:
   them the further it tips (`rate` 60 a second at full flow), at `speed`
   0.8 m/s along the axis, and fall under gravity to land where the aim
   points (`onto`, else the target of the beat that aims that object).
-  Each drop is a stretched `size` 0.012 m bead (`color` a pale water blue).
+  Each drop is a `size` 0.03 m bead (about 5 px wide on the card) stretched along its fall so drops overlap into a stream (`color` a light water blue).
   `wet` (0.06 m, or `false`) leaves a darker disc on the surface that grows as
   water lands and stays to the end.
 - `{ "kind": "burst", "at", "when" }`: `count` 24 sparks thrown `spread`
