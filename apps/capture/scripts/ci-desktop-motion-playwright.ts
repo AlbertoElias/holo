@@ -7,7 +7,7 @@
 // Samples and reports go to output/ci-desktop-motion/ (<avatar>-samples.json,
 // <avatar>-report.json, summary.json). MOTION_QUALITY_REPORT_ONLY=1 reports
 // misses without failing; DESKTOP_MOTION_ONLY=<substring> keeps matching avatars.
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { chromium, type Page } from 'playwright';
 import {
@@ -113,6 +113,8 @@ function walkSpeedOf(samples: Array<{ timeMs: number; phase: string; body: BodyS
   return from && to ? Math.hypot(to[0] - from[0], to[2] - from[2]) / ((walk.at(-1)!.timeMs - walk[0]!.timeMs) / 1000) : 0;
 }
 
+// Each run replaces the last, so the report never mixes this run's avatars with an older run's.
+await rm(artifactDir, { recursive: true, force: true });
 await mkdir(artifactDir, { recursive: true });
 const only = process.env.DESKTOP_MOTION_ONLY;
 const fixtures = (await generateAvatarFixtures(path.join(artifactDir, 'fixtures'))).filter((f) => SKELETONS.includes(f.name));
@@ -122,6 +124,9 @@ const avatars: Array<{ name: string; url: string | null; walkClip: string }> = [
   { name: 'shipped', url: null, walkClip: 'own' },
   ...fixtures.map((f) => ({ name: f.name, url: `/${path.relative(process.cwd(), f.file).split(path.sep).join('/')}`, walkClip: f.expect.ownClips ? 'own' : 'retargeted' }))
 ].filter((a) => !only || a.name.includes(only));
+const lost = SKELETONS.filter((name) => !fixtures.some((f) => f.name === name));
+if (lost.length) throw new Error(`no generated fixture for ${lost.join(', ')} (renamed in scripts/lib/avatar-fixtures.ts?)`);
+if (!avatars.length) throw new Error(`DESKTOP_MOTION_ONLY=${only} matches no avatar`);
 const summary: Record<string, unknown>[] = [];
 let failed = false;
 const browser = await launchXrBrowser(chromium);

@@ -46,6 +46,21 @@ async function loadCameraReport(file: string): Promise<Graded[]> {
   return (report.results ?? []).map((r) => ({ label: `camera/${r.avatar}`, source: 'camera', metrics: r.metrics, inputJitterP95Mm: null, inputRayJitterP95Deg: null, verdicts: r.verdicts }));
 }
 
+// Avatars each source's saved runs should cover: the shipped avatar and the 7 skeletons the avatars check
+// replays (passthrough runs only on the 7: the shipped avatar's passthrough run shares the body replay's
+// directory), and the 17 the camera report drives (gap 2).
+const EXPECTED_AVATARS = { desktop: 8, 'vr-body': 8, 'ar-quest': 7, 'vr-hands': 8, camera: 17 } as const;
+const SOURCES = Object.keys(EXPECTED_AVATARS) as Array<keyof typeof EXPECTED_AVATARS>;
+// A label is `<skeleton>/<take>`, or `<take>` for the shipped avatar; desktop's is `desktop/<avatar>`.
+const skeletonOf = (label: string) => {
+  const parts = label.split('/');
+  if (parts[0] === 'desktop' || parts[0] === 'camera') return parts[1]!;
+  return parts.length > 1 ? parts[0]! : 'shipped';
+};
+const takeOf = (label: string) => (/^(desktop|camera)\//.test(label) ? label.split('/')[0]! : label.split('/').at(-1)!);
+// Misses the owner accepted: camera aim is rough (natural-avatar-motion.md, Decision 4).
+const accepted = (source: MotionSource, metric: string) => source === 'camera' && metric === 'aimErrorMedianDeg';
+
 const fmt = (v: number | null | undefined, digits = 1) => (v === null || v === undefined ? '–' : v.toFixed(digits));
 
 async function main() {
@@ -60,6 +75,7 @@ async function main() {
     }
   }
   const camera: Graded[] = [];
+  const gaps: string[] = [];
   if (!args.length) {
     loaded.push(
       ...(await loadDir('output/ci-desktop-motion', 'desktop', 'desktop/')),
@@ -68,9 +84,19 @@ async function main() {
       ...(await loadAvatarDirs('output/ci-avatars'))
     );
     camera.push(...(await loadCameraReport('output/bodycam-avatars/report.json')));
-    const seen = new Set([...loaded.map((l) => l.source), ...camera.map((c) => c.source)]);
-    const missing = (['desktop', 'vr-body', 'vr-hands', 'ar-quest', 'camera'] as const).filter((source) => !seen.has(source));
-    if (missing.length) console.log(`no saved run for ${missing.join(', ')}: run its check first (see natural-avatar-motion.md, Test plan)`);
+    // Coverage: which skeletons and rows each source's saved runs hold, so a partial run reads as partial.
+    const all = [...loaded.map((l) => ({ source: l.source, label: l.label })), ...camera];
+    for (const source of SOURCES) {
+      const labels = all.filter((r) => r.source === source).map((r) => r.label);
+      const skeletons = new Set(labels.map(skeletonOf));
+      const takes = new Set(labels.map(takeOf));
+      if (!labels.length) gaps.push(`no saved run for ${source}`);
+      else if (skeletons.size < EXPECTED_AVATARS[source]) gaps.push(`${source} covers ${skeletons.size} of ${EXPECTED_AVATARS[source]} avatars`);
+      const partial = [...skeletons].filter((skeleton) => labels.filter((label) => skeletonOf(label) === skeleton).length < takes.size);
+      if (partial.length) gaps.push(`${source}: ${partial.join(', ')} lack some of ${[...takes].join(', ')}`);
+      console.log(`coverage ${source.padEnd(8)} ${labels.length} runs, ${skeletons.size} avatars, rows ${[...takes].join(', ') || '–'}`);
+    }
+    for (const gap of gaps) console.log(`GAP ${gap} (see natural-avatar-motion.md, Test plan)`);
   }
   const rows: Graded[] = loaded.map((l) => {
     const metrics = measureMotion(l.frames);
@@ -83,12 +109,12 @@ async function main() {
     const fails = r.verdicts.filter((v) => !v.pass).map((v) => `${v.metric}=${fmt(v.value, 2)}`);
     console.log(
       `${r.source.padEnd(8)} ${r.label.padEnd(42)} skate ${fmt(m.footSkateMaxCm)}cm/${fmt((m.footSkateShare ?? NaN) * 100)}% float ${fmt(m.footFloatP95Cm)} pen ${fmt(m.footPenetrationCm)} pop ${fmt(m.popP99MS2, 0)} limits ${fmt((m.jointLimitShare ?? NaN) * 100)}%${m.jointLimitWorst ? ` [${m.jointLimitWorst}]` : ''} jitter ${fmt(m.jitterP95Mm)}mm (input ${fmt(r.inputJitterP95Mm)}) ray ${fmt(m.rayJitterP95Deg)}° (input ${fmt(r.inputRayJitterP95Deg)}) wrist ${fmt(m.wristErrorP95Cm)}cm lag ${fmt(m.latencyMs, 0)}ms jerk× ${fmt(m.jerkRatio, 2)} aim ${fmt(m.aimErrorMedianDeg)}°` +
-        (fails.length ? `\n         MISS ${fails.join(' ')}` : '')
+        (fails.length ? `\n         MISS ${fails.join(' ')}${r.verdicts.every((v) => v.pass || accepted(r.source, v.metric)) ? ' (accepted)' : ''}` : '')
     );
   }
   await mkdir('output/motion-quality', { recursive: true });
   await writeFile('output/motion-quality/report.json', JSON.stringify(rows, null, 2));
-  if (process.env.MOTION_QUALITY_STRICT && rows.some((r) => r.verdicts.some((v) => !v.pass))) process.exitCode = 1;
+  if (process.env.MOTION_QUALITY_STRICT && (gaps.length || rows.some((r) => r.verdicts.some((v) => !v.pass && !accepted(r.source, v.metric))))) process.exitCode = 1;
 }
 
 await main();
