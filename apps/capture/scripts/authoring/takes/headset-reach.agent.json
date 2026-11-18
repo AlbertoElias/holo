@@ -1,0 +1,22 @@
+{
+  "title": "Open, fist, point, reach (directed)",
+  "intent": "The same action as the recorded headset take, directed from the beat vocabulary: both hands open, then close to fists, the right hand points ahead, then reaches toward the viewer. The take's pinch and wave have no direction to say them in, and its lowered body (the owner was seated or crouched) has none either.",
+  "duration": 9.1,
+  "performers": [ { "id": "p", "avatar": "stock", "at": [0, 0], "facing": 0, "seed": 5 } ],
+  "marks": { "ahead": [0.15, 1.3, 1.6], "viewer": [0, 1.2, 0.55] },
+  "beats": [
+    { "id": "open", "performer": "p", "at": 0.2, "hold": 2.0, "intent": "Both hands open.", "directions": [
+      { "kind": "hand", "side": "both", "shape": "open" } ] },
+    { "id": "fist", "performer": "p", "at": 2.6, "hold": 1.0, "intent": "Both hands close to fists.", "directions": [
+      { "kind": "hand", "side": "both", "shape": "fist" } ] },
+    { "id": "point", "performer": "p", "at": 3.8, "hold": 1.0, "intent": "The right hand points ahead.", "directions": [
+      { "kind": "reach", "side": "right", "at": "ahead", "stopShort": 0.9, "palm": "down" },
+      { "kind": "hand", "side": "right", "shape": "point" },
+      { "kind": "look", "at": "ahead", "head": 0.5 } ] },
+    { "id": "rest", "performer": "p", "at": 5.2, "hold": 2.8, "intent": "The hands relax.", "directions": [
+      { "kind": "hand", "side": "both", "shape": "relaxed" } ] },
+    { "id": "reach", "performer": "p", "at": 8.3, "hold": 0.6, "intent": "The right hand reaches toward the viewer.", "directions": [
+      { "kind": "reach", "side": "right", "at": "viewer", "stopShort": 0.05, "palm": "toward" },
+      { "kind": "hand", "side": "right", "shape": "reach" } ] }
+  ]
+}

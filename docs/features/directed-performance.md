@@ -1,7 +1,7 @@
 # Feature brief: Direct, preview and revise a performance
 
 **Lead:** Claude (planning session, 2026-11-13)  
-**Status:** In progress: slices 0 and 1 built and verified (2026-11-13);
+**Status:** In progress. Slice 4a (a recorded take as input: import, recast, edit by beat, compare) built and verified 2026-11-18, except that the edited hold reads as frozen to frame readers (see Slice 4a evidence). Slices 0 and 1 built and verified (2026-11-13);
 re-scoped 2026-11-14 to a creation system. Slice 1b built and verified
 (2026-11-14): the review loop, three defaults, face numbers and a second
 piece, which reads only as "watering a plant" after one revision. Its gap
@@ -11,7 +11,12 @@ log (props, sets, publishing, gestures) now leads "Not covered yet". Slice 1c
 build is published (the owner published the slice 1b watering take). The
 owner lifted the hold on the house avatar on 2026-11-17: slice 2 is now
 the avatar flow, approved by the owner on 2026-11-17 ("Approve all",
-open decision 5); 2a and 2b come next, and nothing in it is built yet.  
+open decision 5); 2a and 2b come next, and nothing in it is built yet.
+Slice 1e (gestures, states and the profile hold) built 2026-11-18 while
+the owner was away: the profile hold now reads as alive (2 of 3 readers),
+and four of six gestures and one of two states read blind (nod, head
+shake, rub and concerned do not; open decision 8 records the agent's
+calls for review).  
 **Layer:** event (the acted body is the hologram's raw material; see
 `docs/product/concepts/what-a-hologram-is.md`)
 
@@ -654,6 +659,82 @@ owner answered "Yes, accept" (2026-11-17). **Life is accepted**
 (evidence: "Face in idle life" in slice 1d's evidence); the profile-hold
 follow-up stays open.
 
+### Slice 1e: gestures, states and the profile hold (2026-11-18)
+
+"Not covered yet" items 4 and 12. Built under `apps/capture/scripts/authoring/`
+only (`lib/beats.ts` additively, `lib/direct.ts`, `lib/life.ts`, a new sheet);
+nothing under `apps/capture/src/**`, the viewer or the API changes, and no
+existing expression mix value changes.
+
+**What.**
+
+1. **Gestures by name.** One direction, `{ "kind": "gesture", "name": … }`,
+   with defaults for everything else: `nod`, `head-shake`, `shrug`, `wave`
+   (a small wave, optionally `at` someone), `rub` (rub something between
+   the thumb and fingers, the eyes on the hand), `hand-to-chest`. A hand
+   gesture takes `side` (default right); a repeated one takes `count`;
+   every one takes `strength` and the usual timing. Each layers over idle
+   life the way directions already do: it masks the life channels it
+   uses (a wave that hand's fidget), within its span plus 0.4 s. As built,
+   every gesture also masks the glances, so the eyes stay on the gesture,
+   and the shrug takes over the life face too.
+2. **States by name.** `{ "kind": "state", "name": "noticing" | "concerned" }`
+   for as long as the beat holds: a body and head attitude plus a face mix
+   (new face-mix names `noticing` and `concerned`, in `STATE_FACES`, which
+   `FACE_MIXES` joins to `EXPRESSIONS` so an `expression` can name them
+   too; `EXPRESSIONS` itself is untouched, for the avatar-flow branch that
+   tunes it). *Noticing*: a quick
+   orienting turn of the head to `at` if given, the head and chest come up,
+   the eyes widen, and the body goes still (glances, fidgets and the
+   attending layer give way). *Concerned*: the head drops and tilts, the
+   upper back rounds forward, the shoulders draw up a little, the brows
+   knit and the lips press; glances go on, smaller.
+3. **The profile hold: attending life, a default.** A performer facing
+   another (head within 35° of straight ahead, eased out by 55°) gets a
+   second seeded layer over slice 1d's events, drawn from its seed on new
+   streams (so no existing event moves): small listening nods (one or two,
+   6 to 10°, every 1.6 to 3.2 s), and the arms changing posture now and
+   then, from hanging to the hands loosely together in front of the waist
+   and back (held 2.5 to 5 s, apart 0.6 to 1.4 s; both gaps were tightened
+   from 2.2 to 4.5 s and 1.5 to 3.5 s after the first blind reading, see
+   the evidence). Both are motions in the plane a side view
+   sees, which slice 1d's lateral weight shifts and yaw glances are not.
+   It gives way to every direction that moves the head or the hands, to a
+   held object and to being reached for, as life does. `attend: false` on
+   a performer turns it off.
+
+**Rejected:** larger amplitude of slice 1d's events (failed twice); event
+density keyed to a hold's length (breaks the seed-only schedule); asking
+authors to add a beat (the default fails every two-hander that forgets).
+
+**Acceptance.**
+
+- A new sheet `sheets/gestures.json` exercises every gesture and state,
+  each with a neutral rest between, builds with no miss, and its acting
+  report shows the bones each one moves.
+- **Blind reading, bar set before running:** three fresh Sonnet reader
+  subagents, each given only the review pack's `reader/` folder (frames,
+  video, its README; never the sheet), describe each time span. A gesture
+  or state passes when at least 2 of 3 readers name it or a listed synonym
+  (nod: nod, yes, agree; head shake: shake, no, disagree; shrug: shrug,
+  "don't know"; wave: wave, hello, goodbye, greet; rub: rubs or feels
+  something between fingers, fingertips, texture; hand to chest: hand on
+  chest or heart; noticing: notices, something catches the eye, alert,
+  turns to look, startled; concerned: worried, concerned, troubled,
+  uneasy, anxious). The slice passes when all six gestures pass and at
+  least one state does; a failing state is reported, not tuned past two
+  tries.
+- **The profile hold:** `defaults-test.json` rebuilt, reviewed, and read by
+  three fresh readers who see only its reader folder; at least 2 of 3 call
+  the held ending (4.4 to 8 s) alive rather than frozen or mostly frozen.
+- **Nothing else moves:** `rest`, `watering` and `expressions` (no
+  performer faces another) keep identical acting reports and life
+  printouts; `defaults-test` changes only by the attending layer, and its
+  reach still lands within a millimetre of before; every body target still
+  passes on every take.
+
+**Evidence:** "Slice 1e evidence", below.
+
 ### Slice 2: the avatar flow (designed and approved 2026-11-17; 2a built)
 
 The owner's 2026-11-17 direction, as an 80/20. The 2026-11-13 plan for one
@@ -1055,6 +1136,69 @@ recording path for the mandate sessions to agree to when this slice
 starts. Two declared performers in one file is a format extension and
 would be its own brief.
 
+#### Slice 4a: a recorded take as input, with no change to capture (2026-11-18)
+
+Camera driving landed on `main` behind `?input=camera`
+(`apps/capture/src/bodycam/`; `archive/natural-avatar-motion.md` is
+Complete), so slice 4 starts. It is split in two, decided by the agent in
+the owner's absence on 2026-11-18, for the owner to review: 4a builds what
+needs no change to `apps/capture/src/` or to the recording format; 4b is
+what needs the recording owners.
+
+**Built in 4a** (scripts under `apps/capture/scripts/authoring/`):
+
+1. **Import** (`import-take.ts`): reads any capture-recorded GLB and turns
+   the declared performer into the tool's own representation, a
+   `*.take.json`: per frame, each humanoid bone's rotation away from its
+   bind pose in the body frame, the hips' path, the face as the canonical
+   channels (of 67: 52 ARKit and the visemes) the recording avatar has shapes
+   for, and the
+   performer's measures; plus the take's own beats, found from motion (moves
+   and holds, each with where the head looks). Bind poses come from the
+   skins, because a recorded file's nodes hold its last pose.
+2. **Recast** (`recast-take.ts`): plays that take on another avatar that
+   binds: the stock, the avatar-format fixtures, any GLB. The hips' path is
+   scaled by leg length; each limb's bind direction is matched first (the
+   T-pose/A-pose correction `retargetClips.ts` makes for the arms). A loss
+   report states in numbers what does not survive: hips travel (and what a
+   rotation-only move, as `retargetClips.ts` does, would lose), foot
+   contacts (skate, float, penetration from `motion-quality.ts`, source
+   against recast), and face detail (channels the recording never kept,
+   channels the new avatar cannot show, gaze without eyes).
+3. **Edit by beat** (`edit-take.ts`): a small edit file retimes a span,
+   lengthens a hold and redirects a look, naming the take's beats or times.
+   Everything outside the edited spans plays exactly as recorded (shifted in
+   time where a retime moves it), checked frame by frame. A lengthened hold
+   is filled by idle life from `lib/life.ts`'s schedule (breath, glances,
+   sighs, and blinks in a hold long enough for one), so it does not freeze; a weight shift would move the hips
+   and feet the recording planted, so the hold does not shift weight.
+4. **The same report on both** (`compare-takes.ts`): the acting report and
+   motion numbers on a person's take and on an agent-directed take of the
+   same action, side by side: when each move starts and peaks, how many
+   hesitations and back-and-forth strokes (velocity dips, told apart by whether the hand comes out going the same way) a move has, how still a hold is, how far the
+   hips and chest carry weight.
+
+The inputs are takes the repository's own checks record (no device): the
+owner's Quest 3 hand recording replayed through capture (open, fist,
+point, pinch, wave, reach, 9.3 s), the camera-driven take from
+`ci-bodycam-playwright.ts` (`?input=camera`, a committed landmark stream)
+and the phone selfie take from the phone journey's check.
+
+**Left for 4b, which needs the recording owners** (the motion owner and
+the phone capture mandate):
+
+- keeping the raw 52 face channels in the recording, beside the routed
+  weights on the recording avatar's shapes, so a recast face is not limited
+  by the avatar the person recorded on;
+- keeping hand goals (tracked wrists and fingertips, and what a hand
+  touched) so a recast can re-solve reaches and contacts by IK on the new
+  body rather than copy rotations;
+- two declared performers in one file (IDEA-084), a format extension and
+  its own brief.
+
+4b changes the recording format, so it waits for both owners to agree;
+4a's loss report is the case for it.
+
 ### Slice 5: likeness from a photo (deferred)
 
 The second finish moved into slice 2 (2f) on 2026-11-17. What is left is
@@ -1064,6 +1208,67 @@ phone journey's two minutes, kept on the device and made only from the
 creator's own photo. It changes no trait and no file format: it only
 fills the card a creator can already set by hand. It starts after the
 trait card has been used in both capture flows (2e).
+
+### Slice 6: publish a take in one command (2026-11-18)
+
+Closes "Not covered yet" item 8. `apps/capture/scripts/authoring/publish.ts
+<take.glb | sheet.json> [--title …] [--description …] [--credit …] [--api
+<origin>] [--no-quick-look]` validates a take, uploads it and prints its feed
+URL.
+
+**What exists and is reused.** `scripts/showcase/upload.mjs` already does the
+upload (the normal `POST /api/holograms`), the credential order (session,
+Keychain agent token, nothing), the plain-http and redirect refusals, the
+`/auth/me` account line and the Quick Look wait. Its credential and upload
+steps move unchanged into `scripts/showcase/lib/upload.mjs`, which both
+`upload.mjs` and `publish.ts` import; `upload.mjs` behaves as before.
+
+**Behaviour.**
+
+- *Input:* a `.glb` (the sheet beside it, `<take>.beats.json`, supplies title
+  and `description`/`credit` when present) or a `.json` sheet, which is built
+  with `direct.ts`'s `build` first (refused when a grip, put or aim misses).
+- *Validation, before any network call:* the file is a GLB; at most
+  `MAX_HOLOGRAM_BYTES` (the cap the API enforces); at least one performer
+  found by skin and the file declares its humanoid (`HOLOIM_humanoid`), since
+  the viewer anchors on the declaration; every performer animated; and the
+  Quick Look extent load (the `quickLookLoad` rule of `showcase/build.mjs`,
+  moved into the shared lib) under the converter's budgets, 100 M deformed
+  and 500 M rigid point-frames, unless `--no-quick-look` (the budget only
+  binds the preview). Any failure lists every problem and exits 1.
+- *Target:* `--api` defaults to `http://127.0.0.1:3001`. A non-loopback host
+  needs `--api` spelled out and `--production` as well (production is
+  `https://holoim-api.fly.dev`; any non-loopback spelling counts, found by
+  review: a trailing-dot host slipped past an origin match), so a typo or a
+  copied command cannot reach it. No upload happens without a
+  credential: `HOLOIM_AGENT_TOKEN` (the agent upload token) or
+  `HOLOIM_SESSION` from the environment, else the Keychain entry for that
+  host; none is a refusal that names the setup command.
+- *Result:* waits until the hologram is readable at its id (and, unless
+  `--no-quick-look`, until its Quick Look preview has settled), then prints
+  one JSON line with the id, title, size, preview status and the feed URL
+  (`<web origin>/h/<id>`; the web origin is `--web`, or
+  `https://localhost:3174` for a local API, and absent otherwise). A failed preview exits 2 as `upload.mjs` does.
+- *Title, description and credit:* title from `--title`, else the sheet's
+  `title`. The upload contract carries a name and a `submittedBy`; the agent
+  account's display name replaces `submittedBy`, so credit is the account's.
+  `description` and `credit` are therefore recorded in the printed result
+  (and the sheet), not stored by the API: adding fields to the upload route
+  is a product decision left open.
+
+**Decided by the agent in the owner's absence on 2026-11-18, for the owner to
+review** (each reversible): the production gate is a second flag
+(`--production`) on top of an explicit `--api`; `HOLOIM_AGENT_TOKEN` is the
+environment name; the credential/upload code is extracted from `upload.mjs`
+rather than duplicated or wrapped; description and credit are not sent to the
+API. Production is never exercised by the check.
+
+**Evidence plan.** `publish-check.ts` starts a local test API with open
+uploads off, registers a real agent token through `agent-token.ts`, directs a
+take from `sheets/goodbye.json`, publishes it, reads the feed card back
+through the API and writes `output/authoring/publish-check/report.json`; it
+also shows each refusal (no token, wrong token, take without a declared
+performer, over-budget load, oversize file, production without the flag).
 
 ### Later, each against the audition
 
@@ -1096,7 +1301,12 @@ and 7 (its evidence, below); the second 1c piece added item 13.
 4. **Gestures and states with no direction.** No nod or head shake, no
    "rub the soil between the fingers", no "concerned" or "noticing"
    expression. "The soil is dry" was staged as looking at a fingertip, and
-   read as checking a watch.
+   read as checking a watch. **Partly met in slice 1e (2026-11-18):** all
+   six gestures and both states are directable by name. Wave, shrug,
+   hand to chest and noticing read blind; nod, head shake, rub and
+   concerned do not. The GLB moves as asked (the shake swings ±20° in the
+   head every 0.8 s), but readers judge 0.2 s stills, about two per swing.
+   Still open: a way for a quick head or finger motion to read.
 5. **Change in the world.** No water, particles or plant response: the
    reader saw "no water" and "the plant looks the same".
 6. **Performer-relative placement.** Marks are absolute metres guessed from
@@ -1105,9 +1315,8 @@ and 7 (its evidence, below); the second 1c piece added item 13.
 7. **Post-processing keeps the file valid.** Re-writing a take with
    gltf-transform drops `HOLOIM_humanoid`, so the set script re-declares the
    performer by node name.
-8. **Publishing.** No publish step: the author writes a showcase `meta`
-   module, copies the GLB to `output/showcase/<slug>.glb` and runs
-   `scripts/showcase/upload.mjs` with a session.
+8. **Publishing.** Closed by slice 6: `publish.ts <take|sheet>` validates and
+   uploads through `showcase/lib/upload.mjs`, and prints the feed URL.
 9. **Review tooling.** A pack takes about eight minutes; the close view
    crops a long reach and shows the back of a performer who faces away; the
    README now documents a one-minute framing check (`viewer-check.ts
@@ -1127,9 +1336,11 @@ and 7 (its evidence, below); the second 1c piece added item 13.
     owner judged the slice 1d video on 2026-11-17: "its a lot better" and
     "theres something in the mouth and eyebrows thats missing, but almost
     there". With the face layer from decision 6 (A), the owner accepted
-    life on the face video: "Yes, accept" (2026-11-17). Still open: two
-    people in profile through a long held ending read as mostly frozen to
-    readers; authors give a profile hold a beat for now.
+    life on the face video: "Yes, accept" (2026-11-17). **Met in slice 1e
+    (2026-11-18), narrowly:** with attending life (listening nods and the
+    hands coming together), two of three fresh readers call the held
+    ending of `defaults-test` alive ("Nobody is frozen"); the third still
+    says "mostly frozen to lightly alive".
 
 13. **A far object shrinks the performer.** The card frames every recorded
     object, so each widens the dome, and nothing caps it in an authoring
@@ -1456,6 +1667,23 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
    least sure of neutral against holding something back. So a 7-of-7 design
    for the four now exists to aim the base's face at. The decision itself
    is unchanged and still the owner's.
+
+8. **Slice 1e's calls** (decided by the agent in the owner's absence on
+   2026-11-18, for the owner to review; each is one constant or one
+   option, and reversible):
+   - The two state faces are new mix names in `STATE_FACES`, joined into
+     `FACE_MIXES`; `EXPRESSIONS` is untouched for the avatar-flow branch.
+   - Attending life is on by default for a performer facing another;
+     `attend: false` turns it off. It changes `goodbye` and
+     `defaults-test` (slice 1e evidence).
+   - The attending gaps were tightened once after the first blind
+     reading: nods every 1.6 to 3.2 s (was 2.2 to 4.5), arms apart 0.6 to
+     1.4 s (was 1.5 to 3.5).
+   - The head and rub gestures were made larger and slower twice (nod
+     26°, three 0.8 s cycles; shake ±40° yaw, three 0.8 s cycles; rub
+     five 0.4 s cycles, hand at chest height in view; concerned pitch 14°,
+     roll 8°). They still do not read in stills (evidence); the next idea
+     is a change to the reading medium, not more size.
 
 ## Test plan and evidence
 
@@ -1988,7 +2216,74 @@ as alive in the after clip?", the owner answered **"Yes, accept"**
 
 **Follow-ups.** A directed `weight` direction rolls the pelvis so the free
 hip rises (sign opposite to life's); a profile hold needs a beat or a different idea
-(open).
+(answered by slice 1e's attending life).
+
+### Slice 1e evidence (2026-11-18)
+
+**Build.** `sheets/gestures.json` (one performer, 25 s: wave 1.0 s, nod
+4.2, head shake 6.3, shrug 8.7, noticing 11.1 toward a mark at her side,
+rub 14.2, hand to chest 17.7, concerned 20.8) builds with no miss, and
+its acting report shows each gesture's bones moving in its span. The
+capture typecheck passes.
+
+**Nothing else moves.** Rebuilt from their `sheets/` paths, `rest`,
+`watering` and `expressions` are byte-identical to `main`. `defaults-test`
+changes only by the attending layer (with `attend: false` it is
+identical to before): the reach still lands 19.6 mm from its target
+(asked 20, the same as before), and every body target passes. The p99
+pose acceleration rises from 5.7 to 8.8 (a) and from 3.4 to 8.4 (b), from
+the nods and the hands coming together. `goodbye` also changes, because
+its two performers face each other. Her p99 pose acceleration rises from
+8.1 to 11.5 (no attending vs attending), and every body target passes. His foot skate (2.4 cm max) is the same without
+attending.
+
+**The profile hold** (bar: 2 of 3 call 4.4 to 8 s alive). Readers each
+saw only the reader folder.
+
+In the first try every reader called 4.4 to 6 s alive, so the quotes
+are on 6 to 8 s, the part that had read as frozen.
+
+| Try | Readers on 6 to 8 s | Result |
+|---|---|---|
+| Attending, first gaps | "mostly frozen", "mostly frozen", mixed | fail |
+| Gaps tightened (nods 1.6 to 3.2 s, arms apart 0.6 to 1.4 s) | "Mostly alive … Nobody is frozen"; "Mostly alive … minimal but not frozen"; "Mostly frozen to lightly alive" | **pass, 2/3** |
+
+In the passing take, a nods at 2.3, 5.4 and 7.4 s and b at 1.9, 4.0 and
+5.8 s (double). Their hands come together at 1.0 to 6.1 s and 6.8 to
+11.5 s (a), and at 2.0 to 6.7 s and 7.4 to 13.3 s (b).
+
+**Gestures and states** (bar: each needs 2 of 3 naming it or a synonym;
+all six gestures and at least one state must pass). Three fresh readers
+per try, nine in all.
+
+| | Try 0 (as designed) | Try 1 (larger) | Try 2 (larger, slower) |
+|---|---|---|---|
+| wave | 3/3 | 3/3 | 2/3 |
+| nod | 0/3 ("a slight dip") | 0/3 | 0/3 ("tilts slightly") |
+| head shake | 0/3 | 0/3 | 0/3 (one slow turn aside) |
+| shrug | 3/3 | 3/3 | 2/3 |
+| rub | 0/3 (hand on the hip) | 0/3 (checks a wrist) | 0/3 (looks at the forearm) |
+| hand to chest | 3/3 | 3/3 | 3/3 |
+| noticing | 3/3 | 2/3 | 3/3 |
+| concerned | 0/3 | 0/3 | 0/3 |
+
+**The bar is not met.** Four of six gestures and one of two states pass.
+Two tuning tries are spent, so the failures are reported, as the
+acceptance asks. To rule out a bug, the shipped GLB was sampled through
+the shake: the head's yaw swings +22, -24, +19, -21, +18, -18° at 0.4 s
+half-cycles from 6.4 to 8.6 s. In the close stills, 6.6 s and 6.8 s face
+opposite ways. Every reader still described it as one slow turn. Each
+0.8 s swing falls on about four 0.2 s stills, two on a side, so a shake
+looks like a held turn and a nod like a dip. Finger rolling is below
+card scale. These are motions a viewer sees in the video. A reader who
+judges stills does not see them, so the reading medium needs changing
+(a denser strip for a span, or a motion trace), and not the sizes.
+Concerned is a quiet posture with a face mix the stock avatar cannot
+show at card size (decision 2).
+
+**Kept:** sizes from try 2 (agent decision 8). They pass the same
+items as try 0 (wave and shrug drop from 3/3 to 2/3, still passing), and
+a slower, larger nod and shake are closer to what a person does on video.
 
 ### Slice 2a evidence (2026-11-17)
 
@@ -2350,6 +2645,82 @@ shared mix, and its pressed mouth is small at 40 px.
   `usdchecker --arkit` reports success.
 - **Not done:** the motion owner's report on the base, and people (not AI)
   as readers.
+
+### Slice 6 evidence (2026-11-18)
+
+`publish-check.ts` (14 of 14 rows pass; report in
+`output/authoring/publish-check/report.json`): a local API with open uploads
+off (anonymous POST answers 401), an agent token registered through
+`agent-token.ts`, and `goodbye.json` directed and published. "The goodbye"
+(3.60 MB) is on the feed as Claude (agent-authored), verified, and its stored
+GLB is the take. Refusals, each with nothing uploaded: no token; a wrong
+token; production without `--production`; a take without
+`HOLOIM_humanoid`; a Quick Look load over budget; a file over the cap; no
+title. A proof video (card on the feed after the command) was sent to the
+owner. The Quick Look preview wait was not exercised (the check API has the
+converter off); it is `upload.mjs`'s unchanged code.
+
+### Slice 4a evidence (2026-11-18)
+
+Commands from `apps/capture` (each writes its report under the ignored
+`output/take-input/`; the README's "A recorded take as input" lists them).
+Inputs are the takes the repository's checks record: the owner's Quest 3
+hand take replayed through capture (`test:xr:pointing`, `open-fist`), the
+camera-driven take (`test:xr:bodycam`) and the phone selfie take.
+
+1. **Import** (`import-take.ts`). Headset: 275 frames at 30 fps from a
+   9.23 s recording at 63 fps, 54 humanoid bones, 21 of 52 ARKit channels
+   (only the blinks move), the hips 0.28 m below standing: the owner was
+   seated or crouched.
+   The recorder's start and stop snaps (a wrist at 25 m/s) are trimmed,
+   one frame at each end. Nine beats found (five moves, four holds). The
+   camera take's head turns read as holds at ±30° yaw (three of them), the phone
+   selfie as a single hold (it animates two bones).
+2. **Recast** (`recast-take.ts`, headset take onto the stock, the
+   `unreal-cm` fixture and the house base). On the stock and `unreal-cm`
+   the limbs match to 0.4° p95 and the hips keep their 0.038 m travel and
+   0.279 m drop. The house base (legs 0.868 of the source; bind limbs
+   7–26° off, the thumbs 41°) keeps the hips scaled (0.242 m drop) with
+   the wrists 4.2% of an arm off where the performer's were, and its feet
+   sink 1.15 cm into the floor (the recording: 0). Rotation-only
+   retargeting (hips at bind, as `retargetClips.ts` keeps them; this
+   tool's bind correction on every limb, where `retargetClips.ts` corrects
+   only the arms and hands) loses all hips travel and the drop: the feet
+   float 28.1 cm (24.3 cm on the house base). Lost on every target:
+   31 of 52 face channels, dropped at record time; any contact or hand
+   goal, which the recording never had; on `unreal-cm` (no eye bones, no
+   gaze shapes), the gaze.
+3. **Edit by beat** (`edit-take.ts scripts/authoring/takes/headset-reach.edit.json`):
+   a 1.5 s hold in the open hands, filled with life (a glance and breath),
+   the point retimed from 1.2 s to 2.4 s, and the head turned to yaw −35°
+   during the wave (the recording looks at −5.9°; at full weight the edit
+   replaces that direction, so the head points at −35.0° by construction:
+   the readers below judge whether it reads). The 193 frames outside the
+   edits match the imported take to 0.0008° (its rounding), 0 mm and 0
+   face weight, at the shift the edit file's time map gives them. The beat
+   finder reads the hold's glance as a short move, and the 1.5 s hold is
+   too short for a blink of its own.
+4. **Person and agent** (`compare-takes.ts` on the recording and on
+   `takes/headset-reach.agent.json`, the same action directed). The agent
+   cannot say the pinch, the wave or the lowered body. Side by side, the person
+   raises the hands at 0.37 s (the agent's arms first move at 3.57 s,
+   because a hand shape moves only the fingers), peaks at 0.78 m/s (agent
+   2.17), strokes back and forth 7 times inside its moves, the wave (agent 0), and
+   holds the head
+   within 2.1° of yaw (agent 43°, from life's glances). Holds take the
+   same share of time (0.52 against 0.53), but the person's longest is
+   2.33 s and the agent's 1.17 s. Read as direction for slice 3: the
+   vocabulary lacks raising the hands to show them, a wave and a pinch,
+   and its moves are nearly three times as fast as the person's.
+
+Readers (three fresh Sonnet subagents, frames only, bar in `output/take-input/reader-bar.md` stated first): **partial, the hold fails.** (b) look: 3/3 saw the head turn to the figure's right (the viewer's left) at 10.0–10.6 s while the open hands carried on, matching the authored span (full turn 10.0–10.65 s between 0.45 s eases). (a) hold: 3/3 saw the open/claw pose held about 1.8 s longer, but all three called it "frozen" or "almost frozen": one glance and breath do not read in 0.2 s stills, and the 1.5 s hold is too short for a blink. (c) half: the chest share of the look read as a torso shift, and one reader saw the arms "swing more". Open for later: hold life that reads in stills (a blink allowed in a shorter hold, a visible weight or hand drift), re-graded on the same bar.
+
+The code review in a fresh context found seven issues, all fixed before
+merge: the bind and take floors used different rules; the last frame read
+the first, because the mixer looped; the chest joint fell back differently
+on import and recast; the untouched check was circular; edit overlap
+depended on list order; leg length was measured two ways; hold lengths
+were one frame short.
 
 ## Physical-device limits
 
