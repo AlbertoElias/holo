@@ -63,8 +63,8 @@ type CheckName = keyof typeof CHECKS;
 
 // .mjs checks that import TypeScript workspace sources (the meaning and objects packages) run under tsx too.
 const USES_TSX: ReadonlySet<CheckName> = new Set(['object', 'summon', 'loco-states', 'held-states']);
-// Checks that import the meaning package from Node resolve its sources.
-const USES_SOURCE_CONDITION: ReadonlySet<CheckName> = new Set(['avatars']);
+// Checks that import the meaning package from Node (directly or through the avatar fixtures) resolve its sources.
+const USES_SOURCE_CONDITION: ReadonlySet<CheckName> = new Set(['avatars', 'desktop-motion']);
 
 // Extra environment for entries that share a script.
 const CHECK_ENV: Partial<Record<CheckName, Record<string, string>>> = { 'pointing-fixture': { POSE_FIXTURE: 'pointing' } };
@@ -84,16 +84,19 @@ const CHECK_TIMEOUT_MS: Partial<Record<CheckName, number>> = {
   object: 300000,
   body: 360000,
   face: 360000,
+  // The keyboard row on the shipped avatar and seven skeletons, one page each: about 21 s locally (2026-11-18).
+  'desktop-motion': 240000,
   // Seven skeletons × hand, body, passthrough walk, object and face replays: 854 s alone locally before the
   // passthrough walks, 917 s with them (2026-11-17); the headroom covers a loaded machine.
   avatars: 1500000
 };
 
 // Wall time in seconds per check on a 4-vCPU CI runner, two checks at a time
-// (CI run 40472119472; avatars is not in CI: its 920 is local wall time, 2026-11-17).
+// (CI run 40472119472; avatars is not in CI: its 920 is local wall time, 2026-11-17;
+// desktop-motion's 50 is its 9 on one avatar times the eight it now grades, an estimate until the next refresh).
 // Parallel runs start the longest first and XR_SHARD balances on it. Refresh
 // it on purpose from the xr-checks-shard-*.json timing artifacts.
-const CHECK_COST: Partial<Record<CheckName, number>> = { 'ar-record': 289, face: 100, body: 56, marks: 44, hands: 29, height: 26, ui: 21, terrain: 21, locomotion: 10, 'loco-states': 10, 'held-states': 20, 'desktop-motion': 9, recording: 5, take: 15, bodycam: 40, 'mock-vr': 4, avatars: 920 };
+const CHECK_COST: Partial<Record<CheckName, number>> = { 'ar-record': 289, face: 100, body: 56, marks: 44, hands: 29, height: 26, ui: 21, terrain: 21, locomotion: 10, 'loco-states': 10, 'held-states': 20, 'desktop-motion': 50, recording: 5, take: 15, bodycam: 40, 'mock-vr': 4, avatars: 920 };
 
 const isCheckName = (name: string): name is CheckName => name in CHECKS;
 const args = process.argv.slice(2);

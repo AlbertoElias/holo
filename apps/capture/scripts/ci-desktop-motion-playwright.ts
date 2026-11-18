@@ -2,8 +2,11 @@
 // the avatar with keyboard input on the desktop capture page (frozen page
 // clock, 30 Hz), samples the body every frame, and grades it with the
 // shared motion-quality report (scripts/lib/motion-quality.ts, source
-// "desktop"). Samples and report go to output/ci-desktop-motion/.
-// MOTION_QUALITY_REPORT_ONLY=1 reports misses without failing.
+// "desktop"), strictly, on the shipped avatar and on each skeleton the
+// avatars check replays (scripts/lib/avatar-fixtures.ts), one page each.
+// Samples and reports go to output/ci-desktop-motion/ (<avatar>-samples.json,
+// <avatar>-report.json, summary.json). MOTION_QUALITY_REPORT_ONLY=1 reports
+// misses without failing; DESKTOP_MOTION_ONLY=<substring> keeps matching avatars.
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { chromium, type Page } from 'playwright';
@@ -13,7 +16,8 @@ import {
 } from '@holoim/tooling-testing/xr-env';
 import type {} from '../src/runtime/automationHooks';
 import type { BodySample } from '../src/types/contracts';
-import { judgeMotion, measureMotion, type JointName, type MotionFrame, type Vec3 } from './lib/motion-quality';
+import { generateAvatarFixtures } from './lib/avatar-fixtures.ts';
+import { framesFromBodySamples, judgeMotion, measureMotion } from './lib/motion-quality';
 
 type Input = { forward: boolean; back: boolean; left: boolean; right: boolean; crouch: boolean };
 const idle: Input = { forward: false, back: false, left: false, right: false, crouch: false };
@@ -42,7 +46,10 @@ const SCRIPT: Array<[string, number, Input]> = [
   ['stop', 1.5, idle]
 ];
 
-async function run(page: Page) {
+// The geometric skeletons the avatars check replays (bone axes, bind pose, facing, scale).
+const SKELETONS = ['reoriented-axes', 'a-pose', 't-pose', 't-pose-twisted', 'vrm0-minus-z', 'z-up', 'unreal-cm'];
+
+async function run(page: Page, avatarUrl: string | null) {
   await page.addInitScript(() => {
     Object.defineProperty(window, '__setManualClock', {
       configurable: true,
@@ -59,8 +66,9 @@ async function run(page: Page) {
   url.searchParams.set('scene', '/desktop-motion-floor.gltf');
   url.searchParams.set('sceneScale', '1');
   url.searchParams.set('avatarHeight', '1.8');
+  if (avatarUrl) url.searchParams.set('avatar', avatarUrl);
   await page.goto(url.href, { waitUntil: 'networkidle' });
-  await waitForPageFunctions(page, ['__setManualClock', '__setMockInput', '__respawnCharacter', '__sampleBody', 'advanceTime']);
+  await waitForPageFunctions(page, ['__sampleHumanoid', '__setManualClock', '__setMockInput', '__respawnCharacter', '__sampleBody', 'advanceTime']);
   await waitForTextContentPrefix(page, '#status', 'loaded');
   await page.evaluate(() => {
     window.__setManualClock(true);
@@ -68,6 +76,7 @@ async function run(page: Page) {
     window.__setMockInput({ forward: false, back: false, left: false, right: false, crouch: false });
     window.advanceTime(1000);
   });
+  const humanoid = await page.evaluate(() => window.__sampleHumanoid());
   const samples: Array<{ timeMs: number; phase: string; body: BodySample }> = [];
   let timeMs = 0;
   for (const [phase, seconds, input] of SCRIPT) {
@@ -89,41 +98,61 @@ async function run(page: Page) {
       samples.push({ timeMs, phase, body });
     }
   }
-  return samples;
+  return { samples, walkClip: humanoid?.locomotion?.clips?.walk ?? null };
 }
 
-function toFrames(samples: Array<{ timeMs: number; body: BodySample }>): MotionFrame[] {
-  return samples.map(({ timeMs, body }) => {
-    const joints: MotionFrame['joints'] = {};
-    for (const [name, v] of Object.entries(body.bones)) if (v) joints[name as JointName] = v as Vec3;
-    const g = body.ground;
-    return { timeSec: timeMs / 1000, joints, ground: { left: g.leftToe?.y ?? g.leftAnkle?.y ?? 0, right: g.rightToe?.y ?? g.rightAnkle?.y ?? 0 } };
-  });
-}
 
 // At least three quarters of the brisk walk, the avatar's height (1.8 m) per second.
 const MIN_WALK_SPEED = 0.75 * 1.8;
 
+type Verdict = ReturnType<typeof judgeMotion>[number];
+function walkSpeedOf(samples: Array<{ timeMs: number; phase: string; body: BodySample }>): number {
+  const start = samples.find((s) => s.phase === 'walk')!.timeMs;
+  const walk = samples.filter((sample) => sample.phase === 'walk' && sample.timeMs - start >= 500);
+  const from = walk[0]?.body.bones.hips, to = walk.at(-1)?.body.bones.hips;
+  return from && to ? Math.hypot(to[0] - from[0], to[2] - from[2]) / ((walk.at(-1)!.timeMs - walk[0]!.timeMs) / 1000) : 0;
+}
+
 await mkdir(artifactDir, { recursive: true });
+const only = process.env.DESKTOP_MOTION_ONLY;
+const fixtures = (await generateAvatarFixtures(path.join(artifactDir, 'fixtures'))).filter((f) => SKELETONS.includes(f.name));
+// walkClip: what the binding report must say walks the avatar, so a fixture that failed to load
+// (and left the shipped avatar, which walks on its own clip) cannot pass for it.
+const avatars: Array<{ name: string; url: string | null; walkClip: string }> = [
+  { name: 'shipped', url: null, walkClip: 'own' },
+  ...fixtures.map((f) => ({ name: f.name, url: `/${path.relative(process.cwd(), f.file).split(path.sep).join('/')}`, walkClip: f.expect.ownClips ? 'own' : 'retargeted' }))
+].filter((a) => !only || a.name.includes(only));
+const summary: Record<string, unknown>[] = [];
+let failed = false;
 const browser = await launchXrBrowser(chromium);
 try {
-  const context = await createXrContext(browser, { viewport: { width: 960, height: 720 } });
-  const samples = await run(await context.newPage());
-  if (consoleErrors.length) throw new Error(`Browser errors: ${consoleErrors.join(' | ')}`);
-  const metrics = measureMotion(toFrames(samples));
-  const verdicts = judgeMotion(metrics, 'desktop');
-  await writeFile(path.join(artifactDir, 'desktop-keyboard-samples.json'), JSON.stringify(samples));
-  await writeFile(path.join(artifactDir, 'desktop-keyboard-report.json'), JSON.stringify({ metrics, verdicts }, null, 2));
-  console.log(`[desktop-motion] ${JSON.stringify(metrics)}`);
-  // The feet's targets get easier as the walk slows: the walk itself must stay brisk (1.8 m/s at 1.8 m, the owner's call).
-  const walk = samples.filter((sample) => sample.phase === 'walk' && sample.timeMs - samples.find((s) => s.phase === 'walk')!.timeMs >= 500);
-  const from = walk[0]?.body.bones.hips, to = walk.at(-1)?.body.bones.hips;
-  const walkSpeed = from && to ? Math.hypot(to[0] - from[0], to[2] - from[2]) / ((walk.at(-1)!.timeMs - walk[0]!.timeMs) / 1000) : 0;
-  console.log(`[desktop-motion] walk speed ${walkSpeed.toFixed(3)} m/s`);
-  const misses = verdicts.filter((v) => !v.pass);
-  if (walkSpeed < MIN_WALK_SPEED) misses.push({ metric: 'walk speed', value: walkSpeed, target: { min: MIN_WALK_SPEED }, pass: false } as (typeof verdicts)[number]);
-  for (const miss of misses) console.log(`[desktop-motion] MISS ${miss.metric} = ${miss.value} (target ${JSON.stringify(miss.target)})`);
-  if (misses.length && !process.env.MOTION_QUALITY_REPORT_ONLY) process.exitCode = 1;
+  for (const avatar of avatars) {
+    const context = await createXrContext(browser, { viewport: { width: 960, height: 720 } });
+    consoleErrors.length = 0;
+    const { samples, walkClip } = await run(await context.newPage(), avatar.url);
+    await context.close();
+    const tag = `[desktop-motion] ${avatar.name}:`;
+    const misses: Verdict[] = [];
+    if (walkClip !== avatar.walkClip) { console.log(`${tag} walks on a ${walkClip} clip, expected ${avatar.walkClip}: the avatar did not load`); failed = true; }
+    if (consoleErrors.length) { console.log(`${tag} browser errors: ${consoleErrors.join(' | ')}`); failed = true; }
+    // The shared conversion, so desktop counts the same joints as every other row (not headTop, an end site).
+    const metrics = measureMotion(framesFromBodySamples(samples, 'avatar'));
+    const verdicts = judgeMotion(metrics, 'desktop');
+    await writeFile(path.join(artifactDir, `${avatar.name}-samples.json`), JSON.stringify(samples));
+    await writeFile(path.join(artifactDir, `${avatar.name}-report.json`), JSON.stringify({ metrics, verdicts }, null, 2));
+    console.log(`${tag} ${JSON.stringify(metrics)}`);
+    // The feet's targets get easier as the walk slows: the walk itself must stay brisk (1.8 m/s at 1.8 m, the owner's call).
+    const walkSpeed = walkSpeedOf(samples);
+    console.log(`${tag} walk speed ${walkSpeed.toFixed(3)} m/s`);
+    misses.push(...verdicts.filter((v) => !v.pass));
+    if (walkSpeed < MIN_WALK_SPEED) misses.push({ metric: 'walk speed', value: walkSpeed, target: { min: MIN_WALK_SPEED }, pass: false } as Verdict);
+    for (const miss of misses) console.log(`${tag} MISS ${miss.metric} = ${miss.value} (target ${JSON.stringify(miss.target)})`);
+    if (misses.length) failed = true;
+    summary.push({ avatar: avatar.name, walkClip, walkSpeed, metrics, misses: misses.map((m) => m.metric) });
+  }
 } finally {
   await browser.close();
 }
+await writeFile(path.join(artifactDir, 'summary.json'), JSON.stringify(summary, null, 2));
+console.log(`[desktop-motion] ${failed ? 'FAIL' : 'PASS'}: ${avatars.map((a) => a.name).join(', ')}`);
+if (failed && !process.env.MOTION_QUALITY_REPORT_ONLY) process.exitCode = 1;
