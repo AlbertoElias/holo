@@ -1,0 +1,10 @@
+{
+  "take": "../../../output/take-input/sources/headset-reach.glb",
+  "intent": "The owner's own headset take, three edits and nothing else: the open hands are held about 1.5 s longer, alive rather than frozen; the point plays at half speed; during the wave the head turns to the performer's right (the viewer's left) and looks there while the hands keep waving.",
+  "seed": 11,
+  "edits": [
+    { "kind": "hold", "at": 2.0, "add": 1.5, "life": true },
+    { "kind": "retime", "from": 3.75, "to": 4.95, "duration": 2.4 },
+    { "kind": "look", "from": 6.85, "to": 8.4, "yaw": -35, "pitch": 0 }
+  ]
+}
