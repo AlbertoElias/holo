@@ -286,6 +286,7 @@ and in `manifest.json`.
 3. Follow `prompts.md`: three fresh Sonnet readers per code (card question,
    then the orbit as a follow-up) and one fresh grader per code; save
    `answers/<code>/reader-<n>.json` and `grades/<code>.json`.
+   `prepare` re-renders a reader sheet under 30 KB (a renderer flake gives a black sheet) up to three times. Every beat in the sheet is scored, so give each beat an `intent`.
 4. `six-second-test.ts score <dir>` writes `report.md` / `report.json` and exits
    1 if a row of the bar fails. Never change the bar after seeing a run.
 
