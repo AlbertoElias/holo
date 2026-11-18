@@ -291,14 +291,15 @@ export function faceGeometry(a: LoadedAvatar, options: GeometryOptions = {}): Fa
     const eyeBone = a.humanoid.bone(side === 'left' ? 'leftEye' : 'rightEye');
     const centre = bone(side === 'left' ? 'leftEye' : 'rightEye');
     if (!eyeBone || !centre) { eyes.push({ side, openMm: null, blinkGapMm: null, lidVertices: lids }); continue; }
-    // The eye's radius from what its bone carries; else a human eye's.
+    // The eye's radius from everything its bone carries, across meshes (an eye split by material into sclera,
+    // iris and pupil primitives is one eye); else a human eye's.
     let radius = 0.012;
+    const xs: number[] = [];
     meshes.forEach((_, k) => {
       const s = neutralSkin[k]!;
-      const xs: number[] = [];
       for (let i = 0; i < s.count; i += 1) if (s.dominant[i] === eyeBone) xs.push(neutral.positions[k]![i * 3]!);
-      if (xs.length > 8) radius = Math.max(0.004, (Math.max(...xs) - Math.min(...xs)) / 2);
     });
+    if (xs.length > 8) radius = Math.max(0.004, (Math.max(...xs) - Math.min(...xs)) / 2);
     const isEye = meshes.map((m, k) => {
       const index = m.geometry.index;
       const dom = neutralSkin[k]!.dominant;
@@ -313,20 +314,23 @@ export function faceGeometry(a: LoadedAvatar, options: GeometryOptions = {}): Fa
     if (open) eyeOpenings[side] = { top: open.top, bottom: open.bottom };
   }
 
-  // Brow visibility: a ray from each brow vertex to the card camera, every other mesh an occluder.
+  // Brow visibility: a ray from each brow vertex to the card camera; every mesh the brow shapes do not move is an occluder.
   const visibility = (state: BrowVisibility['state']): BrowVisibility => {
     const posed = state === 'neutral' ? neutral : pose({ browInnerUp: 1 });
     const soups = meshes.map((m, k) => triangles(m, posed.positions[k]!, k));
     const hidden = new Map<number, number>();
     let visible = 0;
     const d = new Float64Array(3);
+    // A mesh the brow shapes move is the brow itself (a brow ribbon or brow cards on their own primitive), not
+    // something in front of it; hair and glasses are never moved by them.
+    const browMeshes = new Set(browAll.map((x) => x.m));
     for (const x of browAll) {
       const p = posed.positions[x.m]!;
       const o = [p[x.i * 3]!, p[x.i * 3 + 1]!, p[x.i * 3 + 2]!];
       d[0] = camera.x - o[0]!; d[1] = camera.y - o[1]!; d[2] = camera.z - o[2]!;
       let by = -1;
       for (const s of soups) {
-        if (s.mesh === x.m) continue;
+        if (browMeshes.has(s.mesh)) continue;
         const n = s.box.length / 6;
         for (let t = 0; t < n && by < 0; t += 1) {
           // The ray runs toward +Z (the camera is in front): skip triangles wholly behind the vertex.

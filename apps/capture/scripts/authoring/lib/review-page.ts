@@ -21,7 +21,8 @@
  *   object's world box, for planning `view`.
  * - `regions(i)`: when `init` was given the audition's face regions
  *   (`lib/face-geometry.ts`), performer `i`'s brow line top, chin bottom
- *   and each eye's opening projected with the card's camera, CSS px.
+ *   and each eye's opening projected with the card's camera, CSS px, and
+ *   the face's world centre (brow to chin) for framing a close view.
  *   `close(i, { …view, regions: true })` returns the same in output pixels
  *   with the OKLab lightness of the render at each brow vertex.
  */
@@ -54,11 +55,13 @@ export const REVIEW_PAGE = String.raw`
       for (let i = 0; i < n; i += step) each(vertex(m, i, v));
     });
   };
-  // The audition's regions name meshes as the avatar file does; three makes repeated names unique.
+  // The audition's regions name meshes as three loaded the avatar file, and three makes repeated names unique
+  // (one per primitive of a mesh with several materials), so the suffix goes on both sides; the count tells them apart.
   const meshOf = (p, set) => {
     let found = null;
+    const name = set.mesh.replace(/_\d+$/, '');
     p.wrapper.traverse((o) => {
-      if (!found && o.isMesh && o.name.replace(/_\d+$/, '') === set.mesh && o.geometry.attributes.position.count === set.count) found = o;
+      if (!found && o.isMesh && o.name.replace(/_\d+$/, '') === name && o.geometry.attributes.position.count === set.count) found = o;
     });
     if (!found) throw new Error('no mesh ' + set.mesh + ' with ' + set.count + ' vertices in ' + p.name);
     return found;
@@ -183,7 +186,11 @@ export const REVIEW_PAGE = String.raw`
       const rect = state.probe.renderer.domElement.getBoundingClientRect();
       const out = regionPoints(i, (w) => { const s = w.clone().project(cam); return [((s.x + 1) / 2) * rect.width, ((1 - s.y) / 2) * rect.height]; });
       delete out.brow;
-      return { ...out, pixelRatio: state.probe.renderer.getPixelRatio() };
+      // The face's world centre, brow line to chin, to frame a close view on the face whatever the head's size.
+      const world = regionPoints(i, (w) => [w.x, w.y, w.z]);
+      const pts = [...world.brow, ...state.regions.chin.flatMap((s) => { const m = meshOf(state.performers[i], s); const v = V(); return s.idx.map((k) => { const q = vertex(m, k, v); return [q.x, q.y, q.z]; }); })];
+      const faceCentre = pts.length ? [0, 1, 2].map((a) => (Math.min(...pts.map((q) => q[a])) + Math.max(...pts.map((q) => q[a]))) / 2) : null;
+      return { ...out, faceCentre, pixelRatio: state.probe.renderer.getPixelRatio() };
     },
     bodies() {
       state.probe.model.updateWorldMatrix(true, true);
@@ -259,8 +266,9 @@ export const REVIEW_PAGE = String.raw`
       if (view.regions) {
         regions = regionPoints(i, (w) => { const s = w.clone().project(cam); return [((s.x + 1) / 2) * view.width, ((1 - s.y) / 2) * view.height]; });
         const px = ctx.getImageData(0, 0, view.width, view.height).data;
-        regions.browL = regions.brow.map(([x, y]) => {
-          const k = (Math.min(view.height - 1, Math.max(0, Math.round(y))) * view.width + Math.min(view.width - 1, Math.max(0, Math.round(x)))) * 4;
+        // Only brow vertices inside the frame are read; one clamped to the edge would read whatever is there.
+        regions.browL = regions.brow.filter(([x, y]) => x >= 0 && y >= 0 && x < view.width && y < view.height).map(([x, y]) => {
+          const k = (Math.round(Math.min(y, view.height - 1)) * view.width + Math.round(Math.min(x, view.width - 1))) * 4;
           return Math.round(lightness(px[k], px[k + 1], px[k + 2]) * 1000) / 1000;
         });
       }
