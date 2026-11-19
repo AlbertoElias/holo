@@ -2605,11 +2605,35 @@ drops use the lit material every effect sphere shares, so the side away from the
 key light goes grey on the teal. An unlit or emissive drop
 material in `lib/write-glb.ts`, scoped to the pour so other sheets stay
 byte-identical, is the likely fix, with a Quick Look check that it survives
-conversion.
+conversion (done in slice 1h evidence, below).
 
 **Quick Look note.** One run of the check on try 1 failed one case on its
 CPU budget after a successful conversion. A re-run passed 4 of 4. Logged
 as B-070.
+
+### Slice 1h evidence (2026-11-19)
+
+The owner approved it on 2026-11-19 ("Decision 5: sounds good"). The readers are
+AI subagents (fresh Sonnet, frames only, blind code), not people.
+
+**What changed.** In `lib/write-glb.ts`, `writeEffect` sets the material's
+`emissiveFactor` to the drop's own colour when `effect.kind === 'pour'`, so the
+side away from the key light stays pale instead of going grey on the card's
+teal. Burst and drift effects stay lit. The pour's wet-patch disc also becomes
+emissive in its own dark colour (negligible).
+
+**Checks.**
+- Byte-identical to `main`: rest, expressions, gestures, defaults-test, goodbye (before the round 3 change), two-avatars, tallest-bar and world-test. Only `watering.glb` changed.
+- `publish.ts --check` on the take: valid.
+- `check_usdz_tools.sh`, by hand: passed (7 cases).
+- Survives conversion: the converted USDZ read back with `inspect_usdz.py` has `emissiveColor` equal to the pour colour on the pour's materials; `inspect_usdz.py` passed.
+
+**Blind reading (three fresh readers, frames only, `sheets/watering.json`).**
+3 of 3 said poured, 3 of 3 said the plant revived, and 0 of 3 called the stream
+thin or hard to see at card size. The bar (at least 2 of 3 see the stream without
+that qualification, and still say poured and revived) is met. Slice 1g's best
+try had 1 of 3. The readers' words are in the session transcript, not
+saved as a file.
 
 ### Slice 2a evidence (2026-11-17)
 
@@ -3353,6 +3377,7 @@ in `six-second-test.ts` (below). Reports are in the ignored
 | base (slice 3) | 0.26 / 0.29 | 0.42 / 0.47 | 0 of 3 | pass, pass | FAIL |
 | r1: door along the profile axis, bigger step, hand to chest, concerned state | 0.41 / 0.39 | 0.61 / 0.65 | 0 of 3 | 0.23 FAIL, pass | FAIL |
 | r2: he leaves in two steps, her reach anticipates longer | 0.68 / 0.56 | 0.67 / 0.67 | 2 of 3 | 0.39 FAIL, 0.57 pass | FAIL |
+| r3 (2026-11-19): pair on a diagonal, two different performers, six readers per take. The casts are not the earlier two: `pair` (two `house:clay` looks) and `mixed` (her `house:clay`, him stock) | pair 0.65 / 0.67; mixed 0.60 / 0.60 | n/a | pair 6 of 6 (flat 4); mixed 1 of 6 (flat 1) | pair 0.65 to 0.66 pass; mixed 0.60 to 0.72 pass | FAIL |
 
 What each round changed and learned:
 
@@ -3390,6 +3415,39 @@ scores every beat in the sheet, including one with no `intent`, so `h-walk`
 needed an intent (`He keeps walking away.`) and a grade; r2's four graders added
 it afterwards, from the answers only. Ports 3614/3641 were held by another
 session; I used 3714/3741.
+
+### Goodbye revision round 3 (2026-11-19)
+
+The owner approved it on 2026-11-19 ("Decision 3: 1 and 3 yes"). The readers and
+graders are AI subagents (fresh Sonnet, frames only, blind codes), not people.
+The bar and the scoring did not change. Changes: `sheets/goodbye.json` stages
+the pair on a diagonal and gives each performer a `house:clay` look (different
+build, hair and clothing colours); `six-second-test.ts` gained `--readers`
+(default 3, recorded in the manifest; the reader-count bars scale in proportion,
+2 of 3 becomes 4 of 6, the score bars do not move) and a per-performer cast
+(`--avatars 'pair=her:house:clay,him:house:clay;mixed=her:house:clay,him:stock'`).
+Report: ignored `apps/capture/output/authoring/six-second/r3/`.
+
+| cast | hesitation (bar 4 of 6) | feeling (bar 4 of 6) | directed / flat | min 0.5 | orbit card to orbit |
+|---|---|---|---|---|---|
+| pair | 6 of 6 (flat 5) ok | 6 of 6 (flat 4) ok | 0.65 / 0.67, margin -0.02 (bar 0.15) FAIL | ok | 0.65 to 0.66 ok |
+| mixed | 6 of 6 (flat 6) ok | 1 of 6 (flat 1) FAIL | 0.60 / 0.60, margin 0 (bar 0.15) FAIL | ok | 0.60 to 0.72 ok |
+
+**Verdict: FAIL, as before; stopped after this one round as agreed.** Failing rows:
+`pair` directed over flat (-0.02), `mixed` feeling (1 of 6) and `mixed` directed
+over flat (0). What moved: the orbit now passes in both casts (the stock orbit
+was 0.39 in r2), so the diagonal fixed the hidden reach, and the directed take
+clears the 0.5 minimum with six readers. What did not: the flat take reads as
+well as the directed one in both casts, so the margin is still about zero. With six readers the
+noise is smaller than in r2, so this is a result, not a draw: staging and casting
+lift both takes, and what only the directed take has (anticipation, face,
+fingers, state) is not what these readers use at card size. The `mixed` feeling
+row (1 of 6 in both takes) shows the cast with the stock him does not carry
+her feeling; that is separate from the margin. I did not try a fourth round. The
+choice is the owner's: a bar that measures what directing adds over blocking
+would need a flat take that is blocked but not acted; or accept that blocking
+and casting carry this piece and test directing on a beat that blocking cannot
+carry.
 
 ### Slice 3 evidence: caveats found by the verifier (2026-11-18)
 

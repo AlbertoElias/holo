@@ -7,33 +7,55 @@
       "id": "her",
       "avatar": "stock",
       "at": [
-        -0.42,
-        0
+        -0.3,
+        -0.3
       ],
-      "facing": 70,
-      "seed": 11
+      "facing": 25,
+      "seed": 11,
+      "look": {
+        "build": "slight",
+        "skin": "honey",
+        "eyes": "darkBrown",
+        "hair": {
+          "style": "wavyBob",
+          "colour": "chestnut"
+        },
+        "glasses": "none",
+        "clothing": "rustWalnut"
+      }
     },
     {
       "id": "him",
       "avatar": "stock",
       "at": [
-        0.42,
-        0
+        0.3,
+        0.3
       ],
-      "facing": -70,
-      "seed": 23
+      "facing": -115,
+      "seed": 23,
+      "look": {
+        "build": "medium",
+        "skin": "goldenSand",
+        "eyes": "mossGreen",
+        "hair": {
+          "style": "sweptCrop",
+          "colour": "espresso"
+        },
+        "glasses": "none",
+        "clothing": "stormGraphite"
+      }
     }
   ],
   "marks": {
     "door": [
       2.4,
       1.5,
-      0.1
+      2.1
     ],
     "floor": [
-      0.05,
+      -0.05,
       0,
-      0.55
+      0.1
     ]
   },
   "beats": [

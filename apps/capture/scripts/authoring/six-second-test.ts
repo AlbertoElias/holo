@@ -33,7 +33,8 @@ import { beatSpan, type BeatSheet } from './lib/beats.ts';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUTPUT = join(HERE, '../../output/authoring/six-second');
 const HOUSE_BASE = join(HERE, '../../public/gltf/models/house-base.glb');
-const READERS = 3;
+/** Readers per take unless `--readers` says otherwise: the bar's reader counts are for this many and scale with it. */
+const DEFAULT_READERS = 3;
 const GRADE = { yes: 1, partly: 0.5, no: 0 } as const;
 type Grade = keyof typeof GRADE;
 
@@ -68,11 +69,25 @@ const questionFor = (performers: number): string => `What is happening, and what
 
 const avatarPath = (avatar: string): string => (avatar === 'house-base' ? HOUSE_BASE : avatar);
 
-export async function prepare(sheetFile: string, options: { avatars?: string[]; out?: string; until?: number; orbit?: number } = {}): Promise<string> {
+/** A cast is `label` (everyone is that avatar, each performer's own `look` dropped) or `label=her:house:clay,him:stock` (separate casts with `;` on the command line; an avatar per performer, `look` kept; a performer left out keeps the sheet's). */
+export function castOf(entry: string, performers: readonly { id: string; avatar?: string }[]): { label: string; avatarOf: (p: { id: string; avatar?: string }) => string | undefined; keepLook: boolean } {
+  const eq = entry.indexOf('=');
+  if (eq === -1) return { label: entry, avatarOf: () => avatarPath(entry), keepLook: false };
+  const per = new Map(entry.slice(eq + 1).split(',').map((pair) => { const c = pair.indexOf(':'); return [pair.slice(0, c), pair.slice(c + 1)] as const; }));
+  for (const id of per.keys()) if (!performers.some((p) => p.id === id)) throw new Error(`cast ${entry}: no performer ${id} in the sheet`);
+  return { label: entry.slice(0, eq), avatarOf: (p) => (per.has(p.id) ? avatarPath(per.get(p.id)!) : p.avatar), keepLook: true };
+}
+
+/** The bar's reader counts are written for DEFAULT_READERS; with more readers the same share is needed (2 of 3 is 4 of 6), never fewer. */
+export const readersNeeded = (bar: number, readers: number): number => Math.ceil((bar * readers) / DEFAULT_READERS - 1e-9);
+
+export async function prepare(sheetFile: string, options: { avatars?: string[]; out?: string; until?: number; orbit?: number; readers?: number } = {}): Promise<string> {
   const sheetPath = resolve(sheetFile);
   const avatars = options.avatars ?? ['stock', 'house-base'];
   const until = options.until ?? 6;
   const orbit = options.orbit ?? 90;
+  const readers = options.readers ?? DEFAULT_READERS;
+  if (!Number.isInteger(readers) || readers < 1) throw new Error(`--readers must be a whole number of readers per take, got ${readers}`);
   if (!Number.isFinite(until) || until <= 0) throw new Error(`--until must be a positive number of seconds, got ${until}`);
   if (!Number.isFinite(orbit)) throw new Error(`--orbit must be a number of degrees, got ${orbit}`);
   const out = resolve(options.out ?? join(OUTPUT, basename(sheetPath, '.json')));
@@ -96,13 +111,14 @@ export async function prepare(sheetFile: string, options: { avatars?: string[]; 
   const { build } = await import('./direct.ts');
   const { review } = await import('./review.ts');
   for (const avatar of avatars) {
+    const cast = castOf(avatar, sheet.performers);
     for (const style of ['flat', 'directed'] as const) {
-      const label = `${avatar.replace(/[^\w-]+/g, '_')}-${style}`;
+      const label = `${cast.label.replace(/[^\w-]+/g, '_')}-${style}`;
       const derived = join(out, 'sheets', `${label}.json`);
       const objects = sheet.objects
         ? Object.fromEntries(Object.entries(sheet.objects).map(([k, o]) => [k, typeof (o as { source?: unknown }).source === 'string' && !isAbsolute((o as { source: string }).source) ? { ...o, source: resolve(dirname(sheetPath), (o as { source: string }).source) } : o]))
         : undefined;
-      await writeFile(derived, `${JSON.stringify({ ...sheet, style, performers: sheet.performers.map((p) => ({ ...p, avatar: avatarPath(avatar) })), ...(objects ? { objects } : {}) }, null, 2)}\n`);
+      await writeFile(derived, `${JSON.stringify({ ...sheet, style, performers: sheet.performers.map((p) => { const { look, ...rest } = p as typeof p & { look?: unknown }; const avatar = cast.avatarOf(p); return { ...rest, ...(cast.keepLook && look && avatar?.startsWith('house:') ? { look } : {}), avatar }; }), ...(objects ? { objects } : {}) }, null, 2)}\n`);
       const built = await build(derived, join(out, 'takes', `${label}.glb`), style);
       const pack = join(out, 'packs', label);
       // The headless renderer sometimes returns a black sheet (seen once: a take's first card sheet, 8 KB against ~300 KB). A reader would
@@ -117,7 +133,7 @@ export async function prepare(sheetFile: string, options: { avatars?: string[]; 
         console.warn(`${label}: blank reader sheet(s) ${blank.join(', ')}, rendering again`);
       }
       const code = `t${createHash('sha1').update(`${basename(sheetPath)}|${label}`).digest('hex').slice(0, 5)}`;
-      takes.push({ code, avatar, style, take: built.out, pack });
+      takes.push({ code, avatar: cast.label, style, take: built.out, pack });
     }
   }
 
@@ -135,10 +151,10 @@ export async function prepare(sheetFile: string, options: { avatars?: string[]; 
   }
 
   const window = sheet.beats.filter((b) => beatSpan(b).from < until).map((b) => ({ id: b.id, performer: b.performer, from: beatSpan(b).from, to: beatSpan(b).to, intent: b.intent ?? null }));
-  const manifest: Manifest = { sheet: sheetPath, intent: sheet.intent ?? null, until, orbit, readers: READERS, question: questionFor(sheet.performers.length), blind, sidecar, beats: window, takes: takes.sort((a, b) => a.code.localeCompare(b.code)), passBar: PASS_BAR };
+  const manifest: Manifest = { sheet: sheetPath, intent: sheet.intent ?? null, until, orbit, readers, question: questionFor(sheet.performers.length), blind, sidecar, beats: window, takes: takes.sort((a, b) => a.code.localeCompare(b.code)), passBar: PASS_BAR };
   await writeFile(join(out, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   await writeFile(join(out, 'prompts.md'), prompts(manifest, out));
-  console.log(`prepared ${takes.length} takes in ${out}\nreaders: ${takes.length * READERS}; see ${join(out, 'prompts.md')}`);
+  console.log(`prepared ${takes.length} takes in ${out}\nreaders: ${takes.length * readers}; see ${join(out, 'prompts.md')}`);
   return out;
 }
 
@@ -206,8 +222,9 @@ export function evaluate(takes: TakeScore[]): Row[] {
     const flat = takes.find((t) => t.avatar === avatar && t.style === 'flat');
     if (!directed || !flat) throw new Error(`${avatar}: needs both a flat and a directed take`);
     const row = (id: string, pass: boolean, detail: string) => rows.push({ id, avatar, pass, detail });
-    row('directed names the hesitation', directed.card.hesitation >= PASS_BAR.hesitationReaders, `${directed.card.hesitation} of ${directed.card.readers} readers (bar ${PASS_BAR.hesitationReaders}); flat: ${flat.card.hesitation}`);
-    row('directed names the feeling', directed.card.feeling >= PASS_BAR.feelingReaders, `${directed.card.feeling} of ${directed.card.readers} readers (bar ${PASS_BAR.feelingReaders}); flat: ${flat.card.feeling}`);
+    const need = (bar: number): number => readersNeeded(bar, directed.card.readers);
+    row('directed names the hesitation', directed.card.hesitation >= need(PASS_BAR.hesitationReaders), `${directed.card.hesitation} of ${directed.card.readers} readers (bar ${need(PASS_BAR.hesitationReaders)}); flat: ${flat.card.hesitation}`);
+    row('directed names the feeling', directed.card.feeling >= need(PASS_BAR.feelingReaders), `${directed.card.feeling} of ${directed.card.readers} readers (bar ${need(PASS_BAR.feelingReaders)}); flat: ${flat.card.feeling}`);
     row('directed scores above flat', atLeast(directed.card.beatScoreExact - flat.card.beatScoreExact, PASS_BAR.directedOverFlat), `directed ${directed.card.beatScore}, flat ${flat.card.beatScore}, margin ${round(directed.card.beatScore - flat.card.beatScore)} (bar ${PASS_BAR.directedOverFlat})`);
     row('directed scores at least the minimum', atLeast(directed.card.beatScoreExact, PASS_BAR.directedMinimum), `${directed.card.beatScore} (bar ${PASS_BAR.directedMinimum})`);
     row('orbiting keeps the reading', atLeast(PASS_BAR.orbitMaxDrop, directed.card.beatScoreExact - directed.orbit.beatScoreExact), `card ${directed.card.beatScore}, orbit ${directed.orbit.beatScore} (drop at most ${PASS_BAR.orbitMaxDrop})`);
@@ -254,14 +271,14 @@ export async function score(dir: string): Promise<{ rows: Row[]; takes: TakeScor
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const flag = (name: string): string | undefined => { const i = args.indexOf(name); return i === -1 ? undefined : args.splice(i, 2)[1]; };
-  const avatars = flag('--avatars'); const out = flag('--out'); const until = flag('--until'); const orbit = flag('--orbit');
+  const avatars = flag('--avatars'); const readers = flag('--readers'); const out = flag('--out'); const until = flag('--until'); const orbit = flag('--orbit');
   const [command, target] = args;
   if ((command !== 'prepare' && command !== 'score') || !target) {
-    console.error('usage: six-second-test.ts prepare <sheet.json> [--avatars stock,house-base] [--out dir] [--until 6] [--orbit 90]\n       six-second-test.ts score <dir>');
+    console.error('usage: six-second-test.ts prepare <sheet.json> [--avatars stock,house-base] [--out dir] [--until 6] [--orbit 90] [--readers 3]\n       six-second-test.ts score <dir>');
     process.exit(2);
   }
   try {
-    if (command === 'prepare') await prepare(target, { ...(avatars ? { avatars: avatars.split(',') } : {}), ...(out ? { out } : {}), ...(until ? { until: Number(until) } : {}), ...(orbit ? { orbit: Number(orbit) } : {}) });
+    if (command === 'prepare') await prepare(target, { ...(avatars ? { avatars: avatars.split(avatars.includes('=') ? ';' : ',') } : {}), ...(out ? { out } : {}), ...(until ? { until: Number(until) } : {}), ...(orbit ? { orbit: Number(orbit) } : {}), ...(readers ? { readers: Number(readers) } : {}) });
     else if (!(await score(target)).rows.every((r) => r.pass)) process.exit(1);
   } catch (e) {
     console.error(`six-second-test: ${(e as Error).message}`);

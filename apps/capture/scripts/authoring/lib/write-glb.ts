@@ -312,6 +312,8 @@ function writeEffect(doc: Document, scene: ReturnType<Document['createScene']>, 
     if (hit) return hit;
     const g = shape === 'sphere' ? SPHERE() : DISC();
     const material = doc.createMaterial(`${effect.id}-${meshes.size + 1}`).setBaseColorFactor([...color, 1] as [number, number, number, number]).setRoughnessFactor(shape === 'sphere' ? 0.25 : 0.95).setMetallicFactor(0);
+    // A pour's drops glow in their own colour, so the side away from the key light stays pale instead of going grey on the card's teal; other effects stay lit.
+    if (effect.kind === 'pour') material.setEmissiveFactor(color as [number, number, number]);
     const mesh = doc.createMesh(`${effect.id}-${shape}`).addPrimitive(doc.createPrimitive()
       .setAttribute('POSITION', doc.createAccessor().setType('VEC3').setArray(new Float32Array(g.getAttribute('position')!.array as Float32Array)).setBuffer(buffer))
       .setAttribute('NORMAL', doc.createAccessor().setType('VEC3').setArray(new Float32Array(g.getAttribute('normal')!.array as Float32Array)).setBuffer(buffer))
