@@ -1,3 +1,4 @@
+import type { BodyWidths } from '../animation/ArmClearance';
 import type { XRDevice } from 'iwer';
 import type { CapturePlace, PlaceCaptureReport } from '../place/CapturePlace';
 import type { HaloAction } from '@holoim/xr-ui-core';
@@ -50,6 +51,8 @@ export interface AutomationHooks {
   __respawnCharacter: () => boolean;
   __sampleHands: () => Record<VrHandSide, HandSample>;
   __sampleBody: () => BodySample;
+  /** The desktop arm clearance: skin widths measured on the avatar (shares of the hip joints' half-spacing) and each upper arm's last opening (degrees). */
+  __sampleArmClearance: () => { widths: BodyWidths | null; openDeg: { left: number; right: number } };
   /** Median and p95 per-frame cost (ms) of animation + body IK over the last frames; `reset` starts a new window. */
   __samplePoseCost: (reset?: boolean) => { frames: number; medianMs: number; p95Ms: number };
   __setBodyFaults: (faults: readonly string[]) => void;

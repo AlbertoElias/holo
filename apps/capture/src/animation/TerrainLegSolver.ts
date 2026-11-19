@@ -62,11 +62,17 @@ const STEP_SEC = 0.32;
 const STEP_LIFT_RATIO = 0.035;
 /** A standing foot further than this (share of height) from where the pose wants it steps there. */
 const STEP_TOLERANCE_RATIO = 0.05;
+/** Share of the step tolerance an unreachable foot must be from the pose's foot to step there. */
+const UNREACHABLE_STEP_SHARE = 0.25;
 /**
  * A pinned foot lets go once it lies this far past the straight leg's reach (share of the leg's length):
  * a walk lands on a nearly straight leg, and the IK holds the rest by drawing the foot in, a slide kept under 3 cm.
  */
 const OVERSTRETCH = 1.03;
+/** A toe whose floor stands above the ankle by more than this share of the foot's length faces a wall. */
+const WALL_TOE_SHARE = 0.7;
+/** The gap a foot drawn back from a rock face keeps from it, as a share of the height. */
+const WALL_CLEARANCE_RATIO = 0.005;
 /** A foot tilts toward its ground's slope by at most this much: on a steeper face it stands as on this slope. */
 const MAX_FOOT_TILT_DEG = 40;
 const MAX_FOOT_TILT_COS = Math.cos(THREE.MathUtils.degToRad(MAX_FOOT_TILT_DEG));
@@ -215,6 +221,15 @@ export class TerrainLegSolver {
           if (gait && leg.lastQuat) free.copy(leg.lastQuat.clone().slerp(free, 1 - Math.exp(-deltaSec / FOOT_TURN_SEC)));
           leg.foot.quaternion.copy(parentRotation.invert().multiply(free)).normalize();
           leg.foot.updateWorldMatrix(false, true);
+          // A toe that would stand in a rock face draws the foot back off it (a planted foot keeps the new spot).
+          const back = grounded ? this.wallSetBack(leg, rig.worldModel, baseY, height) : undefined;
+          if (back) {
+            target.add(back);
+            if (leg.mode === 'pinned') leg.anchor.add(back);
+            this.solve(leg, target, facing, true, leg.soft);
+            leg.foot.quaternion.copy(leg.foot.parent!.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(free)).normalize();
+            leg.foot.updateWorldMatrix(false, true);
+          }
           this.liftToe(leg, rig.worldModel, baseY, height, surface.point.y);
           leg.lastQuat = leg.foot.getWorldQuaternion(new THREE.Quaternion());
         }
@@ -342,8 +357,10 @@ export class TerrainLegSolver {
         leg.anchor.set(at.x, at.y, at.z);
         leg.mode = 'pinned';
       }
-    } else if (leg.mode === 'pinned' && ((flatDistance(leg.anchor, posed) > tolerance && !otherStepping) || pinnedAt().distanceTo(hip) > reach)) {
+    } else if (leg.mode === 'pinned' && ((flatDistance(leg.anchor, posed) > tolerance && !otherStepping) || (pinnedAt().distanceTo(hip) > reach && flatDistance(leg.anchor, posed) > tolerance * UNREACHABLE_STEP_SHARE))) {
       // A foot the leg can no longer reach steps at once, even while the other is stepping: held, it would lift off its print.
+      // Only a step that goes somewhere: one onto the same spot (floor out of the leg's reach there) would land
+      // unreachable again and step forever, twitching the leg.
       this.beginStep(leg, pinnedAt());
     }
 
@@ -409,6 +426,35 @@ export class TerrainLegSolver {
     const world = turn.multiply(leg.foot.getWorldQuaternion(new THREE.Quaternion()));
     leg.foot.quaternion.copy(leg.foot.parent!.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(world)).normalize();
     leg.foot.updateWorldMatrix(false, true);
+  }
+
+  /**
+   * How far to draw the foot back so its toe stays out of a rock face: where the floor along the foot rises above
+   * the ankle by more than the toe could pitch up over, the toe would stand inside the rock. Undefined when clear.
+   */
+  private wallSetBack(leg: Leg, model: THREE.Object3D, baseY: number, height: number): THREE.Vector3 | undefined {
+    if (!leg.toe) return undefined;
+    const ankle = leg.foot.getWorldPosition(new THREE.Vector3());
+    const toe = leg.toe.getWorldPosition(new THREE.Vector3());
+    const along = new THREE.Vector3(toe.x - ankle.x, 0, toe.z - ankle.z);
+    const reach = along.length();
+    if (reach < 1e-5) return undefined;
+    along.divideScalar(reach);
+    const rise = ankle.distanceTo(toe) * WALL_TOE_SHARE;
+    // Looks for rock from just over the ankle to half a body above it: a face taller than the probe window is still a face.
+    const start = Math.max(baseY, ankle.y) + height * 0.3;
+    const walled = (share: number) => {
+      const y = this.surface(model, ankle.x + along.x * reach * share, start, ankle.z + along.z * reach * share, height, 0)?.point.y;
+      return y !== undefined && y + height * leg.toeRatio - ankle.y > rise;
+    };
+    if (!walled(1)) return undefined;
+    // Where along the foot the face stands, to a sixteenth of the foot.
+    let clear = 0, wall = 1;
+    for (let i = 0; i < 4; i++) {
+      const mid = (clear + wall) / 2;
+      if (walled(mid)) wall = mid; else clear = mid;
+    }
+    return along.multiplyScalar(-(reach * (1 - clear) + height * WALL_CLEARANCE_RATIO));
   }
 
   private beginStep(leg: Leg, from: THREE.Vector3, velocity?: THREE.Vector3): void {
