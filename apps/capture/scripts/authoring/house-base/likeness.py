@@ -21,22 +21,16 @@ Blender: +Z up, the base faces -Y; the camera looks along +Y, so +X is the image
 import bpy, json, math, os, sys
 import numpy as np
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from sheet import GROUND, Turnaround  # noqa: E402
+
 argv = sys.argv[sys.argv.index("--") + 1:]
 GLB, SHEET, OUT = argv[0], argv[1], argv[2]
 os.makedirs(OUT, exist_ok=True)
 
-GROUND = np.array([144, 144, 144])  # the sheet's grey, sRGB
 VIEWS = [("front", 0.0), ("threeQuarter", 45.0), ("side", 90.0), ("back", 180.0)]
 HEAD_SHARE = 0.2
 RES = 1600  # render size (px) before the mask is scaled to the sheet's figure
-
-
-def load_png(path):
-    img = bpy.data.images.load(path)
-    w, h = img.size
-    px = np.array(img.pixels[:], dtype=np.float32).reshape(h, w, img.channels)[::-1, :, :3]
-    bpy.data.images.remove(img)
-    return px  # sRGB 0..1 as stored (bpy keeps byte images unconverted in .pixels)
 
 
 def save_png(path, rgb):
@@ -51,43 +45,9 @@ def save_png(path, rgb):
     bpy.data.images.remove(img)
 
 
-# --- The sheet: its four figures on the grey ground, the floor line, the frame lines dropped ------------
-sheet = load_png(SHEET)
-H_, W_ = sheet.shape[:2]
-diff = np.abs(sheet * 255 - GROUND).sum(axis=2)
-fig = diff > 30
-# The title, the ruler on the left and the captions below the floor are not figures.
-top_band, floor_band = int(0.1 * H_), int(0.885 * H_)
-fig[:top_band] = False
-fig[floor_band:] = False
-fig[:, : int(0.04 * W_)] = False
-fig[fig.sum(axis=1) > 0.5 * W_] = False  # the rules across the sheet (under the title, the floor)
-cols = fig.sum(axis=0)
-runs, start = [], None
-for x, c in enumerate(cols):
-    if c > 5 and start is None:
-        start = x
-    if c <= 5 and start is not None:
-        runs.append((start, x))
-        start = None
-runs = [r for r in runs if r[1] - r[0] > 0.01 * W_]
-if len(runs) != 4:
-    raise SystemExit(f"expected four figures on the sheet, found {len(runs)}: {runs}")
-
-
-def sheet_figure(a, b):
-    m = np.zeros_like(fig)
-    m[:, a:b] = fig[:, a:b]
-    # The floor line and the soft shadow under the feet are wider than the feet: rows wider than the
-    # figure's legs at the bottom are cut where the figure's own outline ends (the soles' row).
-    rows = np.where(m.any(axis=1))[0]
-    top = rows.min()
-    # The sole: the lowest row that still holds a shoe colour (darker than the ground by a margin).
-    dark = (sheet[:, a:b] * 255).mean(axis=2) < 120
-    shoe_rows = np.where(dark[: floor_band].any(axis=1))[0]
-    bottom = shoe_rows.max()
-    m[bottom + 1:] = False
-    return m, top, bottom
+# --- The sheet: its four figures (sheet.py) -----------------------------------------------------------
+T = Turnaround(SHEET)
+sheet, runs, sheet_figure, H_, W_ = T.sheet, T.runs, T.figure, T.H, T.W
 
 
 # --- The base, bald and without glasses (the sheet's base wears neither) ---------------------------------

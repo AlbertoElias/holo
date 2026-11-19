@@ -11,8 +11,13 @@ export const gravity = -9.81;
 const groundedStickVelocity = -0.5;
 // A move cut below this fraction of the input, on walkable floor only, is a snag (see `snagged`).
 const SNAG_FRACTION = 0.5;
-// Collision normals at least this vertical are floor (or ceiling), not walls: cos 40°, the steepest walkable slope.
-const SNAG_FLOOR_NORMAL_Y = Math.cos(THREE.MathUtils.degToRad(40));
+/** A jump lifts the body this share of its height: a strong standing jump (0.6 m at 1.8 m tall), never superhuman. */
+const JUMP_RISE_HEIGHTS = 0.33;
+/** The steepest ground the character walks up; anything steeper is a wall. */
+const MAX_CLIMB_RAD = THREE.MathUtils.degToRad(40);
+const MAX_CLIMB_COS = Math.cos(MAX_CLIMB_RAD);
+// Collision normals at least this vertical are floor (or ceiling), not walls.
+const SNAG_FLOOR_NORMAL_Y = MAX_CLIMB_COS;
 const CROUCH_TERRAIN_GUARD_CLEARANCE = 0.02;
 // A sink into the controller's skin smaller than this is the controller's own settling, not a fall through the floor.
 const FLOOR_SKIN_TOLERANCE = 0.004;
@@ -45,6 +50,8 @@ interface CharacterMotorUpdateOptions {
   // it the character starts and stops in one step, which every joint reads
   // as a pop (the keyboard on a flat screen sets it).
   maxAccelerationMS2?: number;
+  // A jump crouches this long (s) before it leaves the ground: a launch from straight legs reads as being lifted.
+  jumpWindupSec?: number;
 }
 
 /** Full movement speed, in avatar heights per second (VR stick; the keyboard walks slower, see MovementSystem). */
@@ -67,6 +74,14 @@ export class CharacterMotor {
   private avatarVisualOffsetY = 0;
   private velocityY = 0;
   private jumpSpeed = 5;
+  /** Seconds left in a queued jump's wind-up; negative when none is under way. */
+  /** Horizontal unit normals of the walls the last computed movement touched (see `hitWall`). */
+  private readonly wallNormalPool = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+  private wallCount = 0;
+  private windupLeft = -1;
+  private windupSec = 0;
+  /** Downward speed (m/s) of the last landing, until the pose takes it. */
+  private landingSpeed = 0;
   private moveSpeed = 3.2;
   private avatarHeight = 1.8;
   private grounded = false;
@@ -102,7 +117,7 @@ export class CharacterMotor {
     // surfaces; the visual base drops by that gap so feet stand on the floor
     // rather than hovering over it.
     this.avatarVisualOffsetY = -(this.capsuleHalfHeight + this.capsuleRadius) - avatarRig.avatarMinLocalY - this.controllerOffset();
-    this.jumpSpeed = Math.sqrt(2 * Math.abs(gravity) * avatarRig.avatarHeight * 1.2);
+    this.jumpSpeed = Math.sqrt(2 * Math.abs(gravity) * avatarRig.avatarHeight * JUMP_RISE_HEIGHTS);
     this.moveSpeed = avatarRig.avatarHeight * WALK_SPEED_HEIGHTS_PER_SEC;
     this.avatarRigRef = avatarRig;
 
@@ -167,7 +182,15 @@ export class CharacterMotor {
       this.tmpMove.copy(this.planarVelocity).multiplyScalar(deltaSec);
     }
     const wasGrounded = this.grounded;
-    if (allowJump && jumpQueued && this.grounded) {
+    const windupSec = Math.max(0, options?.jumpWindupSec ?? 0);
+    if (!this.grounded) this.windupLeft = -1;
+    else if (allowJump && jumpQueued && this.windupLeft < 0) {
+      this.windupLeft = windupSec;
+      this.windupSec = windupSec;
+    }
+    else if (this.windupLeft >= 0) this.windupLeft = Math.max(0, this.windupLeft - deltaSec);
+    if (this.windupLeft === 0) {
+      this.windupLeft = -1;
       this.velocityY = this.jumpSpeed;
       this.grounded = false;
     }
@@ -185,6 +208,7 @@ export class CharacterMotor {
       z: this.tmpMove.z
     }, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS);
     let corrected: RAPIER.Vector = this.characterController.computedMovement();
+    const walled = this.hitWall();
     if (isFiniteVector3Like(corrected) && this.snagged(corrected)) corrected = this.moveSplit(corrected, this.velocityY * deltaSec);
     if (!isFiniteVector3Like(corrected)) {
       this.horizontalSpeed = 0;
@@ -227,12 +251,15 @@ export class CharacterMotor {
       this.rapierWorld.propagateModifiedBodyPositionsToColliders();
     }
     this.horizontalSpeed = Math.hypot(total.x, total.z) / Math.max(deltaSec, 1e-6);
-    // A wall that stops the body stops its momentum too. Only the part along the way it was going is kept: the
-    // collider's slide along the wall is recomputed each step, and kept as momentum it would drift the body sideways.
-    if (maxAcceleration !== undefined && hasInput) {
-      const direction = this.tmpMove.setY(0).normalize();
-      const along = Math.max(0, (correctedX * direction.x + correctedZ * direction.z) / Math.max(deltaSec, 1e-6));
-      this.planarVelocity.copy(direction).multiplyScalar(along);
+    // A wall takes the momentum that pushes into it, and only that: head-on it stops the body, at a glance the
+    // body keeps its pace along it. Keeping only the progress the controller made each step compounds into a crawl,
+    // on walkable slopes (0.4 m/s on 17°) and beside steep terrain facets the capsule brushes (0.04 m/s, brief 15).
+    if (maxAcceleration !== undefined && hasInput && walled) {
+      for (let i = 0; i < this.wallCount; i++) {
+        const normal = this.wallNormalPool[i]!;
+        const into = this.planarVelocity.x * normal.x + this.planarVelocity.z * normal.z;
+        if (into < 0) this.planarVelocity.addScaledVector(normal, -into);
+      }
     }
     else if (maxAcceleration === undefined) this.planarVelocity.set(0, 0, 0);
 
@@ -252,9 +279,27 @@ export class CharacterMotor {
     else if (wasGrounded && hasInput && this.velocityY <= 0 && this.restoreFloorSkin()) {
       this.grounded = true;
     }
+    if (this.grounded && !wasGrounded && this.velocityY < 0) this.landingSpeed = -this.velocityY;
     if (this.grounded && this.velocityY < 0) {
       this.velocityY = groundedStickVelocity;
     }
+  }
+
+  /** The upward speed (m/s) a jump leaves the ground with. */
+  get jumpLaunchSpeed(): number {
+    return this.jumpSpeed;
+  }
+
+  /** How far a queued jump is through its wind-up (0..1); 0 when none is under way. */
+  get jumpWindup(): number {
+    return this.windupLeft >= 0 && this.windupSec > 0 ? clamp(1 - this.windupLeft / this.windupSec, 0, 1) : 0;
+  }
+
+  /** The downward speed (m/s) of a landing since the last call, else 0. */
+  takeLanding(): number {
+    const speed = this.landingSpeed;
+    this.landingSpeed = 0;
+    return speed;
   }
 
   getCharacterBodyPosition(out: THREE.Vector3): THREE.Vector3 {
@@ -413,6 +458,20 @@ export class CharacterMotor {
     return isFiniteVector3Like(down) ? { x: across.x + down.x, y: across.y + down.y, z: across.z + down.z } : across;
   }
 
+  /** The last computed movement touched something too steep to climb (a wall, or a rock face). */
+  private hitWall(): boolean {
+    const controller = this.characterController;
+    this.wallCount = 0;
+    if (!controller) return false;
+    for (let i = 0; i < controller.numComputedCollisions(); i++) {
+      const normal = controller.computedCollision(i)?.normal1;
+      if (!normal || normal.y >= MAX_CLIMB_COS) continue;
+      const across = Math.hypot(normal.x, normal.z);
+      if (across > 1e-4 && this.wallCount < this.wallNormalPool.length) this.wallNormalPool[this.wallCount++]!.set(normal.x / across, 0, normal.z / across);
+    }
+    return this.wallCount > 0;
+  }
+
   private controllerOffset(): number {
     return Math.max(0.01, this.avatarHeight * 0.02);
   }
@@ -424,7 +483,7 @@ export class CharacterMotor {
     this.characterController = this.rapierWorld.createCharacterController(this.controllerOffset());
     this.characterController.setUp({ x: 0, y: 1, z: 0 });
     this.characterController.setSlideEnabled(true);
-    this.characterController.setMaxSlopeClimbAngle(THREE.MathUtils.degToRad(40));
+    this.characterController.setMaxSlopeClimbAngle(MAX_CLIMB_RAD);
     this.characterController.setMinSlopeSlideAngle(THREE.MathUtils.degToRad(45));
     this.characterController.enableAutostep(Math.max(0.08, this.avatarHeight * 0.2), Math.max(0.04, this.avatarHeight * 0.1), true);
     // Keep ground snap conservative; large snap distances can cause sticky horizontal motion.

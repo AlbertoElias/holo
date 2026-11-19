@@ -1097,7 +1097,7 @@ bars in the brief to the artist.
 | **2b: the sheets** | Astra draws the style sheets from the request below; the owner picks a finish set (open decision 1) | The sheets, judged against the acceptance list in the request; the owner's pick recorded here | **Yes.** No code |
 | **2c: the base** | One base in the picked style, neutral finish, neutral card, made the recommended way | Every audition row passes; three blind readers at 5 of 7 or better at card size; a review pack of `sheets/expressions.json` and the watering piece on the base beside the stock; the motion owner's report; `check_usdz_tools.sh`; a proof video | **Yes.** Loads through `?avatar=` and beat sheets only; edits nothing the mandates own |
 | **2d: traits** | The shared dressing function, used by `direct.ts` only; three builds; hair and glasses parts; the poem's two characters from cards. Built 2026-11-18 (see "Slice 2d evidence"); the turn row still fails, worse with garments | The audition on every trait value at its extreme; a contact sheet of the trait values; the poem's two characters made from cards alone, in a take whose GLB carries the look | **Yes.** A workspace package, authoring scripts and avatar files; nothing in `apps/capture/src/` |
-| **2c2: the base looks like the sheets** | Added 2026-11-18 on the owner's verdict: "the images its based on are great, we need to reach the point where the avatars look just like those images". The owner picked the route "Generate, then fit": a shape generated locally from `clay-turnaround.png`, with no spend, and the house base's own mesh wrapped onto it (`house-base/fit.py`), keeping the rig, the face shapes, the three builds and the trait parts | The likeness check (`house-likeness.ts`): silhouette overlap per turnaround view, "which is the drawing?" pairs for fresh readers, a contact sheet against each sheet. The audition and the blind reading unchanged, `house-traits.ts` over every trait value, the base at 1.8 MB or under, a proof video | **Yes.** Authoring scripts and avatar files; nothing in `apps/capture/src/`; `DEFAULT_AVATAR_URL` unchanged |
+| **2c2: the base looks like the sheets** | Added 2026-11-18 on the owner's verdict: "the images its based on are great, we need to reach the point where the avatars look just like those images". The owner picked the route "Generate, then fit"; on 2026-11-19 the owner's licence decision replaced the generated shape with a visual hull carved from the sheet's own silhouettes (`house-base/carve.py`), and the house base's own mesh is wrapped onto it (`house-base/fit.py`), keeping the rig, the face shapes, the three builds and the trait parts | The likeness check (`house-likeness.ts`): silhouette overlap per turnaround view, "which is the drawing?" pairs for fresh readers, a contact sheet against each sheet. The audition and the blind reading unchanged, `house-traits.ts` over every trait value, the base at 1.8 MB or under, a proof video | **Yes.** Authoring scripts and avatar files; nothing in `apps/capture/src/`; `DEFAULT_AVATAR_URL` unchanged |
 | **2e: chosen per take** | `house:<finish>` and `look` in beat sheets; the dressing function in capture's avatar loading; height from the head-top bone; the "your look" step in the phone journey and the headset mirror; `?look=` | A phone e2e: set a look, record, upload, and the feed card shows it; an XR harness check of the mirror; a beat sheet re-dressed with another card; a proof video | **No.** Touches the phone journey (`CaptureOverlay.tsx` and its flow), owned by the phone mandate, and `src/avatar/` (loading, `AvatarRig`'s height fit), owned by the motion owner: built with both, after the phone's device checks |
 | **2f: finishes** | The other one or two finishes as material sets | Brow contrast and the blind reading per finish; one authored piece re-dressed in each | **Yes.** Avatar files. Built 2026-11-19: ink and light (see "Slice 2f evidence") |
 | **2g: the default and outside avatars** | `DEFAULT_AVATAR_URL` to the house base; the credit rule and verdict for outside avatars | Motion owner's agreement recorded; the phone journey's load measured against the 2.3 MB; an outside VRM passed and one refused, by name; a proof video | **No.** One constant in capture, on the motion owner's say |
@@ -1891,14 +1891,23 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
 10. **Slice 2c2's calls** (route picked by the owner on 2026-11-18: "Generate,
     then fit"; the rest decided by the agent in the owner's absence the same
     day, for the owner to review):
-   - **The generator's licence.** The fit target comes from Hunyuan3D-2mv
-     (Tencent Hunyuan 3D 2.0 Community License), which excludes the EU, the
-     UK and South Korea. Only a decimated 0.41 MB target
-     (`house-base/fit-target.glb`) is committed, as a fitting guide: none of
-     its geometry ships, only the moves it gives the base's own vertices.
-     Whether the guide may stay, and whether the moves it gave may stay, is
-     the owner's call. Undo: `fit.enabled` false in `base.json` and a
-     rebuild.
+   - **The generator's licence: decided by the owner on 2026-11-19.** The
+     first target came from Hunyuan3D-2mv (Tencent Hunyuan 3D 2.0 Community
+     License), whose rights hold "for the Territory only", which excludes
+     the EU, the UK and South Korea. The owner's words: the base "will be
+     shown worldwide including europe. we want the cheapest option that will
+     generate the best result … the bar is making the avatar look like the
+     images". So the base no longer depends on any generator. The target is
+     now `house-base/sheet-hull.glb`, carved by `house-base/carve.py` from
+     the turnaround's silhouettes alone, and the base is CC0 MPFB wrapped
+     onto it (see "Slice 2c2 evidence", the clean fit). Removed from the tree
+     on the same day: `house-base/fit-target.glb` (the Hunyuan output) and
+     `house-base/generate-target.py`. Rebuilt, so no vertex comes from the
+     Hunyuan fit: `assets/house-base/wardrobe-{slight,medium,broad}.glb` and
+     `public/gltf/models/house-base.glb`. Git history still holds the old
+     files; whether to rewrite it is the owner's question, and nothing was
+     rewritten. The owner's rule from then on: any licence restriction,
+     spend or legal question goes to the owner before anything builds on it.
    - **The pass numbers for likeness** (proposed): mean silhouette IoU at
      least 0.80 over the four turnaround views and mean head IoU at least
      0.90. They are floors just under what the fit reached, judged by hand
@@ -1913,6 +1922,25 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
      in the shoe colour. A level plane decides the trouser hems, as one does
      the collar. These are not sculpted shoes: the sheet's welted brogues
      would need a shoe part.
+
+11. **The owner's decisions of 2026-11-19** (after slice 2f, passed on by
+    the lead session; the numbers are that session's list, the words the
+    owner's):
+   - **"Decision 1: hold"** the default avatar until the licence call and a
+     reading with people. `DEFAULT_AVATAR_URL` stays unchanged.
+   - **"Decision 4: Tune"** the light finish, so garments keep their colour.
+     One pass: a smaller mix for garments that keeps their hue, skin and face
+     unchanged (see "Light finish tune" in slice 2f's evidence). Whether it
+     is settled is the owner's judgement, against the sheet.
+   - **"Decision 6: Prepare Pack"**: a blind reading pack for people, on the
+     built house base (not the drawn sheets), with instructions the owner can
+     forward (see "The reader pack for people" in slice 2f's evidence). The
+     bar is unchanged: each reader at least 5 of 7.
+   - **"Decision 8: hold"**: the phone journey, 2e and 2g, stays on hold.
+   - **Open, not acted on:** the owner was not told of the Hunyuan3D-2mv
+     territory restriction (decision 10) before it was built on, and asked
+     whether an unrestricted model or another route can replace it. The lead
+     is researching that; the fit is unchanged until it does.
 
 ## Test plan and evidence
 
@@ -3198,10 +3226,116 @@ put each of the four sheets above the base's four views.
 **Not done:** people (not AI) as readers; a check on a physical device; the
 owner's review of the licence (decision 10).
 
+#### The clean fit (2026-11-19): the same base, no generator
+
+The owner's licence decision (decision 10) retired the Hunyuan target. The
+fit above is unchanged; only its target is new. Run by the agent; no spend.
+
+**The target.** `house-base/carve.py` (Blender headless, numpy only) carves
+a visual hull from the turnaround's own silhouettes. `house-base/sheet.py`
+holds the sheet parsing it shares with `likeness.py`. The steps:
+
+- Voxels at 1/360 of the figure's height (about 5 mm). A voxel is kept
+  where every view's mask holds it: front, back, side, and the three-quarter
+  view at 45° and mirrored at −45°.
+- The three-quarter drawing does not agree exactly with the front, so its
+  mask is widened by 0.012 of the height and its offset searched (best
+  −0.015).
+- The occupancy is blurred (σ 5 voxels across the floor, 1.2 up), cut at
+  0.5, and its surface projected onto that level and Taubin-smoothed. This
+  rounds the planar facets a hull is made of.
+- It keeps the largest piece and decimates to 48,407 faces:
+  `house-base/sheet-hull.glb` (0.72 MB). The carve is deterministic (a
+  re-run is byte-identical).
+- The hull's own overlap with the sheet: front 0.957, three-quarter 0.822,
+  side 0.983, back 0.953.
+
+**The fit values** were chosen by sweeping the carve's slack and blur
+against the fit's insets, measuring each candidate with `house-likeness.ts`
+exactly as before (same views, framing and pose search). Insets are now
+torso 0.012, arms and legs 0.015 m (were 0.016 and 0.02). Every other value
+is the Hunyuan fit's.
+
+| Run (mean IoU / head IoU) | Result |
+|---|---|
+| Unfitted base (`main` before 2c2) | 0.779 / 0.879 |
+| Hunyuan fit (retired) | 0.826 / 0.908 |
+| Hull without blur, original insets | 0.790 / 0.891 |
+| Blur 3, half insets | 0.820 / 0.910 |
+| Blur 5, half insets | 0.824 / 0.917 |
+| **Blur 5, insets 0.012 / 0.015 (chosen)** | **0.830 / 0.912** |
+| Blur 7, half insets | 0.828 / 0.916 |
+| Blur 9 (the arms merge with the body) | 0.715 / 0.840 |
+
+Per view, chosen fit: front 0.871 (head 0.916), three-quarter 0.773
+(0.903), side 0.804 (0.903), back 0.871 (0.927). Both proposed floors
+(0.80, 0.90) are met, and the clean fit is at or above the Hunyuan fit on
+both means. As before, the target comes from the sheet the IoU is scored
+against, so this shows the fit reached the sheet's silhouettes, not an
+independent likeness. The residuals are the Hunyuan fit's too: in the side
+view the hands hang forward (a rest pose the measure does not pose out), and
+the three-quarter arm angle differs.
+
+**The face, traits and finishes carry over.** The head is rigid in the fit,
+so the stylised face is the same shape; the blind cards show the same
+expressions, face 44 px.
+
+- Blind reading (`face-legibility.ts`, `blind-05`, fresh Sonnet readers,
+  three wordings):
+
+  | Round | Scores |
+  |---|---|
+  | First round | 5, 4, 5 of 7 (misses the gate) |
+  | Second round, same wordings | 7, 5, 5 of 7 (passes) |
+  | Control: the Hunyuan base's cards, the wording that gave the 4 | 7 of 7 |
+
+  Every miss is the held, eyes-down and hope trio. Held and eyes-down are
+  swapped as on the Hunyuan base. The 4 also took hope for held. The faces
+  on the two bases' cards are the same, so the spread is reader noise on
+  the known held/eyes-down swap (2d), not a change from the fit. The gate is
+  met only on the second round. People as readers would settle it.
+- Audition (`avatar-audition.ts`, the public base): every binding row
+  passes except `turn.armR-in-torso`, 16 (up to 28.2 mm). The non-binding
+  `other.tongueOut` is 0, as the base has no tongue.
+- Traits (`house-traits.ts`, eight looks): the only failure is the turn
+  row, `armR-in-torso` 15–26 (up to 28 mm), where the Hunyuan fit failed
+  `armL-in-legL` 21–41 (up to 29.4 mm). It has not grown; it is still open
+  (2d).
+- Finishes: `house-traits.ts --finish ink` and `--finish light` on the
+  same eight looks fail only that turn row; every brow-contrast and face
+  row passes in both.
+- Sizes: wardrobes 1.52–1.53 MB, public `house-base.glb` 1.07 MB, all under
+  1.8 MB.
+
+**Removed from the tree** (2026-11-19, the owner's licence decision):
+
+- `apps/capture/scripts/authoring/house-base/fit-target.glb`, the Hunyuan
+  output;
+- `apps/capture/scripts/authoring/house-base/generate-target.py`, the
+  script that ran Hunyuan3D-2mv.
+
+**Rebuilt** from the clean fit, so none of their vertices came from the
+Hunyuan fit:
+
+- `apps/capture/assets/house-base/wardrobe-{slight,medium,broad}.glb`;
+- `apps/capture/public/gltf/models/house-base.glb`.
+
+No other tracked file came from the base's geometry. Nothing in the
+current tree names `fit-target`, `generate-target` or Hunyuan except this
+record. Git history still holds the old files; whether to rewrite it is the
+owner's question, and nothing was rewritten.
+
+**Proof video:** `output/house-clean-fit/proof-clean-fit.mp4` (ignored):
+the sheet above the Hunyuan fit and the clean fit turning side by side.
+
+**Not done:** people as readers; Quick Look (no change to export or the
+USDZ tools); a check on a physical device.
+
 ### Slice 2f evidence (2026-11-19): ink and light on the fitted base
 
 Built by the agent in the owner's absence on 2026-11-19, on the 2c2 base
-(`b333f499acda`), matched to the round 2 sheets (`base-finishes.png`,
+(`b333f499acda`; the same day the base moved to the clean fit, and the
+finishes were re-audited on it: see "The clean fit" in 2c2's evidence), matched to the round 2 sheets (`base-finishes.png`,
 `ink-turnaround.png`, the expression sheets). Every choice below was
 decided by the agent in the owner's absence on 2026-11-19, for review.
 
@@ -3277,7 +3411,8 @@ weakness ink does not: the 0.4 mix toward warm white takes both
 performers' clothing to near the same cream, so the pair is told apart by
 hair and build only, and the bubble's lines show through the jumpers. A
 smaller mix for garments (keeping their hue) is the next lever, for the
-owner to judge against the sheet.
+owner to judge against the sheet (done on 2026-11-19: "Light finish tune"
+below).
 
 **Not done:** people as readers; Quick Look and the light finish on a
 physical device; the captured-take-with-bubble render (the viewer makes
@@ -3286,6 +3421,45 @@ the ink outline's colour too; masking a garment's line where another
 garment covers it (only skin is masked today; no poke-through was seen in
 the renders, but a tight hem could show one); the owner's review of
 every choice above.
+
+**Light finish tune (2026-11-19, the owner's "Decision 4: Tune").** The
+garments (top, trousers, shoes) are no longer mixed 0.4 toward the warm
+white. Each is mixed `LIGHT_GARMENT_LIFT` 0.25 of the way toward its own
+brightest version (the colour scaled until its largest channel is 1), which
+brightens it and keeps its hue exactly; their glow is still 0.45 of that.
+Skin, face parts, brows, frames and hair are unchanged, as are the opacity
+and the blend. The value 0.25 is the agent's pick; whether it is right is
+the owner's judgement against the sheet, not settled here. On the poem pair
+in the card view, her rust top and walnut trousers and his slate-blue top
+now tell the two apart, where before both went to the same cream. The
+bubble's lines still show through the garments (alpha blend at 0.86).
+Re-measured over the 8 looks (`house-traits.ts --finish light`, both
+tiers):
+
+| Light | Rows failing | Brow contrast (bar 0.25) | Face box (px) | Size (bar 1.8 MB) |
+|---|---|---|---|---|
+| Before (2f) | only the turn row | 0.602–0.633 | 43.6–43.9 | 1.09–1.16 MB |
+| After the tune | only the turn row | 0.602–0.633 | 43.6–43.9 | 1.08–1.16 MB |
+
+The turn row (`turn.armL-in-legL`, 41 slight, 37 broad, 21 medium) is the
+same as before and still the motion owner's. The side-by-side video for the
+owner (before and after, card view, real time) is ignored output, not
+linked here.
+
+**The reader pack for people (2026-11-19, the owner's "Decision 6: Prepare
+Pack").** The seven judged expressions of `sheets/expressions.json`, on the
+built house base in its default look, at the phone card's true face size
+(44 device px brow to chin, 29.3 CSS px, 4.85 mm), rendered by the viewer's
+own renderer (`face-legibility.ts --tiles`, which now also writes each face
+unlabelled) and enlarged smoothly. One sheet per finish: clay, ink, and light
+after the tune. Each sheet's order and the sheets' order are drawn at random,
+under random codes; the key stays outside the zip. The zip holds a one-page
+instruction, an answer sheet (PDF to print, text to type into) and the three
+sheets. The bar is unchanged: per finish, three readers who are people and
+have not seen the faces, each at least 5 of 7. Every reader does all three
+sheets in order, so the later sheets have the benefit of practice; the
+scoring note says so. The pack, key and scoring note are ignored output (not
+linked here). No reader has seen it yet.
 
 ### Slice 6 evidence (2026-11-18)
 
