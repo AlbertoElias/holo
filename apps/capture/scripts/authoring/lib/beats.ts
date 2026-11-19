@@ -468,7 +468,7 @@ export function validateSheet(sheet: BeatSheet): string[] {
   if (!sheet.performers.length) problems.push('no performers');
   if (!(sheet.duration > 0)) problems.push('duration must be > 0');
   for (const p of sheet.performers) {
-    if (p.avatar.startsWith('house') && !houseFinish(p.avatar)) problems.push(`${p.id}: avatar "${p.avatar}": the house base is ${FINISHES.map((f) => `"house:${f}"`).join(', ')}`);
+    if ((p.avatar === 'house' || p.avatar.startsWith('house:')) && !houseFinish(p.avatar)) problems.push(`${p.id}: avatar "${p.avatar}": the house base is ${FINISHES.map((f) => `"house:${f}"`).join(', ')}`);
     if (p.look === undefined) continue;
     if (!houseFinish(p.avatar)) { problems.push(`${p.id}: a look needs a house avatar ("${HOUSE_AVATAR}" or another finish)`); continue; }
     try { parseLook(p.look, `${p.id} look`); } catch (e) { problems.push((e as Error).message); }

@@ -53,11 +53,13 @@ export async function resolveAvatar(spec: string, sheetFile: string, look?: Look
 }
 
 export async function loadSheet(sheetFile: string, avatarOverride?: string): Promise<{ sheet: BeatSheet; avatars: Map<string, LoadedAvatar>; sources: Map<string, LoadedSource> }> {
-  const sheet = JSON.parse(await readFile(sheetFile, 'utf8')) as BeatSheet;
+  const parsed = JSON.parse(await readFile(sheetFile, 'utf8')) as BeatSheet;
+  // An override dresses every performer in it alone, so the take records what they wear.
+  const sheet: BeatSheet = avatarOverride ? { ...parsed, performers: parsed.performers.map(({ look: _look, ...p }) => ({ ...p, avatar: avatarOverride })) } : parsed;
   const problems = validateSheet(sheet);
   if (problems.length) throw new Error(`${basename(sheetFile)}:\n  ${problems.join('\n  ')}`);
   const avatars = new Map<string, LoadedAvatar>();
-  for (const p of sheet.performers) avatars.set(p.id, await loadAvatar(await resolveAvatar(avatarOverride ?? p.avatar, avatarOverride ? join(process.cwd(), 'x') : sheetFile, avatarOverride ? undefined : p.look)));
+  for (const p of sheet.performers) avatars.set(p.id, await loadAvatar(await resolveAvatar(p.avatar, avatarOverride ? join(process.cwd(), 'x') : sheetFile, p.look)));
   const sources = await loadSources(sheet.objects ?? {}, sheetFile, join(OUTPUT, 'objects'));
   return { sheet, avatars, sources };
 }
