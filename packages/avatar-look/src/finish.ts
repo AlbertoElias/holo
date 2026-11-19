@@ -33,6 +33,16 @@ export const INK_COVERED = 0.03;
  * through; the opacity stays high enough that the garments' do not.
  */
 export const LIGHT = { pale: 0.4, tint: [255, 240, 214] as SRGB, opacity: 0.86, glow: 0.45 } as const;
+/**
+ * Light, garments only: instead of the warm white, each garment colour is
+ * mixed `lift` of the way toward its own brightest version (the same colour
+ * scaled until its largest channel is 1), so it brightens and keeps its hue;
+ * the warm white took two performers' clothes to the same cream (2f
+ * evidence). The owner asked for this tune on 2026-11-19 ("Decision 4:
+ * Tune"); the value 0.25 was picked by the agent, for the owner to judge.
+ */
+export const LIGHT_GARMENT_LIFT = 0.25;
+const LIGHT_GARMENT = /^HouseBase_(top|trousers|shoes)$/;
 
 /** Materials a finish leaves exactly as they are: the eyes, lashes, mouth and teeth carry the face's reading. */
 const FACE_PARTS = /^HouseBase_(eye_|lash|mouth|teeth)/;
@@ -197,7 +207,10 @@ function light(doc: Document): void {
     if (FACE_PARTS.test(name)) continue;
     const c = m.getBaseColorFactor();
     const tint = linear(LIGHT.tint);
-    const pale = [0, 1, 2].map((k) => c[k]! * (1 - LIGHT.pale) + tint[k]! * LIGHT.pale);
+    const own = Math.max(c[0]!, c[1]!, c[2]!) || 1;
+    const pale = LIGHT_GARMENT.test(name)
+      ? [0, 1, 2].map((k) => c[k]! * (1 - LIGHT_GARMENT_LIFT) + (c[k]! / own) * LIGHT_GARMENT_LIFT)
+      : [0, 1, 2].map((k) => c[k]! * (1 - LIGHT.pale) + tint[k]! * LIGHT.pale);
     m.setEmissiveFactor([pale[0]! * LIGHT.glow, pale[1]! * LIGHT.glow, pale[2]! * LIGHT.glow]);
     m.setRoughnessFactor(0.5).setMetallicFactor(0);
     if (/^HouseBase_(brow|frames)$/.test(name)) m.setEmissiveFactor([0, 0, 0]);

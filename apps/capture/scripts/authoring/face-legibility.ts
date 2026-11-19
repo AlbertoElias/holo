@@ -2,7 +2,7 @@
  * How big a face must be on screen for an expression to read, measured in
  * the real viewer:
  *
- *   node --conditions=development --import tsx scripts/authoring/face-legibility.ts <take.glb> [--sheet take.beats.json] [--out dir]
+ *   node --conditions=development --import tsx scripts/authoring/face-legibility.ts <take.glb> [--sheet take.beats.json] [--out dir] [--tiles]
  *
  * The take is one performer facing +Z with one expression per beat (as
  * `sheets/expressions.json`). It writes to `output/authoring/face/`:
@@ -18,7 +18,9 @@
  *   phone's mm says how small it is to the eye.
  *
  * Give each `blind-NN.jpg` to a different fresh reader, with the list of
- * expression names, and score against `key.json`.
+ * expression names, and score against `key.json`. `--tiles` also writes
+ * each face unlabelled and unenlarged, `tiles/<face px>/<expression>.jpg`,
+ * for a pack made elsewhere (the reader pack for people, slice 2f).
  */
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
@@ -74,9 +76,10 @@ async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const flag = (n: string) => { const i = args.indexOf(n); return i === -1 ? undefined : args.splice(i, 2)[1]; };
   const sheetArg = flag('--sheet');
+  const writeTiles = args.includes('--tiles') ? Boolean(args.splice(args.indexOf('--tiles'), 1)) : false;
   const out = resolve(flag('--out') ?? OUTPUT);
   const take = args[0];
-  if (!take) { console.error('usage: face-legibility.ts <take.glb> [--sheet take.beats.json] [--out dir]'); process.exit(2); }
+  if (!take) { console.error('usage: face-legibility.ts <take.glb> [--sheet take.beats.json] [--out dir] [--tiles]'); process.exit(2); }
   const sheetFile = sheetArg ?? take.replace(/\.glb$/, '.beats.json');
   const sheet = JSON.parse(await readFile(sheetFile, 'utf8')) as BeatSheet;
   const performer = sheet.performers[0];
@@ -127,6 +130,11 @@ async function main(): Promise<void> {
           await call(page, 'seek', p.t);
           const shot = await call(page, 'close', 0, view(d, size)) as { image: string };
           tiles[n]![p.name] = shot.image;
+          if (writeTiles) {
+            await mkdir(join(out, 'tiles', String(n)), { recursive: true });
+            const ext = shot.image.startsWith('data:image/png') ? 'png' : 'jpg';
+            await writeFile(join(out, 'tiles', String(n), `${p.name}.${ext}`), Buffer.from(shot.image.slice(shot.image.indexOf(',') + 1), 'base64'));
+          }
         }
       }
     } finally { await open.close(); }
