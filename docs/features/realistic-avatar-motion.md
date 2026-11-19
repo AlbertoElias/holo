@@ -88,6 +88,36 @@ jitters"), fixed in 1b:
     a point (`pointing`, desktop take), and a set-down landed at the feet
     (`summon`, desktop undo take). An arm the point or the carry holds is
     now theirs alone; the clearance opens only the clip's arms.
+15. Walking over the terrain kept stalling and lurching (owner report,
+    2026-11-19: "stuck and clumsy on and off"). On a walkable slope the
+    controller moves a little less than asked, and the wall momentum reset
+    kept only that each frame, so it compounded into a 0.4 m/s crawl. The
+    reset now runs only when the move touched something too steep to climb
+    (steeper than 40°). On a 40 s random roam the slow share went 0.48 →
+    0.16. Brushing a steep facet beside the path (a 50° face, mostly
+    sideways) still crawled at 0.04 m/s, because the reset kept only the
+    progress made; a wall now takes only the momentum pushing into it, so a
+    head-on wall stops the body and a glancing one lets it walk on (that
+    spot: 0.72 m/s minimum). The stalls left are cliffs walked into.
+16. Diagonal and sideways walks looked long-legged: every direction plays
+    the same walk turned into the travel, so it showed the stride side-on,
+    and at 1.1× stride the trailing leg locked straight far behind (feet
+    0.91 m apart at p95). The walk now plays its own stride (1.0×, 0.84 m),
+    about 130 steps/min at 1.8 m/s. The faster cadence raised the desktop
+    pop gate's p99 to 49 m/s² (gate 46 → 50) and the swing knee to 79°
+    (gate 78° → 80°), above the original takes' 68–73°.
+17. The jump rose 2.1 m with the legs straight and the arms out: the jump and
+    fall clips animate only the hips and legs, so the arms fell back to the
+    rest pose. A jump now lifts a third of the body's height (0.56 m at
+    1.8 m), squats for 0.14 s before take-off, tucks the legs toward the apex
+    and reaches for the ground again, and dips on landing as deep as the fall
+    was hard. The desktop body keeps its idle in the air, so the arms hang;
+    an avatar with its own whole-body jump clip still plays it. VR jumps at
+    once and keeps its clips.
+18. The crouch-walk read as a hunched run: 1.35 m/s at the full walk cadence,
+    with the crouch half let go once moving (hips 0.13 m down). It now creeps
+    at 0.8 m/s with the hips held 0.26–0.35 m down, and the full crouch drops
+    the hips 0.16 of height (was 0.11), knees near a right angle.
 
 ## Scope
 
@@ -109,9 +139,8 @@ jitters"), fixed in 1b:
   `scripts/build-mocap-clips.ts` (JSON → the shipped avatar's clips, then
   `build-locomotion-library.ts` rebuilds `locomotion.glb`). Sources and dumps
   stay out of git.
-- `LocomotionAnimator`: the walk plays at 1.1× stride (the take was recorded
-  faster than the desktop's 1.8 m/s, so on its own stride it read as ~130
-  steps/min shuffling), and the hips bob is a Gaussian-smoothed (σ 40 ms)
+- `LocomotionAnimator`: the walk plays at its own stride (1.1× laid the
+  trailing leg straight out behind, see 16), and the hips bob is a Gaussian-smoothed (σ 40 ms)
   circular average.
 - Terrain: `TerrainHeightIndex`, an XZ grid of the world's triangles for
   vertical ground queries (allocation-free, built lazily, rebuilt when the

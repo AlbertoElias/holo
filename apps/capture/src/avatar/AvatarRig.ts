@@ -152,6 +152,8 @@ const CROUCH_POSE_EPSILON = 1e-4;
 const CROUCH_MAX_POSE_AMOUNT = 1.45;
 const CROUCH_FOOT_GROUND_CLEARANCE_RATIO = 0.015;
 const CROUCH_MAX_HIPS_LIFT_RATIO = 0.16;
+// The full crouch drops the hips this fraction of height: knees near a right angle, a crouch that reads from behind.
+const CROUCH_HIPS_DROP_RATIO = 0.16;
 // A reach squat: the hips drop this much more (a fraction of height) beyond the full crouch, and the forward bend grows by this factor.
 const SQUAT_EXTRA_HIPS_DROP_RATIO = 0.20;
 // Past the full squat, a hand that still can't reach (a prop gripped near its bottom) takes the hips this much further down, a fraction of height: never more lean.
@@ -160,8 +162,8 @@ const SQUAT_DEEP_EXTRA_RATIO = 0.07;
 const SQUAT_LEG_RELAX = 0.85;
 const CROUCH_WALK_BLEND_START_SPEED = 0.08;
 const CROUCH_WALK_BLEND_END_SPEED = 0.28;
-const CROUCH_WALK_HIPS_POSE_WEIGHT = 0.55;
-const CROUCH_WALK_LEG_POSE_WEIGHT = 0.45;
+const CROUCH_WALK_HIPS_POSE_WEIGHT = 0.85;
+const CROUCH_WALK_LEG_POSE_WEIGHT = 0.6;
 const CROUCH_WALK_FOOT_POSE_WEIGHT = 0.25;
 const CROUCH_WALK_EXTRA_GROUND_CLEARANCE_RATIO = 0.02;
 const CROUCH_GROUND_SAMPLE_RADIUS_RATIO = 0.045;
@@ -233,6 +235,7 @@ export class AvatarRig {
   private lastCrouchAmount = -1;
   private lastSquatAmount = 0;
   private lastDeepExtra = 0;
+  private lastAirborne = false;
   /** Where each foot stood when the current reach began, before it bent the body. */
   readonly plantFeet = { left: new THREE.Vector3(), right: new THREE.Vector3() };
   /** The feet's world orientations when planted: a planted foot stays flat as it was, however far the legs fold. */
@@ -347,7 +350,8 @@ export class AvatarRig {
   }
 
   /** `plant`: a reach is driving the pose, so the feet stay where they stood when it began. */
-  applyCrouchPose(amount: number, horizontalSpeed = 0, squat = 0, plant = false, deepExtra = 0): void {
+  /** `airborne` tucks the legs under hips that stay put (a jump), rather than lowering the hips onto the ground. */
+  applyCrouchPose(amount: number, horizontalSpeed = 0, squat = 0, plant = false, deepExtra = 0, airborne = false): void {
     const clampedAmount = clamp(amount, 0, CROUCH_MAX_POSE_AMOUNT);
     if (!this.crouchRigReady || !this.crouchHips) return;
     if (!plant) this.feetPlanted = false;
@@ -363,9 +367,10 @@ export class AvatarRig {
       }
     }
     const squatAmount = clamp(squat, 0, 1);
-    const amountChanged = Math.abs(clampedAmount - this.lastCrouchAmount) > CROUCH_POSE_EPSILON || Math.abs(squatAmount - this.lastSquatAmount) > CROUCH_POSE_EPSILON || Math.abs(deepExtra - this.lastDeepExtra) > CROUCH_POSE_EPSILON;
+    const amountChanged = airborne !== this.lastAirborne || Math.abs(clampedAmount - this.lastCrouchAmount) > CROUCH_POSE_EPSILON || Math.abs(squatAmount - this.lastSquatAmount) > CROUCH_POSE_EPSILON || Math.abs(deepExtra - this.lastDeepExtra) > CROUCH_POSE_EPSILON;
     this.lastSquatAmount = squatAmount;
     this.lastDeepExtra = deepExtra;
+    this.lastAirborne = airborne;
     const wasCrouched = this.lastCrouchAmount > CROUCH_POSE_EPSILON;
     const isCrouched = clampedAmount > CROUCH_POSE_EPSILON;
     if (!amountChanged && !wasCrouched && !isCrouched) return;
@@ -392,8 +397,8 @@ export class AvatarRig {
     // Bone translations use parent-local units; avatarHeight is world meters.
     const parentScale = this.crouchHips.bone.parent?.getWorldScale(this.tmpSize).y ?? 1;
     const heightInParent = this.avatarHeight / Math.max(1e-8, Math.abs(parentScale));
-    this.crouchHips.bone.position
-      .addScaledVector(this.crouchHips.downInParent, heightInParent * (0.11 * hipsAmount + (SQUAT_EXTRA_HIPS_DROP_RATIO * squatAmount + SQUAT_DEEP_EXTRA_RATIO * clamp(deepExtra, 0, 1))))
+    if (!airborne) this.crouchHips.bone.position
+      .addScaledVector(this.crouchHips.downInParent, heightInParent * (CROUCH_HIPS_DROP_RATIO * hipsAmount + (SQUAT_EXTRA_HIPS_DROP_RATIO * squatAmount + SQUAT_DEEP_EXTRA_RATIO * clamp(deepExtra, 0, 1))))
       .addScaledVector(this.crouchHips.backInParent, heightInParent * 0.045 * hipsAmount);
     this.applyCrouchBoneRotation(this.crouchHips, hipsAmount * lean);
     this.crouchHips.bone.updateMatrixWorld(true);
@@ -416,7 +421,7 @@ export class AvatarRig {
     }
 
     // Planted feet are pinned by the leg solver, so lifting the hips to clear the unplanted feet would only make the hips jump with the terrain probe.
-    if (!plant) this.applyCrouchFootGroundCompensation(clampedAmount, walkBlend, squatAmount);
+    if (!plant && !airborne) this.applyCrouchFootGroundCompensation(clampedAmount, walkBlend, squatAmount);
   }
 
   /** The avatar's canonical bone, or its end site for a `…Tip` reference. */

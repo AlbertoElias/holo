@@ -3,8 +3,11 @@ import * as THREE from 'three';
 import { KEYBOARD_WALK_HEIGHTS_PER_SEC, WALK_SPEED_HEIGHTS_PER_SEC } from '../physics/CharacterMotor';
 import { type CaptureContext, captureContext } from './captureContext';
 
-const CROUCH_MOVE_SPEED_AT_FULL = 0.75;
+// A crouched walk is a slow creep, about 0.8 m/s at the keyboard walk: faster reads as a hunched run.
+const CROUCH_MOVE_SPEED_AT_FULL = 0.45;
 const CROUCH_MIN_EFFECT_THRESHOLD = 0.05;
+// A flat-screen jump squats this long (s) before take-off; a tracked body in XR jumps when the stick says.
+const JUMP_WINDUP_SEC = 0.14;
 // Keyboard walking reaches full speed in about a quarter second: an instant start or stop reads as a pop on every joint.
 const KEYBOARD_ACCELERATION_MS2 = 12;
 // A desktop body walking sideways turns to face where it goes (it has only a forward walk); past this angle from the
@@ -48,7 +51,7 @@ export class MovementSystem extends createSystem() {
     motor.update(deltaSec, c.camera.lookYaw, input.moveState, input.consumeJumpQueued(), {
       moveSpeedMultiplier: (1 - (1 - CROUCH_MOVE_SPEED_AT_FULL) * crouchAmount) * (frame.vrActive ? 1 : KEYBOARD_WALK_HEIGHTS_PER_SEC / WALK_SPEED_HEIGHTS_PER_SEC),
       allowJump: true,
-      ...(frame.vrActive ? {} : { maxAccelerationMS2: KEYBOARD_ACCELERATION_MS2 }),
+      ...(frame.vrActive ? {} : { maxAccelerationMS2: KEYBOARD_ACCELERATION_MS2, jumpWindupSec: JUMP_WINDUP_SEC }),
       stickToTerrain: crouchAmount >= CROUCH_MIN_EFFECT_THRESHOLD,
       ...(frame.bodyTracking ? { externalDisplacement: body.displacement } : reachStep ? { externalDisplacement: reachStep } : {}),
       ...(stick.x !== 0 || stick.z !== 0 ? { analogMove: stick } : {})

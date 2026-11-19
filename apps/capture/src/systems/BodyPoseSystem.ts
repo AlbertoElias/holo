@@ -1,4 +1,5 @@
 import { createSystem } from '@iwsdk/core';
+import * as THREE from 'three';
 import { KEYBOARD_WALK_HEIGHTS_PER_SEC, WALK_SPEED_HEIGHTS_PER_SEC } from '../physics/CharacterMotor';
 import { type CaptureContext, captureContext } from './captureContext';
 
@@ -11,6 +12,10 @@ export class BodyPoseSystem extends createSystem() {
   private capture!: CaptureContext;
   /** Travel speed eased for the crouch pose's walk blend, whose band a stop crosses in a frame or two. */
   private crouchSpeed = 0;
+
+  /** Seconds since the last landing, and how hard it was (0..1); the absorb plays out from it. */
+  private sinceLanding = Infinity;
+  private landingPeak = 0;
 
   init(): void {
     this.capture = captureContext(this.world);
@@ -52,10 +57,15 @@ export class BodyPoseSystem extends createSystem() {
       // Walking away unplants them at once: a foot left behind would snap to the stride when the stand-up ends.
       const moving = input.moveState.forward || input.moveState.back || input.moveState.left || input.moveState.right;
       // The plant is held through the last of the stand-up, until the crouch is gone, so the feet do not snap as the reach ends.
-      const plant = (c.crouch.reach > 0 || (avatar.isPlanted && c.crouch.amount > 0.003)) && !moving;
+      const jump = this.jumpBend(deltaSec, character.grounded, character.velocityY);
+      const airborne = !character.grounded && jump > 0;
+      const poseAmount = Math.max(c.crouch.poseAmount, jump);
+      // A jump's wind-up and landing bend the knees over feet that stay where they stood.
+      const jumpPlant = character.grounded && jump > 0.02 && !moving;
+      const plant = ((c.crouch.reach > 0 || (avatar.isPlanted && c.crouch.amount > 0.003)) || jumpPlant) && !moving;
       this.crouchSpeed += (character.horizontalSpeed - this.crouchSpeed) * (1 - Math.exp(-Math.max(0, deltaSec) / CROUCH_SPEED_EASE_SEC));
-      avatar.applyCrouchPose(c.crouch.poseAmount, this.crouchSpeed, c.crouch.squat, plant, c.crouch.deepExtra);
-      c.terrainLegs.update(avatar, character.grounded, deltaSec, plant, c.crouch.poseAmount > 0.3, c.animator.getGaitState());
+      avatar.applyCrouchPose(poseAmount, this.crouchSpeed, c.crouch.squat, plant, c.crouch.deepExtra, airborne);
+      c.terrainLegs.update(avatar, character.grounded, deltaSec, plant, poseAmount > 0.3, c.animator.getGaitState());
       // Desktop arms come from the clip alone; in XR the tracked hands own them.
       if (!frame.vrActive) {
         // An arm the point or the carry holds is theirs to aim (they run after this, from the pose they found).
@@ -64,7 +74,43 @@ export class BodyPoseSystem extends createSystem() {
       }
     }
   }
+
+  /**
+   * The crouch a flat-screen jump adds (0..1): a squat through the wind-up, legs tucked up toward the apex (none at
+   * take-off or touch-down, where they push off and reach for the ground), and on landing a dip as deep as the
+   * fall was hard, in quickly and out over a few tenths of a second.
+   */
+  private jumpBend(deltaSec: number, grounded: boolean, velocityY: number): number {
+    const motor = this.capture.motor;
+    const impact = motor.takeLanding();
+    if (impact > LANDING_MIN_SPEED) {
+      this.sinceLanding = 0;
+      this.landingPeak = THREE.MathUtils.clamp(impact / LANDING_FULL_SPEED, LANDING_MIN_PEAK, 1);
+    } else this.sinceLanding += Math.max(0, deltaSec);
+    if (this.capture.frame.vrActive) return 0;
+    const windup = motor.jumpWindup;
+    if (windup > 0) return JUMP_WINDUP_DEPTH * THREE.MathUtils.smoothstep(windup, 0, 1);
+    if (!grounded) return JUMP_TUCK_DEPTH * Math.max(0, 1 - Math.abs(velocityY) / Math.max(1e-3, motor.jumpLaunchSpeed));
+    const t = this.sinceLanding;
+    if (t >= LANDING_ATTACK_SEC + LANDING_RELEASE_SEC) return 0;
+    const envelope = t < LANDING_ATTACK_SEC
+      ? THREE.MathUtils.smoothstep(t, 0, LANDING_ATTACK_SEC)
+      : 1 - THREE.MathUtils.smoothstep(t - LANDING_ATTACK_SEC, 0, LANDING_RELEASE_SEC);
+    return LANDING_DEPTH * this.landingPeak * envelope;
+  }
 }
+
+// A jump's wind-up squats to this crouch amount; the legs tuck to JUMP_TUCK_DEPTH at the apex.
+const JUMP_WINDUP_DEPTH = 0.75;
+const JUMP_TUCK_DEPTH = 0.5;
+// A landing at LANDING_FULL_SPEED (m/s, a jump's own touch-down) dips to LANDING_DEPTH; slower ones less, down to
+// LANDING_MIN_PEAK of it, and a step down slower than LANDING_MIN_SPEED not at all.
+const LANDING_FULL_SPEED = 3.4;
+const LANDING_MIN_SPEED = 1.2;
+const LANDING_MIN_PEAK = 0.3;
+const LANDING_DEPTH = 0.8;
+const LANDING_ATTACK_SEC = 0.07;
+const LANDING_RELEASE_SEC = 0.32;
 
 // The last frames' cost of animation + body IK (ms), for the desktop motion check's per-frame budget.
 const POSE_COST_FRAMES = 600;
