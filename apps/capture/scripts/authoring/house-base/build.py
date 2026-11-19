@@ -37,6 +37,7 @@ argv = sys.argv[sys.argv.index("--") + 1:]
 P = json.load(open(argv[0]))
 FU_DIR, OUT, REPORT = argv[1], argv[2], argv[3]
 BUILD = argv[4] if len(argv) > 4 else "medium"
+MACRO0 = dict(P["macro"])
 P["macro"] = {**P["macro"], **P["builds"][BUILD]["macro"]}
 F = P["face"]
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -75,42 +76,26 @@ def smoothstep(e0, e1, x):
     return t * t * (3 - 2 * t)
 
 
-# --- An MPFB human, its modelling targets baked into the mesh ---------------------------
-for o in list(bpy.data.objects):
-    bpy.data.objects.remove(o)
-human = HumanService.create_human(mask_helpers=False, feet_on_ground=True, scale=0.1, macro_detail_dict=P["macro"])
-for name, weight in P.get("targets", {}).items():
-    TargetService.load_target(human, TargetService.target_full_path(name), weight=weight, name=name)
-keys = human.data.shape_keys.key_blocks
-basis = coords(keys[0])
-X = basis.copy()
-for k in keys[1:]:
-    X += k.value * (coords(k) - basis)
-human.shape_key_clear()
-human.data.vertices.foreach_set("co", X.astype(np.float32).ravel())
-human.data.update()
-
-# --- The face units kept on the skin (the jaw, the cheeks), and mouthSmile to find the mouth corners -----
-SKIN = {c: g for c, g in F["skinUnits"].items() if not c.startswith("$")}
-human.shape_key_add(name="Basis")
-offsets = {}
-for c in [*SKIN, "mouthSmileLeft", "mouthSmileRight"]:
-    TargetService.load_target(human, os.path.join(FU_DIR, c + ".target"), weight=0.0, name=c)
-    off = coords(human.data.shape_keys.key_blocks[c]) - X
-    off[np.linalg.norm(off, axis=1) < 1e-6] = 0.0  # float32 noise, so the targets stay sparse
-    offsets[c] = off
-human.shape_key_clear()
-
-# --- Vertex groups (MPFB's) and rig weights (MPFB's mixamo weights, by vertex index) ------
-groups = {g.index: g.name for g in human.vertex_groups}
-members = {}
-for v in human.data.vertices:
-    for g in v.groups:
-        members.setdefault(groups[g.group], []).append(v.index)
-members = {k: np.array(v) for k, v in members.items()}
+# --- An MPFB human, its modelling targets baked into the mesh; its proportions; the fit ----------------
 rig_dir = os.path.join(LocationService.get_mpfb_data("rigs"), "standard")
 wjson = json.load(open(os.path.join(rig_dir, "weights.mixamo.json")))["weights"]
-N = len(X)
+
+
+def make_human(macro):
+    for o in list(bpy.data.objects):
+        bpy.data.objects.remove(o)
+    h = HumanService.create_human(mask_helpers=False, feet_on_ground=True, scale=0.1, macro_detail_dict=macro)
+    for name, weight in P.get("targets", {}).items():
+        TargetService.load_target(h, TargetService.target_full_path(name), weight=weight, name=name)
+    keys = h.data.shape_keys.key_blocks
+    basis = coords(keys[0])
+    X = basis.copy()
+    for k in keys[1:]:
+        X += k.value * (coords(k) - basis)
+    h.shape_key_clear()
+    h.data.vertices.foreach_set("co", X.astype(np.float32).ravel())
+    h.data.update()
+    return h, X
 
 
 def weight_of(*bones):
@@ -130,35 +115,90 @@ def scale_about(at, pivot, s, w):
     return pivot + (at - pivot) * (1 + (s - 1) * w)[:, None]
 
 
-pr = P["proportions"]
-w_head = np.clip(weight_of("Head") + pr["head"]["neckShare"] * weight_of("Neck"), 0, 1)
-# MPFB's eye helpers carry no rig weight; they belong to the head in full, or the scale leaves them behind.
-for side in ("l", "r"):
-    w_head[members[f"helper-{side}-eye"]] = 1.0
-neck = centre("joint-neck", X)
-out_ref = scale_about(X, neck, pr["head"]["scale"], w_head)
+def proportioner(X):
+    pr = P["proportions"]
+    w_head = np.clip(weight_of("Head") + pr["head"]["neckShare"] * weight_of("Neck"), 0, 1)
+    # MPFB's eye helpers carry no rig weight; they belong to the head in full, or the scale leaves them behind.
+    for side in ("l", "r"):
+        w_head[members[f"helper-{side}-eye"]] = 1.0
+    neck = centre("joint-neck", X)
+    out_ref = scale_about(X, neck, pr["head"]["scale"], w_head)
+
+    def proportion(at):
+        out = scale_about(at, neck, pr["head"]["scale"], w_head)
+        for side in ("Left", "Right"):
+            bones = [f"{side}Hand"] + [f"{side}Hand{f}{n}" for f in ["Thumb", "Index", "Middle", "Ring", "Pinky"] for n in (1, 2, 3)]
+            wrist = out_ref[members[f"joint-{SIDES[side]}-hand"]].mean(axis=0)
+            out = scale_about(out, wrist, pr["hands"]["scale"], weight_of(*bones))
+        return out
+    return proportion
 
 
-def proportion(at):
-    out = scale_about(at, neck, pr["head"]["scale"], w_head)
-    for side in ("Left", "Right"):
-        bones = [f"{side}Hand"] + [f"{side}Hand{f}{n}" for f in ["Thumb", "Index", "Middle", "Ring", "Pinky"] for n in (1, 2, 3)]
-        wrist = out_ref[members[f"joint-{SIDES[side]}-hand"]].mean(axis=0)
-        out = scale_about(out, wrist, pr["hands"]["scale"], weight_of(*bones))
-    return out
+def standing(base):
+    """Stands on the ground, scaled uniformly to the height (head top, helpers excluded); the scale."""
+    body = members["body"]
+    base[:, 2] -= base[body, 2].min()
+    s = P["height"] / base[body, 2].max()
+    base *= s
+    return s
 
 
+# The fit (fit.py) is found on the medium build and its moves are added to every build, so the builds
+# keep their differences (same topology, same vertex order).
+medium_macro = {k: v for k, v in P["macro"].items()}
+for k in P["builds"][BUILD]["macro"]:
+    medium_macro[k] = P["builds"]["medium"]["macro"].get(k, MACRO0[k])
+fit_report = {}
+FIT = P.get("fit")
+if FIT and FIT.get("enabled", True):
+    human, X = make_human(medium_macro)
+    groups = {g.index: g.name for g in human.vertex_groups}
+    members = {}
+    for v in human.data.vertices:
+        for g in v.groups:
+            members.setdefault(groups[g.group], []).append(v.index)
+    members = {k: np.array(v) for k, v in members.items()}
+    N = len(X)
+    med = proportioner(X)(X)
+    standing(med)
+    is_body0 = np.zeros(N, dtype=bool)
+    is_body0[members["body"]] = True
+    polys0 = [list(p.vertices) for p in human.data.polygons if is_body0[list(p.vertices)].all()]
+    import fit as fitmod
+    _, FIT_MOVES = fitmod.fit(med, is_body0, polys0, members, weight_of, [k[len(PREFIX):] for k in wjson], FIT, os.path.join(os.path.dirname(os.path.abspath(__file__)), FIT["target"]), fit_report)
+
+human, X = make_human(P["macro"])
+
+# --- The face units kept on the skin (the jaw, the cheeks), and mouthSmile to find the mouth corners -----
+SKIN = {c: g for c, g in F["skinUnits"].items() if not c.startswith("$")}
+human.shape_key_add(name="Basis")
+offsets = {}
+for c in [*SKIN, "mouthSmileLeft", "mouthSmileRight"]:
+    TargetService.load_target(human, os.path.join(FU_DIR, c + ".target"), weight=0.0, name=c)
+    off = coords(human.data.shape_keys.key_blocks[c]) - X
+    off[np.linalg.norm(off, axis=1) < 1e-6] = 0.0  # float32 noise, so the targets stay sparse
+    offsets[c] = off
+human.shape_key_clear()
+
+# --- Vertex groups (MPFB's) and rig weights (MPFB's mixamo weights, by vertex index) ------
+groups = {g.index: g.name for g in human.vertex_groups}
+members = {}
+for v in human.data.vertices:
+    for g in v.groups:
+        members.setdefault(groups[g.group], []).append(v.index)
+members = {k: np.array(v) for k, v in members.items()}
+N = len(X)
+
+proportion = proportioner(X)
 base = proportion(X)
 skin_moved = {c: proportion(X + off) - base for c, off in offsets.items()}
-
-# Stand on the ground and scale uniformly to the height (head top, helpers excluded).
-body = members["body"]
-ground = base[body, 2].min()
-base[:, 2] -= ground
-s = P["height"] / base[body, 2].max()
-base *= s
+s = standing(base)
 for c in skin_moved:
     skin_moved[c] *= s * SKIN.get(c, 1.0)
+body = members["body"]
+if FIT and FIT.get("enabled", True):
+    base += FIT_MOVES
+    base[:, 2] -= base[body, 2].min()
 
 is_body = np.zeros(N, dtype=bool)
 is_body[body] = True
@@ -567,6 +607,17 @@ for poly in human.data.polygons:
     if slots[poly.material_index] in ("skin", "top"):
         poly.material_index = slots.index("top" if c.z < z0 + cl["tilt"] * (c.y - y0) else "skin")
 
+# The trouser hems: at the ankles the vote leaves a ragged edge too (and the fit moves it), so a level plane
+# `raise` (m) above the top of the feet' faces decides there instead (shoe below, trousers above).
+cf = P["garments"]["cuff"]
+foot_z = np.array([human.data.vertices[i].co.z for i in range(len(vbone)) if vbone[i] in ("LeftToeBase", "RightToeBase")])
+zc = float(foot_z.max()) + cf["raise"]
+for poly in human.data.polygons:
+    if poly.index >= n_body_polys or abs(poly.center.z - zc) > cf["band"]:
+        continue
+    if slots[poly.material_index] in ("trousers", "shoes", "skin"):
+        poly.material_index = slots.index("shoes" if poly.center.z < zc else "trousers")
+
 # --- Remove helper geometry and joint cubes -----------------------------------------------
 drop = set(members["HelperGeometry"].tolist()) | set(members["JointCubes"].tolist())
 bm = bmesh.new()
@@ -657,7 +708,7 @@ report = {
     "bones": [b.name for b in rig.data.bones],
     "materials": {n: sum(1 for p in human.data.polygons if p.material_index == i) for i, n in enumerate(slots)},
     "credits": credits, "build": BUILD, "landmarks": {k: round(v, 4) for k, v in land.items()},
-    "garments": garment_report, "hair": hair_report, "glasses": glasses_report,
+    "garments": garment_report, "hair": hair_report, "glasses": glasses_report, "fit": fit_report,
 }
 json.dump(report, open(REPORT, "w"), indent=2)
 print("HOUSE_BASE_DONE", OUT)
