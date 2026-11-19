@@ -10,16 +10,18 @@ ordinary hologram GLB, and review whether it reads. Run everything from `apps/ca
 |---|---|
 | `acting-report.ts <take.glb> [--against other.glb] [--json out.json]` | Per performer (found by skin): which bones and face shapes move and when, frozen spans, and whether fingers, face and eyes ever move. `--against` lists the spans where two takes differ. |
 | `avatar-audition.ts <avatar.glb\|.gltf> [--geometry] [--out dir] [--json out.json]` | Grades any avatar against the audition bar (`lib/audition-bar.ts`): one row per bar with its measured value and pass or fail, in `audition.json` (below). Exits 1 when a binding row fails. |
-| `direct.ts <sheet.json> [--out take.glb] [--style flat\|directed] [--against earlier.glb]` | Solves the beat sheet on each performer's avatar, writes the GLB and the sheet beside it (and, with objects, `<take>.objects.json`), prints each reach's stop-short distance, each grip, put and aim's miss, and the acting report. Exits 1 when a grip, put or aim misses past its limit (the files are still written). |
-| `house-base.ts [--params file] [--out file.glb] [--blender path] [--install-mpfb]` | Makes the house base avatar (slice 2c) from CC0 parts in headless Blender: fetches MPFB 2.0.18 and the faceunits01 pack at pinned sha256 into `output/authoring/house-base/cache/`, runs `house-base/build.py` with every value from `house-base/base.json`, and writes `public/gltf/models/house-base.glb` with its credits in `asset.copyright` and the scene's `holoimAvatar` extras. Change the look in `base.json`, never in the GLB. Re-runs give the same geometry, but Blender may order the eye and mouth triangles differently, so the sha256 can change. |
+| `direct.ts <sheet.json> [--out take.glb] [--style flat\|directed] [--against earlier.glb] [--avatar spec]` | Solves the beat sheet on each performer's avatar (`--avatar` casts every performer on that avatar instead: a spec as in a sheet, or a GLB path relative to the working directory), writes the GLB and the sheet beside it (and, with objects, `<take>.objects.json`; with sound, each padded source in `<take>.audio/`), prints each reach's stop-short distance, each grip, put and aim's miss, each sound's place and padded length, and the acting report. Exits 1 when a grip, put or aim misses past its limit (the files are still written). |
+| `house-base.ts [--params file] [--build name] [--out file.glb] [--blender path] [--install-mpfb]` | Makes the house base avatar (slice 2c) from CC0 parts in headless Blender: fetches MPFB 2.0.18 and the faceunits01 pack at pinned sha256 into `output/authoring/house-base/cache/`, and runs `house-base/build.py` with every value from `house-base/base.json` once per build in its `builds`, writing `assets/house-base/wardrobe-<build>.glb` (the body, loose garments, and every hair and glasses part). It then writes `public/gltf/models/house-base.glb`, the medium wardrobe dressed in base.json's `defaultLook` by `@holoim/avatar-look`, with its credits in `asset.copyright` and the scene's `holoimAvatar` extras. `--build` makes only that wardrobe (to `--out` if given) and leaves the public file alone. Change the look in `base.json`, never in the GLB. Re-runs give the same geometry, but Blender may order the eye and mouth triangles differently, so the sha256 can change. Run with `node --conditions=development --import tsx`. |
+| `house-traits.ts [--geometry] [--only n]` | Slice 2d's trait audition: dresses eight looks that between them cover every trait value at its extreme (it fails if one is missing), auditions each, and writes `output/authoring/house-traits/<n>-<look>/audition.json` and `report.json` (fails, rows not run, size per look). Exits 1 on any fail. Run with `node --conditions=development --import tsx`. |
 | `import-take.ts <recorded.glb> [--out dir] [--fps n]` | Turns a capture-recorded GLB into the tool's own take (`lib/take.ts`, `<name>.take.json`): bone rotations away from bind, the hips' path, face channels and measures, resampled to 30 fps, with the beats found in its motion. Writes `<name>.import.md`. |
 | `recast-take.ts <take.json\|recorded.glb> --to <avatar> [--to …] [--out dir]` | Plays the take on each avatar (`stock`, `fixture:<name>` or a path) as an ordinary hologram GLB, and writes `<name>.recast.md` / `.json`: what survives and what is lost (hips, feet, limbs, wrist placement, face, gaze), against rotation-only retargeting on the same avatar. |
 | `edit-take.ts <edit.json> [--to <avatar>] [--out dir]` | Applies an edit file (`lib/edit.ts`: retime, hold, look) to a take, writes the edited take and both the original and edited takes on the avatar, and `<name>.edit.md` / `.json`. Exits 1 when a frame outside the edits differs from the recording. |
 | `compare-takes.ts <person.glb> <agent.glb> [--out dir]` | The acting report and motion numbers (beats, hold stillness, hand speed, hesitations and back-and-forth strokes, head range, travel) on two takes side by side, in `<a>-vs-<b>.compare.md` / `.json`. |
-| `review.ts <take.glb> [--sheet take.beats.json] [--out dir] [--step 0.2] [--fps 30] [--until s] [--card-only] [--orbit deg]` | Plays the take in viewer-web and writes a review pack (below): a real-time H.264 video at feed-card size and a close view per performer, frame sheets every `--step` s, the acting report, the face's height and per-second travel on the card, and a comparison to fill in. Same ports as `viewer-check.ts`. |
+| `review.ts <take.glb> [--sheet take.beats.json] [--out dir] [--step 0.2] [--fps 30] [--until s] [--card-only] [--orbit deg]` | Plays the take in viewer-web and writes a review pack (below): a real-time H.264 video at feed-card size and a close view per performer (with sound: the take's own, mixed from clip time 0, and a face view per performer so the lips can be read), frame sheets every `--step` s, the acting report, the face's height and per-second travel on the card, and a comparison to fill in. Same ports as `viewer-check.ts`. |
 | `six-second-test.ts prepare <sheet.json> [--avatars stock,house-base] [--until 6] [--orbit 90] [--out dir]` / `score <dir>` | The six-second test (below): builds a flat and a directed take per avatar, renders the first six seconds muted at card size and after an orbit as blind frame sheets, and, after fresh readers and graders have answered, scores each take against the sheet's intent. |
 | `publish.ts <take.glb\|sheet.json> [--title t] [--description d] [--credit c] [--api <origin>] [--web <origin>] [--production] [--no-quick-look] [--check]` | Validates a take and publishes it through the normal upload route (below). |
-| `viewer-check.ts <take.glb> [--video out.mp4] [--frames dir] [--report out.json]` | Uploads the take to a local test API, opens it in a viewer-web test build and reads what plays: moving bones, fingers and face shapes per performer, which performer holds the humanoid the viewer anchors on, and each recorded object (meshes, whether it moves, its credit). `--video` records it as H.264; `--frames` saves twelve paused stills at exact take times. Uses ports 3341 and 3214 (`VIEWER_CHECK_API_PORT`, `VIEWER_CHECK_WEB_PORT`). |
+| `viewer-check.ts <take.glb> [--video out.mp4] [--frames dir] [--report out.json]` | Uploads the take to a local test API, opens it in a viewer-web test build and reads what plays: moving bones, fingers and face shapes per performer, which performer holds the humanoid the viewer anchors on, and each recorded object (meshes, whether it moves, its credit). `--video` records it as H.264; `--frames` saves twelve paused stills at exact take times; `--audio out.webm` presses the card's unmute control, records what the card sends to its speakers over one real-time pass, and prints where each sound in the file is heard (exit 1 when one is not heard within 100 ms of its place); with `--video` that recording is the video's soundtrack. Uses ports 3341 and 3214 (`VIEWER_CHECK_API_PORT`, `VIEWER_CHECK_WEB_PORT`). |
+| `speech-report.ts <take.glb> [--json out.json]` | Reads a take with sound from the GLB alone: decodes each `KHR_audio` source as embedded (its length against the clip, where it sounds) and measures the mouth opening (mm along each face mesh's own `jawOpen`, else `mouthOpen`, else `viseme_aa`) against the voice: each phrase's mouth onset against its sound, the mouth in the voice's pauses, and how closely it follows the loudness; with the sheet beside the take, each line's first sound against its beat. Exits 1 past its bars (below). |
 
 ## Publishing a take
 
@@ -101,8 +103,10 @@ named. The bar's numbers are provisional (`docs/features/directed-performance.md
 types are in `lib/beats.ts`. A sheet has a `duration`, `performers` (an
 `avatar`, a stage position `at: [x, z]` and `facing` degrees about +Y, 0
 facing +Z), named `marks`, and `beats`. A performer's `avatar` is `stock`, a
-`fixture:<name>` from `scripts/lib/avatar-fixtures.ts`, or a path relative to
-the sheet. The first performer is the one the viewer frames.
+`fixture:<name>` from `scripts/lib/avatar-fixtures.ts`, a path relative to
+the sheet, or `house:clay` with a `look` card (`@holoim/avatar-look`; see
+`sheets/poem-pair.json`), which `direct.ts` dresses from the build's
+wardrobe and records in the GLB's `asset.extras.holoim.looks`. The first performer is the one the viewer frames.
 
 A sheet states its `intent`, what a viewer should come away with, and each
 beat its own `intent`, in a viewer's words ("she wants him to stay"); `note`
@@ -177,6 +181,60 @@ Each direction is a closed form of time, so revising one beat changes only its
 own span; a `whole` turn and a step also move what follows. Check with
 `direct.ts <sheet> --out revised.glb --against earlier.glb`.
 
+## Sound: a spoken line, lips and an effect
+
+Sound brief slice 1a (`docs/features/sound-voice-captions.md`). A beat can
+say a line, and a sheet can tie an effect to a put; both are written into
+the take as `KHR_audio`, which the feed card and Quick Look already play.
+
+```json
+{ "id": "turn", "performer": "p", "at": 4.6, "hold": 2.6,
+  "say": { "text": "That one is the tallest. Almost twice the first.", "voice": "local:af_heart" } }
+...
+"sounds": [{ "id": "clink", "file": "synth:cup-clink", "at": { "beat": "put", "event": "put" }, "on": "cup" }]
+```
+
+- **Voice.** `local:<voice>` speaks the text with Kokoro-82M (kokoro-js
+  1.2.1 and onnx-community/Kokoro-82M-v1.0-ONNX q8, both Apache-2.0) on this
+  machine: no key, no cost. Its phonemiser (phonemizer 1.2.1) runs eSpeak
+  NG, GPL-3.0, as WASM; nothing of it is committed or shipped, only the
+  audio it helps make. The first build installs them at pinned versions into
+  the ignored `output/authoring/tools/kokoro/` (the model, 96 MB, is cached
+  there too), and each line is cached in `output/authoring/sound/` by a
+  hash of the versions, voice and text. `file:<path>` takes a recording
+  instead (relative to the sheet) and needs a `credit`. A line is placed by
+  its first voiced sound, so a voice's lead-in silence does not make it
+  late; `delay` (s after the beat, never before) and `gain` are optional.
+- **Lips.** `lib/lips.ts` lays the line's phones (from the same
+  phonemiser) over the voiced time of the audio itself, and turns them into
+  the 15 Oculus visemes, which `@holoim/avatar-face` routes onto any avatar
+  that passes the audition (its own viseme shapes, else `jawOpen` and the lip
+  shapes). The mouth leads the sound by 40 ms, opens with the voice's
+  loudness and closes in its pauses; the face's life yields while the line
+  plays. The flat style has no face, so no lips.
+- **Effects.** `synth:cup-clink` is generated here (CC0, this project's own);
+  a file path takes a free-licence recording with its `credit`. `at` names a
+  beat, optionally its `put` landing, plus a `delay`; `on` is an object, or
+  `<performer>.head`. Each place carries one sound (one emitter per node),
+  so a performer speaks one line per take for now.
+- **In the file.** KHR_audio has no start time: the viewer and the Quick Look
+  converter start every source at clip time 0 and loop it with the clip. So
+  each source is padded with silence to the clip length, encoded as
+  Opus (64 kbps mono, 48 kHz, which needs an ffmpeg with libopus: `FFMPEG`,
+  else the first `ffmpeg` that has it, Homebrew's included) and checked
+  against the clip within a frame. Each sound is a positional emitter on its
+  node: the voice on the performer's head bone, an effect on its object.
+  Credits go into `asset.copyright` and `asset.extras.holoim.sounds`.
+- **Checks.** `speech-report.ts <take.glb>` bars, set before the first
+  measurement: every source within a frame of the clip, each phrase's mouth
+  onset within ±80 ms of its sound, the mouth in pauses of 0.25 s or more
+  below 15 % of its speaking level, and a correlation with the loudness of at
+  least 0.4, and each line's first sound within a frame of its beat (when
+  the sheet is beside the take). `viewer-check.ts <take.glb> --audio heard.webm` hears the card.
+
+The example is `sheets/spoken-line.json`, which is `tallest-bar` with a line
+on its turn and a clink on its put.
+
 ## Objects and a set
 
 A sheet's `objects`, keyed by id, are the set and the props, written into the
@@ -223,6 +281,59 @@ an object while a beat names it, and while it is held. `on-screen.json`
 gives each object's size on the card. The 1c reader who saw the pointer
 aimed at nothing was given stills cropped to the cast, a fault in the review
 tool, not in the viewer (fixed).
+
+## Change in the world
+
+A sheet's `world` lists what changes in the set, one line each:
+
+- `{ "kind": "pour", "object": "can" }`: drops leave a held tool's tip while
+  its axis points below `tilt` (degrees under the horizontal, 0), more of
+  them the further it tips (`rate` 60 a second at full flow), at `speed`
+  0.8 m/s along the axis, and fall under gravity to land where the aim
+  points (`onto`, else the target of the beat that aims that object).
+  Each drop is a `size` 0.045 m bead (about 8 px wide on the card) stretched along its fall so drops overlap into a stream (`color` a light water blue).
+  `wet` (0.06 m, or `false`) leaves a darker disc on the surface that grows as
+  water lands and stays to the end.
+- `{ "kind": "burst", "at", "when" }`: `count` 24 sparks thrown `spread`
+  0.25 m out over the upper half, gone within `life` 1.2 s.
+- `{ "kind": "drift", "at", "when", "until" }`: `count` 12 motes released
+  between the two cues, each rising `rise` 0.3 m over about `life` 2 s.
+- `{ "kind": "change", "object", "when" }`: the object turns (`turn`
+  `[x, y, z]` degrees), scales (`scale`, one number or three), lifts (`lift`
+  m) or changes colour (`color`, in `steps` 4) over `over` 1.5 s, eased, from
+  `from` (or where its last change left it) to the state the line names.
+  What a line leaves out returns to how the sheet made the object, so
+  `{ "when": 5.3, "from": { "turn": [36, 0, 16] } }` stands a slumped plant
+  back up. A line with `show` (`true` or `false`) and nothing else makes the
+  object appear or disappear at its cue.
+
+A cue is seconds, a beat id (its `at`) or `<beat>.end`. A point is an
+object's anchor, a mark or `[x, y, z]`. The build prints a line per change
+(how many drops, where they land, the colour steps, when the object is
+present) and fails on a cue outside the take, a pour with no tool axis, a
+held object made to appear or disappear, a colour change on a sourced
+model (it keeps its own materials), a pour aimed at a performer point or a
+place (give `onto`), an object that changes again before its last change
+ends, or one shown and hidden at the same time. A pour whose tool never
+tips far enough only says so (`no water`).
+
+Limits: a world point follows its object's own track, not its change, so
+a drift at `lamp.top` after the lamp lifts starts where the lamp was, and
+an object `on` a changing one does not follow the change. A drop aims at
+where its target is when it leaves the spout. Unknown keys are refused
+only on `change` lines.
+
+Everything is node animation, so it plays on the card, in AR and in
+Quick Look: each pour, burst or drift is a summoned `RecordedObject` whose
+children are the drops or motes (a pour's drops take turns on about sixteen
+nodes, keyed on the take's own frames, which keeps the Quick Look readback
+within its time limit), and a changing object gains a
+`<id>-change` node between its wrapper and its shape. Quick Look cannot
+blend a colour: a colour change is `steps` copies of the shape, one shown at
+a time, so it changes in visible steps everywhere. Drops are rigid beads,
+not a fluid; nothing splashes or soaks in beyond the wet disc.
+`sheets/world-test.json` exercises every line but the pour; `watering.json`
+pours.
 
 ## A recorded take as input
 
@@ -297,7 +408,7 @@ A take reads when someone who was not told the intent sees it. The loop:
 1. **Build:** `direct.ts sheets/<piece>.json`.
 2. **Review:** `review.ts output/authoring/<piece>.glb`. The pack goes to
    `output/authoring/review/<piece>/`:
-   - `reader/`: `review.mp4` (card left, close views right, real time; not written with `--card-only`, which also skips the close sheets, and `--until` cuts the take short),
+   - `reader/`: `review.mp4` (card left, close views right, real time; for a take with sound, the take's sound and a face view per performer, rightmost, with `sheet-face-<performer>-NN.jpg`; not written with `--card-only`, which also skips the close and face sheets, and `--until` cuts the take short),
      `sheet-card-NN.jpg` (the card framing cropped to the cast at the
      phone's true device pixels), `sheet-close-<n>-NN.jpg`, one still every
      0.2 s labelled with the time only, and the reader's `README.md`;
@@ -328,10 +439,8 @@ minute; `node packages/tooling-testing/src/preview.mjs <dir>` (from the
 repository root) tiles them.
 
 Not covered by these tools yet (`docs/features/directed-performance.md`,
-"Not covered yet"): change in the world (water, a plant that responds),
-handing an object between performers, collisions, and publishing.
-A take is published like a showcase piece, with
-`scripts/showcase/upload.mjs`.
+"Not covered yet"): handing an object between performers and collisions.
+Publishing is `publish.ts` ("Publishing a take" above).
 
 ## The file
 
@@ -340,8 +449,9 @@ each under a wrapper node: the first is `RecordedAvatar` and the only one
 declared in `HOLOIM_humanoid` (listed in `extensionsUsed` only), as a captured
 export does. `asset.extras.holoim.authored` is `synthetic`, with the author,
 title and method, as showcase pieces mark themselves. The published format is
-unchanged. The writer registers no glTF extensions, so an avatar's own (VRM,
-MToon, `KHR_materials_*`) are not carried into the take.
+unchanged. The writer registers no glTF extensions but `KHR_audio` when the take has
+sound, so an avatar's own (VRM, MToon, `KHR_materials_*`) are not carried
+into the take.
 
 The solver imports capture's `AvatarRig`, `HumanoidSkeleton`, `FaceRig`,
 `LivenessFace`, `ArmIkSolver`, `legIk` and `palmFrame` and never edits them;

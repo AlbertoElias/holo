@@ -40,10 +40,11 @@ export interface GaitState {
 }
 
 /**
- * The shipped walk's stride is short for a brisk 1.8 m/s walk, so its cadence would be a scurry and its swing foot
- * would whip. Laying each stride down longer, and playing the clip slower to match, keeps the planted foot still.
+ * The shipped walk (CMU 07_12) was recorded faster than the desktop's 1.8 m/s; played at that pace on its own
+ * stride its cadence is a touch quick (~130 steps/min). Laying each stride 10% longer, and playing the clip slower to match, walks at ~116
+ * steps/min with a softer swing (docs/features/realistic-avatar-motion.md).
  */
-const WALK_STRIDE_SCALE = 1.2;
+const WALK_STRIDE_SCALE = 1.1;
 
 export function inStance(gait: WalkGait, leg: GaitLeg, phase: number): boolean {
   const { land, lift } = gait.stance[leg];
@@ -73,6 +74,7 @@ const WALK_TIME_SCALE_BASE = 1.4;
 const WALK_TIME_SCALE_MIN = 0.15;
 const WALK_TIME_SCALE_MAX = 3;
 const GAIT_SAMPLES = 96;
+const HIPS_BOB_SIGMA_SEC = 0.04;
 const WALK_LOOP_QUAT_MATCH_DOT = 0.99995;
 const WALK_STATE_SPEED_THRESHOLD = 0.12;
 const WALK_FADE_SEC = 0.08;
@@ -99,6 +101,7 @@ function parseTrackName(trackName: string): { nodeName: string; property: 'posit
 export class LocomotionAnimator {
   private mixer: THREE.AnimationMixer | null = null;
   private lowerBodyNames: ReadonlySet<string> | undefined;
+  private armNames: ReadonlySet<string> | undefined;
   private rootMotionNames: ReadonlySet<string> | undefined;
   private readonly actionsByProfile: Record<LocomotionProfile, Partial<Record<LocomotionState, THREE.AnimationAction>>> = {
     'desktop-full': {},
@@ -166,9 +169,11 @@ export class LocomotionAnimator {
    */
   attachClips(root: THREE.Object3D, ownClips: THREE.AnimationClip[], humanoid?: HumanoidSkeleton, retargeted: readonly THREE.AnimationClip[] = []): void {
     this.lowerBodyNames = undefined;
+    this.armNames = undefined;
     this.rootMotionNames = undefined;
     if (humanoid) {
       this.lowerBodyNames = LocomotionAnimator.boneKeys(humanoid, LOWER_BODY_BONES);
+      this.armNames = LocomotionAnimator.boneKeys(humanoid, VRM_HUMANOID_BONES.filter((b) => /Shoulder|Arm|Hand|Thumb|Index|Middle|Ring|Little/.test(b)));
       this.rootMotionNames = new Set([...LocomotionAnimator.boneKeys(humanoid, ['hips']), 'armature', 'root']);
     }
     const own = !humanoid || LocomotionAnimator.usesOwnClips(ownClips, humanoid);
@@ -301,12 +306,13 @@ export class LocomotionAnimator {
     if (!measured) return undefined;
     const { soles, restSole } = measured;
     const n = soles.length;
-    // Lightly smoothed (circular, ±2 samples) so a foot's roll from heel to toe does not shake the body.
-    const drop = soles.map((_, i) => {
-      let sum = 0;
-      for (let k = -2; k <= 2; k++) sum += soles[(i + k + n) % n]! - restSole;
-      return sum / 5;
-    });
+    // Smoothed (circular Gaussian, σ HIPS_BOB_SIGMA_SEC): the lower sole switches feet at each
+    // footfall, a corner a person's pelvis rounds off, and a foot's roll from heel to toe must not shake the body.
+    const sigma = Math.max(1, (HIPS_BOB_SIGMA_SEC / clip.duration) * n);
+    const reach = Math.ceil(sigma * 3);
+    const weights = Array.from({ length: 2 * reach + 1 }, (_, k) => Math.exp(-(((k - reach) / sigma) ** 2) / 2));
+    const total = weights.reduce((a, b) => a + b, 0);
+    const drop = soles.map((_, i) => weights.reduce((sum, w, k) => sum + w * (soles[(((i + k - reach) % n) + n) % n]! - restSole), 0) / total);
     root.updateWorldMatrix(true, true);
     const parentQuat = hips.parent.getWorldQuaternion(new THREE.Quaternion()).invert();
     const parentScale = Math.abs(hips.parent.getWorldScale(new THREE.Vector3()).y) || 1;
@@ -531,14 +537,16 @@ export class LocomotionAnimator {
   }
 
   private preprocessClip(clip: THREE.AnimationClip, profile: LocomotionProfile): THREE.AnimationClip | undefined {
-    const isIdleClip = CLIP_MATCHERS.idle.test(clip.name);
+    // "Standing Jump" or "Stand To Fall" is not an idle.
+    const isIdleClip = CLIP_MATCHERS.idle.test(clip.name) && !LOCOMOTION_STATES.some((state) => state !== 'idle' && CLIP_MATCHERS[state].test(clip.name));
     const isWalkClip = CLIP_MATCHERS.walk.test(clip.name);
     const tracks = clip.tracks
       .filter((track) => this.shouldKeepTrack(track.name, profile, isIdleClip))
       .map((track) => track.clone())
       .map((track) => this.trimWalkLoopTail(track, isWalkClip))
       // A walk keyed at a few poses with straight-line blends jerks the feet at every key; play it as a smooth loop.
-      .map((track) => (isWalkClip && profile === 'desktop-full' ? LocomotionAnimator.smoothLoop(track, clip.duration) : track));
+      .map((track) => (isWalkClip && profile === 'desktop-full' ? LocomotionAnimator.smoothLoop(track, clip.duration) : track))
+      .map((track) => (isIdleClip && profile === 'desktop-full' ? LocomotionAnimator.holdFirstKey(track, clip.duration) : track));
     if (tracks.length === 0) return undefined;
     const processed = new THREE.AnimationClip(clip.name, -1, tracks);
     processed.resetDuration();
@@ -554,12 +562,25 @@ export class LocomotionAnimator {
       return false;
     }
     if (profile === 'desktop-full') {
-      if (isIdleClip && parts.property === 'quaternion' && this.isLowerBodyTarget(parts.nodeName)) {
-        return false;
-      }
+      // On desktop the idle only lowers the arms (holdFirstKey): its torso and head lean would move the shoulder and
+      // eyes the desktop reach, carry and aim are tuned from, and the legs stand on the terrain IK. (VR plays no idle.)
+      if (isIdleClip) return parts.property === 'quaternion' && this.isArmTarget(parts.nodeName);
       return true;
     }
     return parts.property === 'quaternion' && this.isLowerBodyTarget(parts.nodeName);
+  }
+
+  /**
+   * The track held at its first key for the whole clip. The desktop arms stand in the idle's pose (down, on any rest
+   * pose, so a T-pose avatar does not swing them down when it starts walking) but without its sway, which would move
+   * the hand the desktop reach, carry and set-down are tuned from (docs/features/realistic-avatar-motion.md,
+   * follow-ups). Two keys, so the clip keeps a nonzero duration to loop over.
+   */
+  private static holdFirstKey(track: THREE.KeyframeTrack, duration: number): THREE.KeyframeTrack {
+    const size = track.getValueSize();
+    const first = Array.from(track.values.slice(0, size));
+    const TrackType = track.constructor as new (name: string, times: number[], values: number[]) => THREE.KeyframeTrack;
+    return new TrackType(track.name, [0, Math.max(duration, 1 / 30)], [...first, ...first]);
   }
 
   /**
@@ -672,6 +693,12 @@ export class LocomotionAnimator {
   private isRootMotionTarget(nodeName: string): boolean {
     if (this.rootMotionNames) return this.rootMotionNames.has(nodeName);
     return ROOT_MOTION_TARGETS.some((target) => nodeName === target || nodeName.endsWith(target));
+  }
+
+  /** Shoulders, arms, hands and fingers: by canonical bone with a humanoid, else by the shipped rig's names. */
+  private isArmTarget(nodeName: string): boolean {
+    if (this.armNames) return this.armNames.has(nodeName);
+    return /(shoulder|arm|hand)/i.test(nodeName) && !/armature/i.test(nodeName);
   }
 
   private isLowerBodyTarget(nodeName: string): boolean {

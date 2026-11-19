@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { AvatarRig } from '../avatar/AvatarRig';
 import { inStance, type GaitLeg, type GaitState } from './LocomotionAnimator';
+import { TerrainHeightIndex, WALKABLE_NORMAL_Y } from './TerrainHeightIndex';
 
 /**
  * How a foot is placed on the animation path:
@@ -66,6 +67,10 @@ const STEP_TOLERANCE_RATIO = 0.05;
  * a walk lands on a nearly straight leg, and the IK holds the rest by drawing the foot in, a slide kept under 3 cm.
  */
 const OVERSTRETCH = 1.03;
+/** A foot tilts toward its ground's slope by at most this much: on a steeper face it stands as on this slope. */
+const MAX_FOOT_TILT_DEG = 40;
+const MAX_FOOT_TILT_COS = Math.cos(THREE.MathUtils.degToRad(MAX_FOOT_TILT_DEG));
+const MAX_FOOT_TILT_SIN = Math.sin(THREE.MathUtils.degToRad(MAX_FOOT_TILT_DEG));
 
 const smooth = (t: number) => t * t * (3 - 2 * t);
 
@@ -80,10 +85,7 @@ export class TerrainLegSolver {
   private avatar: THREE.Object3D | undefined;
   private legs: Leg[] = [];
   private readonly originals = new Map<THREE.Bone, THREE.Quaternion>();
-  private readonly ray = new THREE.Raycaster();
-  private readonly down = new THREE.Vector3(0, -1, 0);
   private readonly up = new THREE.Vector3(0, 1, 0);
-  private readonly normalMatrix = new THREE.Matrix3();
   private samples: LegSample[] = [];
   private readonly lastRoot = new THREE.Vector3();
   private hasLastRoot = false;
@@ -199,7 +201,12 @@ export class TerrainLegSolver {
           const contact = 1 - THREE.MathUtils.smoothstep(target.y - surface.point.y - sole, height * 0.025, height * 0.15);
           const worldRotation = gait ? animatedQuat : leg.foot.getWorldQuaternion(new THREE.Quaternion());
           const footUp = leg.upInFoot.clone().applyQuaternion(worldRotation);
-          const tilt = new THREE.Quaternion().setFromUnitVectors(footUp, surface.normal);
+          const support = surface.normal.clone();
+          if (support.y < MAX_FOOT_TILT_COS) {
+            const across = Math.hypot(support.x, support.z);
+            support.set(support.x / across * MAX_FOOT_TILT_SIN, MAX_FOOT_TILT_COS, support.z / across * MAX_FOOT_TILT_SIN);
+          }
+          const tilt = new THREE.Quaternion().setFromUnitVectors(footUp, support);
           tilt.slerp(new THREE.Quaternion(), 1 - contact);
           const parentRotation = leg.foot.parent!.getWorldQuaternion(new THREE.Quaternion());
           const free = tilt.multiply(worldRotation);
@@ -208,7 +215,7 @@ export class TerrainLegSolver {
           if (gait && leg.lastQuat) free.copy(leg.lastQuat.clone().slerp(free, 1 - Math.exp(-deltaSec / FOOT_TURN_SEC)));
           leg.foot.quaternion.copy(parentRotation.invert().multiply(free)).normalize();
           leg.foot.updateWorldMatrix(false, true);
-          this.liftToe(leg, surface.point.y + height * leg.toeRatio);
+          this.liftToe(leg, rig.worldModel, baseY, height, surface.point.y);
           leg.lastQuat = leg.foot.getWorldQuaternion(new THREE.Quaternion());
         }
       } else {
@@ -376,11 +383,20 @@ export class TerrainLegSolver {
     return vx * leg.velocity.x + vz * leg.velocity.z < 0;
   }
 
-  /** A toe the clip or the crouch tips below the floor is pitched up about the ankle until it rests at its standing height. */
-  private liftToe(leg: Leg, floorY: number): void {
+  /**
+   * A toe the clip, the crouch or a rising slope tips below the floor is pitched up about the ankle until it
+   * rests at its standing height. The floor is sampled under the toe itself: on an uphill slope the ground
+   * there is higher than under the ankle.
+   */
+  private liftToe(leg: Leg, model: THREE.Object3D, baseY: number, height: number, ankleGroundY: number): void {
     if (!leg.toe) return;
     const ankle = leg.foot.getWorldPosition(new THREE.Vector3());
     const toe = leg.toe.getWorldPosition(new THREE.Vector3());
+    // Any upward face counts under the toe, in the same window as the ankle's probe (from about a quarter of
+    // the height above the base): a rock edge too steep to stand on still stops it, and so does a ledge the
+    // body is stepping down from.
+    const groundY = this.surface(model, toe.x, Math.max(baseY, toe.y + height * 0.05 - height * 0.28), toe.z, height, 0)?.point.y ?? ankleGroundY;
+    const floorY = Math.max(groundY, ankleGroundY) + height * leg.toeRatio;
     if (toe.y >= floorY) return;
     const arm = toe.clone().sub(ankle);
     const length = arm.length();
@@ -416,17 +432,13 @@ export class TerrainLegSolver {
     return at;
   }
 
-  private surface(world: THREE.Object3D, x: number, y: number, z: number, height: number) {
-    this.ray.set(new THREE.Vector3(x, y + height * 0.28, z), this.down);
-    this.ray.near = 0;
-    this.ray.far = height * 0.55;
-    for (const hit of this.ray.intersectObject(world, true)) {
-      if (!hit.face) continue;
-      this.normalMatrix.getNormalMatrix(hit.object.matrixWorld);
-      const normal = hit.face.normal.clone().applyNormalMatrix(this.normalMatrix);
-      if (normal.y >= Math.cos(THREE.MathUtils.degToRad(40))) return { point: hit.point, normal };
-    }
-    return undefined;
+  /** The ground at (x, z) near `y`, on faces whose normal's y is at least `minNormalY` (by default what the character walks on). */
+  private surface(world: THREE.Object3D, x: number, y: number, z: number, height: number, minNormalY = WALKABLE_NORMAL_Y) {
+    // A probe from just above the hips' reach down past the foot (the leg's span), as a downward ray would.
+    const normal = new THREE.Vector3();
+    const top = y + height * 0.28;
+    const ground = TerrainHeightIndex.of(world).heightAt(x, z, top, top - height * 0.55, minNormalY - 1e-6, normal);
+    return ground === undefined ? undefined : { point: new THREE.Vector3(x, ground, z), normal };
   }
 
   private solve(leg: Leg, target: THREE.Vector3, facing: THREE.Vector3, kneesForward: boolean, soft = 0): void {

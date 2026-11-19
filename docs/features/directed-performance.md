@@ -735,6 +735,113 @@ authors to add a beat (the default fails every two-hander that forgets).
 
 **Evidence:** "Slice 1e evidence", below.
 
+### Slice 1f: change in the world (2026-11-18)
+
+"Not covered yet" item 5. Built under `apps/capture/scripts/authoring/`
+only (`lib/beats.ts` additively, a new `lib/world.ts`, `lib/write-glb.ts`,
+`direct.ts`'s printout, the watering sheet); nothing under
+`apps/capture/src/**`, the viewer, the API or `@holoim/objects` changes.
+The set's change is plain glTF node animation (translation, rotation,
+scale, STEP presence), which the viewer's mixer plays unfiltered and the
+USDZ converter bakes (`glb_to_usdz.py` carries node TRS and turns a scale
+of 0 into USD visibility); no morph target, material animation or new
+extension is used.
+
+**What.** A sheet may give `world`: a list of changes, one line each, the
+rest defaulted.
+
+1. **Poured.** `{ "kind": "pour", "object": "can" }`: while the object's
+   tool axis points below the horizontal (`tilt`, default 0°), drops leave
+   its tip (`rate` 60 a second at full tilt, fewer near the threshold),
+   fall under gravity from the tip's speed along the axis, and land on
+   `onto` (default: the target of the `aim` that points that object),
+   scattered over a third of the wet patch. Each drop is a small blue
+   (`color`) stretched sphere, along its velocity, present only in flight.
+   Drops take turns on a pool of nodes (about 15 are in flight at once),
+   keyed on the take's frames: one node per drop (132 in watering) took
+   the Quick Look readback (`inspect_usdz.py`) 314 s against the tool
+   check's 180 s limit; pooled, it is 16 nodes and 115 channels.
+   Where they land, a wet patch (`wet`, default on, radius 0.06 m) grows
+   with the water landed and stays to the end, darker than the part it
+   lies on.
+2. **Particles.** `{ "kind": "burst", "at": <point>, "when": <cue> }`:
+   `count` (24) seeded motes fly out to `spread` (0.25 m) and shrink away
+   over `life` (1.2 s). `{ "kind": "drift", "at", "when", "until" }`:
+   motes rise slowly (`rise` 0.3 m) and fade, a few at a time, over the span.
+3. **An object responds.** `{ "kind": "change", "object": "plant",
+   "when": <cue>, "over": 1.5, "from": { "turn": [24, 0, 8], "scale":
+   [1, 0.8, 1], "color": "#8a8a45" } }`: the object's shape turns about
+   its own origin (the bottom centre), scales, lifts (`lift`, metres)
+   and changes colour from `from` to the change's own values (default:
+   as the sheet made it), eased over `over`. Colour is a swap in `steps`
+   (4) whole-object copies, since neither glTF without an extension nor
+   Quick Look animates a material. `"show": false` makes it disappear at
+   the cue and `"show": true` appear (absent before), with the object's
+   `HOLOIM_objects` presence spans written to match. A change ends at the
+   state it names; what it leaves out returns to as-made, so a later
+   change restates a colour it keeps.
+
+A cue is seconds, a beat id (its start) or `<beat>.end`. Points are
+object points (`pot.soil`), numeric marks or `[x, y, z]`; a performer
+point or a place is refused, since the change is computed after the
+solve from the objects' tracks. Each pour, burst and drift is one
+`summoned` `RecordedObject` (source `effect:<kind>`) whose presence spans
+cover its motes, so the viewer's cast-only framing leaves it out; a
+sheet without `world` writes the same file as before.
+
+**What Quick Look cannot show:** a colour fades only in its steps; drops
+are separate rigid nodes, not a fluid; nothing splashes or soaks in.
+
+**Rejected:** a morph-target stream (one long mesh deformed per frame:
+heavier on the deformed extent budget, B-057, which counts every frame);
+`KHR_animation_pointer` colour (the converter and Quick Look drop it);
+a particle extension the viewer would have to learn.
+
+**Acceptance.**
+
+- `sheets/watering.json` revised: the plant starts wilted and perks up
+  after the water lands; the pour leaves a wet patch. It builds with no
+  miss, and the converter's extent load (`publish.ts --check`) stays under
+  budget.
+- **Blind reading, bar set before running:** three fresh Sonnet readers,
+  each given only the review pack's `reader/` folder (never the sheet),
+  describe the piece. It passes when at least 2 of 3 say water was poured
+  (pours, waters, watering, water, drops, stream, sprinkles) and at least
+  2 of 3 say the plant changed (perks up, lifts, straightens, revives,
+  stands up, grows, greener, healthier). Not tuned past two tries; a
+  failure is reported.
+- `viewer-check` on the card frames the piece with the water in view; the
+  Quick Look check (`check_usdz_tools.sh`) passes on it, its readback
+  matching every node's world transform (drops' visibility as scale 0, the
+  plant's change node) at the sampled times. `sheets/world-test.json`
+  (burst, drift, colour, lift, appear and disappear) passes the same two.
+- **Nothing else moves:** `rest`, `expressions`, `gestures`,
+  `defaults-test` and `goodbye` write byte-identical GLBs to `main`'s.
+
+**Evidence:** "Slice 1f evidence", below.
+
+### Slice 1g: a stream that reads at card size (2026-11-18)
+
+Slice 1f's follow-up. All three readers saw the pour, but called the
+stream "thin" and "hard to see at card size". At 16 mm wide it is about 2
+px on the card, and its pale blue sits on the teal background. Built only
+in `lib/world.ts` (the pour's defaults and drop shape) and
+`sheets/watering.json`. No new nodes: the levers are the drops' width,
+their stretch along the fall, and their colour against the background.
+
+**Acceptance.**
+- The watering sheet builds with no miss.
+- `publish.ts --check` stays valid within the extent budget.
+- `check_usdz_tools.sh` passes all four cases.
+- Every other sheet stays byte-identical to `main`, because no other sheet pours.
+- On a fresh blind reading of frames only, 2 of 3 readers say water was
+  poured and 2 of 3 say the plant changed, as before. At least 2 of 3 also
+  see the stream at card size without calling it thin or hard to see.
+- Two tuning tries at most, then report.
+
+**Evidence:** "Slice 1g evidence", below. The stream bar is not met after
+two tries; the stream is wider and paler, and nothing else regressed.
+
 ### Slice 2: the avatar flow (designed and approved 2026-11-17; 2a built)
 
 The owner's 2026-11-17 direction, as an 80/20. The 2026-11-13 plan for one
@@ -984,7 +1091,7 @@ bars in the brief to the artist.
 | **2a: the bar** | The new audition rows above, in `avatar-audition.ts` and `face-legibility.ts`; run on the stock avatar and the avatar-format fixtures | One command that audits any avatar file and writes audition JSON with every row; it is what grades the new base (2c), outside avatars and each finish. Sanity check only: the stock avatar, known to be poor, fails the brow, lid, mouth, visibility and face-box rows by name | **Yes.** Scripts under `apps/capture/scripts/authoring/` only |
 | **2b: the sheets** | Astra draws the style sheets from the request below; the owner picks a finish set (open decision 1) | The sheets, judged against the acceptance list in the request; the owner's pick recorded here | **Yes.** No code |
 | **2c: the base** | One base in the picked style, neutral finish, neutral card, made the recommended way | Every audition row passes; three blind readers at 5 of 7 or better at card size; a review pack of `sheets/expressions.json` and the watering piece on the base beside the stock; the motion owner's report; `check_usdz_tools.sh`; a proof video | **Yes.** Loads through `?avatar=` and beat sheets only; edits nothing the mandates own |
-| **2d: traits** | The shared dressing function, used by `direct.ts` only; three builds; hair and glasses parts; the poem's two characters from cards | The audition on every trait value at its extreme; a contact sheet of the trait values; the poem's two characters made from cards alone, in a take whose GLB carries the look | **Yes.** A workspace package, authoring scripts and avatar files; nothing in `apps/capture/src/` |
+| **2d: traits** | The shared dressing function, used by `direct.ts` only; three builds; hair and glasses parts; the poem's two characters from cards. Built 2026-11-18 (see "Slice 2d evidence"); the turn row still fails, worse with garments | The audition on every trait value at its extreme; a contact sheet of the trait values; the poem's two characters made from cards alone, in a take whose GLB carries the look | **Yes.** A workspace package, authoring scripts and avatar files; nothing in `apps/capture/src/` |
 | **2e: chosen per take** | `house:<finish>` and `look` in beat sheets; the dressing function in capture's avatar loading; height from the head-top bone; the "your look" step in the phone journey and the headset mirror; `?look=` | A phone e2e: set a look, record, upload, and the feed card shows it; an XR harness check of the mirror; a beat sheet re-dressed with another card; a proof video | **No.** Touches the phone journey (`CaptureOverlay.tsx` and its flow), owned by the phone mandate, and `src/avatar/` (loading, `AvatarRig`'s height fit), owned by the motion owner: built with both, after the phone's device checks |
 | **2f: finishes** | The other one or two finishes as material sets | Brow contrast and the blind reading per finish; one authored piece re-dressed in each | **Yes.** Avatar files |
 | **2g: the default and outside avatars** | `DEFAULT_AVATAR_URL` to the house base; the credit rule and verdict for outside avatars | Motion owner's agreement recorded; the phone journey's load measured against the 2.3 MB; an outside VRM passed and one refused, by name; a proof video | **No.** One constant in capture, on the motion owner's say |
@@ -1370,8 +1477,12 @@ and 7 (its evidence, below); the second 1c piece added item 13.
    concerned do not. The GLB moves as asked (the shake swings ±20° in the
    head every 0.8 s), but readers judge 0.2 s stills, about two per swing.
    Still open: a way for a quick head or finger motion to read.
-5. **Change in the world.** No water, particles or plant response: the
-   reader saw "no water" and "the plant looks the same".
+5. **Change in the world.** Closed by slice 1f: a beat sheet's `world`
+   lines direct a pour from a held tool's tip, a burst or drift of motes,
+   and an object that changes over time (turn, scale, lift, colour, show
+   or hide). All are node and mesh-swap animation, so the GLB, card, AR
+   viewer and Quick Look all show them. Was: "no water" and "the plant
+   looks the same".
 6. **Performer-relative placement.** Marks are absolute metres guessed from
    the avatar's size; nothing says "at her right hand's height" or "a
    step in front of her".
@@ -1752,6 +1863,23 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
      five 0.4 s cycles, hand at chest height in view; concerned pitch 14°,
      roll 8°). They still do not read in stills (evidence); the next idea
      is a change to the reading medium, not more size.
+9. **Slice 1f's calls** (decided by the agent in the owner's absence on
+   2026-11-18, for the owner to review; each is reversible):
+   - Drops are pooled onto reusable nodes (a node takes the next drop
+     that starts after its last ends): 132 drops on 16 nodes. One node per
+     drop made the Quick Look readback take 314 s against its 180 s limit.
+   - A change ends at the state it names; anything it leaves out returns
+     to as-made. Overlapping changes on one object, and a show and hide
+     at the same time, are refused.
+   - Watering uses drops of 16 mm and a stronger wilt (36° turn, 0.7
+     height, olive `#8e8644`). At first the readers saw a thin stream at
+     card size and a mild wilt.
+   - Drop and mote keys sit on the take's frame grid, so they add no new
+     key times to the file.
+   - `sheets/world-test.json` covers burst, drift, show and hide, and a
+     colour, lift and scale change on a two-part lamp.
+   - A pour whose tool never tips below its threshold is an info line,
+     not a failure (the brief does not ask either way).
 
 ## Test plan and evidence
 
@@ -2353,6 +2481,103 @@ show at card size (decision 2).
 items as try 0 (wave and shrug drop from 3/3 to 2/3, still passing), and
 a slower, larger nod and shake are closer to what a person does on video.
 
+### Slice 1f evidence (2026-11-18)
+
+**Build.** `sheets/watering.json` now has two world lines (a pour from the
+can, the plant changing from 5.3 s over 2.4 s). It builds with no miss:
+132 drops on 16 nodes from 4.774 to 7.196 s, landing within 20 mm of
+`pot.soil`; a wet patch 12 cm across that stays to the end; the plant in
+4 colour steps from 5.3 to 7.7 s; 115 channels, 3.8 MB. `publish.ts
+--check` gives valid, with a deformed load of 686,136 and rigid 4,817,839
+(budgets 100M and 500M). `sheets/world-test.json` builds: a burst of 24
+motes (1 to 2.2 s), a drift of 12 (2.5 to 4.5 s), the lamp present 1 to
+6.2 s in 4 colour steps, 140 channels; `--check` gives valid.
+
+**Quick Look.** `check_usdz_tools.sh` passes all four cases (animated ancestor and face,
+silent, alpha/UV/PBR, unsupported required extension) on the final builds of
+both `watering` (138 s of CPU for the whole check) and `world-test`
+(133 s). The readback matches every node's world transform at the sampled
+times.
+
+**Nothing else moves.** `rest`, `expressions`, `gestures`, `defaults-test`,
+`goodbye`, `two-avatars` and `tallest-bar` rebuild byte-identical to
+`main`. A sheet without `world` writes the same file.
+
+**Viewer.** viewer-check on watering showed the thin stream from the spout
+and the plant going from olive and slumped to green and upright. From the
+side, the pot rim hides the wet patch. On world-test it showed the lamp
+appear, turn gold, lift and shrink, and disappear.
+
+**Refusals.** Each was tested: a pour aimed at a performer point or a place
+("its aim's target; give onto"), overlapping changes ("changes again at
+2.80 s, before the change before it ends"), and a colour on a sourced
+model.
+
+**Blind reading (bar: 2 of 3 say water was poured and 2 of 3 say the plant
+changed).** Three fresh Sonnet readers saw the review pack's frames only.
+
+| Reader | Water poured | Plant changed |
+|---|---|---|
+| 1 | yes: "a visible stream falls into the pot" | yes: "upright and bright green" |
+| 2 | yes: "a thin blue stream running into the plant" | yes: "a wilted yellow-green plant turns into a healthy bright green one" |
+| 3 | yes: "a thin stream of water falls onto the plant" | yes: "turns green and grows upright" |
+
+**The bar is met, 3 of 3 on both.** All three readers called the stream
+thin and hard to see at card size before about 5 s. The check at 2.1 s
+reads as a wrist check, not a finger in the soil (slice 1e's
+finding).
+
+**Review.** The code review found three issues, all fixed and retested:
+the aim target was not validated, overlapping changes were not refused,
+and a span that ends within 1 ms of a float32 last frame lost the object
+on that frame. The independent verifier also found four, all fixed:
+the default `onto` (the same fix), overlap (the same fix), a duplicate
+final colour copy, and a wet patch whose first key had a zero area but
+was not all zero. A show and hide at the same time is now refused. One of
+the verifier's Quick Look runs went over the 100 s CPU budget. Converting
+the same file alone takes 3.6 s of CPU (main's watering takes 3.1 s), so
+that run did not reproduce. Its notes on limits are in the README:
+world points follow the object's track, not its change, and a drop's
+target is sampled at departure.
+
+**What Quick Look cannot show.** The colour change is mesh swaps, so
+Quick Look shows it in steps (as the viewer does). Drops and motes are
+node scale and translation, which Quick Look plays. Nothing in a world
+line depends on a material animation or a shader.
+
+### Slice 1g evidence (2026-11-18)
+
+**What changed.** In `lib/world.ts`, a drop now defaults to `size` 0.045 m
+(was 0.012; about 8 px on the card) in `#d4efff` (was `#8cc4ec`). Each drop
+is stretched to 1.5 times the distance it falls in a frame, capped at
+0.12 m, so neighbouring drops overlap into one stream. `sheets/watering.json`
+drops its own `"size": 0.016`.
+
+**Checks (try 2).**
+- The build: 132 drops on 16 nodes, plant in 4 colour steps from 5.3 to 7.7 s, 115 channels, 3.8 MB.
+- `publish.ts --check`: valid, deformed 686,136 and rigid 4,817,839.
+- `check_usdz_tools.sh`: 4 of 4.
+- rest, expressions, gestures, defaults-test, goodbye, two-avatars and tallest-bar are byte-identical to `main`.
+
+**Blind reading, frames only, three fresh readers per try.**
+- Try 1 (0.03 m, `#b4e2ff`): 3 of 3 said poured and 3 of 3 said the plant revived. 0 of 3 saw the stream without calling it thin or hard to see at card size: "a thin pale-blue sliver and hard to see", "small and low contrast", "a thin pale curve and easy to miss".
+- Try 2 (0.045 m, `#d4efff`): 3 of 3 said poured and 3 of 3 said revived. 1 of 3 saw the stream at card size without qualification: "a pale, thick, curved white-grey stream", "visible as a white arc". The other two read it as "small, pale and thin" and "not obvious what it is without the close view". So the stream bar (2 of 3) is not met.
+- Two readers also saw the stream as "a solid white-grey curved tube rather than droplets".
+
+**Decision (decided by the agent in the owner's absence on 2026-11-18, for the
+owner to review).** Keep try 2: it reads better than try 1 and 1f, costs nothing in
+budget, and leaves every other sheet unchanged. The bar is not loosened; the
+stream at card size stays open. The next lever is contrast, not width: the
+drops use the lit material every effect sphere shares, so the side away from the
+key light goes grey on the teal. An unlit or emissive drop
+material in `lib/write-glb.ts`, scoped to the pour so other sheets stay
+byte-identical, is the likely fix, with a Quick Look check that it survives
+conversion.
+
+**Quick Look note.** One run of the check on try 1 failed one case on its
+CPU budget after a successful conversion. A re-run passed 4 of 4. Logged
+as B-070.
+
 ### Slice 2a evidence (2026-11-17)
 
 **The command.** `avatar-audition.ts <avatar.glb|.gltf>` grades any avatar
@@ -2713,6 +2938,108 @@ shared mix, and its pressed mouth is small at 40 px.
   `usdchecker --arkit` reports success.
 - **Not done:** the motion owner's report on the base, and people (not AI)
   as readers.
+
+### Slice 2d evidence (2026-11-18): traits built, the turn row still fails
+
+Built with the owner away; every choice below was decided by the agent in
+the owner's absence on 2026-11-18, for review.
+
+**What was built:**
+
+- **`packages/avatar-look`**: the trait card (`traits.ts`, `card.ts`) and
+  the one dressing function (`dress.ts`, gltf-transform). It reads a
+  build's wardrobe file, keeps only the card's hair and glasses parts, and
+  sets the skin, eye, hair, brow and clothing colours. `direct.ts` is its
+  only caller (`avatar: "house:clay"` plus a `look` on the performer); the
+  capture side waits for 2e.
+- **Three builds** (`house-base.ts --build slight|medium|broad`), each
+  written as `apps/capture/assets/house-base/wardrobe-<build>.glb` (about
+  1.55 MB) with every hair style and both glasses frames as parts. A dressed
+  file is 1.08 to 1.17 MB. `public/gltf/models/house-base.glb` is the
+  default look (medium, caramel, dark brown eyes, swept crop in espresso,
+  no glasses, oatmeal and slate) and is still reached only through
+  `?avatar=`.
+- **Loose garments as geometry**: the jumper, trousers and shoes are now
+  meshes over the body, hanging straight (Taubin-smoothed, a symmetric
+  neckline, a bounded push-out), with thigh and hem ease kept slim so a
+  hanging hand stays clear. This answers the 2c "Clothing" gap.
+- **Hair and glasses**: six styles and two frames, skinned to the head, none
+  crossing the brow line; frames sit below the brows.
+- **Brows follow the hair, a step darker than the skin.** The brow colour
+  is 0.55 of the hair colour, darkened until its OKLab lightness is at most
+  the skin's minus `BROW_STEP` (0.42). Without the step, light hair on light
+  skin and dark hair on dark skin missed the brow-contrast bar (0.18 to
+  0.25); with it every look passes. The default look is unchanged (its
+  brows already sat lower).
+- **The take carries the look**: `lib/write-glb.ts` writes each house
+  performer's card in `asset.extras.holoim.looks`.
+- **`house-traits.ts`**: auditions eight looks that between them cover
+  every trait value at its extreme, and fails if any value is left out.
+
+**Audition on every trait value** (`house-traits.ts`, geometry and render
+tiers, bars unchanged; `output/authoring/house-traits/report.json`):
+
+| Look | Size | Fails |
+|---|---|---|
+| 1 slight, porcelain, blue, centre part wheat, square | 1.17 MB | armR-in-torso 48 |
+| 2 broad, espresso, dark brown, tight coils black, round | 1.11 MB | armR-in-torso 52, armR-in-legR 21 |
+| 3 medium, linen, cool grey, high bun silver, none | 1.08 MB | armR-in-torso 47 |
+| 4 slight, umber, amber, wavy bob espresso, round | 1.17 MB | armR-in-torso 48 |
+| 5 broad, golden sand, hazel, short twists plum, square | 1.11 MB | armR-in-torso 52, armR-in-legR 21 |
+| 6 medium, honey, moss green, swept crop ash brown, square | 1.11 MB | armR-in-torso 48 |
+| 7 broad, caramel, blue, centre part copper, none | 1.14 MB | armR-in-torso 52, armR-in-legR 21 |
+| 8 slight, copper, dark brown, swept crop chestnut, none | 1.08 MB | armR-in-torso 47 |
+
+Every face, brow, lid, mouth, visibility, contrast (0.29 to 0.39 L) and
+size row passes on every look. The only misses are the turn rows (bar: the
+75° turn adds at most 0.5% of the arm's vertices, about 10, deeper than
+5 mm).
+
+**The turn row is not cleared, and 2d made it worse.** The stance is the
+root: the stock fails the row too (32), and origin/main's base failed it at
+33. In the stance the hanging arm is offset from the shoulder and turned
+with the torso (0.65 of the yaw) while the hips turn 0.25, so at 75° the
+right arm swings into the side. The loose garments then add to it: the
+default look scores 47 (the eight looks 47 to 52), and the broad build also
+fails `armR-in-legR` (21; the leg row's margin on medium shrank from −461
+to −49). Tried and reverted: a wider hang (0.26 of reach) clears the house
+base but worsens the stock (40); a smaller arm share trades the torso row
+for the leg rows. A real fix belongs in the stance (turn the arm with the
+hips, or swing it out in a turn), which is pose work shared with the motion
+owner, and then in the jumper's and trousers' ease at the side. So the base
+is still not passing and stays behind `?avatar=`; the bar was not loosened.
+
+**Contact sheet** (`output/authoring/house-traits/sheet/traits-beside-sheet.jpg`):
+every skin tone, eye colour, hair style and colour, glasses value and build,
+rendered front-on in `clay-traits.png`'s layout, beside the sheet. Its render and
+layout scripts are working files in that ignored folder, so the sheet is
+evidence, not a repeatable check.
+
+**Blind reading with hair and glasses on**
+(`output/authoring/house-traits/reading/`): `sheets/expressions.json` on
+look 4 (wavy bob, round glasses), the card-size sheet (`blind-05.jpg`, face
+43 device px), three fresh readers with three fixed wordings: 5, 5, 5 of 7.
+Hair and glasses cost nothing. Holding something back and looking down
+still swap for every reader. Holding back's 0.2 blink and small pressed
+mouth read as lowered lids at 43 px, while looking down's 0.55 lid reads
+calm. Not attempted: fixing it changes shared expression mixes or the base
+face, and needs another reader round.
+
+**The poem's two characters from cards alone** (`sheets/poem-pair.json`,
+target `clay-poem-pair`): her (slight, honey, dark brown, wavy bob in
+chestnut, no glasses, rust and walnut) and him (medium, golden sand, moss
+green, swept crop in espresso, no glasses, storm and graphite). The take
+is 2.6 MB, and its `asset.extras.holoim.looks` holds both cards. One reach
+note: her reach stops 183.6 mm short against 160 asked ("out of reach even
+leaning").
+
+**Quick Look:** the poem take converts with `glb_to_usdz.py` (6.28 MB
+USDZ), and `inspect_usdz.py` passes with no failures. `check_usdz_tools.sh`
+still cannot run its material challenge (no textures; see 2c).
+
+**Not done:** the turn row (above), the held and looking-down swap, tests
+for `@holoim/avatar-look` (only the manual `house-traits.ts` exercises it), the
+motion owner's report on the base, and people (not AI) as readers.
 
 ### Slice 6 evidence (2026-11-18)
 
