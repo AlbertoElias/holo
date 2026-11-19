@@ -2574,7 +2574,7 @@ conversion.
 
 **Quick Look note.** One run of the check on try 1 failed one case on its
 CPU budget after a successful conversion. A re-run passed 4 of 4. Logged
-as B-069.
+as B-070.
 
 ### Slice 2a evidence (2026-11-17)
 
