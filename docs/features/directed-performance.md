@@ -3215,7 +3215,7 @@ motion owner (2d).
 
 | Finish | Rows failing | Brow contrast (bar 0.25) | Face box (px) | Size (bar 1.8 MB) |
 |---|---|---|---|---|
-| Ink | only the turn row, same values | 0.424–0.481 | 43.5–43.8 | 1.45–1.55 MB |
+| Ink | only the turn row, same values | 0.424–0.481 | 43.5–43.8 | 1.44–1.55 MB |
 | Light | only the turn row, same values | 0.602–0.633 | 43.6–43.9 | 1.09–1.16 MB |
 
 **Blind reading** (`sheets/expressions.json` on the default look, faces
@@ -3248,7 +3248,12 @@ this untextured base (see 2c).
 **Against the sheets:** ink reads as ink at card size; small outline
 spurs show at the inner eye corners, nostrils and mouth corners. Light
 reads as a warm glowing figure with a clean face; the sheet's light is
-more see-through than this one.
+more see-through than this one. In motion (the poem pair) light has a
+weakness ink does not: the 0.4 mix toward warm white takes both
+performers' clothing to near the same cream, so the pair is told apart by
+hair and build only, and the bubble's lines show through the jumpers. A
+smaller mix for garments (keeping their hue) is the next lever, for the
+owner to judge against the sheet.
 
 **Not done:** people as readers; Quick Look and the light finish on a
 physical device; the captured-take-with-bubble render (the viewer makes
