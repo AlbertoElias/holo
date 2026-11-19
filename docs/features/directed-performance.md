@@ -1914,6 +1914,25 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
      the collar. These are not sculpted shoes: the sheet's welted brogues
      would need a shoe part.
 
+11. **The owner's decisions of 2026-11-19** (after slice 2f, passed on by
+    the lead session; the numbers are that session's list, the words the
+    owner's):
+   - **"Decision 1: hold"** the default avatar until the licence call and a
+     reading with people. `DEFAULT_AVATAR_URL` stays unchanged.
+   - **"Decision 4: Tune"** the light finish, so garments keep their colour.
+     One pass: a smaller mix for garments that keeps their hue, skin and face
+     unchanged (see "Light finish tune" in slice 2f's evidence). Whether it
+     is settled is the owner's judgement, against the sheet.
+   - **"Decision 6: Prepare Pack"**: a blind reading pack for people, on the
+     built house base (not the drawn sheets), with instructions the owner can
+     forward (see "The reader pack for people" in slice 2f's evidence). The
+     bar is unchanged: each reader at least 5 of 7.
+   - **"Decision 8: hold"**: the phone journey, 2e and 2g, stays on hold.
+   - **Open, not acted on:** the owner was not told of the Hunyuan3D-2mv
+     territory restriction (decision 10) before it was built on, and asked
+     whether an unrestricted model or another route can replace it. The lead
+     is researching that; the fit is unchanged until it does.
+
 ## Test plan and evidence
 
 - The acting and audition reports on their baselines (numeric, saved as
@@ -3253,7 +3272,8 @@ weakness ink does not: the 0.4 mix toward warm white takes both
 performers' clothing to near the same cream, so the pair is told apart by
 hair and build only, and the bubble's lines show through the jumpers. A
 smaller mix for garments (keeping their hue) is the next lever, for the
-owner to judge against the sheet.
+owner to judge against the sheet (done on 2026-11-19: "Light finish tune"
+below).
 
 **Not done:** people as readers; Quick Look and the light finish on a
 physical device; the captured-take-with-bubble render (the viewer makes
@@ -3262,6 +3282,45 @@ the ink outline's colour too; masking a garment's line where another
 garment covers it (only skin is masked today; no poke-through was seen in
 the renders, but a tight hem could show one); the owner's review of
 every choice above.
+
+**Light finish tune (2026-11-19, the owner's "Decision 4: Tune").** The
+garments (top, trousers, shoes) are no longer mixed 0.4 toward the warm
+white. Each is mixed `LIGHT_GARMENT_LIFT` 0.25 of the way toward its own
+brightest version (the colour scaled until its largest channel is 1), which
+brightens it and keeps its hue exactly; their glow is still 0.45 of that.
+Skin, face parts, brows, frames and hair are unchanged, as are the opacity
+and the blend. The value 0.25 is the agent's pick; whether it is right is
+the owner's judgement against the sheet, not settled here. On the poem pair
+in the card view, her rust top and walnut trousers and his slate-blue top
+now tell the two apart, where before both went to the same cream. The
+bubble's lines still show through the garments (alpha blend at 0.86).
+Re-measured over the 8 looks (`house-traits.ts --finish light`, both
+tiers):
+
+| Light | Rows failing | Brow contrast (bar 0.25) | Face box (px) | Size (bar 1.8 MB) |
+|---|---|---|---|---|
+| Before (2f) | only the turn row | 0.602–0.633 | 43.6–43.9 | 1.09–1.16 MB |
+| After the tune | only the turn row | 0.602–0.633 | 43.6–43.9 | 1.08–1.16 MB |
+
+The turn row (`turn.armL-in-legL`, 41 slight, 37 broad, 21 medium) is the
+same as before and still the motion owner's. The side-by-side video for the
+owner (before and after, card view, real time) is ignored output, not
+linked here.
+
+**The reader pack for people (2026-11-19, the owner's "Decision 6: Prepare
+Pack").** The seven judged expressions of `sheets/expressions.json`, on the
+built house base in its default look, at the phone card's true face size
+(44 device px brow to chin, 29.3 CSS px, 4.85 mm), rendered by the viewer's
+own renderer (`face-legibility.ts --tiles`, which now also writes each face
+unlabelled) and enlarged smoothly. One sheet per finish: clay, ink, and light
+after the tune. Each sheet's order and the sheets' order are drawn at random,
+under random codes; the key stays outside the zip. The zip holds a one-page
+instruction, an answer sheet (PDF to print, text to type into) and the three
+sheets. The bar is unchanged: per finish, three readers who are people and
+have not seen the faces, each at least 5 of 7. Every reader does all three
+sheets in order, so the later sheets have the benefit of practice; the
+scoring note says so. The pack, key and scoring note are ignored output (not
+linked here). No reader has seen it yet.
 
 ### Slice 6 evidence (2026-11-18)
 
