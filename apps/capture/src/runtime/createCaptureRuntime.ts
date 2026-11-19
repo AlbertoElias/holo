@@ -5,6 +5,7 @@ import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { Vector3 } from 'three';
 import { LocomotionAnimator } from '../animation/LocomotionAnimator';
 import { attachLocomotion, sampleAvatarPose } from '../animation/locomotionLibrary';
+import { ArmClearance } from '../animation/ArmClearance';
 import { TerrainLegSolver } from '../animation/TerrainLegSolver';
 import { AvatarRig } from '../avatar/AvatarRig';
 import { BodyTracking } from '../body/BodyTracking';
@@ -280,6 +281,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     face: new FaceDriver(cameraRig, (state) => ui.setFaceCamera(state), tracking.camera),
     animator: new LocomotionAnimator(),
     terrainLegs: new TerrainLegSolver(),
+    armClearance: new ArmClearance(),
     ar: new ArSpectator(scene, renderer, stage.worldGroup, avatar, config.embodyOffset),
     ui,
     vrChrome,
@@ -360,6 +362,8 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
         associations: avatarGltf.parser.associations
       });
       capture.terrainLegs.attach(avatar);
+      // The skin beside the hips and torso is measured in the rest pose, before any animation writes the skeleton.
+      capture.armClearance.measure(avatar.avatarRoot, avatar.humanoid);
       hands.attach();
       capture.point.attach();
       objects.attach();
@@ -448,6 +452,10 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
         __respawnCharacter: () => motor.respawn(),
         __sampleHands: () => hands.sample(),
         __sampleBody: () => body.sample(cameraRig, tracking.getHeadPose()),
+        __sampleArmClearance: () => ({
+          widths: capture.armClearance.measured() ?? null,
+          openDeg: { left: (capture.armClearance.lastOpenRad.left * 180) / Math.PI, right: (capture.armClearance.lastOpenRad.right * 180) / Math.PI }
+        }),
         __samplePoseCost: (reset) => samplePoseCost(reset),
         __setBodyFaults: (faults) => body.setFaults(faults),
         __setHandOverlay: (enabled) => capture.diagnostics.setHandOverlay(enabled),

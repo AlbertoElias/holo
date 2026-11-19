@@ -37,7 +37,8 @@ export class BodyPoseSystem extends createSystem() {
       moveIntent: input.moveState.forward || input.moveState.back || input.moveState.left || input.moveState.right,
       vrMode: frame.vrActive,
       // The walk's own target speed, for a clip without a measured gait.
-      referenceSpeed: avatar.avatarHeight * (frame.vrActive ? WALK_SPEED_HEIGHTS_PER_SEC : KEYBOARD_WALK_HEIGHTS_PER_SEC)
+      referenceSpeed: avatar.avatarHeight * (frame.vrActive ? WALK_SPEED_HEIGHTS_PER_SEC : KEYBOARD_WALK_HEIGHTS_PER_SEC),
+      position: avatar.avatarRoot.position
     });
     if (!body.active && body.posed) {
       body.solver.restoreBindPose();
@@ -55,6 +56,8 @@ export class BodyPoseSystem extends createSystem() {
       this.crouchSpeed += (character.horizontalSpeed - this.crouchSpeed) * (1 - Math.exp(-Math.max(0, deltaSec) / CROUCH_SPEED_EASE_SEC));
       avatar.applyCrouchPose(c.crouch.poseAmount, this.crouchSpeed, c.crouch.squat, plant, c.crouch.deepExtra);
       c.terrainLegs.update(avatar, character.grounded, deltaSec, plant, c.crouch.poseAmount > 0.3, c.animator.getGaitState());
+      // Desktop arms come from the clip alone; in XR the tracked hands own them.
+      if (!frame.vrActive) c.armClearance.apply(avatar.humanoid);
     }
   }
 }

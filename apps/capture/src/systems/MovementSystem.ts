@@ -7,6 +7,13 @@ const CROUCH_MOVE_SPEED_AT_FULL = 0.75;
 const CROUCH_MIN_EFFECT_THRESHOLD = 0.05;
 // Keyboard walking reaches full speed in about a quarter second: an instant start or stop reads as a pop on every joint.
 const KEYBOARD_ACCELERATION_MS2 = 12;
+// A desktop body walking sideways turns to face where it goes (it has only a forward walk); past this angle from the
+// look it backs up facing the look instead. The gap either side keeps an analog direction near the boundary from flipping.
+const BACK_UP_ENTER_RAD = THREE.MathUtils.degToRad(120);
+const BACK_UP_EXIT_RAD = THREE.MathUtils.degToRad(105);
+// How quickly the body turns toward its travel (s), and back to the look once it stops.
+const TRAVEL_TURN_SEC = 0.1;
+const SETTLE_TURN_SEC = 0.25;
 
 /**
  * Crouch, then the character motor: input movement, gravity, jumps and the
@@ -18,6 +25,9 @@ export class MovementSystem extends createSystem() {
   private readonly bodyPosition = new THREE.Vector3();
   private readonly inputMovement = new THREE.Vector3();
   private readonly stickMove = { x: 0, z: 0 };
+  /** The desktop body's turn from the look yaw toward its travel (rad). */
+  private travelTurn = 0;
+  private backingUp = false;
 
   init(): void {
     this.capture = captureContext(this.world);
@@ -62,7 +72,32 @@ export class MovementSystem extends createSystem() {
     }
     // The forward offset applies in every view so the model faces the look
     // direction; without it, first person and VR see the avatar's sides swapped.
-    const yaw = frame.bodyTracking || (body.active && body.solver.isAligned) ? body.solver.bodyYaw : c.camera.lookYaw;
+    const tracked = frame.bodyTracking || (body.active && body.solver.isAligned);
+    // First person, XR and a reach keep the body on the look: the view and the reach are aimed from it.
+    const turn = tracked || frame.vrActive ? 0 : this.desktopTravelTurn(deltaSec, c.camera.desktopViewMode === 'first' || c.objects.reachDemand() > 0);
+    const yaw = tracked ? body.solver.bodyYaw : c.camera.lookYaw + turn;
     avatar.syncAvatarPoseFromCharacter(this.bodyPosition, yaw, motor.getAvatarVisualOffsetY(), config.avatarForwardOffset);
+  }
+
+  /**
+   * The desktop body's turn toward the keys' travel: a person walking sideways turns and walks forward that way, where
+   * the forward walk played sideways would scissor the legs across each other. Backing up keeps the look's facing and
+   * plays the walk backward. Standing still, the body turns back to the look, the way reach, carry and aim expect it.
+   */
+  private desktopTravelTurn(deltaSec: number, onLook: boolean): number {
+    const move = this.capture.input.moveState;
+    const across = (move.left ? 1 : 0) - (move.right ? 1 : 0);
+    const along = (move.forward ? 1 : 0) - (move.back ? 1 : 0);
+    let target = 0;
+    let sec = SETTLE_TURN_SEC;
+    if (!onLook && (across !== 0 || along !== 0)) {
+      const travel = Math.atan2(across, along);
+      this.backingUp = Math.abs(travel) > (this.backingUp ? BACK_UP_EXIT_RAD : BACK_UP_ENTER_RAD);
+      target = this.backingUp ? travel - Math.sign(travel || 1) * Math.PI : travel;
+      sec = TRAVEL_TURN_SEC;
+    } else this.backingUp = false;
+    const delta = Math.atan2(Math.sin(target - this.travelTurn), Math.cos(target - this.travelTurn));
+    this.travelTurn += delta * (1 - Math.exp(-Math.max(0, deltaSec) / sec));
+    return this.travelTurn;
   }
 }

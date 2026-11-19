@@ -18,6 +18,9 @@ export interface LocomotionUpdateInput {
   vrMode: boolean;
   /** Uncrouched travel speed: cadence slows with crouch as well as collision. */
   referenceSpeed?: number;
+  /** The body's world position on the ground plane: the walk is chosen on its net travel, since a body pushed
+   * against a rock rattles back and forth each step and reports speed without going anywhere. */
+  position?: { x: number; z: number };
 }
 
 export type GaitLeg = 'left' | 'right';
@@ -73,10 +76,29 @@ const LOWER_BODY_BONES: readonly VrmHumanoidBone[] = [
 const WALK_TIME_SCALE_BASE = 1.4;
 const WALK_TIME_SCALE_MIN = 0.15;
 const WALK_TIME_SCALE_MAX = 3;
+/**
+ * The slowest the desktop walk plays while the body is held back (shuffling along a rock, or pushing uphill). People held back keep
+ * most of their cadence and shorten their steps; slowing the clip alone would hang each leg mid-swing for seconds.
+ * Below this rate the stride shortens instead, so the planted foot still stays put. A free walk speeds up and
+ * slows down on the clip's own rate, as before: a floor there quickens the first and last steps into pops.
+ */
+const WALK_CADENCE_FLOOR = 0.55;
+/** A walk is held back once it has run this long (s) below HELD_BACK_SHARE of its intended speed. */
+const HELD_BACK_SEC = 0.25;
+const HELD_BACK_SHARE = 0.6;
+/** The shortest stride, as a share of the full one, laid down at the cadence floor. */
+const WALK_STRIDE_SHARE_MIN = 0.2;
 const GAIT_SAMPLES = 96;
 const HIPS_BOB_SIGMA_SEC = 0.04;
 const WALK_LOOP_QUAT_MATCH_DOT = 0.99995;
+/** A walk starts at this speed and ends below WALK_STATE_SPEED_THRESHOLD: a walk pushed against a rock creeps
+ * around 0.1 m/s, and must settle into the idle (a person stands against a wall) rather than flicker between the two. */
+const WALK_STATE_ENTER_SPEED = 0.2;
 const WALK_STATE_SPEED_THRESHOLD = 0.12;
+/** Time constant of the net travel velocity a rattling body's walk is chosen on (s). */
+const NET_VELOCITY_SEC = 0.08;
+/** A body whose step reversed within this long (s) is rattling against something: its walk follows the net travel. */
+const RATTLE_SEC = 0.3;
 const WALK_FADE_SEC = 0.08;
 /** The desktop body is all clip: its walk eases in over most of a step, or the hips drop and the knees jump at the first frame. */
 const DESKTOP_WALK_IN_SEC = 0.25;
@@ -108,9 +130,16 @@ export class LocomotionAnimator {
     'vr-lower-body': {}
   };
   private state: LocomotionState = 'idle';
+  private lastPosition: { x: number; z: number } | undefined;
+  private readonly netVelocity = { x: 0, z: 0 };
+  private readonly lastStep = { x: 0, z: 0 };
+  private rattleSec = Infinity;
+  /** How long the walk has run well below its intended speed (s). */
+  private heldBackSec = 0;
   private activeProfile: LocomotionProfile = 'desktop-full';
   private activeAction: THREE.AnimationAction | null = null;
   private currentTimeScale = 1;
+  private strideShare = 1;
   private clipSources: Record<LocomotionState, LocomotionClipSource> = { idle: 'none', walk: 'none', jump: 'none', fall: 'none' };
   private root: THREE.Object3D | undefined;
   private gait: WalkGait | undefined;
@@ -214,7 +243,8 @@ export class LocomotionAnimator {
 
   update(input: LocomotionUpdateInput): void {
     const nextProfile: LocomotionProfile = input.vrMode ? 'vr-lower-body' : 'desktop-full';
-    const nextState = this.resolveState(input.grounded, input.velocityY, input.horizontalSpeed);
+    const travel = Math.min(input.horizontalSpeed, this.netSpeed(input.position, input.deltaSec) ?? input.horizontalSpeed);
+    const nextState = this.resolveState(input.grounded, input.velocityY, travel);
     const fadeSec =
       nextState === 'jump' || nextState === 'fall'
           ? 0.1
@@ -282,7 +312,7 @@ export class LocomotionAnimator {
     const walking = this.state === 'walk' && walk !== undefined && this.activeAction === walk;
     const duration = walk?.getClip().duration ?? 0;
     const phase = walk && duration > 0 ? (((walk.time / duration) % 1) + 1) % 1 : 0;
-    return { gait: this.gait, walking, phase, stride: WALK_STRIDE_SCALE };
+    return { gait: this.gait, walking, phase, stride: WALK_STRIDE_SCALE * this.strideShare };
   }
 
   /** The planted foot's speed at time scale 1, in world metres per second (the avatar's scale applied). */
@@ -427,10 +457,35 @@ export class LocomotionAnimator {
     if (!grounded) {
       return velocityY > 0.25 ? 'jump' : 'fall';
     }
-    if (horizontalSpeed >= WALK_STATE_SPEED_THRESHOLD) {
+    if (horizontalSpeed >= (this.state === 'walk' ? WALK_STATE_SPEED_THRESHOLD : WALK_STATE_ENTER_SPEED)) {
       return 'walk';
     }
     return 'idle';
+  }
+
+  /**
+   * While the body rattles (a step reversed lately, as against a rock), the speed of its eased net travel;
+   * otherwise, or without a position or across a teleport, undefined, so a walk starts and stops without lag.
+   */
+  private netSpeed(position: { x: number; z: number } | undefined, deltaSec: number): number | undefined {
+    if (!position || deltaSec <= 0) return undefined;
+    const last = this.lastPosition;
+    this.lastPosition = { x: position.x, z: position.z };
+    if (!last) return undefined;
+    const vx = (position.x - last.x) / deltaSec;
+    const vz = (position.z - last.z) / deltaSec;
+    if (Math.hypot(vx, vz) * deltaSec > 1) {
+      this.netVelocity.x = 0;
+      this.netVelocity.z = 0;
+      return undefined;
+    }
+    const k = 1 - Math.exp(-deltaSec / NET_VELOCITY_SEC);
+    this.netVelocity.x += (vx - this.netVelocity.x) * k;
+    this.netVelocity.z += (vz - this.netVelocity.z) * k;
+    this.rattleSec = vx * this.lastStep.x + vz * this.lastStep.z < 0 ? 0 : this.rattleSec + deltaSec;
+    this.lastStep.x = vx;
+    this.lastStep.z = vz;
+    return this.rattleSec < RATTLE_SEC ? Math.hypot(this.netVelocity.x, this.netVelocity.z) : undefined;
   }
 
   private playState(state: LocomotionState, profile: LocomotionProfile, fadeSec: number): void {
@@ -501,6 +556,7 @@ export class LocomotionAnimator {
 
   private applyPlaybackSpeedCalibration(input: LocomotionUpdateInput): void {
     let nextTimeScale = 1;
+    let nextShare = 1;
     const walkAction = this.actionsByProfile[this.activeProfile].walk;
     const usingWalkAction = walkAction !== undefined && this.activeAction === walkAction && this.state === 'walk';
     if (usingWalkAction) {
@@ -509,12 +565,19 @@ export class LocomotionAnimator {
       const rate = stanceSpeed
         ? input.horizontalSpeed / stanceSpeed
         : WALK_TIME_SCALE_BASE * input.horizontalSpeed / Math.max(input.referenceSpeed ?? input.targetHorizontalSpeed, 0.01);
-      nextTimeScale = THREE.MathUtils.clamp(rate, WALK_TIME_SCALE_MIN, WALK_TIME_SCALE_MAX);
+      const heldBack = input.horizontalSpeed < input.targetHorizontalSpeed * HELD_BACK_SHARE;
+      this.heldBackSec = heldBack ? this.heldBackSec + Math.max(0, input.deltaSec) : 0;
+      nextTimeScale = THREE.MathUtils.clamp(rate, stanceSpeed && this.heldBackSec >= HELD_BACK_SEC ? WALK_CADENCE_FLOOR : WALK_TIME_SCALE_MIN, WALK_TIME_SCALE_MAX);
+      if (stanceSpeed) nextShare = THREE.MathUtils.clamp(rate / nextTimeScale, WALK_STRIDE_SHARE_MIN, 1);
+    } else {
+      this.heldBackSec = 0;
     }
 
     // Smooth cadence changes without restarting the walking phase.
-    nextTimeScale = THREE.MathUtils.lerp(this.currentTimeScale, nextTimeScale, 1 - Math.exp(-12 * Math.max(0, input.deltaSec)));
+    const ease = 1 - Math.exp(-12 * Math.max(0, input.deltaSec));
+    nextTimeScale = THREE.MathUtils.lerp(this.currentTimeScale, nextTimeScale, ease);
     this.currentTimeScale = nextTimeScale;
+    this.strideShare = THREE.MathUtils.lerp(this.strideShare, nextShare, ease);
     this.activeAction?.setEffectiveTimeScale(nextTimeScale);
   }
 

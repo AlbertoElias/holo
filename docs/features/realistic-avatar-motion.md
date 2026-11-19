@@ -1,7 +1,7 @@
 # Feature brief: realistic avatar motion (mocap clips + IK)
 
 **Lead:** Claude (Opus), session local_86351c34 family, worktree `.worktrees/desktop-gait`
-**Status:** Shipped (slice 1, 2026-11-18); physical Quest check pending with the owner
+**Status:** Shipped (slice 1 and the follow-up fix 1b, 2026-11-18); physical Quest check pending with the owner
 **Layer:** event (the recorded body)
 
 ## User outcome
@@ -41,6 +41,46 @@ procedural gait.
    average) put 19 m/s² pops into hips and head against 8–9 in the source.
 7. Found on terrain: every foot probe was a three.js raycast over the whole
    landscape, 1.8 ms per frame for the leg solver alone.
+
+Reported by the owner after slice 1 ("the arms go through the body, it still
+jitters"), fixed in 1b:
+
+8. The mocap arms are the performer's, whose hips are narrower than most
+   avatars': on the default avatar the hanging wrists sat 38% inside the hip
+   surface. `ArmClearance` measures each avatar's hip and torso cross-section
+   (an ellipse, from its skinned vertices, once per avatar) and opens the
+   upper arm just enough that the wrist and elbow clear it, desktop only.
+   It undoes its own opening when the clip did not rewrite the arm, so a held
+   idle key never accumulates.
+9. Walking into a rock flickered walk ↔ idle at about 5 Hz (hips ±4 cm): the
+   motor reports the attempted speed while the body rattles back and forth.
+   While a step has reversed in the last 0.3 s, the animator chooses the walk
+   on the eased net travel speed instead, and it enters walk at 0.2 m/s and
+   leaves it at 0.12 m/s. (Holding each switch for 0.1 s also stopped the
+   flicker but slid the feet at every start and stop: the gate's held jitter
+   went 0.43 → 4.2 mm.)
+10. A held-back walk (sliding along a rock) played the clip at 15–20% speed
+    with a full stride, so one leg hung stretched across the body for over a
+    second. Once a walk has run 0.25 s below 60% of its intended speed, it
+    keeps at least 55% of its cadence and shortens the stride instead, the
+    way people walk when held back. A free walk keeps the clip's own rate:
+    a floor there quickened the first and last steps (pops 44.9 → 46.3).
+11. Strafing (A or D) played the forward walk with its stride laid sideways,
+    so the legs scissored across each other (owner report, 2026-11-18). The
+    desktop body now turns toward its travel, within about 0.1 s, and walks
+    forward that way. Past 120° from the look (back, back-left, back-right)
+    it faces the look and walks backward. Standing still, it turns back to
+    the look within 0.25 s, the feet stepping round. First person and a
+    reach keep the look's facing. This also ends the diagonal cross that
+    10 left.
+12. Standing over ground the leg could not reach (beside a rock), one foot
+    re-stepped onto the same spot every 0.33 s for as long as the avatar
+    stood (owner report: "the right leg doing weird movements"). An
+    unreachable foot now steps only when the step would move it.
+13. With 11, the terrain diagonal walked a foot into the side of a rock, its
+    toe 26–31 cm inside the face. A foot whose toe would stand in a face
+    taller than the toe can pitch over is drawn back off it, and a planted
+    foot keeps the new spot. Under the ground 26.4 → 0.00 cm.
 
 ## Scope
 
@@ -159,7 +199,7 @@ dependency for what a 150-line vertical-only grid does).
 
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
-| Arms, knees, gait, terrain, cost | `pnpm --filter @holoim/capture run test:xr:desktop-motion` | `output/ci-desktop-motion/summary.json`: PASS on all 9 rows (2026-11-18). Shipped, flat floor: cadence 116 steps/min, arm swing 43.8 cm at correlation −0.956, knee swing 77.4°, mid-stance 38.8°, stance 0.45/0.45, asymmetry 0.065, pops 44.8 m/s², jitter 0.43 mm. Terrain: deepest foot joint under the ground 0.00 cm (was 20 cm), planted float p95 0.81 cm. Pose cost median 0.1–0.2 ms, p95 0.2–0.3 ms on every row (the terrain probes were 1.8 ms before the height index) |
+| Arms, knees, gait, terrain, cost | `node --import tsx scripts/run-xr-checks.ts desktop-motion` (from `apps/capture`) | `output/ci-desktop-motion/summary.json`: PASS on all 9 rows (2026-11-18). Shipped, flat floor: cadence 116 steps/min, arm swing 42.8 cm at correlation −0.955, knee swing 77.4°, mid-stance 38.8°, stance 0.45/0.45, asymmetry 0.065, pops 45.7 m/s², skate max 1.78 cm, jitter 0.59 mm. Terrain: deepest foot joint under the ground 0.00 cm (was 20 cm), planted float p95 0.81 cm. Pose cost median 0.1–0.2 ms, p95 0.2–0.3 ms on every row (0.2–0.5 ms median under CI emulation) (the terrain probes were 1.8 ms before the height index) |
 | All sources still pass | `test:xr:avatars`, `test:xr:body`, `test:xr:hands`, `test:xr:ar-record`, `pnpm run verify:pr` | All pass (2026-11-18). In `verify:pr`, two pipeline specs timed out under load on shared ports and passed when rerun alone. The desktop and phone object checks outside `verify:pr` fail on `main` as well (B-069) |
 | Looks right | proof video (ignored `output/`, not linked) | A 14 s desktop keyboard walk over the default terrain: arms hang and swing opposite the legs, knees bend through the stride, and the feet stay on the slopes |
 
