@@ -81,6 +81,13 @@ jitters"), fixed in 1b:
     toe 26–31 cm inside the face. A foot whose toe would stand in a face
     taller than the toe can pitch over is drawn back off it, and a planted
     foot keeps the new spot. Under the ground 26.4 → 0.00 cm.
+14. The arm clearance took a pointing arm for the clip's pose: the mixer
+    skips a value that has not changed (the desktop idle holds its arm
+    key), so the point's last write stood on the bone, was opened again,
+    and the point then kept it as its rest. The arm stayed 0.67 m off after
+    release (`pointing`, desktop take). The clearance now notes the arm as
+    the last frame left it, before the animation runs, and starts from its
+    own saved pose when nothing rewrote it.
 
 ## Scope
 

@@ -65,7 +65,7 @@ export class ArmClearance {
   private readonly parent = new THREE.Quaternion();
   /** Per side: the upper arm's local rotation before the last opening, and the one written, so a frame whose
    * animation did not rewrite the arm (a held idle key) starts from the pose, not from last frame's opening. */
-  private readonly undo = SIDES.map(() => ({ before: new THREE.Quaternion(), written: new THREE.Quaternion(), active: false }));
+  private readonly undo = SIDES.map(() => ({ before: new THREE.Quaternion(), written: new THREE.Quaternion(), ended: new THREE.Quaternion(), active: false }));
   /** Last opening per side (rad), for checks. */
   readonly lastOpenRad = { left: 0, right: 0 };
 
@@ -151,6 +151,16 @@ export class ArmClearance {
     };
   }
 
+  /**
+   * Notes each upper arm as the last frame left it, before this frame's animation runs. The mixer skips a value
+   * that has not changed (the desktop idle holds its arm key), so a pose a later writer (the point or the carry)
+   * left there stands until apply; apply must not take it for the clip's pose and open it again.
+   */
+  beforeAnimation(humanoid: HumanoidSkeleton | undefined): void {
+    if (!humanoid || humanoid !== this.measuredFor) return;
+    SIDES.forEach((side, index) => this.undo[index]!.ended.copy(humanoid.bone(side.upper)!.quaternion));
+  }
+
   /** Opens each upper arm until its hand clears the hips and its elbow the torso. Desktop animation path only. */
   apply(humanoid: HumanoidSkeleton | undefined): void {
     const widths = this.widths;
@@ -164,7 +174,8 @@ export class ArmClearance {
     SIDES.forEach((side, index) => {
       const upper = humanoid.bone(side.upper)!;
       const undo = this.undo[index]!;
-      if (undo.active && upper.quaternion.equals(undo.written)) upper.quaternion.copy(undo.before);
+      // The animation left the arm alone this frame: start from the clip's pose under last frame's opening.
+      if (undo.active && (upper.quaternion.equals(undo.written) || upper.quaternion.equals(undo.ended))) upper.quaternion.copy(undo.before);
       undo.active = false;
       upper.updateWorldMatrix(true, true);
       upper.getWorldPosition(this.shoulder);

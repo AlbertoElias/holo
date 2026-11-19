@@ -28,6 +28,7 @@ export class BodyPoseSystem extends createSystem() {
     const character = frame.character;
     if (frame.arCameraAuthor || !character) return;
     const { body, input, avatar } = c;
+    if (!frame.vrActive) c.armClearance.beforeAnimation(avatar.humanoid);
     c.animator.update({
       deltaSec,
       grounded: character.grounded,
