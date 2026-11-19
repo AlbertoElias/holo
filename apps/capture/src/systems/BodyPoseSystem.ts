@@ -28,7 +28,6 @@ export class BodyPoseSystem extends createSystem() {
     const character = frame.character;
     if (frame.arCameraAuthor || !character) return;
     const { body, input, avatar } = c;
-    if (!frame.vrActive) c.armClearance.beforeAnimation(avatar.humanoid);
     c.animator.update({
       deltaSec,
       grounded: character.grounded,
@@ -58,7 +57,11 @@ export class BodyPoseSystem extends createSystem() {
       avatar.applyCrouchPose(c.crouch.poseAmount, this.crouchSpeed, c.crouch.squat, plant, c.crouch.deepExtra);
       c.terrainLegs.update(avatar, character.grounded, deltaSec, plant, c.crouch.poseAmount > 0.3, c.animator.getGaitState());
       // Desktop arms come from the clip alone; in XR the tracked hands own them.
-      if (!frame.vrActive) c.armClearance.apply(avatar.humanoid);
+      if (!frame.vrActive) {
+        // An arm the point or the carry holds is theirs to aim (they run after this, from the pose they found).
+        const pointing = c.point.ownedSide();
+        c.armClearance.apply(avatar.humanoid, { left: pointing === 'left', right: pointing === 'right' || c.objects.carry.getWeight() > 0 });
+      }
     }
   }
 }

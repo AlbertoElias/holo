@@ -138,6 +138,11 @@ export class DesktopPointAction {
     return Boolean(this.arm);
   }
 
+  /** The arm the point holds (blending in, held or easing back), or null when neither does. */
+  ownedSide(): VrHandSide | null {
+    return this.weight > 0 && this.arm ? this.arm.side : null;
+  }
+
   /** Hold state for text-state checks. */
   snapshot(): { weight: number; landed: boolean; landing: [number, number, number]; direction: [number, number, number] } {
     return {
