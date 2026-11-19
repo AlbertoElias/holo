@@ -43,11 +43,11 @@ export interface GaitState {
 }
 
 /**
- * The shipped walk (CMU 07_12) was recorded faster than the desktop's 1.8 m/s; played at that pace on its own
- * stride its cadence is a touch quick (~130 steps/min). Laying each stride 10% longer, and playing the clip slower to match, walks at ~116
- * steps/min with a softer swing (docs/features/realistic-avatar-motion.md).
+ * The shipped walk (CMU 07_12) plays on its own stride: at 1.8 m/s that is ~130 steps/min of 0.84 m steps. A longer
+ * stride (1.1×) locked the trailing leg straight far behind, which read as stretched legs side-on
+ * (docs/features/realistic-avatar-motion.md, 16).
  */
-const WALK_STRIDE_SCALE = 1.1;
+const WALK_STRIDE_SCALE = 1.0;
 
 export function inStance(gait: WalkGait, leg: GaitLeg, phase: number): boolean {
   const { land, lift } = gait.stance[leg];
@@ -546,6 +546,9 @@ export class LocomotionAnimator {
       const action = this.mixer.clipAction(clip);
       action.enabled = true;
       const airborne = /jump|takeoff|fall|air/i.test(clip.name);
+      // A legs-only airborne clip leaves the desktop body's arms in their rest pose (straight out) for the whole jump;
+      // it stays on the idle instead, and the crouch pose draws the wind-up, tuck and landing (BodyPoseSystem).
+      if (profile === 'desktop-full' && (state === 'jump' || state === 'fall') && !animatesArms(clip)) continue;
       action.setLoop(airborne ? THREE.LoopOnce : THREE.LoopRepeat, airborne ? 1 : Infinity);
       action.clampWhenFinished = airborne;
       action.setEffectiveTimeScale(1);
@@ -583,6 +586,7 @@ export class LocomotionAnimator {
 
   private resolveAction(profile: LocomotionProfile, state: LocomotionState): THREE.AnimationAction | undefined {
     const actions = this.actionsByProfile[profile];
+    if (profile === 'desktop-full' && (state === 'jump' || state === 'fall') && !actions.jump && !actions.fall && actions.idle) return actions.idle;
     for (const fallbackState of CLIP_FALLBACK_ORDER[state]) {
       const action = actions[fallbackState];
       if (action) return action;
@@ -768,4 +772,9 @@ export class LocomotionAnimator {
     if (this.lowerBodyNames) return this.lowerBodyNames.has(nodeName);
     return LOWER_BODY_TARGETS.some((target) => nodeName === target || nodeName.endsWith(target));
   }
+}
+
+/** The clip moves an arm: a whole-body clip, not one drawn for the legs alone. */
+function animatesArms(clip: THREE.AnimationClip): boolean {
+  return clip.tracks.some((track) => /arm|shoulder/i.test(track.name.split('.')[0] ?? ''));
 }
