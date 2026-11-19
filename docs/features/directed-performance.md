@@ -979,6 +979,11 @@ Three are proposed, to be chosen from the style sheets (open decision 1):
    only, not transmission, which the USDZ path may not carry (checked in
    Quick Look). The riskiest for faces, since translucency lowers
    contrast; it ships only if it passes brow contrast and the reading.
+   As built (2f): the skin, brows and frames stay opaque and the skin
+   glows, while the garments and hair are alpha blend at 0.86. A
+   see-through skin showed the teeth and mouth through the lips, so the
+   body is lit from within, not translucent (decided by the agent in the
+   owner's absence on 2026-11-19, for review).
 
 Every finish is auditioned twice in the render tier: on an authored take
 and on a captured take with a bubble, because the viewer makes every
@@ -1094,7 +1099,7 @@ bars in the brief to the artist.
 | **2d: traits** | The shared dressing function, used by `direct.ts` only; three builds; hair and glasses parts; the poem's two characters from cards. Built 2026-11-18 (see "Slice 2d evidence"); the turn row still fails, worse with garments | The audition on every trait value at its extreme; a contact sheet of the trait values; the poem's two characters made from cards alone, in a take whose GLB carries the look | **Yes.** A workspace package, authoring scripts and avatar files; nothing in `apps/capture/src/` |
 | **2c2: the base looks like the sheets** | Added 2026-11-18 on the owner's verdict: "the images its based on are great, we need to reach the point where the avatars look just like those images". The owner picked the route "Generate, then fit": a shape generated locally from `clay-turnaround.png`, with no spend, and the house base's own mesh wrapped onto it (`house-base/fit.py`), keeping the rig, the face shapes, the three builds and the trait parts | The likeness check (`house-likeness.ts`): silhouette overlap per turnaround view, "which is the drawing?" pairs for fresh readers, a contact sheet against each sheet. The audition and the blind reading unchanged, `house-traits.ts` over every trait value, the base at 1.8 MB or under, a proof video | **Yes.** Authoring scripts and avatar files; nothing in `apps/capture/src/`; `DEFAULT_AVATAR_URL` unchanged |
 | **2e: chosen per take** | `house:<finish>` and `look` in beat sheets; the dressing function in capture's avatar loading; height from the head-top bone; the "your look" step in the phone journey and the headset mirror; `?look=` | A phone e2e: set a look, record, upload, and the feed card shows it; an XR harness check of the mirror; a beat sheet re-dressed with another card; a proof video | **No.** Touches the phone journey (`CaptureOverlay.tsx` and its flow), owned by the phone mandate, and `src/avatar/` (loading, `AvatarRig`'s height fit), owned by the motion owner: built with both, after the phone's device checks |
-| **2f: finishes** | The other one or two finishes as material sets | Brow contrast and the blind reading per finish; one authored piece re-dressed in each | **Yes.** Avatar files |
+| **2f: finishes** | The other one or two finishes as material sets | Brow contrast and the blind reading per finish; one authored piece re-dressed in each | **Yes.** Avatar files. Built 2026-11-19: ink and light (see "Slice 2f evidence") |
 | **2g: the default and outside avatars** | `DEFAULT_AVATAR_URL` to the house base; the credit rule and verdict for outside avatars | Motion owner's agreement recorded; the phone journey's load measured against the 2.3 MB; an outside VRM passed and one refused, by name; a proof video | **No.** One constant in capture, on the motion owner's say |
 
 2a and 2b start together and need nothing else. 2c needs both. 2d and 2f
@@ -3168,6 +3173,95 @@ put each of the four sheets above the base's four views.
 
 **Not done:** people (not AI) as readers; a check on a physical device; the
 owner's review of the licence (decision 10).
+
+### Slice 2f evidence (2026-11-19): ink and light on the fitted base
+
+Built by the agent in the owner's absence on 2026-11-19, on the 2c2 base
+(`b333f499acda`), matched to the round 2 sheets (`base-finishes.png`,
+`ink-turnaround.png`, the expression sheets). Every choice below was
+decided by the agent in the owner's absence on 2026-11-19, for review.
+
+**What a finish is in code:** `applyFinish(doc, finish)` in
+`@holoim/avatar-look` (`finish.ts`) runs after `dressAvatar`, so any trait
+card takes any finish. A beat sheet names `avatar: "house:ink"` or
+`"house:light"`; the take's `asset.extras.holoim.looks` records the finish
+beside each performer's card. `house-traits.ts --finish <f>` auditions
+every trait sample in a finish.
+
+- **Ink:** colours flattened (emissive 0.6 of the colour, base 0.4), face
+  parts (eyes, lashes, mouth, teeth) untouched. The outline is an
+  inverted hull: an extra primitive per inked primitive that shares the
+  source's normals, skin and morph targets (so it moves with the face),
+  pushed out along welded normals, winding flipped, one single-sided
+  material `HouseBase_ink` in warm dark brown. 6 mm on the body, 2.5 mm on
+  the head; no line on body skin within 3 cm of a garment, nor on eyes,
+  glasses, mouth, teeth or lashes.
+- **Light:** colours mixed 0.4 toward a warm white, emissive 0.45 of that,
+  roughness 0.5; skin glows but stays opaque, brows and frames opaque with
+  no glow, garments and hair alpha blend at 0.86. A see-through skin was
+  tried first and showed the teeth through the lips, so it was dropped.
+- **Audition change:** the geometry measures (the audition's and
+  `face-legibility.ts`'s, through `meshesOf`) now ignore `HouseBase_ink`
+  meshes, which are line work, not surfaces. Before this, the hull was
+  counted as a surface hiding the brows (0.567) and as an accessory. No
+  bar was changed.
+
+**2d's traits on the new base (clay):** all 8 sample looks, both tiers:
+every row passes except `turn.armL-in-legL` (41 slight, 37 broad, 21
+medium; up to 29.4 mm), identical to 2c2's record. Still open with the
+motion owner (2d).
+
+**Each finish over the 8 looks:**
+
+| Finish | Rows failing | Brow contrast (bar 0.25) | Face box (px) | Size (bar 1.8 MB) |
+|---|---|---|---|---|
+| Ink | only the turn row, same values | 0.424–0.481 | 43.5–43.8 | 1.44–1.55 MB |
+| Light | only the turn row, same values | 0.602–0.633 | 43.6–43.9 | 1.09–1.16 MB |
+
+**Blind reading** (`sheets/expressions.json` on the default look, faces
+44 px, `blind-05`; readers are AI: three fresh Claude Sonnet subagents
+per finish, three wordings, not people):
+
+| Finish | Reader 1 | Reader 2 | Reader 3 | Gate (each ≥ 5 of 7) |
+|---|---|---|---|---|
+| Ink | 5 | 5 | 5 | met |
+| Light | 7 | 5 | 5 | met |
+| Clay (control, same run) | 4 | 3 | 2 | not met |
+
+The misses are the quiet pairs (held / looking down, neutral /
+determined / hopeful). Clay read 5, 5, 5 in 2c2 with other readers on the
+same rendering, so the spread between rounds is reader noise of about two
+labels; clay's earlier pass is not re-decided here, and people as readers
+remain the real test.
+
+**One authored piece re-dressed:** the poem pair (both cards kept) built
+in ink and light; each take's `looks` carries `"finish"`. Review videos:
+`output/authoring/finishes/review/<finish>/reader/review.mp4` (ignored).
+
+**Quick Look:** the ink and light expression takes convert with
+`glb_to_usdz.py` (4.35 and 4.36 MB) and `inspect_usdz.py` passes both
+with no failures; the ink USDZ carries `HouseBase_ink`. Whether RealityKit
+culls the hull's back faces as the browser does is not seen yet (no
+device). `check_usdz_tools.sh` still cannot run its material challenge on
+this untextured base (see 2c).
+
+**Against the sheets:** ink reads as ink at card size; small outline
+spurs show at the inner eye corners, nostrils and mouth corners. Light
+reads as a warm glowing figure with a clean face; the sheet's light is
+more see-through than this one. In motion (the poem pair) light has a
+weakness ink does not: the 0.4 mix toward warm white takes both
+performers' clothing to near the same cream, so the pair is told apart by
+hair and build only, and the bubble's lines show through the jumpers. A
+smaller mix for garments (keeping their hue) is the next lever, for the
+owner to judge against the sheet.
+
+**Not done:** people as readers; Quick Look and the light finish on a
+physical device; the captured-take-with-bubble render (the viewer makes
+every material transparent there, `sphereClipping.ts`), which will thin
+the ink outline's colour too; masking a garment's line where another
+garment covers it (only skin is masked today; no poke-through was seen in
+the renders, but a tight hem could show one); the owner's review of
+every choice above.
 
 ### Slice 6 evidence (2026-11-18)
 

@@ -6,7 +6,7 @@
  * and anchors on it. The published format is unchanged; the asset says the
  * take was authored, the way showcase pieces do, and (`looks`) the look card of
  * each house-base performer given one (one without wears base.json's
- * `defaultLook`, which is not repeated here).
+ * `defaultLook`, which is not repeated here) and its finish when not clay.
  *
  * Each object the sheet declares is a unit-scale `RecordedObject` wrapper at
  * the scene root with its own position and rotation tracks (none when it
@@ -22,6 +22,7 @@ import { dedup, mergeDocuments } from '@gltf-transform/functions';
 import * as THREE from 'three';
 import { assertHoloimObjects, formatCredit, HOLOIM_CREDIT_EXTRAS_KEY, HOLOIM_OBJECTS_EXTENSION, HOLOIM_OBJECTS_VERSION, RECORDED_OBJECT_NODE_NAME, type HoloimObjects } from '@holoim/objects';
 
+import { houseFinish } from './beats.ts';
 import type { PerformerTrack, PropTrack, SolvedTake } from './direct.ts';
 import { partGeometry } from './props.ts';
 import type { Effect, Keys, ObjectChange, SolvedWorld } from './world.ts';
@@ -189,7 +190,10 @@ export async function writeTake(take: SolvedTake, provenance: Provenance, world?
   glb = patchJson(glb, (json) => {
     const sources = [...new Map(take.props.flatMap((t) => (t.prop.source ? [[t.prop.source.loaded.name, { source: t.prop.source.loaded.name, sha256: t.prop.source.loaded.sha256, ...(t.prop.source.loaded.fetchedFrom ? { fetchedFrom: t.prop.source.loaded.fetchedFrom } : {}) }] as const] : []))).values()];
     // The look card of each house-base performer given one, so the take says how its people were dressed.
-    const looks = take.tracks.flatMap((t) => (t.spec.look ? [{ performer: t.spec.id, look: t.spec.look }] : []));
+    const looks = take.tracks.flatMap((t) => {
+      const finish = houseFinish(t.spec.avatar);
+      return t.spec.look || (finish && finish !== 'clay') ? [{ performer: t.spec.id, ...(t.spec.look ? { look: t.spec.look } : {}), ...(finish && finish !== 'clay' ? { finish } : {}) }] : [];
+    });
     json.asset = { ...json.asset, extras: { ...(json.asset.extras ?? {}), holoim: { authored: 'synthetic', ...provenance, ...(sources.length ? { sources } : {}), ...(looks.length ? { looks } : {}) } } };
     // mergeDocuments drops a source's asset fields, so the credits are written here.
     if (credits.length) json.asset.copyright = credits.join('; ');

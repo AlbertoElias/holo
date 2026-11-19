@@ -4,6 +4,7 @@
  * Only for the audition and checks; direction never needs it.
  */
 import * as THREE from 'three';
+import { INK_MATERIAL } from '@holoim/avatar-look';
 
 export interface SkinnedSurface {
   readonly mesh: THREE.Mesh;
@@ -104,9 +105,13 @@ function writeDir(e: ArrayLike<number>, n: number[], i: number, out: Float32Arra
   out[i * 3] = x / l; out[i * 3 + 1] = y / l; out[i * 3 + 2] = z / l;
 }
 
-/** Every visible mesh under the avatar. */
+/**
+ * Every visible surface mesh under the avatar. An ink finish's outline (material
+ * `INK_MATERIAL`) is line work drawn on its far side only, not a surface, so it is left out.
+ */
 export function meshesOf(root: THREE.Object3D): THREE.Mesh[] {
   const out: THREE.Mesh[] = [];
-  root.traverse((o) => { if ((o as THREE.Mesh).isMesh && o.visible) out.push(o as THREE.Mesh); });
+  const outline = (m: THREE.Material | THREE.Material[]) => !Array.isArray(m) && m.name === INK_MATERIAL;
+  root.traverse((o) => { if ((o as THREE.Mesh).isMesh && o.visible && !outline((o as THREE.Mesh).material)) out.push(o as THREE.Mesh); });
   return out;
 }
