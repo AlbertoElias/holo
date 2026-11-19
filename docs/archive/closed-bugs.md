@@ -1329,6 +1329,17 @@ bug above.)
 - **Not done:** not seen on a real iPhone. RealityKit on macOS is the closest check run.
 - **Closed:** 2026-11-13.
 
+### B-071 — The viewer's audio-sync fixture outran its own audio once the avatar's Idle grew to 5 s
+
+- **Area:** `apps/viewer-web/e2e/xr-viewer.spec.ts` (`avatarWithAudio()`, used by "VR foot controls" and the phone AR drag-scrub test)
+- **Severity:** P1 (deterministic red on `main`: hosted runs 44424492123, 44426488886 and 44427696686, from `eb630be6` on; deploys skipped)
+- **Observed:** 2026-11-18, hosted CI: `audio resumes at the dragged time` and `audio scheduled at the scrubbed clip time`, drift 30 s against a 0.05 s limit
+- **Evidence:** the fixture multiplied every clip's keyframe times by 8 and attached a 30 s looping audio track. `bug/desktop-gait` replaced `avatar.glb`'s 1 s Idle with a 5 s CMU mocap Idle, so the stretched clip lasted 40 s and a scrub past 30 s compared the clip time with audio that had already wrapped; the drift is exactly one audio length.
+- **Expected:** the fixture's timing does not depend on how long the shared avatar's clips are.
+- **Reproduction:** run either test on `eb630be6` or later; it fails whenever the scrub target lands past 30 s.
+- **Fix:** the fixture stretches the longest clip to a fixed `CLIP_SECONDS = 8` (each clip keeps its proportion) and fails loudly if the avatar carries no timed animation. Both tests passed five times each under `CI_EMULATE_LOAD=2 scripts/ci-emulate.sh`.
+- **Same runs, second cause:** `ci-desktop-motion-playwright.ts` gated the per-frame pose cost at the brief's 0.25 ms median, measured on the desktop test machine; every rig on the hosted runners read 0.30 ms (three 0.1 ms `performance.now()` steps). The CI gate is now 1 ms, which still fails a regression of several times the budget, and the value is still printed and reported.
+
 ### B-067 — The status-line follow check reads a head that moved as the line following
 
 - **Area:** `apps/capture/scripts/ci-capture-ui-playwright.ts` (stage "headset: status line follow")
