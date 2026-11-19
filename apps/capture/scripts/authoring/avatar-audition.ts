@@ -28,6 +28,7 @@ import { basename, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as THREE from 'three';
 import { FACE_CHANNELS, type FaceChannel } from '@holoim/avatar-face';
+import { INK_MATERIAL } from '@holoim/avatar-look';
 import type { VrmHumanoidBone } from '@holoim/meaning';
 
 import { fileRows, geometryRows, renderRows, type AuditionRow } from './lib/audition-bar.ts';
@@ -327,6 +328,10 @@ export async function audition(input: string, options: AuditionOptions = {}): Pr
   const file = await asGlb(input, out);
   const bytes = (await stat(file)).size;
   const a = await loadAvatar(file);
+  // An ink outline is line work drawn on its far side only, not a surface: the geometry tier measures surfaces.
+  const outlines: THREE.Object3D[] = [];
+  a.scene.traverse((o) => { const m = (o as THREE.Mesh).material; if ((o as THREE.Mesh).isMesh && !Array.isArray(m) && m?.name === INK_MATERIAL) outlines.push(o); });
+  for (const o of outlines) o.removeFromParent();
   const geometry = faceGeometry(a);
   resetPose(a);
   const face = faceAudition(a);

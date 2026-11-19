@@ -4,17 +4,18 @@
  * colour, glasses kind and clothing set), run the full avatar audition on
  * each with its bars unchanged, and write one table.
  *
- *   node --conditions=development --import tsx scripts/authoring/house-traits.ts [--geometry] [--only <n>]
+ *   node --conditions=development --import tsx scripts/authoring/house-traits.ts [--geometry] [--only <n>] [--finish clay|ink|light]
  *
  * Writes output/authoring/house-traits/<n>-<lookKey>/ (the audition and its
- * card.png) and output/authoring/house-traits/report.json. Exits 1 when any
+ * card.png) and output/authoring/house-traits/report.json; a finish other
+ * than clay writes under house-traits/<finish>/ instead. Exits 1 when any
  * look fails a binding row.
  */
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { BUILDS, CLOTHING, EYES, GLASSES, HAIR_COLOUR, HAIR_STYLES, lookKey, parseLook, SKIN, type LookCard } from '@holoim/avatar-look';
+import { BUILDS, CLOTHING, EYES, FINISHES, GLASSES, HAIR_COLOUR, HAIR_STYLES, lookKey, parseLook, SKIN, type Finish, type LookCard } from '@holoim/avatar-look';
 
 import { audition, summarizeAudition } from './avatar-audition.ts';
 import { dressedFile } from './lib/house-look.ts';
@@ -57,6 +58,10 @@ async function main(): Promise<void> {
   const geometryOnly = args.includes('--geometry');
   const onlyAt = args.indexOf('--only');
   const only = onlyAt === -1 ? null : Number(args[onlyAt + 1]);
+  const finishAt = args.indexOf('--finish');
+  const finish = (finishAt === -1 ? 'clay' : args[finishAt + 1]) as Finish;
+  if (!FINISHES.includes(finish)) throw new Error(`--finish must be one of ${FINISHES.join(', ')}`);
+  const outDir = finish === 'clay' ? OUT : join(OUT, finish);
   const missing = uncovered(TRAIT_LOOKS);
   if (missing.length) throw new Error(`the trait looks leave out ${missing.join(', ')}`);
 
@@ -64,8 +69,8 @@ async function main(): Promise<void> {
   for (const [i, card] of TRAIT_LOOKS.entries()) {
     const n = i + 1;
     if (only !== null && only !== n) continue;
-    const file = await dressedFile(card);
-    const out = join(OUT, `${n}-${lookKey(card)}`);
+    const file = await dressedFile(card, finish);
+    const out = join(outDir, `${n}-${lookKey(card)}`);
     const report = await audition(file, { render: !geometryOnly, out });
     await mkdir(out, { recursive: true });
     await writeFile(join(out, 'audition.json'), `${JSON.stringify(report, null, 2)}\n`);
@@ -79,8 +84,8 @@ async function main(): Promise<void> {
       sizeMb: Number(size?.value ?? 0),
     });
   }
-  await mkdir(OUT, { recursive: true });
-  await writeFile(join(OUT, 'report.json'), `${JSON.stringify({ looks: results }, null, 2)}\n`);
+  await mkdir(outDir, { recursive: true });
+  await writeFile(join(outDir, 'report.json'), `${JSON.stringify({ finish, looks: results }, null, 2)}\n`);
   console.log('\nlook | fails | not run');
   for (const r of results) console.log(`${r.n}. ${r.look} | ${r.fails.length ? r.fails.join('; ') : 'none'} | ${r.notRun}`);
   if (results.some((r) => r.fails.length)) process.exitCode = 1;

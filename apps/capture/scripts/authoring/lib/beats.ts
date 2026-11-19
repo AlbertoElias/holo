@@ -5,7 +5,7 @@
  * turn and a step are persistent: they also move everything after them).
  */
 import { FACE_CHANNELS, type FaceChannel } from '@holoim/avatar-face';
-import { parseLook, type LookCard } from '@holoim/avatar-look';
+import { FINISHES, parseLook, type Finish, type LookCard } from '@holoim/avatar-look';
 
 import type { HandShapeName } from './hands.ts';
 import { HAND_SHAPES } from './hands.ts';
@@ -150,14 +150,20 @@ export interface SoundSpec {
   readonly credit?: CreditSpec;
 }
 
-/** The house base as a performer's avatar (its one finish so far, clay). */
+/** The house base as a performer's avatar, in its default finish, clay; `house:<finish>` wears another (`FINISHES` in `@holoim/avatar-look`). */
 export const HOUSE_AVATAR = 'house:clay';
+
+/** The finish a `house:<finish>` avatar names, or null when the avatar is not the house base. */
+export function houseFinish(avatar: string): Finish | null {
+  const m = /^house:(.+)$/.exec(avatar);
+  return m && (FINISHES as readonly string[]).includes(m[1]!) ? (m[1] as Finish) : null;
+}
 
 export interface PerformerSpec {
   readonly id: string;
-  /** Path to the avatar GLB, relative to the beat sheet; or `stock`, `fixture:<name>`, `house:clay` (the house base). */
+  /** Path to the avatar GLB, relative to the beat sheet; or `stock`, `fixture:<name>`, `house:<finish>` (the house base in `clay`, `ink` or `light`). */
   readonly avatar: string;
-  /** For `house:clay` only: the look card the house base is dressed in (`@holoim/avatar-look`); default its default look. */
+  /** For `house:<finish>` only: the look card the house base is dressed in (`@holoim/avatar-look`); default its default look. */
   readonly look?: LookCard;
   /** Stage position `[x, z]` in metres. */
   readonly at: readonly [number, number];
@@ -462,9 +468,9 @@ export function validateSheet(sheet: BeatSheet): string[] {
   if (!sheet.performers.length) problems.push('no performers');
   if (!(sheet.duration > 0)) problems.push('duration must be > 0');
   for (const p of sheet.performers) {
-    if (p.avatar.startsWith('house') && p.avatar !== HOUSE_AVATAR) problems.push(`${p.id}: avatar "${p.avatar}": the house base is "${HOUSE_AVATAR}"`);
+    if (p.avatar.startsWith('house') && !houseFinish(p.avatar)) problems.push(`${p.id}: avatar "${p.avatar}": the house base is ${FINISHES.map((f) => `"house:${f}"`).join(', ')}`);
     if (p.look === undefined) continue;
-    if (p.avatar !== HOUSE_AVATAR) { problems.push(`${p.id}: a look needs avatar "${HOUSE_AVATAR}"`); continue; }
+    if (!houseFinish(p.avatar)) { problems.push(`${p.id}: a look needs a house avatar ("${HOUSE_AVATAR}" or another finish)`); continue; }
     try { parseLook(p.look, `${p.id} look`); } catch (e) { problems.push((e as Error).message); }
   }
   // One table of names: a point's first word means one thing.
