@@ -34,7 +34,7 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Expected:** the failed post releases the grant before the retry, every run.
 - **Reproduction:** not reproduced in isolation (3 of 3 pass with `npx vitest run test/post-grant.test.ts`); seen once in the full `test:unit:all` under machine load. Try `CI_EMULATE_LOAD=2 scripts/ci-emulate.sh` with `--repeat-each`.
 
-### B-069 — Quick Look check: CPU budget fires after a successful conversion
+### B-070 — Quick Look check: CPU budget fires after a successful conversion
 
 - **Area:** apps/viewer-api/tools (`glb_to_usdz.py` budget timer, `check_usdz_tools.sh`)
 - **Severity:** P2 (the check is the gate before USDZ-tool changes deploy; a false failure blocks a sound change)
