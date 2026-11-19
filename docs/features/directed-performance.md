@@ -1896,8 +1896,9 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
      rebuild.
    - **The pass numbers for likeness** (proposed): mean silhouette IoU at
      least 0.80 over the four turnaround views and mean head IoU at least
-     0.90. They are floors just under what the fit reached, so a later
-     change that loses the likeness shows. The "which is the drawing?" pairs
+     0.90. They are floors just under what the fit reached, judged by hand
+     from `house-likeness.ts`'s numbers (no check enforces them yet), so a
+     later change that loses the likeness shows when the check is rerun. The "which is the drawing?" pairs
      are kept as a diagnostic, not a gate: a 3D render beside a painted
      sheet is told apart by its finish.
    - **The rest lid** stays where 2c put it (edge 8). The fit round's 22
@@ -3088,19 +3089,25 @@ rig):
 - The head is rigid and sized by `proportions.head`.
 - The hands follow what surrounds them and keep their fingers.
 - Moves on the medium build: median 49.7 mm, p90 70.9 mm, max 123.2 mm.
-- The head moves as a whole by [0.4, −15.5, −0.7] mm.
+- The head moves as a whole by [0.4, −15.5, −0.7] mm within the wrap.
+- The target is placed by its chest, so the wrap alone carried the whole
+  body about 6 cm forward of the root. The fit then takes the body's mean
+  move across the floor back out (`recentredMm` in the report).
+- After that, the feet stand where `main`'s did (LeftFoot y −0.022 m on
+  both). The hips sit 38 mm ahead of `main`'s, in the sheet's posture.
+  The verifier found this offset; it is fixed here.
 
 **Likeness** (`house-likeness.ts`, medium build, the turnaround's framing):
 
 | View | IoU before | IoU after | Head IoU before | Head IoU after |
 |---|---|---|---|---|
-| front | 0.784 | 0.856 | 0.878 | 0.884 |
-| three-quarter | 0.753 | 0.767 | 0.863 | 0.919 |
-| side | 0.796 | 0.806 | 0.883 | 0.926 |
-| back | 0.782 | 0.859 | 0.893 | 0.923 |
-| **mean** | **0.779** | **0.822** | **0.879** | **0.913** |
+| front | 0.784 | 0.859 | 0.878 | 0.887 |
+| three-quarter | 0.753 | 0.770 | 0.863 | 0.911 |
+| side | 0.796 | 0.810 | 0.883 | 0.923 |
+| back | 0.782 | 0.865 | 0.893 | 0.912 |
+| **mean** | **0.779** | **0.826** | **0.879** | **0.908** |
 
-Both proposed floors are met: IoU ≥0.80 and head IoU ≥0.90.
+Both proposed floors are met: IoU ≥0.80 and head IoU ≥0.90. Nothing enforces them yet: `house-likeness.ts` writes the numbers, and they are judged here by hand. The "before" columns are `main`'s base measured the same way on the same day. The fit target comes from the same turnaround the IoU is scored against, so the gain shows mostly that the fit reached its target, not an independent likeness.
 
 **The "which is the drawing?" pairs**, a diagnostic and not a gate. Fresh
 readers told the sheet from the base by its finish in essentially every
@@ -3110,19 +3117,22 @@ pair. Their cues were:
 - the base: ragged hems, bare feet, a line mouth.
 
 Two of those cues were then fixed: the base now has shoes and level trouser
-hems (`garments.shoes`, `garments.cuff`). The readers sometimes swapped their
+hems (`garments.shoes`, `garments.cuff`). The shoes' smoothing rounded the
+soles 24 mm under the floor; `dress.py` now holds them at the bare foot's
+floor (a verifier finding, fixed). The readers sometimes swapped their
 left and right labels, but their reasons always named the drawing's finish.
 
-**Blind reading** (`face-legibility.ts`, card size `blind-05`, 44 px face,
+**Blind reading** (`face-legibility.ts`, card size `blind-05`, a 43–44 px face,
 3 fresh Sonnet readers each):
 
 | Round | Scores |
 |---|---|
 | First fit, rest lid edge 22 | 4, 4, 4 of 7 (fail) |
 | Lid back to 8 | 5, 5, 5 of 7 |
-| Final base, with shoes and hems | 5, 5, 5 of 7 |
+| Shoes and hems | 5, 5, 5 of 7 |
+| Final base (re-centred, soles on the floor) | 5, 5, 5 of 7 |
 
-In the final round all three readers swapped held and eyes-down, and read
+In both of the last two rounds all three readers swapped held and eyes-down, and read
 the other five correctly. The gate is ≥5 of 7 for 3 readers, so it passes.
 The held and looking-down swap from 2d remains.
 
@@ -3135,11 +3145,11 @@ geometry and render tiers of the audition):
   - `turn.armL-in-legL` now fails at 21–41 (up to 29.4 mm).
 - So the count is lower but the part changed: the wider stance brings the
   left hand to the thigh in the turn. It is still open (2d).
-- Sizes: the trait looks are 1.08–1.16 MB, the wardrobes 1.52 MB, and the
-  public `house-base.glb` 1.07 MB. All are under the 1.8 MB bar.
+- Sizes: the trait looks are 1.08–1.17 MB, the wardrobes 1.52–1.53 MB, and
+  the public `house-base.glb` 1.08 MB. All are under the 1.8 MB bar.
 
 **Quick Look:** a directed take on the fitted base converts with
-`glb_to_usdz.py` (4.29 MB USDZ), and `inspect_usdz.py` passes with no
+`glb_to_usdz.py` (4.24 MB USDZ), and `inspect_usdz.py` passes with no
 failures. `check_usdz_tools.sh` still cannot run its material challenge,
 because the base has no textures, as on `main` (see 2c).
 

@@ -242,6 +242,11 @@ def garments(human, rig, slots, G):
     if sh_f:
         # Shoes: the feet eased out and smoothed into one rounded shape (no toes), under the trouser hems.
         Ps, Fs, Ws, rs = build(sh_f, G["shoes"], "shoes", [])
+        # The smoothing still rounds the sole under the floor the bare foot stands on: nothing goes below it.
+        floor = V[sorted(set(v for k in sh_f for v in polys[k])), 2].min()
+        rs["soleBelowFloor"] = int((np.asarray(Ps)[:, 2] < floor - 1e-4).sum())
+        Ps = np.asarray(Ps).copy()
+        Ps[:, 2] = np.maximum(Ps[:, 2], floor)
         worn.append(skinned("HouseBase_Shoes", Ps, Fs, Ws, [me.materials[si]], rig, human))
         report["shoes"] = rs
 

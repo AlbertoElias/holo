@@ -122,7 +122,8 @@ def fit(X, is_body, body_polys, members, weight_of, bone_names, Pf, target_path,
         side = "Left" if name.startswith("Left") else "Right"
         extra = fingers(side) if "Arm" in bones[0] else []
         w = np.clip(weight_of(*bones, *extra), 0, 1)
-        # The vertices with no rig weight (helpers, joint cubes) on that limb go with it in full.
+        # Vertices with no rig weight (helpers, joint cubes) stay put here; they take their moves from
+        # the body vertices nearest them at the end.
         pivot = X[joint].mean(axis=0)
         turns.append((pivot, sign, deg, w))
         P = turn(P, pivot, (0, 1, 0), sign * deg, w)
@@ -215,6 +216,12 @@ def fit(X, is_body, body_polys, members, weight_of, bone_names, Pf, target_path,
         dd = np.take_along_axis(d2, nn, axis=1)
         w = 1.0 / np.maximum(np.sqrt(dd), 1e-4)
         D[chunk] = (D[body][nn] * w[:, :, None]).sum(axis=1) / w.sum(axis=1, keepdims=True)
+
+    # The figure keeps its place over the root: the body's mean move across the floor is taken out (the
+    # target is placed by its chest, so the wrap alone carried the whole body some centimetres forward).
+    shift = D[body, :2].mean(axis=0)
+    D[:, :2] -= shift
+    report["recentredMm"] = np.round(-shift * 1000, 1).tolist()
 
     moved = np.linalg.norm(D[body], axis=1)
     report.update({
