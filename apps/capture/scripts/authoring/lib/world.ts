@@ -14,7 +14,7 @@ import { parseColor } from './props.ts';
 
 const DEG = Math.PI / 180;
 const G = 9.81;
-const WATER = '#8cc4ec';
+const WATER = '#d4efff'; // light enough to stand off the card's teal
 const SPARK = '#ffd877';
 const MOTE = '#f4f0d8';
 
@@ -133,7 +133,8 @@ export function solveWorld(sheet: BeatSheet, take: SolvedTake): SolvedWorld {
     const tilt = w.tilt ?? 0;
     const rate = w.rate ?? 60;
     const speed = w.speed ?? 0.8;
-    const size = w.size ?? 0.012;
+    // About 8 px wide on the card (16 mm and 30 mm streams both read as "thin", slice 1g).
+    const size = w.size ?? 0.045;
     const wetRadius = w.wet === false ? 0 : typeof w.wet === 'number' ? w.wet : 0.06;
     const color = parseColor(w.color ?? WATER);
     const rnd = stream(salt);
@@ -362,8 +363,8 @@ export function solveWorld(sheet: BeatSheet, take: SolvedTake): SolvedWorld {
         const p = from.clone().lerp(to, tau / T);
         p.y = from.y + vy * tau - (G * tau * tau) / 2;
         const v = new THREE.Vector3((to.x - from.x) / T, vy - G * tau, (to.z - from.z) / T);
-        // Stretched by the distance it falls in a frame: a stream, not beads.
-        const len = Math.min(0.08, Math.max(size * 2, v.length() / take.fps));
+        // Stretched past the distance it falls in a frame, so the drops overlap: a stream, not beads.
+        const len = Math.min(0.12, Math.max(size * 2, (1.5 * v.length()) / take.fps));
         const on = inside ? 1 : 0;
         keys.push({ t, p, q: new THREE.Quaternion().setFromUnitVectors(up, v.normalize()), s: new THREE.Vector3(size * on, len * on, size * on) });
       }
