@@ -1592,8 +1592,10 @@ is not in a take's undo history; changing the look again is its undo.
   name the hesitation; the flat take scores lower; the owner's verdict is
   recorded. Orbiting is tested as a second question. Tool built and run on
   `goodbye` (2026-11-18): **the bar is not met**, the directed take does not
-  beat the flat one; see "Slice 3 evidence" below. Stays open for the owner
-  and for a rework of the directed acting.
+  beat the flat one; see "Slice 3 evidence" below. After two revisions of the
+  goodbye's direction (see "Goodbye revision rounds") the stock avatar is
+  within 0.03 of the bar and the house base still fails; stays open for the
+  owner and for a rework of the directed acting.
 - [x] Revising one beat changes only that span in the report, and rebuilds
   in under 30 s. Evidence: slice 1 below.
 - [x] Slice 1b's review loop: a review command writes a pack (H.264 video
@@ -1886,7 +1888,7 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
 - One pipeline check: a directed take on two avatars through upload and
   render, with the stop-short distance and the viewer's anchors read back.
 - `check_usdz_tools.sh` by hand on the two-character piece.
-- The owner's verdict on the six-second test, and what to change after its FAIL on `goodbye`.
+- The owner's verdict on the six-second test, and what to change after its FAIL on `goodbye` (two revision rounds, see "Goodbye revision rounds").
 - Proof video under ignored `output/`.
 
 ### Slice 0 evidence (2026-11-13)
@@ -2574,7 +2576,7 @@ conversion.
 
 **Quick Look note.** One run of the check on try 1 failed one case on its
 CPU budget after a successful conversion. A re-run passed 4 of 4. Logged
-as B-069.
+as B-070.
 
 ### Slice 2a evidence (2026-11-17)
 
@@ -3114,6 +3116,58 @@ the first, because the mixer looped; the chest joint fell back differently
 on import and recast; the untouched check was circular; edit overlap
 depended on list order; leg length was measured two ways; hold lengths
 were one frame short.
+
+### Goodbye revision rounds (2026-11-18)
+
+Decided by the agent in the owner's absence on 2026-11-18, for the owner to
+review. The readers and graders in every round are AI subagents (fresh Sonnet,
+frames only, blind codes, a neutral path), not people. The bar and the scoring
+were not changed. Only `sheets/goodbye.json` (direction) changed, plus a guard
+in `six-second-test.ts` (below). Reports are in the ignored
+`apps/capture/output/authoring/six-second/{base,r1,r2}/`.
+
+| round | stock directed / flat | house base directed / flat | stock feeling | orbit (stock, house base) | verdict |
+|---|---|---|---|---|---|
+| base (slice 3) | 0.26 / 0.29 | 0.42 / 0.47 | 0 of 3 | pass, pass | FAIL |
+| r1: door along the profile axis, bigger step, hand to chest, concerned state | 0.41 / 0.39 | 0.61 / 0.65 | 0 of 3 | 0.23 FAIL, pass | FAIL |
+| r2: he leaves in two steps, her reach anticipates longer | 0.68 / 0.56 | 0.67 / 0.67 | 2 of 3 | 0.39 FAIL, 0.57 pass | FAIL |
+
+What each round changed and learned:
+
+- **r1** moved his exit to the profile axis (`marks.door` 2.4, 1.5, 0.1), a 0.55 m
+  step, a hand-to-chest gesture for "she stops herself", and the `concerned`
+  state. It raised the directed scores (+0.15 stock, +0.19 house base), but flat
+  rose with it: blocking lifts both takes, so the margin measures only what is
+  directed-only (anticipation, face, life, hand, state). Readers could not see
+  him leave.
+- **r2** made him walk off in two steps (0.9 m, then 0.7 m; the second is the
+  new beat `h-walk`) and gave her reach a 0.5 anticipation. Readers now name
+  him walking away to the right, her reaching, the hand to the chest and the
+  hurt. Stock directed 0.68 beats flat 0.56 by 0.12 (bar 0.15). Rejected: a long
+  anticipation on `h-turn` (0.45) made the foot skate 3.38 cm and failed the body
+  check; it was removed (1.12 cm).
+- **Still failing:** the stock margin (0.12 of 0.15), the stock orbit (0.39 against
+  the card's 0.68: in the orbit view the two overlap along the viewing axis so
+  the reach is hidden), and the house base margin (0: flat reads as well as
+  directed). Three readers per take is noise of about 0.1, so 0.12 against 0.15
+  is within it.
+
+**What blocks the pass.** Mainly the test and the cast, not the acting:
+both performers are the same avatar (no "he" or "she", faces are blank at card
+size), so the directed-only craft that the 0.15 margin needs (face, fingers,
+anticipation) is mostly invisible at card size; and the staging is along one
+axis, which the orbit hides. A third round would stage the pair on a diagonal
+(fixing the orbit) and try a different `him` avatar. I stopped at two rounds:
+the remaining levers are staging and casting, not the beat sheet's acting, and
+the owner should choose.
+
+**Tool findings.** A reader sheet once rendered black (8 KB against 90-310 KB)
+and three readers read it; those answers were void and redone. `prepare` now
+re-renders a sheet under 30 KB up to three times and then fails. The test also
+scores every beat in the sheet, including one with no `intent`, so `h-walk`
+needed an intent (`He keeps walking away.`) and a grade; r2's four graders added
+it afterwards, from the answers only. Ports 3614/3641 were held by another
+session; I used 3714/3741.
 
 ### Slice 3 evidence: caveats found by the verifier (2026-11-18)
 
