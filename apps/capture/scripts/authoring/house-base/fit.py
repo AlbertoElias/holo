@@ -1,11 +1,11 @@
 """
 The fit (slice 2c2 of docs/features/directed-performance.md): moves the MPFB human onto a target shape
-generated from Astra's clay turnaround, keeping its topology, so everything `build.py` adds after it (the
+carved from Astra's clay turnaround, keeping its topology, so everything `build.py` adds after it (the
 smoothed face and its parts, the face shapes, the rig fitted from the joint cubes, garments, hair,
 glasses) is made on the fitted shape and keeps working.
 
-The target (`base.json` `fit.target`, a GLB, made by `generate-target.py`) is clothed and stands in the
-sheet's pose, so:
+The target (`base.json` `fit.target`, a GLB, made by `carve.py` from the sheet's silhouettes alone) is
+clothed and stands in the sheet's pose, so:
 
 - it is scaled to the human's height (sole to head top), and centred on it;
 - the human is first turned into the sheet's stance (the upper arms down, the legs in, about their
