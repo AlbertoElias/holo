@@ -35,7 +35,9 @@ const testDir = path.dirname(fileURLToPath(import.meta.url));
 const avatarGlbPath = path.resolve(testDir, "../../capture/public/gltf/models/avatar.glb");
 const reportPath = path.resolve(testDir, "../../../output/test-results/xr-viewer-report.json");
 const AUDIO_SECONDS = 30;
-const CLIP_STRETCH = 8;
+// The fixture's longest clip lasts this long, whatever avatar.glb carries;
+// it must stay shorter than AUDIO_SECONDS, or the looping audio wraps first.
+const CLIP_SECONDS = 8;
 const AUDIO_SYNC_TOLERANCE_S = 0.05;
 // Mean Rec. 709 luminance (0-255) of the hologram's pixels; a black
 // silhouette reads near 0.
@@ -181,15 +183,20 @@ async function avatarWithAudio(): Promise<Buffer> {
   };
   const binStart = 20 + jsonLength;
   const bin = Buffer.from(glb.subarray(binStart + 8, binStart + 8 + glb.readUInt32LE(binStart)));
-  // Slow the avatar's 1 s loops to CLIP_STRETCH seconds, so scrubbing and
-  // restart have a clip long enough to tell positions apart.
+  // Stretch the avatar's clips so the longest lasts CLIP_SECONDS: scrubbing
+  // and restart need a clip long enough to tell positions apart, and the
+  // audio must outlast it. Scaling to a length, not by a factor, keeps the
+  // fixture fixed when avatar.glb gains longer clips.
   const inputs = new Set((json.animations ?? []).flatMap((animation) => animation.samplers.map((sampler) => sampler.input)));
+  const longest = Math.max(...[...inputs].map((index) => json.accessors[index]!.max?.[0] ?? 0));
+  if (!(longest > 0)) throw new Error("avatar.glb has no timed animation to stretch");
+  const stretch = CLIP_SECONDS / longest;
   for (const index of inputs) {
     const accessor = json.accessors[index]!;
     const start = (json.bufferViews[accessor.bufferView]!.byteOffset ?? 0) + (accessor.byteOffset ?? 0);
-    for (let i = 0; i < accessor.count; i++) bin.writeFloatLE(bin.readFloatLE(start + i * 4) * CLIP_STRETCH, start + i * 4);
-    if (accessor.min) accessor.min = accessor.min.map((v) => v * CLIP_STRETCH);
-    if (accessor.max) accessor.max = accessor.max.map((v) => v * CLIP_STRETCH);
+    for (let i = 0; i < accessor.count; i++) bin.writeFloatLE(bin.readFloatLE(start + i * 4) * stretch, start + i * 4);
+    if (accessor.min) accessor.min = accessor.min.map((v) => v * stretch);
+    if (accessor.max) accessor.max = accessor.max.map((v) => v * stretch);
   }
   const wav = toneWav(AUDIO_SECONDS);
   const audioOffset = Math.ceil(bin.length / 4) * 4;

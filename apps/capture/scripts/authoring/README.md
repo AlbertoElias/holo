@@ -293,7 +293,7 @@ A sheet's `world` lists what changes in the set, one line each:
   them the further it tips (`rate` 60 a second at full flow), at `speed`
   0.8 m/s along the axis, and fall under gravity to land where the aim
   points (`onto`, else the target of the beat that aims that object).
-  Each drop is a stretched `size` 0.012 m bead (`color` a pale water blue).
+  Each drop is a `size` 0.045 m bead (about 8 px wide on the card) stretched along its fall so drops overlap into a stream (`color` a light water blue).
   `wet` (0.06 m, or `false`) leaves a darker disc on the surface that grows as
   water lands and stays to the end.
 - `{ "kind": "burst", "at", "when" }`: `count` 24 sparks thrown `spread`
@@ -399,6 +399,7 @@ and in `manifest.json`.
 3. Follow `prompts.md`: three fresh Sonnet readers per code (card question,
    then the orbit as a follow-up) and one fresh grader per code; save
    `answers/<code>/reader-<n>.json` and `grades/<code>.json`.
+   `prepare` re-renders a reader sheet under 30 KB (a renderer flake gives a black sheet) up to three times. Every beat in the sheet is scored, so give each beat an `intent`.
 4. `six-second-test.ts score <dir>` writes `report.md` / `report.json` and exits
    1 if a row of the bar fails. Never change the bar after seeing a run.
 

@@ -820,6 +820,28 @@ a particle extension the viewer would have to learn.
 
 **Evidence:** "Slice 1f evidence", below.
 
+### Slice 1g: a stream that reads at card size (2026-11-18)
+
+Slice 1f's follow-up. All three readers saw the pour, but called the
+stream "thin" and "hard to see at card size". At 16 mm wide it is about 2
+px on the card, and its pale blue sits on the teal background. Built only
+in `lib/world.ts` (the pour's defaults and drop shape) and
+`sheets/watering.json`. No new nodes: the levers are the drops' width,
+their stretch along the fall, and their colour against the background.
+
+**Acceptance.**
+- The watering sheet builds with no miss.
+- `publish.ts --check` stays valid within the extent budget.
+- `check_usdz_tools.sh` passes all four cases.
+- Every other sheet stays byte-identical to `main`, because no other sheet pours.
+- On a fresh blind reading of frames only, 2 of 3 readers say water was
+  poured and 2 of 3 say the plant changed, as before. At least 2 of 3 also
+  see the stream at card size without calling it thin or hard to see.
+- Two tuning tries at most, then report.
+
+**Evidence:** "Slice 1g evidence", below. The stream bar is not met after
+two tries; the stream is wider and paler, and nothing else regressed.
+
 ### Slice 2: the avatar flow (designed and approved 2026-11-17; 2a built)
 
 The owner's 2026-11-17 direction, as an 80/20. The 2026-11-13 plan for one
@@ -1572,8 +1594,10 @@ is not in a take's undo history; changing the look again is its undo.
   name the hesitation; the flat take scores lower; the owner's verdict is
   recorded. Orbiting is tested as a second question. Tool built and run on
   `goodbye` (2026-11-18): **the bar is not met**, the directed take does not
-  beat the flat one; see "Slice 3 evidence" below. Stays open for the owner
-  and for a rework of the directed acting.
+  beat the flat one; see "Slice 3 evidence" below. After two revisions of the
+  goodbye's direction (see "Goodbye revision rounds") the stock avatar is
+  within 0.03 of the bar and the house base still fails; stays open for the
+  owner and for a rework of the directed acting.
 - [x] Revising one beat changes only that span in the report, and rebuilds
   in under 30 s. Evidence: slice 1 below.
 - [x] Slice 1b's review loop: a review command writes a pack (H.264 video
@@ -1891,7 +1915,7 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
 - One pipeline check: a directed take on two avatars through upload and
   render, with the stop-short distance and the viewer's anchors read back.
 - `check_usdz_tools.sh` by hand on the two-character piece.
-- The owner's verdict on the six-second test, and what to change after its FAIL on `goodbye`.
+- The owner's verdict on the six-second test, and what to change after its FAIL on `goodbye` (two revision rounds, see "Goodbye revision rounds").
 - Proof video under ignored `output/`.
 
 ### Slice 0 evidence (2026-11-13)
@@ -2548,6 +2572,39 @@ Quick Look shows it in steps (as the viewer does). Drops and motes are
 node scale and translation, which Quick Look plays. Nothing in a world
 line depends on a material animation or a shader.
 
+### Slice 1g evidence (2026-11-18)
+
+**What changed.** In `lib/world.ts`, a drop now defaults to `size` 0.045 m
+(was 0.012; about 8 px on the card) in `#d4efff` (was `#8cc4ec`). Each drop
+is stretched to 1.5 times the distance it falls in a frame, capped at
+0.12 m, so neighbouring drops overlap into one stream. `sheets/watering.json`
+drops its own `"size": 0.016`.
+
+**Checks (try 2).**
+- The build: 132 drops on 16 nodes, plant in 4 colour steps from 5.3 to 7.7 s, 115 channels, 3.8 MB.
+- `publish.ts --check`: valid, deformed 686,136 and rigid 4,817,839.
+- `check_usdz_tools.sh`: 4 of 4.
+- rest, expressions, gestures, defaults-test, goodbye, two-avatars and tallest-bar are byte-identical to `main`.
+
+**Blind reading, frames only, three fresh readers per try.**
+- Try 1 (0.03 m, `#b4e2ff`): 3 of 3 said poured and 3 of 3 said the plant revived. 0 of 3 saw the stream without calling it thin or hard to see at card size: "a thin pale-blue sliver and hard to see", "small and low contrast", "a thin pale curve and easy to miss".
+- Try 2 (0.045 m, `#d4efff`): 3 of 3 said poured and 3 of 3 said revived. 1 of 3 saw the stream at card size without qualification: "a pale, thick, curved white-grey stream", "visible as a white arc". The other two read it as "small, pale and thin" and "not obvious what it is without the close view". So the stream bar (2 of 3) is not met.
+- Two readers also saw the stream as "a solid white-grey curved tube rather than droplets".
+
+**Decision (decided by the agent in the owner's absence on 2026-11-18, for the
+owner to review).** Keep try 2: it reads better than try 1 and 1f, costs nothing in
+budget, and leaves every other sheet unchanged. The bar is not loosened; the
+stream at card size stays open. The next lever is contrast, not width: the
+drops use the lit material every effect sphere shares, so the side away from the
+key light goes grey on the teal. An unlit or emissive drop
+material in `lib/write-glb.ts`, scoped to the pour so other sheets stay
+byte-identical, is the likely fix, with a Quick Look check that it survives
+conversion.
+
+**Quick Look note.** One run of the check on try 1 failed one case on its
+CPU budget after a successful conversion. A re-run passed 4 of 4. Logged
+as B-070.
+
 ### Slice 2a evidence (2026-11-17)
 
 **The command.** `avatar-audition.ts <avatar.glb|.gltf>` grades any avatar
@@ -3177,6 +3234,58 @@ the first, because the mixer looped; the chest joint fell back differently
 on import and recast; the untouched check was circular; edit overlap
 depended on list order; leg length was measured two ways; hold lengths
 were one frame short.
+
+### Goodbye revision rounds (2026-11-18)
+
+Decided by the agent in the owner's absence on 2026-11-18, for the owner to
+review. The readers and graders in every round are AI subagents (fresh Sonnet,
+frames only, blind codes, a neutral path), not people. The bar and the scoring
+were not changed. Only `sheets/goodbye.json` (direction) changed, plus a guard
+in `six-second-test.ts` (below). Reports are in the ignored
+`apps/capture/output/authoring/six-second/{base,r1,r2}/`.
+
+| round | stock directed / flat | house base directed / flat | stock feeling | orbit (stock, house base) | verdict |
+|---|---|---|---|---|---|
+| base (slice 3) | 0.26 / 0.29 | 0.42 / 0.47 | 0 of 3 | pass, pass | FAIL |
+| r1: door along the profile axis, bigger step, hand to chest, concerned state | 0.41 / 0.39 | 0.61 / 0.65 | 0 of 3 | 0.23 FAIL, pass | FAIL |
+| r2: he leaves in two steps, her reach anticipates longer | 0.68 / 0.56 | 0.67 / 0.67 | 2 of 3 | 0.39 FAIL, 0.57 pass | FAIL |
+
+What each round changed and learned:
+
+- **r1** moved his exit to the profile axis (`marks.door` 2.4, 1.5, 0.1), a 0.55 m
+  step, a hand-to-chest gesture for "she stops herself", and the `concerned`
+  state. It raised the directed scores (+0.15 stock, +0.19 house base), but flat
+  rose with it: blocking lifts both takes, so the margin measures only what is
+  directed-only (anticipation, face, life, hand, state). Readers could not see
+  him leave.
+- **r2** made him walk off in two steps (0.9 m, then 0.7 m; the second is the
+  new beat `h-walk`) and gave her reach a 0.5 anticipation. Readers now name
+  him walking away to the right, her reaching, the hand to the chest and the
+  hurt. Stock directed 0.68 beats flat 0.56 by 0.12 (bar 0.15). Rejected: a long
+  anticipation on `h-turn` (0.45) made the foot skate 3.38 cm and failed the body
+  check; it was removed (1.12 cm).
+- **Still failing:** the stock margin (0.12 of 0.15), the stock orbit (0.39 against
+  the card's 0.68: in the orbit view the two overlap along the viewing axis so
+  the reach is hidden), and the house base margin (0: flat reads as well as
+  directed). Three readers per take is noise of about 0.1, so 0.12 against 0.15
+  is within it.
+
+**What blocks the pass.** Mainly the test and the cast, not the acting:
+both performers are the same avatar (no "he" or "she", faces are blank at card
+size), so the directed-only craft that the 0.15 margin needs (face, fingers,
+anticipation) is mostly invisible at card size; and the staging is along one
+axis, which the orbit hides. A third round would stage the pair on a diagonal
+(fixing the orbit) and try a different `him` avatar. I stopped at two rounds:
+the remaining levers are staging and casting, not the beat sheet's acting, and
+the owner should choose.
+
+**Tool findings.** A reader sheet once rendered black (8 KB against 90-310 KB)
+and three readers read it; those answers were void and redone. `prepare` now
+re-renders a sheet under 30 KB up to three times and then fails. The test also
+scores every beat in the sheet, including one with no `intent`, so `h-walk`
+needed an intent (`He keeps walking away.`) and a grade; r2's four graders added
+it afterwards, from the answers only. Ports 3614/3641 were held by another
+session; I used 3714/3741.
 
 ### Slice 3 evidence: caveats found by the verifier (2026-11-18)
 
