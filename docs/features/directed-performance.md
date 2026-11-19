@@ -3601,6 +3601,9 @@ build, hair and clothing colours); `six-second-test.ts` gained `--readers`
 2 of 3 becomes 4 of 6, the score bars do not move) and a per-performer cast
 (`--avatars 'pair=her:house:clay,him:house:clay;mixed=her:house:clay,him:stock'`).
 Report: ignored `apps/capture/output/authoring/six-second/r3/`.
+The `house:clay` performers were built on the house base as it stood before
+the 2026-11-19 clean-fit merge (the base was refit after the round ran), so the
+round 3 numbers describe that base.
 
 | cast | hesitation (bar 4 of 6) | feeling (bar 4 of 6) | directed / flat | min 0.5 | orbit card to orbit |
 |---|---|---|---|---|---|
