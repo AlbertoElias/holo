@@ -24,12 +24,100 @@
   "proportions": {
     "$comment": "Scales about a pivot, weighted by the MPFB mixamo weights of the bones named, so the rig is fitted to the scaled mesh and no bone is ever scaled. head: about the neck joint; hands: about the wrist.",
     "head": {
-      "scale": 1.4,
+      "scale": 1.35,
       "neckShare": 0.35
     },
     "hands": {
-      "scale": 1.15
+      "scale": 1.3
     }
+  },
+  "fit": {
+    "$comment": "The fit (slice 2c2, fit.py): the MPFB human, proportioned, is moved onto `target`, a shape generated from clay-turnaround.png by generate-target.py (Hunyuan3D-2mv, local). stance: the sheet's pose against the human's rest (degrees: upper arms down, legs in), so a limb wraps onto the same limb. regions (strongest rig weight wins; a bone ending in * is every bone starting so): strength (1 wraps fully, 0 only follows its surroundings), inset (m, under the target's surface, where garments are eased out again) and rigid (the head: it moves as a whole, by the mean move to its matches, so the face made after the fit keeps its shape; its size is proportions.head.scale). rounds: smoothing passes of the move field per round; maxDistance (m) and minFacing (cosine) refuse a nearest point on another limb. The route (generate, then fit) is the owner's, 2026-11-18; the values are decided by the agent the same day, owner's review pending (open decision 10).",
+    "enabled": true,
+    "target": "fit-target.glb",
+    "forward": 0.0,
+    "stance": {
+      "armDown": 12,
+      "legIn": 5
+    },
+    "regions": {
+      "head": {
+        "bones": [
+          "Head*"
+        ],
+        "strength": 1.0,
+        "inset": 0.0,
+        "rigid": true
+      },
+      "neck": {
+        "bones": [
+          "Neck"
+        ],
+        "strength": 0,
+        "inset": 0.0
+      },
+      "torso": {
+        "bones": [
+          "Spine",
+          "Spine1",
+          "Spine2",
+          "LeftShoulder",
+          "RightShoulder",
+          "Hips"
+        ],
+        "strength": 1.0,
+        "inset": 0.016
+      },
+      "arms": {
+        "bones": [
+          "LeftArm",
+          "RightArm",
+          "LeftForeArm",
+          "RightForeArm"
+        ],
+        "strength": 1.0,
+        "inset": 0.02
+      },
+      "legs": {
+        "bones": [
+          "LeftUpLeg",
+          "RightUpLeg",
+          "LeftLeg",
+          "RightLeg"
+        ],
+        "strength": 1.0,
+        "inset": 0.02
+      },
+      "feet": {
+        "bones": [
+          "LeftFoot",
+          "RightFoot",
+          "LeftToeBase",
+          "RightToeBase"
+        ],
+        "strength": 0.6,
+        "inset": 0.0
+      },
+      "hands": {
+        "bones": [
+          "LeftHand*",
+          "RightHand*"
+        ],
+        "strength": 0.0,
+        "inset": 0.0
+      }
+    },
+    "regionBlend": 6,
+    "rounds": [
+      40,
+      20,
+      8
+    ],
+    "maxDistance": 0.08,
+    "minFacing": 0.2,
+    "fillIterations": 150,
+    "finalSmooth": 3,
+    "helperNeighbours": 8
   },
   "face": {
     "$comment": "The stylised face (decided by the agent on 2026-11-18, the owner away, for the owner to review; decision 7 of docs/features/directed-performance.md), drawn from the clay sheets: lengths in metres, angles in degrees unless named.",
@@ -47,7 +135,7 @@
       "to": 0.01
     },
     "smooth": {
-      "$comment": "The front of the face as a depth map on a grid of `grid` cells (m), halfWidth either side of the midline and from `above` the eyes to `below` them: holes up to about twice `holes` across filled, bumps up to about twice `bumps` across taken off (morphological windows of 2\u00b7round(x/grid)+1 cells), blurred by sigma; applied in the `core` ellipse about the eyes' midline, `centre` below eye height, fading out from `fade` of it. A vertex within `tolerance` of the front surface goes onto the smoothed one, one further behind keeps its depth less that. Only head vertices in front of y frontOf move.",
+      "$comment": "The front of the face as a depth map on a grid of `grid` cells (m), halfWidth either side of the midline and from `above` the eyes to `below` them: holes up to about twice `holes` across filled, bumps up to about twice `bumps` across taken off (morphological windows of 2·round(x/grid)+1 cells), blurred by sigma; applied in the `core` ellipse about the eyes' midline, `centre` below eye height, fading out from `fade` of it. A vertex within `tolerance` of the front surface goes onto the smoothed one, one further behind keeps its depth less that. Only head vertices in front of y frontOf move.",
       "grid": 0.0015,
       "halfWidth": 0.12,
       "above": 0.08,
@@ -67,11 +155,11 @@
     },
     "eyes": {
       "$comment": "Each eye's centre `x` from the midline at eye height, its radius, its centre `depth` eye radii behind the smoothed skin; the iris and pupil as angles (radians) from the forward pole.",
-      "x": 0.047,
-      "radius": 0.024,
-      "depth": 0.45,
-      "iris": 0.62,
-      "pupil": 0.3
+      "x": 0.05,
+      "radius": 0.027,
+      "depth": 0.55,
+      "iris": 0.74,
+      "pupil": 0.34
     },
     "lids": {
       "$comment": "Shells about each eye (radius in eye radii), `columns` across, from the edge angle (up from straight ahead) to the back angle in `rows`; the upper lid's rows within `lash` degrees of its edge are the dark lash line. shapes: the edge angles [upper, lower] each shape moves to (null: that lid stays). A shape's targets go out along their radius as far as needed for every vertex's straight path to stay `clear` eye radii from the centre.",
@@ -116,7 +204,7 @@
       "low": 1.6,
       "rise": 0.05,
       "arch": 0.25,
-      "thick": 0.72,
+      "thick": 0.8,
       "taper": 0.4,
       "lift": 0.0025,
       "segments": 14,
@@ -135,9 +223,9 @@
       "$comment": "An ellipsoid (radii, m) `at` of the way from the eyes down to the mouth, `out` of it in front of the skin; noseSneer lifts it.",
       "at": 0.5,
       "radii": [
-        0.007,
-        0.006,
-        0.0065
+        0.011,
+        0.009,
+        0.01
       ],
       "out": 0.6,
       "sneer": 0.003
@@ -430,10 +518,30 @@
     },
     "collar": {
       "$comment": "The jumper's neckline: across the shoulders (|x| under `halfWidth` m, from `below` m under the neck's base up), faces below a plane through the neck's base (raised `raise` m), tilting down to the front by `tilt` (m per m), are jumper; above it, skin.",
-      "raise": 0.006,
+      "raise": 0.035,
       "tilt": 0.45,
       "halfWidth": 0.17,
       "below": 0.12
+    },
+    "cuff": {
+      "$comment": "The trouser hems: faces within `band` (m) of a level plane `raise` (m) above the highest toe vertex are shoe below it and trousers above it, so the hem is straight. Decided by the agent on 2026-11-18 (slice 2c2), owner's review pending.",
+      "raise": 0.06,
+      "band": 0.08
+    },
+    "shoes": {
+      "$comment": "Shoes from the feet's faces, eased and smoothed like the other garments (no opening tapers, so the ease is even), the ease going to nothing on faces turned down (`soleBelow`), so the sole stays on the floor. Decided by the agent on 2026-11-18 (slice 2c2), owner's review pending.",
+      "easeBody": 0.02,
+      "easeLimb": 0.02,
+      "taper": 0.01,
+      "taperAt": [],
+      "limbBones": [],
+      "gapShare": 0.4,
+      "smooth": 40,
+      "rounds": 10,
+      "clear": 0.3,
+      "taubin": -0.53,
+      "reach": 0.04,
+      "soleBelow": 0.6
     }
   },
   "hair": {
@@ -442,7 +550,7 @@
     "rows": 14,
     "poleRow": 86,
     "tuck": 0.004,
-    "browMargin": 0.008,
+    "browMargin": 0.012,
     "styles": {
       "sweptCrop": {
         "line": [
@@ -472,16 +580,16 @@
           ]
         ],
         "sides": 0.008,
-        "top": 0.024,
+        "top": 0.018,
         "rise": 30,
         "back": 0.0,
-        "front": 0.03,
+        "front": 0.02,
         "frontWidth": 55,
         "locks": {
           "kind": "ridges",
-          "n": 13,
-          "sweep": 2.5,
-          "depth": 0.9
+          "n": 18,
+          "sweep": 1.5,
+          "depth": 0.45
         }
       },
       "wavyBob": {
@@ -507,17 +615,17 @@
             0
           ]
         ],
-        "sides": 0.02,
-        "top": 0.026,
+        "sides": 0.03,
+        "top": 0.03,
         "rise": 25,
         "back": 0.004,
         "front": 0.012,
         "frontWidth": 70,
         "locks": {
           "kind": "ridges",
-          "n": 11,
-          "sweep": 3.0,
-          "depth": 0.7
+          "n": 14,
+          "sweep": 2.0,
+          "depth": 0.8
         },
         "curtain": {
           "rows": 9,
@@ -536,10 +644,10 @@
             ]
           ],
           "clear": 0.008,
-          "flare": 0.03,
-          "thick": 0.02,
-          "wave": 0.012,
-          "waves": 11
+          "flare": 0.04,
+          "thick": 0.03,
+          "wave": 0.018,
+          "waves": 14
         }
       },
       "tightCoils": {
@@ -565,16 +673,16 @@
             -12
           ]
         ],
-        "sides": 0.034,
-        "top": 0.046,
+        "sides": 0.018,
+        "top": 0.03,
         "rise": 30,
         "back": 0.004,
         "locks": {
           "kind": "bumps",
-          "n": 17,
-          "m": 14,
-          "twist": 1.5,
-          "depth": 0.7
+          "n": 24,
+          "m": 12,
+          "twist": 1.0,
+          "depth": 0.6
         }
       },
       "highBun": {
@@ -609,14 +717,14 @@
         "rise": 30,
         "locks": {
           "kind": "ridges",
-          "n": 20,
+          "n": 26,
           "sweep": 0.0,
-          "depth": 0.25
+          "depth": 0.4
         },
         "bun": {
           "at": [
             180,
-            62
+            78
           ],
           "radius": 0.042,
           "squash": 0.82,
@@ -714,15 +822,14 @@
             -30
           ]
         ],
-        "sides": 0.016,
-        "top": 0.03,
+        "sides": 0.012,
+        "top": 0.022,
         "rise": 30,
         "back": 0.0,
         "locks": {
-          "kind": "bumps",
-          "n": 22,
-          "m": 10,
-          "twist": 0.8,
+          "kind": "ridges",
+          "n": 26,
+          "sweep": 0.0,
           "depth": 0.8
         }
       }

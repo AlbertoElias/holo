@@ -138,7 +138,8 @@ def hang(P, P0, used_dom, _unused, toMesh, rig, spec):
 
 # --- Garments ---------------------------------------------------------------------------------
 def garments(human, rig, slots, G):
-    """Replaces the body's top and trouser faces with loose garment meshes; returns them and a report."""
+    """Replaces the body's top, trouser and (with `shoes` in G) shoe faces with garment meshes; returns them
+    and a report."""
     me = human.data
     V = np.array([v.co[:] for v in me.vertices])
     NRM = np.array([v.normal[:] for v in me.vertices])
@@ -155,6 +156,8 @@ def garments(human, rig, slots, G):
     ti, ri = slots.index("top"), slots.index("trousers")
     top_f = [k for k in range(len(polys)) if mat[k] == ti]
     tr_f = [k for k in range(len(polys)) if mat[k] == ri]
+    si = slots.index("shoes")
+    sh_f = [k for k in range(len(polys)) if mat[k] == si] if "shoes" in G else []
 
     # The jumper's hem hangs over the trousers: the trouser faces within `hem` of the waist join it too.
     waist = set(v for k in top_f for v in polys[k]) & set(v for k in tr_f for v in polys[k])
@@ -179,6 +182,9 @@ def garments(human, rig, slots, G):
         if kind == "top":
             ease = np.where(np.isin(used, list(hem_v)), spec["easeHem"], ease)
         ease = ease * smoothstep(0.0, spec["taper"], dist)
+        if "soleBelow" in spec:
+            # The sole stays on the floor: faces turned down (normal's z under -soleBelow) take no ease.
+            ease = ease * smoothstep(-spec["soleBelow"] - 0.3, -spec["soleBelow"], NRM[used, 2])
         # Where two parts lie close (the inner thighs, an arm by the side), the ease stays under a share of the gap.
         left = np.array([gdom[i].startswith("Left") for i in range(n)])
         right = np.array([gdom[i].startswith("Right") for i in range(n)])
@@ -232,18 +238,24 @@ def garments(human, rig, slots, G):
     tb = mesh_bvh(Pt, Ft)
     Pj, Fj, Wj, rj = build(top_f + hem_f, G["top"], "top", [(tb, G["top"]["overTrousers"])])
     jumper = skinned("HouseBase_Jumper", Pj, Fj, Wj, [me.materials[ti]], rig, human)
+    worn, report = [jumper, trousers], {"jumper": rj, "trousers": rt, "hemFaces": len(hem_f)}
+    if sh_f:
+        # Shoes: the feet eased out and smoothed into one rounded shape (no toes), under the trouser hems.
+        Ps, Fs, Ws, rs = build(sh_f, G["shoes"], "shoes", [])
+        worn.append(skinned("HouseBase_Shoes", Ps, Fs, Ws, [me.materials[si]], rig, human))
+        report["shoes"] = rs
 
     # The body under the garments goes; the openings' rings stay, so the skin meets each garment's edge.
     bm = bmesh.new()
     bm.from_mesh(me)
     bm.faces.ensure_lookup_table()
-    bmesh.ops.delete(bm, geom=[bm.faces[k] for k in top_f + tr_f], context="FACES_ONLY")
+    bmesh.ops.delete(bm, geom=[bm.faces[k] for k in top_f + tr_f + sh_f], context="FACES_ONLY")
     loose = [v for v in bm.verts if not v.link_faces]
     bmesh.ops.delete(bm, geom=loose, context="VERTS")
     bm.to_mesh(me)
     bm.free()
     me.update()
-    return [jumper, trousers], {"jumper": rj, "trousers": rt, "hemFaces": len(hem_f)}
+    return worn, report
 
 
 # --- Hair -------------------------------------------------------------------------------------
