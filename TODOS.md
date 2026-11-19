@@ -204,7 +204,11 @@ it from the item below instead of duplicating its status here.
   dressing package used by `direct.ts`, and the poem pair from cards; every
   trait value passes the audition except the turn row, which the loose
   garments made worse (47 to 52, was 33; the stance fix waits on the motion
-  owner, then the garments' side ease). Next: 2f (ink).
+  owner, then the garments' side ease). 2f (finishes) was built on
+  2026-11-19 with the owner away, for review: ink and light as
+  `house:<finish>`, both passing brow contrast and the blind reading by AI
+  readers; open: people as readers, Quick Look on a device, and the turn
+  row (motion owner).
   Owned by
   [`docs/features/directed-performance.md`](docs/features/directed-performance.md).
 - [ ] Make all avatar movement look completely natural, in XR and 2D
