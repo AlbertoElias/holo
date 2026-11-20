@@ -147,7 +147,7 @@ docs/product/design/tokens.json. Do not edit; run `pnpm --filter @holoim/design-
   --holoim-edge-cloche-follow-yaw: 18;
   --holoim-edge-cloche-follow-pitch: 16;
   --holoim-edge-cloche-frame-share: 0.78;
-  --holoim-edge-cloche-performer-floor: 0.75;
+  --holoim-edge-cloche-performer-floor: 0.85;
   --holoim-edge-cloche-inside-fade-from: 1.6;
   --holoim-edge-cloche-inside-fade-to: 1.05;
   --holoim-edge-cloche-shade-scale: 1.15;

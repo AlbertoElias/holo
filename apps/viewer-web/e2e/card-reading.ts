@@ -13,7 +13,7 @@ export type Reading = { label: string; performerPx: number; performerOnCard: num
  * that is on the card, and, at each of `times` (seconds into the take, the
  * clip held there), her height and share again.
  */
-export async function readCard(page: Page, glb: Buffer, label: string, times: readonly number[] = []): Promise<Reading> {
+export async function readCard(page: Page, glb: Buffer, label: string, times: readonly number[] = [], { at = "/" }: { at?: "/" | "posted" } = {}): Promise<Reading> {
   const hologram = {
     id: "floor-1",
     url: "/uploads/floor.glb",
@@ -32,7 +32,7 @@ export async function readCard(page: Page, glb: Buffer, label: string, times: re
   await page.route("**/api/holograms?*", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [hologram], nextCursor: null }) }));
   await page.route(`**/api/holograms/${hologram.id}`, (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(hologram) }));
   await page.route("**/uploads/**", (route) => route.fulfill({ status: 200, body: glb, contentType: "model/gltf-binary" }));
-  await page.goto("/");
+  await page.goto(at === "posted" ? `/h/${hologram.id}` : "/");
   await assertViewerShell(page);
   const card = page.locator(`.feed-card[data-card-id="${hologram.id}"]`);
   await expect(card).toHaveAttribute("data-model-state", "rendered", { timeout: 30_000 });

@@ -174,7 +174,7 @@ export const tokens = {
       followYaw: 18,
       followPitch: 16,
       frameShare: 0.78,
-      performerFloor: 0.75,
+      performerFloor: 0.85,
       insideFadeFrom: 1.6,
       insideFadeTo: 1.05,
       shadeScale: 1.15,

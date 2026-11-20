@@ -11,12 +11,12 @@ import { readCard, type Reading } from "./card-reading";
 // reference: it widens nothing, and a card with an object has the same
 // viewing box as the ones below) and with a chart 0.5, 2, 3 and 5 m off to
 // her side and toward the viewer. Her height on the card, read by projecting
-// her own mesh through the card's camera, never falls under 75 % of the
+// her own mesh through the card's camera, never falls under 85 % of the
 // reference; she is always wholly on the card; and the chart sits wholly on
 // it while it is near and only partly, or not at all, once it is far.
 
 const artifactDir = resolve(import.meta.dirname, "../../../output/card-framing-floor");
-const FLOOR = 0.75;
+const FLOOR = 0.85;
 const PHONE = { width: 390, height: 844 };
 
 type Placement = { label: string; at: readonly [number, number] };
@@ -35,7 +35,7 @@ const placements: Placement[] = [
 
 test.use({ viewport: PHONE });
 
-test("a far recorded object leaves the performer at 75 % or more of her size, wholly on the card", async ({ browser }, testInfo) => {
+test("a far recorded object leaves the performer at 85 % or more of her size, wholly on the card", async ({ browser }, testInfo) => {
   test.setTimeout(240_000);
   const readings: Reading[] = [];
   for (const placement of placements) {
@@ -67,11 +67,11 @@ test("a far recorded object leaves the performer at 75 % or more of her size, wh
 // A wide recorded set (a phone take's default or scanned scene) widened the
 // dome until the performer stood a few dozen pixels tall on a phone. The
 // performer comes first (styleguide 3.4): against a dome fitted to her and
-// her reach alone she keeps 75 % of her size or more (the far-object floor),
+// her reach alone she keeps 85 % of her size or more (the far-object floor),
 // wholly on the card, and a wide set runs off the card instead.
 const setWidths = [1, 6, 12, 24] as const;
 
-test("a wide recorded set leaves the performer at 75 % of her own size or more, wholly on the card", async ({ browser }, testInfo) => {
+test("a wide recorded set leaves the performer at 85 % of her own size or more, wholly on the card", async ({ browser }, testInfo) => {
   test.setTimeout(240_000);
   const readings: Reading[] = [];
   for (const width of setWidths) {
@@ -93,7 +93,21 @@ test("a wide recorded set leaves the performer at 75 % of her own size or more, 
     expect(reading.performerOnCard, `${reading.label}: she is wholly on the card`).toBe(1);
   }
   for (const reading of readings) expect(reading.performerPx, `${reading.label}: the performer is a third of the phone's height or more`).toBeGreaterThanOrEqual(PHONE.height * LEAST_SHARE_OF_SCREEN);
-  const widest = readings.at(-1)!;
+  // The posted page (the link a take is shared by) has a smaller viewing box than the feed card; she is a third of the phone there too.
+  {
+    const { baseURL } = testInfo.project.use;
+    const context = await browser.newContext({ viewport: PHONE, ignoreHTTPSErrors: true, ...(baseURL ? { baseURL } : {}) });
+    try {
+      const posted = await readCard(await context.newPage(), setTakeGltf(24), "set 24 m wide, posted page", [], { at: "posted" });
+      readings.push(posted);
+      expect(posted.performerPx, "on the posted page, the performer is a third of the phone's height or more").toBeGreaterThanOrEqual(PHONE.height * LEAST_SHARE_OF_SCREEN);
+      expect(posted.performerOnCard, "on the posted page, she is wholly in view").toBe(1);
+    } finally {
+      await context.close();
+    }
+  }
+  await writeFile(resolve(artifactDir, "set-report.json"), `${JSON.stringify(readings, null, 2)}\n`);
+  const widest = readings.at(-2)!;
   expect(widest.setOnCard, "the widest set runs off the card, the performer being kept large").toBeLessThan(1);
 });
 

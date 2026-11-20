@@ -394,12 +394,12 @@ enter.
   reach (a phone take's scene), widens the dome and would shrink her. Her own
   size is her body and her reach over the take framed alone, with no dome
   around them, at 78% of the viewing box. The camera stops pulling back when
-  she would fall below 75% of that (`edge.cloche.performerFloor`), and centres
+  she would fall below 85% of that (`edge.cloche.performerFloor`), and centres
   between her and the dome, so the far object, the set's edge and the dome's
   own shoulders may sit partly or wholly off the card. Revised 2026-11-20,
   after a lone performer on a phone take stood under a fifth of the screen:
-  she now stands a third of a phone's height or more, her head and feet on
-  the card for the whole take; a performer who walks far is smaller, by as
+  she now stands a third of a phone's height or more on the feed card and the
+  posted page, her head and feet on the card for the whole take; a performer who walks far is smaller, by as
   much as her walk is wider than her. A take with no performer (a camera
   take) frames the whole dome.
 - **Never exported.** The GLB never holds the cloche; every renderer fits it
