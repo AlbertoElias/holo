@@ -423,8 +423,12 @@ async function make(sheetFile: string, quick: boolean): Promise<boolean> {
     rows.push({ id: `aim.${a.beat}`, bar: `${a.object}'s tool within ${L.aimResidual}° of its target`, value: `${a.residual.toFixed(1)}°`, pass, ...(pass ? {} : { fix: await fitMiss(sheetFile, { kind: 'aim', beat: a.beat, side: a.side }) }) });
   }
   for (const t of built.take.tracks) for (const r of t.reaches) {
-    const out = r.targetDistance - r.stopShort > 0.02 && r.outOfReach > 0.01;
-    rows.push({ id: `reach.${r.beat}`, bar: 'the palm gets to its point (within 2 cm, leaning allowed)', value: `${(r.targetDistance * 1000).toFixed(0)} mm from it`, pass: !out, ...(out ? { fix: `the point is beyond the arm even leaning: move it (or the performer) about ${(r.outOfReach * 100).toFixed(0)} cm nearer, add a step, or a bend for a low point` } : {}) });
+    const miss = r.targetDistance - r.stopShort > 0.02;
+    // A point within the arm that the palm still misses: another beat (a gesture such as a shrug, or an overlapping reach) moves the same arm.
+    const fix = r.outOfReach > 0.01
+      ? `the point is beyond the arm even leaning: move it (or the performer) about ${(r.outOfReach * 100).toFixed(0)} cm nearer, add a step, or a bend for a low point`
+      : 'the point is within reach but the palm does not get there: another beat moves this arm at the same time (a gesture such as a shrug, or an overlapping reach); give the arm to one beat at a time';
+    rows.push({ id: `reach.${r.beat}`, bar: 'the palm gets to its point (within 2 cm, leaning allowed)', value: `${(r.targetDistance * 1000).toFixed(0)} mm from it`, pass: !miss, ...(miss ? { fix } : {}) });
   }
   for (const t of built.take.tracks) {
     const line = bodyLine(t.motion);

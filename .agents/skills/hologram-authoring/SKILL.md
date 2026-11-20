@@ -210,8 +210,9 @@ over the 40 px bar.
    > `node packages/tooling-testing/src/preview.mjs <file>` from the repo root
    > and look at the small JPEG it prints. Watch the video too, since motion
    > such as a wave shows only there: extract PNG frames at 10 fps
-   > (`ffmpeg -ss <s> -t 2 -i <video> -vf fps=10 <dir>/f%03d.png`) into an
-   > empty folder in your scratch directory and preview that folder (a
+   > (`ffmpeg -ss <s> -t 2 -i <video> -vf fps=10 <dir>/f%03d.png`) into a new
+   > empty folder in your scratch directory, named `<piece>-vN-<start>`
+   > (readers that run at the same time share that directory), and preview that folder (a
    > contact sheet), one stretch of two seconds at a time, through the whole
    > video. Write your answer to
    > `<version dir>/review/reader.md`.
