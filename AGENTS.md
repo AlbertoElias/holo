@@ -23,7 +23,10 @@
   ignored `output/` directory or your scratchpad; never commit, merge, or
   link it from docs. Watch it yourself as a verification loop (preview it
   with `preview.mjs`), fix what it shows, then send it to the user before
-  handoff. Durable evidence stays in the e2e checks and their reports.
+  handoff. Keep the video until the user approves it: before you remove a
+  worktree or clear a scratchpad, copy the video to the main checkout's
+  ignored `apps/capture/output/` (or another ignored folder that stays).
+  Durable evidence stays in the e2e checks and their reports.
 
 This pnpm monorepo contains `apps/capture` (WebXR recording and GLTF export),
 `apps/viewer-api` (upload and storage), `apps/viewer-web` (feed and AR viewer),
@@ -229,7 +232,8 @@ for git-ignored files and while resolving a merge, cherry-pick or rebase.
   sandbox blocks the user-database lookup SSH requires); HTTPS through `gh`
   works with no approval. Do not switch the remote back to SSH.
 - The lead merges the verified branch into `main`, pushes, then removes the
-  worktree (`git worktree remove`) and deletes the merged branch (check
+  worktree (`git worktree remove`; first copy out a proof video the user has
+  not approved) and deletes the merged branch (check
   `git branch --merged main` afterwards). If a push is
   rejected because another agent landed first, pull with rebase, re-run the
   affected check, and push again. Do not force-push.
