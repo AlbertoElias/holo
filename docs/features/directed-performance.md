@@ -1102,7 +1102,7 @@ bars in the brief to the artist.
 | **2c3: the face matches the sheet** | Added 2026-11-19 on the owner's verdict on the default avatar: "issues with the eyes and mouth, it looks weird and uncanny as hell. it need to be much closer to the reference image". `build.py` rebuilds the eyes, lids, brows, nose and mouth to the clay expression sheet; the shared mixes, the body and the rig are unchanged. Built 2026-11-19 and merged 2026-11-20 on the owner's word "Merge as is", with the ink and light blind readings below the gate in the AI round and the turn row one vertex worse (see "Slice 2c3 evidence") | The face likeness check (`house-face-likeness.ts`) before and after; every 2c2 and 2f gate re-run unchanged; a new reader pack for people; a proof video | **Yes.** Authoring scripts, avatar files and `@holoim/avatar-look` colours; nothing in `apps/capture/src/` |
 | **2e: chosen per take** | `house:<finish>` and `look` in beat sheets; the dressing function in capture's avatar loading; height from the head-top bone; the "your look" step in the phone journey and the headset mirror; `?look=` | A phone e2e: set a look, record, upload, and the feed card shows it; an XR harness check of the mirror; a beat sheet re-dressed with another card; a proof video | **No.** Touches the phone journey (`CaptureOverlay.tsx` and its flow), owned by the phone mandate, and `src/avatar/` (loading, `AvatarRig`'s height fit), owned by the motion owner: built with both, after the phone's device checks |
 | **2f: finishes** | The other one or two finishes as material sets | Brow contrast and the blind reading per finish; one authored piece re-dressed in each | **Yes.** Avatar files. Built 2026-11-19: ink and light (see "Slice 2f evidence") |
-| **2g: the default and outside avatars** | `DEFAULT_AVATAR_URL` to the house base; the credit rule and verdict for outside avatars. The owner lifted the hold on the default on 2026-11-20; the swap was tried and fails five capture checks (see "Slice 2g attempt"), so it is not merged | Motion owner's agreement recorded; the phone journey's load measured against the 2.3 MB; an outside VRM passed and one refused, by name; a proof video | **No.** One constant in capture, on the motion owner's say |
+| **2g: the default and outside avatars** | `DEFAULT_AVATAR_URL` to the house base; the credit rule and verdict for outside avatars. The owner lifted the hold on the default on 2026-11-20; the swap was tried and fails five capture checks (see "Slice 2g attempt"), the wiring, fingertips and thumbs are fixed and the walk still fails (see "Slice 2g fixes"), so it is not merged | Motion owner's agreement recorded; the phone journey's load measured against the 2.3 MB; an outside VRM passed and one refused, by name; a proof video | **No.** One constant in capture, on the motion owner's say |
 
 2a and 2b start together and need nothing else. 2c needs both. 2d and 2f
 need 2c and can run side by side; 2f also waits on 2c2, so the ink finish
@@ -2041,6 +2041,28 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
       faster cadence at the same walk speed). Only the owner and the motion
       owner can do this; the agent does not loosen a bar.
     - **Leave the stock avatar as the default** until one of the above.
+
+    **Update, same day.** The owner chose the first option through the
+    lead session ("fix the avatar so that the default swap passes the 5
+    failing XR checks. Do not change a bar"). The wiring, the fingertip
+    bones and the thumb joint are fixed on the branch (tip
+    `d8c1a44dcffe`); height passes and the hands' thumb rows pass. The
+    walk does not pass by changing the avatar (see "Slice 2g fixes"), so
+    the swap is still not merged and no bar was changed. What the owner
+    decides now:
+    - **Walk speed by leg length, not by height** (recommended). The
+      keyboard walk is one avatar height per second (the owner's call of
+      2026-11-13, `KEYBOARD_WALK_HEIGHTS_PER_SEC`). Tried on the branch
+      and not committed: with the speed scaled by the base's leg (0.88),
+      the base walks at 1.58 m/s and passes every flat row (pops 46.2,
+      jitter 0.61 mm, cadence 133.3). It changes that call and the
+      motion owner's `CharacterMotor.ts`, so it needs both.
+    - **Longer legs on the base.** Legs 8, 14 and 20% longer still fail
+      pops (52.5, 52.2, 50.3), and 14% or more leaves the owner's sheet.
+      Not a route.
+    - **A longer stride for this avatar.** The motion work tried 1.1 and
+      rejected it for its look.
+    - **Leave the stock avatar as the default.**
 
 ## Test plan and evidence
 
@@ -4051,6 +4073,54 @@ and a proof video: the swap stopped at the first failing gate.
 
 **Not merged.** The branch is kept as the starting point. The stale lines
 this corrects: decision 11's two "hold" lines now point at decision 13.
+
+### Slice 2g fixes (2026-11-20): wiring, fingertips and thumbs fixed; the walk does not pass on the avatar alone
+
+On `feature/default-house-avatar` (tip `d8c1a44dcffe`, pushed, not merged).
+No bar was changed.
+
+**Fixed.**
+
+- Wiring: the height check's fixture and desktop-motion's clip row follow
+  `DEFAULT_AVATAR_URL`; desktop-motion has a `stock` row so the stock
+  avatar's own clips stay under test. Height passes.
+- The base has fingertip end bones (`*Hand<Finger>4`), so the hands check
+  measures a pinch: agreement 0.99 to 1.00.
+- The thumb's base joint sits where a tracked hand has it (`rig.thumbBase`
+  in `base.json`). MPFB's rig has it in the palm's plane, which the replay
+  read as 20 to 27 degrees of thumb curl error (bar 15). Now 5.0 to 8.2
+  degrees, correlation 0.98 to 0.99. The mesh and weights do not move; the
+  file is 1.18 MB.
+
+**Still failing.**
+
+| Check | Result | Bar | Note |
+|---|---|---|---|
+| desktop-motion, flat | Pops p99 56.4 m/s²; jitter p95 5.71 mm; cadence 150 | 50; 3; 100 to 140 | See the walk, below |
+| hands, headset fixture | Wrist error p95 2.13 cm | 2 | The right arm is at full reach (0.403 m against the 0.429 m the wrist needs). The head-top height fit of 2e scales the avatar 2.2% up; not measured with it |
+| body | Eyes p95 2.1 cm (crouch-and-lean); pops 36.1 (walk-ramp) | 2.0; 35 | Not measured with the head-top fit |
+| face | Eye pivot not measured | Under 5 mm | The fix is in `FaceRig.ts`, which the phone look session has open; it waits for that merge |
+
+**The walk.** The keyboard walk is one avatar height per second and the
+clip's rate is that speed over the clip's stance speed on the avatar, so
+cadence follows leg length. The base's leg is 0.803 m at 1.8 m (hip at
+48.7% of height); the stock's is 0.913 m (57.8%). Foot acceleration rises
+with cadence, and the stock avatar itself reads pops 48.9 against 50. The
+jitter is the last settle step after a stop (it ends about 770 ms in; the
+check judges from 600 ms), which depends on the stride phase at the stop.
+
+| Attempt | Cadence | Pops p99 | Jitter p95 | Speed | Verdict |
+|---|---|---|---|---|---|
+| The base as built | 150 | 56.4 | 5.71 mm | 1.8 m/s | Fails |
+| Legs 8% longer (test copy) | 144.0 | 52.5 | 0.60 mm | 1.8 | Fails |
+| Legs 14% longer | 138.5 | 52.2 | 0.56 mm | 1.8 | Fails pops; leaves the sheet |
+| Legs 20% longer | 133.3 | 50.3 | 0.49 mm | 1.8 | Fails pops; leaves the sheet |
+| Walk speed by leg length (0.88; engine test, not committed) | 133.3 | 46.2 | 0.61 mm | 1.58 (bar 1.35) | Passes; skate 1.63 cm |
+
+Two attempts were made and the task's stop rule applied: the swap stays
+unmerged. The choice is open decision 13.
+
+**Not run:** all 15 checks together, `verify:pr`, and a proof video.
 
 ## Physical-device limits
 
