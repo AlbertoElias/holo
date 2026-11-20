@@ -1,7 +1,7 @@
 # Feature brief: Your look, on a phone (slice 2e, phone part)
 
 **Lead:** Claude (Opus)  
-**Status:** Phone slice verified (emulation), with the picture picker; slice 2, the headset, is next  
+**Status:** Phone slice verified (emulation), with the picture picker; slice 2, the headset, verified in IWER and on `main` (2026-11-20); a Quest check of the mirror under multiview is open  
 **Layer:** event (who performs the take). See
 `docs/product/concepts/what-a-hologram-is.md`.
 
@@ -84,7 +84,7 @@ not reachable while a take runs.
   and behave as before.
 - [ ] Desktop (a 1280 × 800 viewport) sets a look, records and posts it in
   the same journey.
-- [ ] Slice 2: in the IWER headset harness, the look panel beside the mirror
+- [x] Slice 2: in the IWER headset harness, the look panel beside the mirror
   changes the look, and the take carries it.
 - [ ] A live change from clay to ink, then a take: the posted GLB has face
   morph tracks, one skeleton (every skin names the same joint nodes, and
