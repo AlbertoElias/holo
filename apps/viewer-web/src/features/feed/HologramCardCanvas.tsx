@@ -3,6 +3,7 @@ import { withKtx2 } from "../hologram/ktx2";
 import { useTextureDetail } from "../hologram/textureDetail";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import {
   ACESFilmicToneMapping,
   Box3,
@@ -342,7 +343,8 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
     const text = active && captionTrack ? activeCue(captionTrack, primaryActionRef.current?.time ?? 0)?.text ?? null : null;
     if (text !== captionShown.current) {
       captionShown.current = text;
-      onCaption(text);
+      // Committed now, so the caption paints in the frame whose pose it belongs to, not one frame later.
+      flushSync(() => onCaption(text));
     }
   });
   useEffect(() => () => onCaption?.(null), [onCaption]);

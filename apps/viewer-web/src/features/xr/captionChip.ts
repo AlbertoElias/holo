@@ -16,8 +16,8 @@ import type { PlacedHologram } from "./viewerContext";
 
 /** When captions show in XR: "unheard" (holograms without audio focus) or "always". */
 export const XR_CAPTIONS_WHEN: "unheard" | "always" = "unheard";
-/** The chip's foot stands this far above the speaker's head (m, at recorded scale). */
-const ABOVE_HEAD_M = 0.22;
+/** The chip's foot stands this far above the speaker's head bone (m, at recorded scale): the crown is about 0.2 m above it, so a hand's width clear of the hair. */
+const ABOVE_HEAD_M = 0.3;
 /** The widest a caption chip lays out before it wraps (apx, before the headset scale). */
 const MAX_WIDTH_APX = 360;
 
@@ -33,6 +33,10 @@ export interface CaptionChipProbe {
   opacity: number;
   worldPosition: [number, number, number];
   speaker: string | null;
+  /** Whether the chip was wanted last frame, and the distances that decided it (m). */
+  want: boolean;
+  fromHeadM: number | null;
+  toHologramM: number | null;
 }
 
 const VIEW: Record<XrUiTarget, ViewTarget> = { vr: VIEW_TARGETS.vr, "ar-quest": VIEW_TARGETS.questPassthrough, "ar-phone": VIEW_TARGETS.androidChrome };
@@ -64,6 +68,9 @@ class CaptionChip {
   private current = "";
   speaker: string | null = null;
   opacity = 0;
+  want = false;
+  fromHeadM: number | null = null;
+  toHologramM: number | null = null;
 
   constructor(world: World, target: XrUiTarget, pixelSize: number) {
     const metrics = targetMetrics(target);
@@ -115,8 +122,8 @@ class CaptionChip {
       this.text.setProperties({ text });
     }
     const target = want && text ? 1 : 0;
-    const rate = target > this.opacity ? dtMs / MOTION.chromeInMs : -dtMs / MOTION.chromeOutMs;
-    this.opacity = Math.min(1, Math.max(0, this.opacity + rate));
+    // Toward the target and no further: in by the chrome's in time, out by its out time.
+    this.opacity = target > this.opacity ? Math.min(target, this.opacity + dtMs / MOTION.chromeInMs) : Math.max(target, this.opacity - dtMs / MOTION.chromeOutMs);
     const object = this.entity.object3D!;
     object.visible = this.opacity > 0;
     if (!object.visible) return;
@@ -176,10 +183,13 @@ export class CaptionChips {
           anchor.y += ABOVE_HEAD_M * object.getWorldScale(at).y;
           chip.place(anchor, head);
           object.getWorldPosition(at);
+          chip.fromHeadM = anchor.distanceTo(head);
+          chip.toHologramM = Math.hypot(head.x - at.x, head.z - at.z);
           // A hologram's caption fades within 1 m of it, like its other text (choice 3; styleguide 7.3).
-          want = headsetTextVisible(VIEW[this.target], "caption", { fromHeadM: anchor.distanceTo(head), toHologramM: Math.hypot(head.x - at.x, head.z - at.z) });
+          want = headsetTextVisible(VIEW[this.target], "caption", { fromHeadM: chip.fromHeadM, toHologramM: chip.toHologramM });
         }
       }
+      chip.want = want;
       chip.step(cue?.text ?? null, want, dtMs);
     }
   }
@@ -189,7 +199,7 @@ export class CaptionChips {
       const chip = this.chips.get(record.entity);
       if (!chip) return [];
       const object = chip.entity.object3D!;
-      return [{ id: record.id, text: chip.shown, visible: object.visible, opacity: chip.opacity, worldPosition: object.getWorldPosition(new Vector3()).toArray() as [number, number, number], speaker: chip.speaker }];
+      return [{ id: record.id, text: chip.shown, visible: object.visible, opacity: chip.opacity, worldPosition: object.getWorldPosition(new Vector3()).toArray() as [number, number, number], speaker: chip.speaker, want: chip.want, fromHeadM: chip.fromHeadM, toHologramM: chip.toHologramM }];
     });
   }
 

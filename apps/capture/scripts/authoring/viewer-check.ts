@@ -16,14 +16,19 @@
  * what the card sends to its speakers over one real-time pass (a take
  * without sound fails it) and finds where each `KHR_audio` source is heard,
  * against where the file puts it; with `--video` the recording becomes the
- * video's soundtrack.
+ * video's soundtrack. `--captions` reads the caption the muted card shows on
+ * every frame of one real-time pass against the file's `HOLOIM_captions`
+ * cues (run before `--audio`, which unmutes); with `--audio` too, each cue's
+ * start is checked against where the voice is heard.
  */
 import { spawnSync } from 'node:child_process';
-import { mkdir, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Page } from 'playwright';
+import { activeCue, primaryTrack, type CaptionCue } from '@holoim/contracts';
 
+import { readCaptions } from './lib/captions.ts';
 import { envelopeOf, voicedSpans } from './lib/lips.ts';
 import { ffmpegPath } from './lib/sound.ts';
 import { speechReport } from './speech-report.ts';
@@ -59,11 +64,35 @@ export interface ViewerReading {
   readonly objects: ObjectReading[];
   /** What the card was heard to play (`--audio`). */
   readonly heard?: HeardReading;
+  /** The captions the muted card showed (`--captions`). */
+  readonly captions?: CaptionsReading;
+}
+
+/** A frame at most this far from a cue's edge may show either side (s): the card sets its caption the frame after the clock. */
+const CAPTION_EDGE_S = 0.1;
+/** The most a caption edge may trail the clock, and a cue's start the heard voice (ms), as the sound bar. */
+const CAPTION_SYNC_MS = 100;
+
+export interface CaptionsReading {
+  readonly language: string | null;
+  readonly cues: CaptionCue[];
+  /** Frames sampled over one pass, and those that showed other than the cue the clock was in (away from an edge). */
+  readonly frames: number;
+  readonly wrongFrames: { t: number; shown: string; expected: string }[];
+  /** For each cue, how long after the first frame drawn past its start and end the card showed and cleared it (ms; 0 is that frame). */
+  readonly edges: { text: string; showLagMs: number | null; hideLagMs: number | null }[];
+  /** Wall clock (ms) and take time when the pass began, to place it in a recording. */
+  readonly passStartedAt: number;
+  readonly passTakeTime: number;
+  /** Each cue's start against the nearest heard voice onset (`--audio`). */
+  readonly voice?: { text: string; from: number; heardOnset: number | null; deltaMs: number | null }[];
 }
 
 export interface HeardReading {
   /** Seconds recorded, and the take's motion and lead sound clocks when recording began. */
   readonly seconds: number;
+  /** When recording began (Date.now ms), on the same clock as the captions pass's `passStartedAt`. */
+  readonly startedAt?: number;
   readonly motionAt: number;
   readonly soundAt: number | null;
   /** Sounding stretches of the recording, in take time. */
@@ -160,6 +189,42 @@ export async function read(page: Page, url: string): Promise<ViewerReading> {
   }, [url, FINGER.source, HUMANOID_BONE_TAG, HUMANOID_SOURCE_TAG] as const);
 }
 
+/** One real-time pass of the muted card, from its clip's start to its wrap: the take time and the caption shown, every frame. */
+async function watchCaptions(page: Page, url: string, file: string): Promise<CaptionsReading> {
+  const track = primaryTrack(readCaptions(new Uint8Array(await readFile(file))));
+  const pass = await page.evaluate((u) => new Promise<{ startedAt: number; samples: { t: number; caption: string }[] }>((done, fail) => {
+    const p = Object.entries((window as unknown as { __feedProbes: Record<string, { actions: Record<string, { time: number } | null> }> }).__feedProbes).find(([k]) => k.endsWith(u))![1];
+    const region = document.querySelector<HTMLElement>('[data-testid=card-caption]');
+    const samples: { t: number; caption: string }[] = [];
+    let startedAt = 0; let frames = 0;
+    const step = () => {
+      frames += 1;
+      if (frames > 60 * 120) return fail(new Error('no full pass of the clip'));
+      const t = Object.values(p.actions).find((a) => a)?.time ?? -1;
+      if (!startedAt && t >= 0 && t < 0.3) startedAt = Date.now();
+      if (startedAt) {
+        if (samples.length && t < samples[samples.length - 1]!.t) return done({ startedAt, samples });
+        samples.push({ t, caption: region?.dataset.caption ?? '<no caption region>' });
+      }
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }), url);
+  const cues = track?.cues ?? [];
+  const near = (t: number) => cues.some((c) => Math.abs(t - c.from) < CAPTION_EDGE_S || Math.abs(t - c.to) < CAPTION_EDGE_S);
+  const wrongFrames = pass.samples
+    .map((s) => ({ t: s.t, shown: s.caption, expected: activeCue(track, s.t)?.text ?? '' }))
+    .filter((s) => !near(s.t) && s.shown !== s.expected);
+  // Late by how long after the first frame drawn past the edge: the frame rate alone (a loaded machine draws a few a second) is not lag.
+  const lag = (at: number, ok: (caption: string) => boolean) => {
+    const first = pass.samples.find((s) => s.t >= at);
+    const hit = pass.samples.find((s) => s.t >= at && ok(s.caption));
+    return first && hit ? Math.round((hit.t - first.t) * 1000) : null;
+  };
+  const edges = cues.filter((c) => c.kind === 'speech').map((c) => ({ text: c.text, showLagMs: lag(c.from, (x) => x === c.text), hideLagMs: c.to >= (pass.samples.at(-1)?.t ?? 0) ? 0 : lag(c.to, (x) => x !== c.text) }));
+  return { language: track?.language ?? null, cues, frames: pass.samples.length, wrongFrames, edges, passStartedAt: pass.startedAt, passTakeTime: pass.samples[0]?.t ?? 0 };
+}
+
 /** Where the recording sounds, in take time, against where each source in the file first sounds. */
 async function hear(file: string, recording: string, motionAt: number, soundAt: number | null, duration: number): Promise<HeardReading> {
   const RATE = 16000;
@@ -187,8 +252,10 @@ async function main(): Promise<void> {
   const reportOut = flag('--report');
   const framesOut = flag('--frames');
   const audioOut = flag('--audio');
+  const captionsOn = args.includes('--captions');
+  if (captionsOn) args.splice(args.indexOf('--captions'), 1);
   const file = args[0];
-  if (!file) { console.error('usage: viewer-check.ts <take.glb> [--video out.mp4] [--frames dir] [--audio out.webm] [--report out.json]'); process.exit(2); }
+  if (!file) { console.error('usage: viewer-check.ts <take.glb> [--video out.mp4] [--frames dir] [--audio out.webm] [--captions] [--report out.json]'); process.exit(2); }
   const videoDir = videoOut ? await tempDir('viewer-check-') : undefined;
   const servers = await startViewer();
   try {
@@ -218,6 +285,8 @@ async function main(): Promise<void> {
         for (const a of Object.values(p.actions)) if (a) a.paused = false;
       }, uploaded.url);
     }
+    // The feed starts muted, so the captions pass comes first; `--audio` unmutes after it.
+    let captions: CaptionsReading | undefined = captionsOn ? await watchCaptions(page, uploaded.url, file) : undefined;
     let heard: HeardReading | undefined;
     let heardStartedAt = 0;
     if (audioOut) {
@@ -242,7 +311,15 @@ async function main(): Promise<void> {
       await new Promise((r) => setTimeout(r, (result.duration + 1) * 1000)); // wall-clock: what the card plays is heard in real time.
       const { base64 } = await page.evaluate(() => (window as unknown as { __heard: { stop(): Promise<{ base64: string }> } }).__heard.stop());
       await writeFile(audioOut, Buffer.from(base64, 'base64'));
-      heard = await hear(file, audioOut, at.motion, at.sound, result.duration);
+      heard = { ...(await hear(file, audioOut, at.motion, at.sound, result.duration)), startedAt: at.startedAt };
+      if (captions) {
+        const spans = heard.spans;
+        captions = { ...captions, voice: captions.cues.map((c) => {
+          if (!spans.length) return { text: c.text, from: c.from, heardOnset: null, deltaMs: null };
+          const nearest = spans.reduce((best, sp) => (Math.abs(sp.start - c.from) < Math.abs(best.start - c.from) ? sp : best));
+          return { text: c.text, from: c.from, heardOnset: nearest.start, deltaMs: Math.round((nearest.start - c.from) * 1000) };
+        }) };
+      }
     } else if (videoOut) {
       // Let the card play the whole take once more from the start, in real time.
       await page.evaluate((u) => {
@@ -270,8 +347,18 @@ async function main(): Promise<void> {
       console.log(`  heard ${heard.seconds.toFixed(1)} s from take time ${heard.motionAt.toFixed(2)} s (sound clock ${heard.soundAt?.toFixed(2) ?? '-'} s): sounding ${heard.spans.map((sp) => `${sp.start.toFixed(2)}-${sp.end.toFixed(2)}`).join(', ') || 'never'}`);
       for (const h of heard.sources) console.log(`  ${h.name}: in the file from ${h.fileOnset?.toFixed(2) ?? '-'} s, heard from ${h.heardOnset?.toFixed(2) ?? '-'} s (${h.deltaMs ?? '-'} ms)`);
     }
+    if (captions) {
+      console.log(`  captions (${captions.language ?? 'none'}): ${captions.cues.length} cues, ${captions.frames} frames, ${captions.wrongFrames.length} showed the wrong caption`);
+      for (const e of captions.edges) console.log(`  "${e.text}": shown ${e.showLagMs ?? '-'} ms after the first frame past its start, cleared ${e.hideLagMs ?? '-'} ms after the first past its end`);
+      for (const v of captions.voice ?? []) console.log(`  "${v.text}" from ${v.from.toFixed(2)} s, voice heard from ${v.heardOnset?.toFixed(2) ?? '-'} s (${v.deltaMs ?? '-'} ms)`);
+    }
     console.log(`  card: ${shot}`);
-    if (reportOut) await writeFile(reportOut, `${JSON.stringify({ ...result, ...(heard ? { heard } : {}) }, null, 2)}\n`);
+    if (reportOut) await writeFile(reportOut, `${JSON.stringify({ ...result, ...(heard ? { heard } : {}), ...(captions ? { captions } : {}) }, null, 2)}\n`);
+    if (captions) {
+      const late = captions.edges.some((e) => e.showLagMs === null || e.showLagMs > CAPTION_SYNC_MS || e.hideLagMs === null || e.hideLagMs > CAPTION_SYNC_MS);
+      const offVoice = (captions.voice ?? []).some((v) => v.deltaMs === null || Math.abs(v.deltaMs) > CAPTION_SYNC_MS);
+      if (!captions.cues.length || captions.wrongFrames.length || late || offVoice) { console.error('the card\'s captions are not the file\'s, in time with the clock and the voice'); process.exitCode = 1; }
+    }
     if (heard && heard.sources.some((h) => h.deltaMs === null || Math.abs(h.deltaMs) > 100)) { console.error('a sound in the file was not heard where the file puts it'); process.exitCode = 1; }
   } finally {
     servers.close();

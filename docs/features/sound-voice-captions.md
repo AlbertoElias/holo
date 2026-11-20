@@ -3,7 +3,8 @@
 **Lead:** Claude (Opus), session "Slice 4: a person's take as input", for the
 directed-performance lead (2026-11-18)
 **Status:** Slice 1a built in the authoring tool (2026-11-18,
-`feature/sound-1a`); slices 1b to 6 not started. Written and built while the
+`feature/sound-1a`); slice 3 (captions) built 2026-11-19
+(`feature/sound-captions`); slices 1b, 4 to 6 not started. Written and built while the
 owner was away on 2026-11-18. On 2026-11-19 the owner heard the slice 1a clip
 and accepted all eight recommended decisions ("Owner decisions" at the end),
 and with them the agent's slice 1a choices (the local Kokoro voice and the
@@ -429,6 +430,40 @@ review (the lead's picks; each is one constant or option, so reversible):
 6. **Type:** speech captions use `captionOnHologram` (Figtree 400,
    `clamp(.8rem, 1.3vw, 1rem)`; 40 apx in a headset).
 
+## Slice 3: built (2026-11-19)
+
+Branch `feature/sound-captions`. What landed:
+
+- **Contract:** `packages/contracts/src/captions.ts` (`HOLOIM_captions` v1,
+  `parseCaptions`, `activeCue`, `primaryTrack`, `splitCaptionText`).
+- **Writer:** `apps/capture/scripts/authoring/lib/captions.ts`, called by
+  `direct.ts` after the audio; it reads the file back with the viewer's
+  parser and fails on a dropped cue.
+- **Card:** `HologramCardCanvas.tsx` reads the cue at the primary action's
+  time in the frame loop and commits it in that frame (`flushSync`), so the
+  chip paints with the pose it belongs to. `HologramCard.tsx` shows it in one
+  polite live region, on the focused card only, while muted.
+- **WebXR:** `apps/viewer-web/src/features/xr/captionChip.ts`, a UIKit chip
+  0.3 m above the speaker's head bone, turned to the viewer, fading by the
+  chrome timings.
+
+Evidence (all local):
+
+| Check | Command | Result |
+|---|---|---|
+| Sheet to card, in time with the clock and the voice | `direct.ts` on `spoken-line`, then `viewer-check.ts --captions --audio --video` (publishes to its own local API) | 2 cues (4.60–6.00 "That one is the tallest.", 6.00–7.19 "Almost twice the first."); 110 frames of a muted pass, 0 wrong; every edge on the first frame drawn past it (0 ms late); voice heard 81 ms after each cue's start (bar 100 ms) |
+| Card sync, mute, contrast, type, no-caption file, phone reach row | `e2e/captions.spec.ts` (mocked feed, in `test:e2e:mocked` shard 2) | 0 wrong frames and every edge on the first frame drawn past it, over 9 runs (`--repeat-each=3`) at load averages of 60 to 97, 46 frames a pass at the slowest (8 inside every cue; bar 3); a `title` cue never shows; chip contrast 6.67:1 worst (fill `rgba(8,26,30,0.72)` over white and black, bar 4.5); unmuted, none shown; a GLB with no captions, none shown; phone, paused in Free mode with the row stacked: caption bottom 503 px, controls top 527 px |
+| WebXR, heard and not heard, head, fade, focus | `e2e/xr-viewer.spec.ts` "VR captions:" (IWER, `office_small`) | focused hologram shows none, the other shows its cue at opacity 1; chip foot 1.847 m against a head top of 1.769 m; 40 stepped reads, 19 of cue 1 and 21 of cue 2, none wrong; opacity 0 with the head 0.72 m from the hologram, back at 1 beyond 1 m; focus swap moves the chip |
+| Quick Look carries no text (decision 3) | `check_usdz_tools.sh` on `spoken-line.glb`; `glb_to_usdz.py` | 7/7 cases pass; the converter warns on `HOLOIM_captions` and the 4.9 MB USDZ holds no caption text |
+| Older viewers and the API | no API change; `extensionsUsed` only, never `extensionsRequired` | an older viewer ignores the extension |
+
+Found and fixed while building: the XR chip's fade stuck at 0.875 (it faded
+out when already at its target); the card's caption painted one frame after
+its pose (about 200 ms at the 8 fps a loaded machine draws), now committed in
+the frame; the checks count lag from the first frame drawn past an edge, so a
+slow frame rate is not read as lag. Limits: `edit-take.ts` and `recast-take.ts` drop captions with the
+audio, as planned; no captions toggle yet (choice 2).
+
 ## Acceptance criteria (slice 1a)
 
 - [x] A beat sheet with a `say` line (a supplied file) and a `sound` on a
@@ -491,6 +526,7 @@ review (the lead's picks; each is one constant or option, so reversible):
 | Lips | a viseme report (onsets, closures) on two avatars; frame readers | slice 1a: onsets, pauses and r on both avatars; readers (see "Frame readers") |
 | Quick Look | `apps/viewer-api/tools/check_usdz_tools.sh` | slice 1a: passed, convert and inspect on both takes |
 | Feed playback | `review.ts` on the take against a local API | slice 1a: `viewer-check.ts --audio`, heard 68 ms after the file |
+| Captions | `viewer-check.ts --captions --audio`, `e2e/captions.spec.ts`, the VR captions test | slice 3: see "Slice 3: built" |
 
 ## Physical-device limits
 
