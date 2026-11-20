@@ -20,6 +20,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import type { CaptionsExtension } from '@holoim/contracts';
 import { parseLook, type LookCard } from '@holoim/avatar-look';
 
 import { generateAvatarFixtures, SHIPPED_AVATAR } from '../lib/avatar-fixtures.ts';
@@ -32,6 +33,7 @@ import { solveTake, type ObjectReport, type SolvedTake } from './lib/direct.ts';
 import { describeAttend, describeLife } from './lib/life.ts';
 import { loadSources, type LoadedSource } from './lib/props.ts';
 import { parseGlb } from './lib/gltf-read.ts';
+import { addCaptions, takeCaptions } from './lib/captions.ts';
 import { addAudio, padAndEncode, prepareEffects, prepareLine, probeSeconds, type AudioSource, type Effect, type Line } from './lib/sound.ts';
 import { solveWorld } from './lib/world.ts';
 import { writeTake } from './lib/write-glb.ts';
@@ -97,6 +99,8 @@ export interface BuildResult {
   readonly effects: readonly Effect[];
   /** Each audio source as written: its onset and the decoded length of the padded file (s). */
   readonly audio: readonly { name: string; onset: number; seconds: number; padded: number; bytes: number; file: string }[];
+  /** The `HOLOIM_captions` the take carries, or null when nothing is said. */
+  readonly captions: CaptionsExtension | null;
 }
 
 export async function build(sheetFile: string, out?: string, style?: BeatSheet['style'], avatarOverride?: string): Promise<BuildResult> {
@@ -143,12 +147,19 @@ export async function build(sheetFile: string, out?: string, style?: BeatSheet['
     sourcesOut.push({ name, bytes, node: nodeOf(on), gain, kind });
     audio.push({ name, onset, seconds: src.seconds, padded: seconds, bytes: bytes.byteLength, file: padded });
   }
-  const glb = addAudio(written.glb, sourcesOut, [...lines.map((l) => l.credit), ...effects.map((e) => e.credit)]);
+  // Captions share the voice's lifecycle: written with it here, dropped with it by edit and recast (brief, slice 3).
+  const speakerOf = (id: string): string => {
+    const name = written.performers.find((p) => p.id === id)?.name;
+    if (!name) throw new Error(`no performer ${id} for a caption`);
+    return name;
+  };
+  const captions = takeCaptions(lines, clip, speakerOf);
+  const glb = addCaptions(addAudio(written.glb, sourcesOut, [...lines.map((l) => l.credit), ...effects.map((e) => e.credit)]), captions);
   await writeFile(file, glb);
   // The sheet as solved (with any --style override), beside the take.
   await writeFile(`${file.replace(/\.glb$/, '')}.beats.json`, `${JSON.stringify(sheet, null, 2)}\n`);
   if (take.props.length) await writeFile(`${file.replace(/\.glb$/, '')}.objects.json`, `${JSON.stringify(take.objects, null, 2)}\n`);
-  return { out: file, take, world: world.lines, channels: written.channels, seconds: (performance.now() - started) / 1000, bytes: glb.byteLength, lines, effects, audio };
+  return { out: file, take, world: world.lines, channels: written.channels, seconds: (performance.now() - started) / 1000, bytes: glb.byteLength, lines, effects, audio, captions };
 }
 
 async function main(): Promise<void> {
@@ -169,6 +180,7 @@ async function main(): Promise<void> {
   const r = await build(sheetFile, out, style, avatar);
   console.log(`${basename(r.out)}: ${r.take.tracks.length} performer(s), ${r.take.times.length} frames at ${r.take.fps} fps, ${r.channels} channels, ${(r.bytes / 1e6).toFixed(1)} MB, built in ${r.seconds.toFixed(1)} s`);
   for (const a of r.audio) console.log(`  ${a.name}: ${a.seconds.toFixed(2)} s from ${a.onset.toFixed(2)} s, padded to ${a.padded.toFixed(3)} s, ${(a.bytes / 1e3).toFixed(0)} KB`);
+  for (const t of r.captions?.tracks ?? []) for (const c of t.cues) console.log(`  caption ${t.language} ${c.from.toFixed(2)}-${c.to.toFixed(2)} s (${c.speaker}): ${c.text}`);
   for (const t of r.take.tracks) for (const reach of t.reaches) {
     console.log(`  ${t.spec.id} reach ${reach.beat} (${reach.side}): palm ${(reach.targetDistance * 1000).toFixed(1)} mm from target, asked ${(reach.stopShort * 1000).toFixed(0)} mm` +
       (reach.targetDistance - reach.stopShort > 0.02 && reach.outOfReach > 0.01 ? `; out of reach even leaning: move the performers closer or add a step` : ''));

@@ -3,18 +3,18 @@
 **Lead:** Claude (Opus), session "Slice 4: a person's take as input", for the
 directed-performance lead (2026-11-18)
 **Status:** Slice 1a built in the authoring tool (2026-11-18,
-`feature/sound-1a`); slices 1b to 6 not started. Written and built while the
-owner was away on 2026-11-18; every choice below is a recommendation for the
-owner, and the open decisions at the end are theirs. Where slice 1a could not
-proceed without one, the agent took the recommended option, reversibly, and
-recorded it under "Slice 1a: built" for the owner's review.
+`feature/sound-1a`); slice 3 (captions) on `main` 2026-11-19
+(`feature/sound-captions`; six choices made by the agent in the owner's absence, for review); slices 1b, 4 to 6 not started. Written and built while the
+owner was away on 2026-11-18. On 2026-11-19 the owner heard the slice 1a clip
+and accepted all eight recommended decisions ("Owner decisions" at the end),
+and with them the agent's slice 1a choices (the local Kokoro voice and the
+house base as the lip-sync avatar).
 **Layer:** Event for voice and effects: a sound has a time and a place in the
 recorded event, like a gesture (`docs/product/concepts/what-a-hologram-is.md`).
 Meaning (read) for captions of speech: a reading of the event offered to a
 viewer, never part of it, and a viewer can turn them off. A music bed (no
 place in the event) and titles (the card already has one) fit no layer
-cleanly; whether pieces carry them is open decision 7, and they stay out of
-the first slices.
+cleanly; decision 7 (2026-11-19) keeps them out until a piece needs one.
 
 ## User outcome
 
@@ -109,7 +109,7 @@ embedded bufferView with ffmpeg (Opus pre-skip and the WebM container can
 shift the onset) and read the viewer's scheduled offsets in the local feed;
 the onset lies within one frame of its beat in both. Whether it *sounds* right is the owner's to judge: subagent
 readers cannot hear. A listening clip of each candidate voice goes to the
-owner, an open decision below.
+owner (decision 1: the local voice, accepted 2026-11-19).
 
 ### 2. How the mouth follows the voice, on any avatar that passes the audition
 
@@ -156,24 +156,25 @@ written first.
 `extensionsRequired` (the converter refuses unknown required extensions and
 only warns on used ones), with a `language` per track so a second language
 can come later, and PRD-009's referent links added later as an optional
-field on a cue. A cue names its `speaker` by performer name from
-`HOLOIM_humanoid`, not a node index, which `edit-take.ts` and `recast-take.ts`
-rewrite. **Proof:** an extension round trip in the authoring writer's check
+field on a cue. A cue names its `speaker` by the performer's wrapper node name
+(`RecordedAvatar` for the first, `Performer_<id>` for others), not a node
+index, which `edit-take.ts` and `recast-take.ts` rewrite. (`HOLOIM_humanoid`
+declares only the first performer's bones and no names, so it cannot name a
+speaker; corrected at the slice 3 design review.) **Proof:** an extension round trip in the authoring writer's check
 (the cues read back equal), and a viewer e2e (below).
 
 ### 4. Where captions render
 
 | Option | Notes |
 |---|---|
-| A. On the card: one line on the chip above the control row while the card is muted, or always if the viewer turns captions on | Feed starts muted (`FeedPage.tsx:213`), so this is where most people meet it. Figtree, on the chip, as the styleguide requires for text over a hologram |
+| A. On the card (the flat-screen portal, zoomed out or inside): one line on the chip above the control row while the card is muted, or always if the viewer turns captions on | Feed starts muted (`FeedPage.tsx:213`), so this is where most people meet it. Figtree, on the chip, as the styleguide requires for text over a hologram |
 | B. Near the speaker (PRD-009): a chip by the head that faces the viewer | Right for AR and the headset, where the card's foot does not exist; on a phone it can cover the face |
 | C. Inside Quick Look | Not possible without breaking the styleguide's "no text in Quick Look" (option 3C); Quick Look keeps the voice and lips only |
 
-**Recommendation:** A on the card and in the portal, B in WebXR AR and the
+**Recommendation:** A on the card (the card is the portal), B in WebXR AR and the
 headset, none in Quick Look. This differs from PRD-009, which makes the
 phone the primary moment and puts words near the speaker there too; which
-wins on the phone is open decision 8. Titles show centred on the chip at their cue
-time on the card, and as a chip in front of the hologram in XR. **Proof:** a
+wins on the phone was decision 8: the card's foot (2026-11-19). No titles (decision 7). **Proof:** a
 viewer-web e2e on a captioned fixture: the cue's text is on the card during
 its span and gone after, contrast at least 4.5:1 on the chip, captions
 follow mute; in AR, an IWER screenshot of the chip by the head, with a
@@ -216,7 +217,7 @@ attribution are owner decisions.
 decisions. **Excluded:** building anything; voice cloning of a real person;
 live voice translation; changing capture's recording format or anything in
 `apps/capture/src/` (the embodied-take items that need it go to the
-recording owners in slice 4 below); a converter change for Quick Look.
+recording owners in slice 5 below); a converter change for Quick Look.
 
 ## Undo
 
@@ -249,12 +250,12 @@ capture, it is a meaning edit (undone out of the take), to be specified there.
    whisper.cpp round trip, and a listening clip for the owner (decision 1).
    Its licences (weights, voices, the GPL phonemiser run as a separate
    process) recorded beside the cache.
-3. **Captions (and titles if decision 7 keeps them).** The `HOLOIM_captions` contract type in
-   `packages/contracts`, written by the authoring tool from `say` lines and
-   title cues, read by viewer-web on the card (chip, follows mute) and in
+3. **Captions (titles out: decision 7).** The `HOLOIM_captions` contract type in
+   `packages/contracts`, written by the authoring tool from `say` lines,
+   read by viewer-web on the card (chip, follows mute) and in
    WebXR (chip by the head). Design review against the styleguide and a
    viewer e2e. Codex screenshot validation when it has quota.
-4. **Effects from events (and a music bed if decision 7 keeps it).** Sounds attached to solver events
+4. **Effects from events (no music bed: decision 7).** Sounds attached to solver events
    (put, grip, pour, foot contacts), one mixed source per object, a global
    music source with a fade, and the budget row in `publish.ts`.
 5. **Embodied takes (needs the recording owners).** The audio-to-motion
@@ -271,8 +272,9 @@ How to use it: `apps/capture/scripts/authoring/README.md`, "Sound". The
 example sheet is `sheets/spoken-line.json`: `tallest-bar` with a line on its
 turn and a clink on its put.
 
-**Decided by the agent in the owner's absence on 2026-11-18, for review
-(each is reversible; none spends or needs a key):**
+**Decided by the agent in the owner's absence on 2026-11-18 (each reversible;
+none spends or needs a key). The owner accepted them on 2026-11-19 with the
+eight decisions:**
 
 1. **The voice is local Kokoro, not a supplied file** (the parent session's
    instruction, ahead of slice 1b): `local:af_heart`, Kokoro-82M through
@@ -286,7 +288,7 @@ turn and a clink on its put.
    NG, **GPL-3.0**, as WASM in a separate process from the ignored cache
    (`output/authoring/tools/kokoro/`), so nothing GPL is committed or
    shipped, only audio it helped make. `file:` voices work too and need a
-   credit. This leans on open decision 1 (local, the recommended option);
+   credit. This is decision 1 (local), accepted 2026-11-19;
    the owner can swap the voice per line.
 2. **Lips come from an in-repo driver, not Rhubarb.** The pinned Rhubarb
    1.14.0 macOS build crashed on this machine (segfault), and running a
@@ -300,7 +302,7 @@ turn and a clink on its put.
    is a swap of one function.
 3. **The effect is `synth:cup-clink`**, made procedurally by the tool (this
    project's own, CC0), instead of a fetched CC0 recording: nothing to
-   fetch, credit or pin. It leans on open decision 4 (CC0 only).
+   fetch, credit or pin. It is decision 4 (CC0 only), accepted 2026-11-19.
 4. **No hand-labelled phones, no lip-distance on p/b/m.** There are no
    recorded lines to label (the voice is synthesised). The written bars were
    replaced, before measuring, by ones read from the GLB alone
@@ -366,11 +368,128 @@ not validation.
 
 **Follow-ups:** the house base misses `tallest-bar`'s aim and put (88.5°)
 with or without sound, a pre-existing house-base solve issue; captions
-(slice 2); an audio-only lip path for takes without text (slice 5); a
+(slice 3); an audio-only lip path for takes without text (slice 5); a
 stronger lip fallback for avatars without viseme shapes (`mouthLowerDown`,
 `mouthUpperUp` with `jawOpen`, in `packages/avatar-face`), since the stock
 avatar's lips read as closed; an unknown Kokoro voice to fail at validation,
 and a sound past the clip end to fail rather than warn.
+
+## Slice 3: design review (2026-11-19)
+
+Design reviewer: `design-reviewer` subagent (Opus), fresh context, read-only,
+before any code. Folded into the plan:
+
+- **Contract** in `packages/contracts/src/captions.ts`: root extension
+  `HOLOIM_captions` `{ version: 1, tracks: [{ language, cues: [{ from, to,
+  text, kind, speaker? }] }] }`, in `extensionsUsed` only. `language` is a
+  BCP-47 tag (`en-US` for Kokoro's `a` voices, `en-GB` for `b`; any other
+  voice, a `file:` one included, `en` until a sheet can name its language). `kind` is any string so a later kind does not void a
+  file; viewers show `speech` only (decision 7). `speaker` is optional (the
+  first performer when absent). The reader drops a bad cue, not the track,
+  and ignores an invalid extension with a warning, as `findStoredPlace` does.
+- **No API change.** Captions are JSON only; `hologram-process.ts` keeps root
+  extensions, and `HOLOIM_meaning` has no upload check either. The Quick Look
+  converter warns on an unknown used extension; `check_usdz_tools.sh` runs
+  once on a captioned file.
+- **Cue times** from the line's voiced sound, not its file: from `at` plus
+  the first voiced group's start to `at` plus the last group's end, clamped
+  to the clip. A line splits into cues at its sentence ends only when its
+  phonemiser phrases match its voiced groups one to one; otherwise it is one
+  cue.
+- **Captions share audio's lifecycle.** `direct.ts` adds them with the audio
+  after `writeTake`, so `edit-take.ts` and `recast-take.ts` drop both alike
+  (a limit, as for sound today).
+- **The card:** the chip is drawn outside `.feed-card-foot` (whose layout
+  hooks watch its subtree and would move Play), absolutely over the bottom of
+  the viewing box, so the cloche and camera never reframe when a cue starts
+  or ends. Only the focused card shows captions: the others are paused and
+  drawn on demand ("the others hold", styleguide 9.3). The text follows the
+  primary action's time, the clock unmuting starts the audio from and the
+  lips follow, set only when the cue changes; paused, it shows the cue at the
+  paused time. One polite live region, on the focused card only.
+
+### Slice 3: choices the eight decisions left open
+
+Decided by the agent in the owner's absence on 2026-11-19, for the owner to
+review (the lead's picks; each is one constant or option, so reversible):
+
+1. **WebXR:** captions show by the head only on a hologram that is not heard
+   (in the gallery, every placed hologram but the focused one); the heard one
+   shows none. (`XR_CAPTIONS_WHEN` in `apps/viewer-web/src/features/xr/captionChip.ts`.)
+2. **No captions toggle in this slice:** on the card, captions follow mute
+   only. A toggle (PRD-009, the Settings sheet) is a follow-up.
+3. **The headset's 1 m fade applies:** speech captions fade within 1 m of
+   the hologram like its other text (styleguide 7.3, `headsetTextVisible`
+   with kind `caption`).
+4. **The card's reach controls lift the caption:** when they open (stacked
+   above Play on a phone), the caption chip rises above them rather than
+   hiding.
+5. **One line:** a line longer than one chip line is split at sentence and
+   clause ends into timed pieces, each its share of the voiced time;
+   `CAPTION_LINE_CHARS` in `packages/contracts/src/captions.ts` caps a piece.
+6. **Type:** speech captions use `captionOnHologram` (Figtree 400,
+   `clamp(.8rem, 1.3vw, 1rem)`; 40 apx in a headset).
+
+## Slice 3: built (2026-11-19)
+
+Branch `feature/sound-captions`. What landed:
+
+- **Contract:** `packages/contracts/src/captions.ts` (`HOLOIM_captions` v1,
+  `parseCaptions`, `activeCue`, `primaryTrack`, `splitCaptionText`).
+- **Writer:** `apps/capture/scripts/authoring/lib/captions.ts`, called by
+  `direct.ts` after the audio; it reads the file back with the viewer's
+  parser and fails on a dropped cue.
+- **Card:** `HologramCardCanvas.tsx` reads the cue at the primary action's
+  time in the frame loop and commits it in that frame (`flushSync`), so the
+  chip paints with the pose it belongs to. `HologramCard.tsx` shows it in one
+  polite live region, on the focused card only, while muted.
+- **WebXR:** `apps/viewer-web/src/features/xr/captionChip.ts`, a UIKit chip
+  0.3 m above the speaker's head bone, turned to the viewer, fading by the
+  chrome timings.
+
+Evidence (all local):
+
+| Check | Command | Result |
+|---|---|---|
+| Sheet to card, in time with the clock and the voice | `direct.ts` on `spoken-line`, then `viewer-check.ts --captions --audio --video` (publishes to its own local API) | 2 cues (4.60–6.00 "That one is the tallest.", 6.00–7.19 "Almost twice the first."); two runs (110 and 47 frames of a muted pass, the second at a load average near 90), 0 wrong; every edge on the first frame drawn past it (0 ms late); voice heard 81 and 72 ms after each cue's start (bar 100 ms) |
+| Card sync, mute, contrast, type, no-caption file, phone reach row | `e2e/captions.spec.ts` (mocked feed, in `test:e2e:mocked` shard 2) | 0 wrong frames and every edge on the first frame drawn past it, over 9 runs (`--repeat-each=3`) at load averages of 60 to 97, 46 frames a pass at the slowest (8 inside every cue; bar 3); a `title` cue never shows; chip contrast 6.67:1 worst (fill `rgba(8,26,30,0.72)` over white and black, bar 4.5); unmuted, none shown; a GLB with no captions, none shown; phone, paused in Free mode with the row stacked: caption bottom 503 px, controls top 527 px |
+| WebXR, heard and not heard, head, fade, focus | `e2e/xr-viewer.spec.ts` "VR captions:" (IWER, `office_small`) | focused hologram shows none, the other shows its cue at opacity 1; chip foot 1.847 m against a head top of 1.769 m; 40 stepped reads, 19 of cue 1 and 21 of cue 2, none wrong; opacity 0 with the head 0.72 m from the hologram, back at 1 beyond 1 m; focus swap moves the chip |
+| Quick Look carries no text (decision 3) | `check_usdz_tools.sh` on `spoken-line.glb`; `glb_to_usdz.py` | 7/7 cases pass; the converter warns on `HOLOIM_captions` and the 4.9 MB USDZ holds no caption text |
+| Older viewers and the API | no API change; `extensionsUsed` only, never `extensionsRequired` | an older viewer ignores the extension |
+
+Found and fixed while building: the XR chip's fade stuck at 0.875 (it faded
+out when already at its target); the card's caption painted one frame after
+its pose (about 200 ms at the 8 fps a loaded machine draws), now committed in
+the frame; the checks count lag from the first frame drawn past an edge, so a
+slow frame rate is not read as lag. Limits: `edit-take.ts` and `recast-take.ts` drop captions with the
+audio, as planned; no captions toggle yet (choice 2).
+
+Independent verifier (Opus, brief and diff only) and a code review (fresh
+context) found no blocker. Fixed from them:
+
+- The splitter cut at "Mr.", "Dr.", an initial and inside "3.50". It now
+  splits only at a space after end punctuation and joins a piece that ends
+  in a title, abbreviation or initial to the next.
+- A line took one voiced group per piece whenever the counts matched, so a
+  clause pause against a word-wrapped piece put words out of step. Now only
+  when every piece but the last ends a sentence; otherwise the pieces share
+  the voiced span by length.
+- The voice check failed a later piece of a length-split line (it opens
+  mid-sentence, not on an onset). A cue now passes on an onset within
+  100 ms or when it opens inside a voiced span, and the report says which.
+- The pass guard counted frames, so a fast display could fail a long clip;
+  it is now time, from the clip's duration.
+- The card commits a caption in the frame only while muted (the chip shows
+  only then), reading the take's clock through `getPlaybackTime`.
+- The XR chip finds each speaker's head bone once, not every frame, places
+  without a per-frame allocation, and hides at once with its hologram.
+- The stacked-row offset used an undefined CSS variable; it is now one touch
+  hit (`--holoim-hit-touch`).
+
+Not proven by a check: a speaker turned away from the viewer, reframing the
+card mid-cue, and AR with one hologram placed. In AR one hologram is the
+focused, heard one, so under choice 1 it never shows captions; that is the
+choice as recorded, for the owner to review.
 
 ## Acceptance criteria (slice 1a)
 
@@ -409,10 +528,10 @@ and a sound past the clip end to fail rather than warn.
 | Old viewers or Quick Look break on captions | Captions are in `extensionsUsed` only, so unknown readers ignore them and the converter warns rather than refuses |
 | A short sound repeats every loop, or plays only once at the start | Every source is padded to the clip's length and loops with the clip; a check fails a source of any other length |
 | A caption's speaker points at the wrong performer after an edit or recast | Speakers are named by performer, not by node index |
-| Quick Look plays a music bed aloud, with no mute and no captions | Music stays out until decision 7; if kept, its gain is set for a phone speaker and Quick Look is listed in the review pack |
+| Quick Look plays a music bed aloud, with no mute and no captions | Music stays out (decision 7); if a piece later needs one, its gain is set for a phone speaker and Quick Look is listed in the review pack |
 | The feed autoplays sound | It does not: the feed starts muted; captions carry the line while muted |
 | Captions cover the face on a phone | On the card they sit on the chip at the foot, not by the head; by-the-head only in XR |
-| A person's recorded take has no known audio offset | Slice 4, with the recording owners; until then imported takes keep their audio as recorded and get no visemes |
+| A person's recorded take has no known audio offset | Slice 5, with the recording owners; until then imported takes keep their audio as recorded and get no visemes |
 
 ## Ownership
 
@@ -421,8 +540,8 @@ and a sound past the clip end to fail rather than warn.
 | Lead | Directed-performance lead | This brief, integration |
 | Design reviewer | `design-reviewer` subagent (Opus) | Read-only, before slice 1 |
 | Implementer (slice 1) | One authoring session | `apps/capture/scripts/authoring/` only |
-| Implementer (slice 2) | A viewer session | `packages/contracts`, `apps/viewer-web` caption rendering |
-| Recording owners (slice 4) | Capture recording and phone-journey sessions | `apps/capture/src/recording/`, `src/face/` |
+| Implementer (slice 3) | A viewer session | `packages/contracts`, `apps/viewer-web` caption rendering |
+| Recording owners (slice 5) | Capture recording and phone-journey sessions | `apps/capture/src/recording/`, `src/face/` |
 | Independent verifier | A different vendor when one has quota, else `verifier` | Read-only |
 
 ## Test plan and evidence
@@ -434,6 +553,7 @@ and a sound past the clip end to fail rather than warn.
 | Lips | a viseme report (onsets, closures) on two avatars; frame readers | slice 1a: onsets, pauses and r on both avatars; readers (see "Frame readers") |
 | Quick Look | `apps/viewer-api/tools/check_usdz_tools.sh` | slice 1a: passed, convert and inspect on both takes |
 | Feed playback | `review.ts` on the take against a local API | slice 1a: `viewer-check.ts --audio`, heard 68 ms after the file |
+| Captions | `viewer-check.ts --captions --audio`, `e2e/captions.spec.ts`, the VR captions test | slice 3: see "Slice 3: built" |
 
 ## Physical-device limits
 
@@ -442,26 +562,19 @@ iPhone, and Quest playback are physical checks, none run. The phone brief's
 pending device checks apply. Emulated playback proves timing, not how it
 sounds.
 
-## Open decisions for the owner
+## Owner decisions (2026-11-19)
 
-1. **Voice for agent-directed pieces:** local open model (recommended, free)
-   or a paid service (spend and a key). A listening clip of the local voice
-   comes with slice 1.
-2. **Captions by default:** shown whenever the card is muted (recommended), or
-   only when the viewer turns them on.
-3. **Text in Quick Look:** none, as the styleguide says (recommended), or
-   titles as geometry.
-4. **Licences:** CC0 only for effects and music (recommended), or also
-   royalty-free with attribution and generated audio.
-5. **Transcribing a person's take:** local whisper.cpp in the authoring tool
-   (recommended, free), or the API's Workers AI path (existing token; spend
-   past the free allocation).
-6. **Size:** 480 source-seconds per piece (recommended; about 7.7 MB of
-   audio in the USDZ), or another limit.
-7. **Music beds and in-piece titles:** they fit no layer of "what a hologram
-   is" cleanly (music has no place in the event; the card already has a
-   title). Keep them out (recommended until a piece needs one), allow them as
-   the piece's framing, or move them to their own brief.
-8. **Captions on the phone:** at the card's foot on the chip (this brief's
-   recommendation, never covers the face), or near the speaker as PRD-009
-   proposes (one reading everywhere).
+The owner heard the slice 1a clip on 2026-11-19 and, asked "Accept the eight
+recommended sound decisions?", answered "Accept all eight". Each is decided as
+the recommended option:
+
+1. **Voice for agent-directed pieces:** a local open model (free; Kokoro
+   `local:af_heart` today). No paid service.
+2. **Captions by default:** shown whenever the card is muted.
+3. **Text in Quick Look:** none, as the styleguide says.
+4. **Licences:** CC0 only for effects and music.
+5. **Transcribing a person's take:** local whisper.cpp in the authoring tool.
+6. **Size:** 480 source-seconds per piece (about 7.7 MB of audio in the USDZ).
+7. **Music beds and in-piece titles:** kept out until a piece needs one.
+8. **Captions on the phone:** at the card's foot on the chip, never over the
+   face.

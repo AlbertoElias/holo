@@ -29,7 +29,7 @@ below are its parts.
 | `review.ts <take.glb> [--sheet take.beats.json] [--out dir] [--step 0.2] [--fps 30] [--until s] [--card-only] [--orbit deg]` | Plays the take in viewer-web and writes a review pack (below): a real-time H.264 video at feed-card size and a close view per performer (with sound: the take's own, mixed from clip time 0, and a face view per performer so the lips can be read), frame sheets every `--step` s, the acting report, the face's height and per-second travel on the card, and a comparison to fill in. Same ports as `viewer-check.ts`. |
 | `six-second-test.ts prepare <sheet.json> [--avatars stock,house-base] [--readers 3] [--until 6] [--orbit 90] [--out dir]` / `score <dir>` | The six-second test (below): builds a flat and a directed take per avatar, renders the first six seconds muted at card size and after an orbit as blind frame sheets, and, after fresh readers and graders have answered, scores each take against the sheet's intent. |
 | `publish.ts <take.glb\|sheet.json> [--title t] [--description d] [--credit c] [--api <origin>] [--web <origin>] [--local] [--no-quick-look] [--check]` | Validates a take and publishes it through the normal upload route (below). |
-| `viewer-check.ts <take.glb> [--video out.mp4] [--frames dir] [--report out.json]` | Uploads the take to a local test API, opens it in a viewer-web test build and reads what plays: moving bones, fingers and face shapes per performer, which performer holds the humanoid the viewer anchors on, and each recorded object (meshes, whether it moves, its credit). `--video` records it as H.264; `--frames` saves twelve paused stills at exact take times (one contact sheet: `node packages/tooling-testing/src/preview.mjs <dir>` from the repo root); `--audio out.webm` presses the card's unmute control, records what the card sends to its speakers over one real-time pass, and prints where each sound in the file is heard (exit 1 when one is not heard within 100 ms of its place); with `--video` that recording is the video's soundtrack. Uses ports 3341 and 3214, or, when another session holds them, the next free pair ten apart (3351 and 3224, …); `VIEWER_CHECK_API_PORT` and `VIEWER_CHECK_WEB_PORT` fix them. |
+| `viewer-check.ts <take.glb> [--video out.mp4] [--frames dir] [--audio out.webm] [--captions] [--report out.json]` | Uploads the take to a local test API, opens it in a viewer-web test build and reads what plays: moving bones, fingers and face shapes per performer, which performer holds the humanoid the viewer anchors on, and each recorded object (meshes, whether it moves, its credit). `--video` records it as H.264; `--frames` saves twelve paused stills at exact take times (one contact sheet: `node packages/tooling-testing/src/preview.mjs <dir>` from the repo root); `--audio out.webm` presses the card's unmute control, records what the card sends to its speakers over one real-time pass, and prints where each sound in the file is heard (exit 1 when one is not heard within 100 ms of its place); with `--video` that recording is the video's soundtrack. `--captions` watches one muted pass and reads the card's caption on every frame against the file's `HOLOIM_captions` cues (exit 1 on a wrong caption away from a cue's edges, or one more than 100 ms after the first frame drawn past an edge); with `--audio` it also compares each cue's start with where its voice is heard. Uses ports 3341 and 3214, or, when another session holds them, the next free pair ten apart (3351 and 3224, …); `VIEWER_CHECK_API_PORT` and `VIEWER_CHECK_WEB_PORT` fix them. |
 | `speech-report.ts <take.glb> [--json out.json]` | Reads a take with sound from the GLB alone: decodes each `KHR_audio` source as embedded (its length against the clip, where it sounds) and measures the mouth opening (mm along each face mesh's own `jawOpen`, else `mouthOpen`, else `viseme_aa`) against the voice: each phrase's mouth onset against its sound, the mouth in the voice's pauses, and how closely it follows the loudness; with the sheet beside the take, each line's first sound against its beat. Exits 1 past its bars (below). |
 
 ## Publishing a take
@@ -242,6 +242,18 @@ the take as `KHR_audio`, which the feed card and Quick Look already play.
   against the clip within a frame. Each sound is a positional emitter on its
   node: the voice on the performer's head bone, an effect on its object.
   Credits go into `asset.copyright` and `asset.extras.holoim.sounds`.
+- **Captions.** Every `say` line is also written as text: a
+  `HOLOIM_captions` root extension (`@holoim/contracts`, listed in
+  `extensionsUsed` only, so Quick Look and older viewers ignore it), one
+  track in the voice's language (`local:a…` en-US, `local:b…` en-GB). A cue
+  runs over the line's voiced sound, not its file. A line longer than 42
+  characters is split at sentence, then clause, ends into timed pieces, each
+  shown at least 0.8 s, and a gap under 0.6 s to the same speaker's next
+  piece is bridged. Each cue names its performer's wrapper node. `direct`
+  reads the file back with the viewer's parser and fails if a cue would be
+  dropped. The feed card shows them while muted; in a headset, holograms not
+  heard show them above the speaker's head. `edit-take` and `recast-take`
+  rebuild the GLB without sound, so they drop captions too.
 - **Checks.** `speech-report.ts <take.glb>` bars, set before the first
   measurement: every source within a frame of the clip, each phrase's mouth
   onset within ±80 ms of its sound, the mouth in pauses of 0.25 s or more
@@ -472,8 +484,8 @@ each under a wrapper node: the first is `RecordedAvatar` and the only one
 declared in `HOLOIM_humanoid` (listed in `extensionsUsed` only), as a captured
 export does. `asset.extras.holoim.authored` is `synthetic`, with the author,
 title and method, as showcase pieces mark themselves. The published format is
-unchanged. The writer registers no glTF extensions but `KHR_audio` when the take has
-sound, so an avatar's own (VRM, MToon, `KHR_materials_*`) are not carried
+unchanged. The writer registers no glTF extensions but `KHR_audio` and `HOLOIM_captions`
+when the take has sound or lines, so an avatar's own (VRM, MToon, `KHR_materials_*`) are not carried
 into the take.
 
 The solver imports capture's `AvatarRig`, `HumanoidSkeleton`, `FaceRig`,
