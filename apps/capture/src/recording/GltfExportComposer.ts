@@ -167,12 +167,22 @@ export class GltfExportComposer {
       tracks.push(new THREE.QuaternionKeyframeTrack(`${uuid}.quaternion`, times, bk.quatValues));
     }
 
+    // One track for each mesh, with every target's value at every key. The exporter merges one-target tracks key
+    // by key with a scan of the times, so a 90 s take of an avatar with many face targets took minutes to save.
+    const morphValuesByUuid = new Map<string, { values: Float32Array; count: number }>();
     for (const mk of morphKeyframes) {
       const binding = morphPathToBinding.get(mk.path);
       if (!binding || mk.index >= binding.influenceCount) continue;
-      const morphTargetName = binding.influenceNamesByIndex[mk.index];
-      if (!morphTargetName) continue;
-      tracks.push(new THREE.NumberKeyframeTrack(`${binding.uuid}.morphTargetInfluences[${morphTargetName}]`, times, mk.values));
+      if (!binding.influenceNamesByIndex[mk.index]) continue;
+      let merged = morphValuesByUuid.get(binding.uuid);
+      if (!merged) {
+        merged = { values: new Float32Array(times.length * binding.influenceCount), count: binding.influenceCount };
+        morphValuesByUuid.set(binding.uuid, merged);
+      }
+      for (let k = 0; k < times.length; k += 1) merged.values[k * merged.count + mk.index] = mk.values[k] ?? 0;
+    }
+    for (const [uuid, merged] of morphValuesByUuid) {
+      tracks.push(new THREE.NumberKeyframeTrack(`${uuid}.morphTargetInfluences`, times, merged.values));
     }
 
     if (tracks.length <= 2) {
