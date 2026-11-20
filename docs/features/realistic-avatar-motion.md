@@ -151,20 +151,21 @@ jitters"), fixed in 1b:
 22. The jump still felt stiff (owner report, 2026-11-19, after cause 20): the
     library's Jump and Fall clips move only the hips and legs, so the desktop
     body is skipped onto the idle clip and the arms hang still through the
-    whole jump. `JumpGesture` layers the upper body over the clip after the
-    leg pose: the arms swing back through the wind-up, drive forward
-    nearly straight at push-off (about 75° from hanging), and drop back by
-    the sides through the rise and fall, a little forward for the landing
-    absorb. The swing stays in front of the body: a first pass that spread
-    the arms and floated them up with bent elbows read as a flutter (owner:
-    "looks very girly, make it more natural"). Each offset follows its target
-    through a lightly damped spring (2.4 Hz, damping 0.85), so the drive has
-    momentum without bouncing, and the springs rest at zero, which leaves the
-    clip untouched. A fall without a jump moves the arms only after 0.25 s in
-    the air, so bumps on terrain do not flick them. The jump clips do not
-    write the arms, so each layer puts back what it wrote last frame before
-    turning the arms again (`ArmClearance.restore` runs first); otherwise the
-    offsets pile up.
+    whole jump. Two hand-tuned arm swings on springs failed: the first spread
+    the arms and floated them up ("looks very girly, make it more natural"),
+    the second settled into held poses ("the arms are stiff and stop moving
+    mid-way"). The arms now come from motion capture: `Leap`, a one-shot clip
+    from CMU 118_01 (a standing jump, frames 60–140), plays in no locomotion
+    state. `JumpArms` samples its shoulder, arm and hand tracks each frame at
+    a clip time mapped from the game's own jump: wind-up progress spans the
+    squat with the arms going back; the upward speed against the launch
+    speed spans the legs' drive, lift-off and flight to touch-down (so the
+    arms keep moving however long the flight lasts, and a fall that never
+    rose starts at the apex); then the clip's absorb plays at its own pace and
+    hands back to the playing pose. The legs stay on the crouch pose and
+    terrain legs. Some states' clips do not write the arms, so the layer puts
+    back what it wrote last frame first; otherwise the blend would creep onto
+    the clip and stay there.
 
 ## Scope
 
@@ -182,6 +183,9 @@ jitters"), fixed in 1b:
   carry pose over it, or blending the arms or the whole upper body back to
   bind, still broke those checks). VR plays no idle: the legs stand at rest
   while the headset stands still.
+- The desktop jump's arms from a recorded jump: `Leap` (CMU 118_01, frames
+  60–140, not looped), scrubbed by `JumpArms` in step with the game's jump
+  (cause 22). The builder rebuilds only the takes whose dumps it is given.
 - `scripts/mocap/amc-to-dump.ts` (ASF/AMC → JSON) and
   `scripts/build-mocap-clips.ts` (JSON → the shipped avatar's clips, then
   `build-locomotion-library.ts` rebuilds `locomotion.glb`). Sources and dumps

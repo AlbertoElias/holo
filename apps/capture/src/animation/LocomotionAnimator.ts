@@ -143,6 +143,8 @@ export class LocomotionAnimator {
   private clipSources: Record<LocomotionState, LocomotionClipSource> = { idle: 'none', walk: 'none', jump: 'none', fall: 'none' };
   private root: THREE.Object3D | undefined;
   private gait: WalkGait | undefined;
+  /** The one-shot Leap (a recorded jump) bound to this avatar, whose arms the desktop jump follows (JumpArms). */
+  private leap: THREE.AnimationClip | undefined;
 
   /**
    * The avatar plays its own clips when it has a usable Idle and Walk (a clip
@@ -235,6 +237,8 @@ export class LocomotionAnimator {
     }
     this.bindProfileActions('desktop-full', desktopClips);
     this.bindProfileActions('vr-lower-body', vrClips);
+    // Leap plays in no state; an avatar with its own clips still gets the library's (retargeted) one.
+    this.leap = clips.find((clip) => /^leap$/i.test(clip.name)) ?? retargeted.find((clip) => /^leap$/i.test(clip.name));
     for (const state of LOCOMOTION_STATES) {
       this.clipSources[state] = this.resolveClip(clips, state) ? (own ? 'own' : 'retargeted') : 'none';
     }
@@ -298,6 +302,10 @@ export class LocomotionAnimator {
 
   getCurrentTimeScale(): number {
     return this.currentTimeScale;
+  }
+
+  getLeap(): THREE.AnimationClip | undefined {
+    return this.leap;
   }
 
   getGait(): WalkGait | undefined {

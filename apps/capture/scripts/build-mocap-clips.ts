@@ -1,6 +1,6 @@
 /**
  * Replaces the shipped avatar's hand-keyed Idle and Walk with motion-capture
- * loops (docs/features/realistic-avatar-motion.md), then the clip library is
+ * loops, and adds the one-shot Leap the desktop jump's arms follow (docs/features/realistic-avatar-motion.md), then the clip library is
  * rebuilt from it (`build-locomotion-library.ts`).
  *
  * Source: the CMU Graphics Lab Motion Capture Database (mocap.cs.cmu.edu,
@@ -19,7 +19,7 @@
  * step mirrored, which then makes the second), and lightly low-passed; then `retargetClips` moves
  * it onto the shipped rig, exactly as an avatar without clips gets them.
  */
-import { readFile, writeFile } from 'node:fs/promises';
+import { access, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { NodeIO, type Animation, type Document } from '@gltf-transform/core';
@@ -37,7 +37,7 @@ const SHIPPED = fileURLToPath(new URL('../public/gltf/models/avatar.glb', import
  * `mirror`: the loop is the first half of the range (left strike to right strike) and then that half
  * mirrored left for right, so both legs walk the same step (a recorded cycle is rarely symmetric).
  */
-export interface MocapLoop { readonly name: string; readonly take: string; readonly from: number; readonly to: number; readonly mirror?: boolean; readonly sway?: number }
+export interface MocapLoop { readonly name: string; readonly take: string; readonly from: number; readonly to: number; readonly mirror?: boolean; readonly sway?: number; readonly once?: boolean }
 
 export const MOCAP_LOOPS: readonly MocapLoop[] = [
   // Subject 7, trial 12, "brisk walk": a 0.9 s cycle at 1.93 m/s, near the desktop walk's 1.8. Its left
@@ -48,7 +48,12 @@ export const MOCAP_LOOPS: readonly MocapLoop[] = [
   // replay on every stop.)
   // Played at 40% of its sway about the mean pose: the full take drifts the head 5 cm in a frame of view
   // that follows the eyes (the desktop camera and aim), where 2 cm reads as standing still and alive.
-  { name: 'Idle', take: '113_21', from: 0, to: 0, sway: 0.4 }
+  { name: 'Idle', take: '113_21', from: 0, to: 0, sway: 0.4 },
+  // Subject 118, trial 1, "Dans jumps": a standing jump with a full arm swing. Not a loop (`once`): the squat
+  // with the arms going back (frame 70), the arms at their furthest back as the legs drive (94), lift-off (103),
+  // touch-down (117) and the absorb (135). The desktop body's jump scrubs its arms through it in step with the
+  // game's own jump (JumpArms); no locomotion state plays it, so its name matches none of theirs.
+  { name: 'Leap', take: '118_01', from: 60, to: 140, once: true }
 ];
 
 // CMU bone → Mixamo name (what HumanoidSkeleton binds). Buttocks fold into
@@ -191,6 +196,20 @@ const SIDE = /^([lr])([A-Z].*)$/;
 const swapSide = (bone: string) => bone.replace(SIDE, (_, s: string, rest: string) => `${s === 'l' ? 'r' : 'l'}${rest}`);
 const mirrorQ = (q: THREE.Quaternion) => new THREE.Quaternion(q.x, -q.y, -q.z, q.w);
 
+/** Low-passes an open one-shot track, the ends held. */
+function smoothOnce(keys: THREE.Quaternion[]): THREE.Quaternion[] {
+  const half = (SMOOTH.length - 1) / 2;
+  return keys.map((center, i) => {
+    let x = 0, y = 0, z = 0, w = 0;
+    SMOOTH.forEach((weight, k) => {
+      const q = keys[Math.min(keys.length - 1, Math.max(0, i + k - half))]!;
+      const s = q.dot(center) < 0 ? -weight : weight;
+      x += q.x * s; y += q.y * s; z += q.z * s; w += q.w * s;
+    });
+    return new THREE.Quaternion(x, y, z, w).normalize();
+  });
+}
+
 /** Each bone's keys closed into a loop: end to start, or (mirror) a half closed onto its own mirror and followed by it. */
 function loopTracks(local: Map<string, THREE.Quaternion[]>, mirror: boolean): Map<string, THREE.Quaternion[]> {
   const out = new Map<string, THREE.Quaternion[]>();
@@ -268,13 +287,22 @@ export async function buildMocapClips(dumpDir: string): Promise<{ clips: THREE.A
   const clips: THREE.AnimationClip[] = [];
   const ranges: MocapLoop[] = [];
   for (const loop of MOCAP_LOOPS) {
-    const dump = JSON.parse(await readFile(path.join(dumpDir, `${loop.take}.json`), 'utf8')) as Dump;
+    // A take whose dump is not in the directory keeps its committed clip (writeClips replaces only what was built).
+    const file = path.join(dumpDir, `${loop.take}.json`);
+    if (!(await access(file).then(() => true, () => false))) {
+      console.log(`[mocap] ${loop.name}: no ${loop.take}.json, kept as committed`);
+      continue;
+    }
+    const dump = JSON.parse(await readFile(file, 'utf8')) as Dump;
     const range = loop.to > loop.from ? loop : { ...loop, ...idleWindow(dump) };
-    ranges.push({ name: loop.name, take: loop.take, from: range.from, to: range.to, ...(loop.mirror ? { mirror: true } : {}) });
+    ranges.push({ name: loop.name, take: loop.take, from: range.from, to: range.to, ...(loop.mirror ? { mirror: true } : {}), ...(loop.once ? { once: true } : {}) });
     const { root, bones } = buildSourceRig(dump);
     const humanoid = HumanoidSkeleton.bind(root, {});
     humanoid.normalizeFacing(root);
-    const local = scaleSway(loopTracks(localTrack(dump, range.from, range.to), loop.mirror === true), loop.sway ?? 1);
+    const cut = localTrack(dump, range.from, range.to);
+    const local = loop.once
+      ? new Map([...cut].map(([b, keys]) => [b, smoothOnce(keys)] as const))
+      : scaleSway(loopTracks(cut, loop.mirror === true), loop.sway ?? 1);
     const tracks: THREE.KeyframeTrack[] = [];
     const times = Array.from({ length: local.values().next().value!.length }, (_, i) => i / dump.fps);
     for (const [b, keys] of local) {

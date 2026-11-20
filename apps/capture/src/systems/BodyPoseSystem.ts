@@ -1,6 +1,6 @@
 import { createSystem } from '@iwsdk/core';
 import * as THREE from 'three';
-import type { JumpPhase } from '../animation/JumpGesture';
+import type { JumpPhase } from '../animation/JumpArms';
 import { KEYBOARD_WALK_HEIGHTS_PER_SEC, WALK_SPEED_HEIGHTS_PER_SEC } from '../physics/CharacterMotor';
 import { type CaptureContext, captureContext } from './captureContext';
 
@@ -25,8 +25,8 @@ export class BodyPoseSystem extends createSystem() {
   /** The wind-up's last bend and the seconds since: the launch frame can still read grounded, so it holds the squat. */
   private windupBend = 0;
   private sinceWindup = Infinity;
-  /** This frame's jump timing, for the upper body's swing. */
-  private readonly phase: JumpPhase = { windup: 0, airborne: false, velocityY: 0, launchSpeed: 0, landing: 0 };
+  /** This frame's jump timing, for the arms' recorded swing. */
+  private readonly phase: JumpPhase = { windup: 0, airborne: false, velocityY: 0, launchSpeed: 0 };
 
   init(): void {
     this.capture = captureContext(this.world);
@@ -62,7 +62,7 @@ export class BodyPoseSystem extends createSystem() {
     }
     if (frame.bodyTracking) {
       body.posed = true;
-      c.jumpGesture.reset();
+      c.jumpArms.reset();
       body.solver.solve(body.head, avatar.avatarRoot.position, deltaSec, body.groundSampler, c.config.embodyOffset, character.grounded);
     } else if (!body.active) {
       // A reach plants the feet where they stood when it began, from the first bend to the end of the stand-up.
@@ -87,7 +87,7 @@ export class BodyPoseSystem extends createSystem() {
         this.phase.velocityY = character.velocityY;
         this.phase.launchSpeed = c.motor.jumpLaunchSpeed;
         c.armClearance.restore(avatar.humanoid);
-        c.jumpGesture.update(avatar.humanoid, deltaSec, this.phase, owned);
+        c.jumpArms.update(avatar.humanoid, deltaSec, this.phase, owned);
         c.armClearance.apply(avatar.humanoid, owned);
       }
     }
@@ -120,7 +120,6 @@ export class BodyPoseSystem extends createSystem() {
     } else this.sinceTakeoff += Math.max(0, deltaSec);
     const phase = this.phase;
     phase.windup = 0;
-    phase.landing = 0;
     // A jump's throw starts with the feet leaving the ground; a step off a ledge (or a bump on a slope that lifts the
     // feet for a frame or two) only once the fall has lasted, so walking over terrain does not flick the arms.
     phase.airborne = !grounded && (this.sinceWindup + this.sinceTakeoff < JUMP_THROW_SEC || this.sinceTakeoff >= FALL_ARMS_SEC);
@@ -147,8 +146,6 @@ export class BodyPoseSystem extends createSystem() {
     const envelope = t < LANDING_ATTACK_SEC
       ? THREE.MathUtils.smoothstep(t, 0, LANDING_ATTACK_SEC)
       : 1 - THREE.MathUtils.smoothstep(t - LANDING_ATTACK_SEC, 0, LANDING_RELEASE_SEC);
-    // The arms are already out from the fall: they hold there from touch-down and ease down with the absorb.
-    phase.landing = this.landingPeak * (t < LANDING_ATTACK_SEC ? 1 : envelope);
     return LANDING_DEPTH * this.landingPeak * envelope;
   }
 }

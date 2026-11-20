@@ -6,7 +6,7 @@ import { Vector3 } from 'three';
 import { LocomotionAnimator } from '../animation/LocomotionAnimator';
 import { attachLocomotion, sampleAvatarPose } from '../animation/locomotionLibrary';
 import { ArmClearance } from '../animation/ArmClearance';
-import { JumpGesture } from '../animation/JumpGesture';
+import { JumpArms } from '../animation/JumpArms';
 import { TerrainLegSolver } from '../animation/TerrainLegSolver';
 import { AvatarRig } from '../avatar/AvatarRig';
 import { BodyTracking } from '../body/BodyTracking';
@@ -283,7 +283,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     animator: new LocomotionAnimator(),
     terrainLegs: new TerrainLegSolver(),
     armClearance: new ArmClearance(),
-    jumpGesture: new JumpGesture(),
+    jumpArms: new JumpArms(),
     ar: new ArSpectator(scene, renderer, stage.worldGroup, avatar, config.embodyOffset),
     ui,
     vrChrome,
@@ -378,6 +378,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
           animator: capture.animator, avatar: avatar.avatar, ownClips: avatarGltf.animations,
           humanoid: avatar.humanoid, library: loadLibrary
         });
+        capture.jumpArms.attach(avatar.avatar, avatar.humanoid, capture.animator.getLeap());
       }
       // Bound at bind pose, like the body, before any system writes the eyes.
       if (avatar.avatar && avatar.humanoid) {
