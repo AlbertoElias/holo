@@ -4,15 +4,15 @@
  *
  *   node --conditions=development --import tsx scripts/authoring/publish.ts <take.glb | sheet.json>
  *        [--title t] [--description d] [--credit c] [--api <origin>] [--web <origin>]
- *        [--production] [--no-quick-look] [--check]
+ *        [--local] [--no-quick-look] [--check]
  *
  * A `.json` sheet is built first (as `direct.ts` does). A `.glb` takes its
  * title, description and credit from the sheet beside it (`<take>.beats.json`),
  * if any; flags win. `--check` validates and stops, with no network call.
  *
- * The target defaults to the local API (http://127.0.0.1:3001). Anything else
- * needs `--api` and `--production` (any non-loopback host; production is
- * https://holoim-api.fly.dev). Credential: HOLOIM_AGENT_TOKEN (the agent upload token) or
+ * The target is production (https://holoim-api.fly.dev) unless `--local` (the
+ * local API, http://127.0.0.1:3001) or `--api <origin>` says otherwise. A
+ * remote host that is not production is refused. Credential: HOLOIM_AGENT_TOKEN (the agent upload token) or
  * HOLOIM_SESSION from the environment, else the Keychain entry for the host
  * (`scripts/agent-upload-token.sh setup`); with none the command refuses.
  * The upload code is `scripts/showcase/lib/upload.mjs`, shared with
@@ -35,6 +35,12 @@ import { findPerformers, parseGlb, readChannels } from './lib/gltf-read.ts';
 export const LOCAL_API = 'http://127.0.0.1:3001';
 export const LOCAL_WEB = 'https://localhost:3174';
 export const PRODUCTION_API = 'https://holoim-api.fly.dev';
+export const PRODUCTION_WEB = 'https://holoim-viewer.pages.dev';
+
+/** Where a publish goes: `--api` if given, else the local API with `--local`, else production. */
+export function publishTarget(options: { readonly api?: string | undefined; readonly local?: boolean | undefined }): URL {
+  return new URL(options.api ?? (options.local ? LOCAL_API : PRODUCTION_API));
+}
 const FEED_WAIT_MS = 60_000;
 
 export interface TakeFacts {
@@ -80,7 +86,8 @@ export interface PublishOptions {
   readonly credit?: string | undefined;
   readonly api?: string | undefined;
   readonly web?: string | undefined;
-  readonly production?: boolean;
+  /** The local API instead of production; `api` wins. */
+  readonly local?: boolean;
   readonly quickLook?: boolean;
   /** Validate and stop. */
   readonly checkOnly?: boolean;
@@ -116,12 +123,12 @@ async function readSheetMeta(file: string): Promise<SheetMeta> {
 /** Publishes; throws `Refusal` (nothing uploaded) or Error. */
 export async function publish(options: PublishOptions): Promise<PublishReport | { checked: TakeFacts }> {
   const quickLook = options.quickLook ?? true;
-  const apiUrl = new URL(options.api ?? LOCAL_API);
+  const apiUrl = publishTarget(options);
 
   // 1. The target, before anything is read.
-  // Only a loopback host is local; every other spelling (a trailing dot, an alias, a custom domain) could be production.
-  if (!isLoopback(apiUrl) && !options.production) {
-    throw new Refusal(`${apiUrl.origin} is not a local API; publishing to a remote host (production is ${PRODUCTION_API}) needs --production as well as --api. Nothing was uploaded.`);
+  // A remote host must be production exactly: any other spelling (a trailing dot, an alias, a typo) would send the token elsewhere.
+  if (!isLoopback(apiUrl) && apiUrl.origin !== PRODUCTION_API) {
+    throw new Refusal(`${apiUrl.origin} is neither production (${PRODUCTION_API}) nor a local API. Nothing was uploaded.`);
   }
 
   // 2. The take.
@@ -178,7 +185,7 @@ export async function publish(options: PublishOptions): Promise<PublishReport | 
   }
   let previewStatus = 'not requested';
   if (quickLook) previewStatus = (await waitForPreview(apiUrl, dto.id)).usdzStatus;
-  const web = options.web ?? (isLoopback(apiUrl) ? LOCAL_WEB : null);
+  const web = options.web ?? (isLoopback(apiUrl) ? LOCAL_WEB : PRODUCTION_WEB);
   return {
     id: dto.id, title: dto.hologramName, description, credit, uploadedAs: account.account.displayName, sizeBytes: dto.sizeBytes,
     seconds: facts!.seconds, quickLook: previewStatus, api: apiUrl.origin, glbUrl: dto.url,
@@ -192,11 +199,11 @@ async function main(): Promise<void> {
   const bool = (name: string): boolean => { const i = args.indexOf(name); if (i !== -1) args.splice(i, 1); return i !== -1; };
   const options = {
     title: flag('--title'), description: flag('--description'), credit: flag('--credit'), api: flag('--api'), web: flag('--web'),
-    production: bool('--production'), quickLook: !bool('--no-quick-look'), checkOnly: bool('--check')
+    local: bool('--local'), quickLook: !bool('--no-quick-look'), checkOnly: bool('--check')
   };
   const input = args[0];
   if (!input || args.some((a) => a.startsWith('--'))) {
-    console.error('usage: publish.ts <take.glb | sheet.json> [--title t] [--description d] [--credit c] [--api <origin>] [--web <origin>] [--production] [--no-quick-look] [--check]');
+    console.error('usage: publish.ts <take.glb | sheet.json> [--title t] [--description d] [--credit c] [--api <origin>] [--web <origin>] [--local] [--no-quick-look] [--check]');
     process.exit(1);
   }
   try {

@@ -1413,11 +1413,14 @@ steps move unchanged into `scripts/showcase/lib/upload.mjs`, which both
   moved into the shared lib) under the converter's budgets, 100 M deformed
   and 500 M rigid point-frames, unless `--no-quick-look` (the budget only
   binds the preview). Any failure lists every problem and exits 1.
-- *Target:* `--api` defaults to `http://127.0.0.1:3001`. A non-loopback host
-  needs `--api` spelled out and `--production` as well (production is
-  `https://holoim-api.fly.dev`; any non-loopback spelling counts, found by
-  review: a trailing-dot host slipped past an origin match), so a typo or a
-  copied command cannot reach it. No upload happens without a
+- *Target:* production (`https://holoim-api.fly.dev`) by default, on the
+  owner's word of 2026-11-19 ("production should be default. if you are
+  publishing, its for prod"); `--local` is the local API
+  (`http://127.0.0.1:3001`) and `--api` names another origin. A remote host
+  that is not production exactly is refused (found by review: a
+  trailing-dot host slipped past an origin match), so a typo cannot carry
+  the token elsewhere. As first built the default was local and production
+  needed `--api` and `--production`. No upload happens without a
   credential: `HOLOIM_AGENT_TOKEN` (the agent upload token) or
   `HOLOIM_SESSION` from the environment, else the Keychain entry for that
   host; none is a refusal that names the setup command.
@@ -1434,8 +1437,9 @@ steps move unchanged into `scripts/showcase/lib/upload.mjs`, which both
   is a product decision left open.
 
 **Decided by the agent in the owner's absence on 2026-11-18, for the owner to
-review** (each reversible): the production gate is a second flag
-(`--production`) on top of an explicit `--api`; `HOLOIM_AGENT_TOKEN` is the
+review** (each reversible): the production gate was a second flag
+(`--production`) on top of an explicit `--api` (replaced on 2026-11-19 by the
+owner: production is the default, see *Target* above); `HOLOIM_AGENT_TOKEN` is the
 environment name; the credential/upload code is extracted from `upload.mjs`
 rather than duplicated or wrapped; description and credit are not sent to the
 API. Production is never exercised by the check.
@@ -3469,7 +3473,7 @@ off (anonymous POST answers 401), an agent token registered through
 `agent-token.ts`, and `goodbye.json` directed and published. "The goodbye"
 (3.60 MB) is on the feed as Claude (agent-authored), verified, and its stored
 GLB is the take. Refusals, each with nothing uploaded: no token; a wrong
-token; production without `--production`; a take without
+token; production without `--production` (since 2026-11-19: a remote host that is not production); a take without
 `HOLOIM_humanoid`; a Quick Look load over budget; a file over the cap; no
 title. A proof video (card on the feed after the command) was sent to the
 owner. The Quick Look preview wait was not exercised (the check API has the
