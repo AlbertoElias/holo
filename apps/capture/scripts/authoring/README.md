@@ -21,7 +21,7 @@ ordinary hologram GLB, and review whether it reads. Run everything from `apps/ca
 | `compare-takes.ts <person.glb> <agent.glb> [--out dir]` | The acting report and motion numbers (beats, hold stillness, hand speed, hesitations and back-and-forth strokes, head range, travel) on two takes side by side, in `<a>-vs-<b>.compare.md` / `.json`. |
 | `review.ts <take.glb> [--sheet take.beats.json] [--out dir] [--step 0.2] [--fps 30] [--until s] [--card-only] [--orbit deg]` | Plays the take in viewer-web and writes a review pack (below): a real-time H.264 video at feed-card size and a close view per performer (with sound: the take's own, mixed from clip time 0, and a face view per performer so the lips can be read), frame sheets every `--step` s, the acting report, the face's height and per-second travel on the card, and a comparison to fill in. Same ports as `viewer-check.ts`. |
 | `six-second-test.ts prepare <sheet.json> [--avatars stock,house-base] [--readers 3] [--until 6] [--orbit 90] [--out dir]` / `score <dir>` | The six-second test (below): builds a flat and a directed take per avatar, renders the first six seconds muted at card size and after an orbit as blind frame sheets, and, after fresh readers and graders have answered, scores each take against the sheet's intent. |
-| `publish.ts <take.glb\|sheet.json> [--title t] [--description d] [--credit c] [--api <origin>] [--web <origin>] [--production] [--no-quick-look] [--check]` | Validates a take and publishes it through the normal upload route (below). |
+| `publish.ts <take.glb\|sheet.json> [--title t] [--description d] [--credit c] [--api <origin>] [--web <origin>] [--local] [--no-quick-look] [--check]` | Validates a take and publishes it through the normal upload route (below). |
 | `viewer-check.ts <take.glb> [--video out.mp4] [--frames dir] [--report out.json]` | Uploads the take to a local test API, opens it in a viewer-web test build and reads what plays: moving bones, fingers and face shapes per performer, which performer holds the humanoid the viewer anchors on, and each recorded object (meshes, whether it moves, its credit). `--video` records it as H.264; `--frames` saves twelve paused stills at exact take times; `--audio out.webm` presses the card's unmute control, records what the card sends to its speakers over one real-time pass, and prints where each sound in the file is heard (exit 1 when one is not heard within 100 ms of its place); with `--video` that recording is the video's soundtrack. Uses ports 3341 and 3214 (`VIEWER_CHECK_API_PORT`, `VIEWER_CHECK_WEB_PORT`). |
 | `speech-report.ts <take.glb> [--json out.json]` | Reads a take with sound from the GLB alone: decodes each `KHR_audio` source as embedded (its length against the clip, where it sounds) and measures the mouth opening (mm along each face mesh's own `jawOpen`, else `mouthOpen`, else `viseme_aa`) against the voice: each phrase's mouth onset against its sound, the mouth in the voice's pauses, and how closely it follows the loudness; with the sheet beside the take, each line's first sound against its beat. Exits 1 past its bars (below). |
 
@@ -40,9 +40,9 @@ a performer no animation reaches, or (unless `--no-quick-look`) is over the
 Quick Look converter's extent budget (100 M deformed, 500 M rigid
 point-frames). `--check` stops there.
 
-- **Target:** the local API (`http://127.0.0.1:3001`) unless `--api` says
-  otherwise; any non-loopback host (production is
-  `https://holoim-api.fly.dev`) also needs `--production`.
+- **Target:** production (`https://holoim-api.fly.dev`) unless `--local`
+  (the local API, `http://127.0.0.1:3001`) or `--api <origin>` says
+  otherwise; a remote host that is not production is refused.
 - **Credential:** `HOLOIM_AGENT_TOKEN` (or `HOLOIM_SESSION`), else the
   Keychain entry for the host (`scripts/agent-upload-token.sh setup`). With
   none it refuses and uploads nothing. The code is
