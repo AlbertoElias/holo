@@ -6,6 +6,7 @@ import { Vector3 } from 'three';
 import { LocomotionAnimator } from '../animation/LocomotionAnimator';
 import { attachLocomotion, sampleAvatarPose } from '../animation/locomotionLibrary';
 import { ArmClearance } from '../animation/ArmClearance';
+import { JumpGesture } from '../animation/JumpGesture';
 import { TerrainLegSolver } from '../animation/TerrainLegSolver';
 import { AvatarRig } from '../avatar/AvatarRig';
 import { BodyTracking } from '../body/BodyTracking';
@@ -282,6 +283,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     animator: new LocomotionAnimator(),
     terrainLegs: new TerrainLegSolver(),
     armClearance: new ArmClearance(),
+    jumpGesture: new JumpGesture(),
     ar: new ArSpectator(scene, renderer, stage.worldGroup, avatar, config.embodyOffset),
     ui,
     vrChrome,

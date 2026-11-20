@@ -172,6 +172,20 @@ export class ArmClearance {
    * An arm the point or the carry holds (`owned`) is theirs: their IK aims it, and they keep the pose they found
    * as the one to return to, so opening it would feed their own write back to them as the clip's pose.
    */
+  /**
+   * Puts back an upper arm that still holds last frame's opening (a clip that does not write the arm leaves it there).
+   * `apply` does this itself; a layer that turns the arms before it calls this first, so it builds on the clip's pose.
+   */
+  restore(humanoid: HumanoidSkeleton | undefined): void {
+    if (!humanoid) return;
+    SIDES.forEach((side, index) => {
+      const undo = this.undo[index]!;
+      const upper = humanoid.bone(side.upper);
+      if (upper && undo.active && upper.quaternion.equals(undo.written)) upper.quaternion.copy(undo.before);
+      undo.active = false;
+    });
+  }
+
   apply(humanoid: HumanoidSkeleton | undefined, owned: Readonly<Record<'left' | 'right', boolean>> = { left: false, right: false }): void {
     const widths = this.widths;
     if (!humanoid || humanoid !== this.measuredFor || !widths) return;
