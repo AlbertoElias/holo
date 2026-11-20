@@ -1158,10 +1158,11 @@ export class VrBodySolver {
       foot.toYaw = this.bodyYawValue;
     }
     const clipPhase = lift + foot.t * swingLength;
-    const s = foot.t >= 1 ? 1 : clamp(sampleWalkTrajectory(walk.legs[side].progress, clipPhase), 0, 1);
     // The clip's sole already rises at its lift-off (its heel rose in
-    // stance); a flat stance foot eases into that rise instead.
+    // stance); a flat stance foot eases into that rise instead, and into the
+    // clip's travel with it, or the sole slides before it is off the ground.
     const liftEase = THREE.MathUtils.smoothstep(foot.t, 0, LIFT_EASE);
+    const s = foot.t >= 1 ? 1 : liftEase * clamp(sampleWalkTrajectory(walk.legs[side].progress, clipPhase), 0, 1);
     const clearance = foot.t >= 1 ? 0 : liftEase * sampleWalkTrajectory(walk.legs[side].clearance, clipPhase) * this.hipsHeight();
     foot.current.lerpVectors(foot.from, foot.to, s);
     foot.currentNormal.lerpVectors(foot.normal, foot.toNormal, s).normalize();
