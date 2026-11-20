@@ -255,12 +255,16 @@ production and needs the owner's word.
 
 ## What works at card size
 
-- **The face is small.** The card frames the performers, every object and
-  everything that moves, so each thing you add shrinks the face. One
-  performer, objects within about 0.6 m and below the head, no steps. Two
-  performers roughly halve the face. A table 0.6 m wide plus a reach to the
-  side can still drop the face under 40 px: keep a table about 0.4 m wide
-  and centred, and reach forward, not out to the side.
+- **The face is small.** For one performer the card frames the body from
+  the hips and the head only, so objects and reaches do not change the
+  face size. The bar reads the median face over the take, brow to chin. A
+  face that tips down or away is shorter on the screen. So:
+  - Look at an object mostly with the eyes: `"head": 0.3` or less. A look
+    with `"head": 0.8` at a thing on a table cost about 3 px in a test.
+  - Look at the viewer (`"at": "viewer"`) for more than half the take. The
+    reaction is the best time for this.
+  - Keep a forward lean (a reach far forward, a bow) short.
+  Two performers roughly halve the face.
   A table too high or too low for a take: change its height (its `size`).
   A fix line that moves its `at` down does the same to its top, but sinks
   the table into the floor.
@@ -287,6 +291,13 @@ production and needs the owner's word.
   between the hands.
   For an offer, add 0.1 m to both `forward` values and hold the beat 1 s or
   more while the performer looks at the viewer.
+- **Every `reach` needs `stopShort`.** Use 0 to put the palm on the mark.
+  For open hands either side of the body (a startle, a shrug with the
+  hands up), put the marks at least 0.25 m to each side with `forward`
+  0.3. Marks nearer than that cross the forearms.
+- **Edit a sheet with the Edit tool or Python, not `sed -i`.** On macOS
+  `sed -i` needs `-i ''`. A search-and-replace on a number (such as
+  `"forward": 0.4`) can also hit an object and a reach at the same time.
 - **Bend over something low.** `{ "kind": "bend", "amount": 0.8 }` bends from
   the waist and pushes the hips back; reach and look are solved on the bent
   body. Use 0.5 for a lean, 1 for the deepest bend. Give it `attack` 0.8-1.0.
@@ -336,7 +347,10 @@ production and needs the owner's word.
   pixels on the card, so show it at chest height for a second after the take.
 - **Change the world.** `world: [{ "kind": "change", "object": "plant",
   "when": 6, "over": 1.5, "from": { "scale": [1, 0.8, 1], "color": "#8e8644" } }]`
-  grows or recolours an object; see the README's "World change".
+  grows or recolours an object; see the README's "World change". The
+  line's own `scale` and `color` are where the change ends. `from` is
+  optional: without it, the change starts from the object as the sheet
+  made it. It works on a held object too.
 - **Customise the look.** Every trait is a fixed menu (`M words`). There are
   three outfits (`oatmealSlate`, `rustWalnut`, `stormGraphite`) and no other
   clothing colours or garments, so say so rather than inventing one.

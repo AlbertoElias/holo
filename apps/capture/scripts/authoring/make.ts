@@ -275,9 +275,10 @@ async function fitMissOrThrow(sheetFile: string, m: Miss): Promise<string> {
 }
 
 /** The face-box fix: what widens the card's frame. */
-const FACE_FIX = 'the card frames the performers, every object and everything that moves, so the face gets smaller as that grows: '
-  + 'keep objects within about 0.6 m of the performer and no higher than the head, leave out objects nobody acts on, '
-  + 'avoid steps and wide reaches, and use one performer where the idea allows (two halve the face)';
+const FACE_FIX = 'the bar reads the median face over the take, and a face that tips down or away is shorter on the card '
+  + '(for one performer the card frames from the hips and head, so objects do not change it): '
+  + 'look at objects mostly with the eyes ("head": 0.3 or less), look at the viewer for more than half the take, '
+  + 'keep forward leans short, and use one performer where the idea allows (two halve the face)';
 
 const STORY_BAR = 'a fresh reader gets the setup, the event and the reaction';
 const STORY_FIX = 'write the sheet\'s "story" first (hologram-authoring skill, "First, the story"), then beats that show it';
