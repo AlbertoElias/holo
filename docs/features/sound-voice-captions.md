@@ -407,6 +407,28 @@ before any code. Folded into the plan:
   lips follow, set only when the cue changes; paused, it shows the cue at the
   paused time. One polite live region, on the focused card only.
 
+### Slice 3: choices the eight decisions left open
+
+Decided by the agent in the owner's absence on 2026-11-19, for the owner to
+review (the lead's picks; each is one constant or option, so reversible):
+
+1. **WebXR:** captions show by the head only on a hologram that is not heard
+   (in the gallery, every placed hologram but the focused one); the heard one
+   shows none. (`XR_CAPTIONS_WHEN` in `apps/viewer-web/src/features/xr/captionChip.ts`.)
+2. **No captions toggle in this slice:** on the card, captions follow mute
+   only. A toggle (PRD-009, the Settings sheet) is a follow-up.
+3. **The headset's 1 m fade applies:** speech captions fade within 1 m of
+   the hologram like its other text (styleguide 7.3, `headsetTextVisible`
+   with kind `caption`).
+4. **The card's reach controls lift the caption:** when they open (stacked
+   above Play on a phone), the caption chip rises above them rather than
+   hiding.
+5. **One line:** a line longer than one chip line is split at sentence and
+   clause ends into timed pieces, each its share of the voiced time;
+   `CAPTION_LINE_CHARS` in `packages/contracts/src/captions.ts` caps a piece.
+6. **Type:** speech captions use `captionOnHologram` (Figtree 400,
+   `clamp(.8rem, 1.3vw, 1rem)`; 40 apx in a headset).
+
 ## Acceptance criteria (slice 1a)
 
 - [x] A beat sheet with a `say` line (a supplied file) and a `sound` on a
