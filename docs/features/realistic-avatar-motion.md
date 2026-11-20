@@ -172,6 +172,31 @@ jitters"), fixed in 1b:
     back what it wrote last frame first; otherwise the blend would creep onto
     the clip and stay there.
 
+23. Seams on the other input paths (audit, 2026-11-20). Each path was
+    recorded on the IWSDK/IWER harness and graded with the shared motion
+    metrics (VR controllers, VR hands, headset AR, mock VR, desktop first
+    and third person, touch). Causes, in system order:
+    - `LocomotionAnimator`: the VR lower-body profile has no idle clip, so
+      its walk started from the rest pose with no fade (mock-VR walk start
+      459 m/s²). A walk from rest now fades in over 0.25 s.
+    - `JumpArms`: the take-off jumped the clip time to lift-off in one frame
+      (455 m/s² at the wrists), and the landing jumped it to touch-down. The
+      clip time now moves at most 1.5× real time.
+    - `TerrainLegSolver`: the legs left their ground solve in one frame at
+      take-off. They now ease from the last ground pose over 0.1 s. The
+      penetration of 2.87 cm on desktop went to 0.
+    - `VrBodySolver`: the feet in the air ease to their slots, tuck by the
+      height above the ground, and plant where they are on landing.
+    - VR stick speed: at the full stick, 3.24 m/s (a jog), the solver's feet
+      dragged 0.85 m behind the hips and kept stepping 1 s after the stop.
+      The owner chose (2026-11-20) to cap the VR stick at the walk speed,
+      1.8 m/s, as on the keyboard. At 1.8 m/s the trailing foot still stayed
+      planted past the leg's reach and lifted 30 cm off the ground: the swing
+      speed cap of 3.0 m/s stretched each walking swing to 0.55 s. A walking
+      swing may now average 2.5× the body speed, as a human swing foot does.
+    The VR hands were already good (wrist p95 0.2 cm, jitter 1.1 mm).
+    First person matches third person (no scissoring on the strafe).
+
 ## Scope
 
 **Included (this slice):**
@@ -213,10 +238,13 @@ jitters"), fixed in 1b:
 pitch/roll to the terrain normal and heel sampling; pelvis drop to the lower
 foot; the desktop Idle's upper-body sway (needs the desktop reach, carry,
 set-down and prop placement retuned to read a moving hand and eye); the remaining knee-swing excess (walk p99 77° against the source's
-57–66°); an allocation-free leg solver (slice 1 removed its per-probe raycasts,
+57–66°); what the audit of cause 23 left: a one-frame knee twitch (up to 130 m/s²)
+when the VR stick stops during a swing, the VR landing (168 m/s², the
+capsule's one-frame velocity change, which the tracked head shares), and the
+mock-VR float (1.71 cm) and knee limit share (3%); an allocation-free leg solver (slice 1 removed its per-probe raycasts,
 but `TerrainLegSolver` still makes Vector3/Quaternion temporaries each frame).
 
-**Excluded:** run/sprint; physical Quest validation (owner, in New York);
+**Excluded:** run/sprint (the VR stick is capped at the walk speed, cause 23); physical Quest validation (owner, in New York);
 facial animation; the directed-performance cast (it imports these modules
 unchanged and keeps working); phone AR (no avatar, by design).
 
@@ -293,6 +321,8 @@ dependency for what a 150-line vertical-only grid does).
 |---|---|---|
 | Arms, knees, gait, terrain, cost | `node --import tsx scripts/run-xr-checks.ts desktop-motion` (from `apps/capture`) | `output/ci-desktop-motion/summary.json`: PASS on all 9 rows (2026-11-18). Shipped, flat floor: cadence 116 steps/min, arm swing 42.8 cm at correlation −0.955, knee swing 77.4°, mid-stance 38.8°, stance 0.45/0.45, asymmetry 0.065, pops 45.7 m/s², skate max 1.78 cm, jitter 0.59 mm. Terrain: deepest foot joint under the ground 0.00 cm (was 20 cm), planted float p95 0.81 cm. Pose cost median 0.1–0.2 ms, p95 0.2–0.3 ms on every row (0.2–0.5 ms median under CI emulation) (the terrain probes were 1.8 ms before the height index) |
 | All sources still pass | `test:xr:avatars`, `test:xr:body`, `test:xr:hands`, `test:xr:ar-record`, `pnpm run verify:pr` | All pass (2026-11-18). In `verify:pr`, two pipeline specs timed out under load on shared ports and passed when rerun alone. The desktop and phone object checks outside `verify:pr` fail on `main` as well (B-069) |
+| Every input path (cause 23) | `output/motion-audit/audit.ts` (ignored; drives each path on a frozen clock and grades it with `scripts/lib/motion-quality.ts`) | Before → after, 2026-11-20. Desktop first/third and touch: penetration 2.87 → 0 cm, standing take-off 455 → 99 m/s², walking take-off 463 → 121, pops p99 65 → 62. Mock VR: walk start 459 → 124, take-off 204 → 100, pops p99 84 → 73. VR stick and headset AR: skate 2.77 → 1.08 cm, penetration 2.16 → 0.09 cm, pops p99 65.5 → 59.0, take-off 174 → 136, largest stop spike 170 → 130 |
+| VR checks still pass | `node --import tsx scripts/run-xr-checks.ts desktop-motion body hands locomotion loco-states mock-vr terrain held-states ar-record` | All pass (2026-11-20) |
 | Looks right | proof video (ignored `output/`, not linked) | A 14 s desktop keyboard walk over the default terrain: arms hang and swing opposite the legs, knees bend through the stride, and the feet stay on the slopes |
 
 ## Physical-device limits
