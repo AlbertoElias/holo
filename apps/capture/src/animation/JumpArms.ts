@@ -25,13 +25,13 @@ export interface JumpPhase {
 }
 
 // Leap's marks (s): the squat with the arms going back, the arms furthest back as the legs drive, lift-off,
-// touch-down and the end of the absorb (CMU 118_01 frames 70, 94, 103, 117 and 135, the clip starting at 60).
+// touch-down and the end of the absorb (CMU 13_42 frames 24, 34, 46, 63 and 70, the clip starting at 14).
 const FPS = 30;
 const SQUAT = 10 / FPS;
-const DRIVE = 34 / FPS;
-const LIFT = 43 / FPS;
-const TOUCH = 57 / FPS;
-const ABSORBED = 75 / FPS;
+const DRIVE = 20 / FPS;
+const LIFT = 32 / FPS;
+const TOUCH = 49 / FPS;
+const ABSORBED = 56 / FPS;
 /** The share of the flight (by vertical speed) the legs' drive spans: the push-off's first ~0.12 s of a 3.3 m/s jump. */
 const DRIVE_SHARE = 0.18;
 /** The landing holds the clip's arms this long after touch-down, then hands back to the playing pose over LAND_OUT_SEC. */

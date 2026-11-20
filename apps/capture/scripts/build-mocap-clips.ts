@@ -49,11 +49,13 @@ export const MOCAP_LOOPS: readonly MocapLoop[] = [
   // Played at 40% of its sway about the mean pose: the full take drifts the head 5 cm in a frame of view
   // that follows the eyes (the desktop camera and aim), where 2 cm reads as standing still and alive.
   { name: 'Idle', take: '113_21', from: 0, to: 0, sway: 0.4 },
-  // Subject 118, trial 1, "Dans jumps": a standing jump with a full arm swing. Not a loop (`once`): the squat
-  // with the arms going back (frame 70), the arms at their furthest back as the legs drive (94), lift-off (103),
-  // touch-down (117) and the absorb (135). The desktop body's jump scrubs its arms through it in step with the
-  // game's own jump (JumpArms); no locomotion state plays it, so its name matches none of theirs.
-  { name: 'Leap', take: '118_01', from: 60, to: 140, once: true }
+  // Subject 13, trial 42, "jump": a standing jump with a full arm swing that keeps moving through the flight (118_01, the
+  // first pick, swings the arms back hard but only to 20° in front, then holds them there). Not a loop (`once`): the
+  // squat with the arms going back (frame 24), the arms at their furthest back, 78° behind, as the legs drive (34),
+  // lift-off with the arms 73° in front (46), falling through the flight to 22° at touch-down (63), and the absorb (70).
+  // The desktop body's jump scrubs its arms through it in step with the game's own jump (JumpArms); no locomotion state
+  // plays it, so its name matches none of theirs.
+  { name: 'Leap', take: '13_42', from: 14, to: 94, once: true }
 ];
 
 // CMU bone → Mixamo name (what HumanoidSkeleton binds). Buttocks fold into

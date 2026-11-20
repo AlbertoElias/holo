@@ -155,8 +155,13 @@ jitters"), fixed in 1b:
     the arms and floated them up ("looks very girly, make it more natural"),
     the second settled into held poses ("the arms are stiff and stop moving
     mid-way"). The arms now come from motion capture: `Leap`, a one-shot clip
-    from CMU 118_01 (a standing jump, frames 60–140), plays in no locomotion
-    state. `JumpArms` samples its shoulder, arm and hand tracks each frame at
+    from CMU 13_42 (a standing jump, frames 14–94), plays in no locomotion
+    state. The first take tried, 118_01, swings the arms back hard but only
+    to 20° in front and holds them there through the flight; the owner saw
+    no change. Of eleven CMU jump takes measured (arm angle in the body's
+    side plane, frame by frame), 13_42 swings furthest and keeps moving: 78°
+    behind in the squat, 73° in front at lift-off, falling to 22° by
+    touch-down. `JumpArms` samples its shoulder, arm and hand tracks each frame at
     a clip time mapped from the game's own jump: wind-up progress spans the
     squat with the arms going back; the upward speed against the launch
     speed spans the legs' drive, lift-off and flight to touch-down (so the
@@ -183,8 +188,8 @@ jitters"), fixed in 1b:
   carry pose over it, or blending the arms or the whole upper body back to
   bind, still broke those checks). VR plays no idle: the legs stand at rest
   while the headset stands still.
-- The desktop jump's arms from a recorded jump: `Leap` (CMU 118_01, frames
-  60–140, not looped), scrubbed by `JumpArms` in step with the game's jump
+- The desktop jump's arms from a recorded jump: `Leap` (CMU 13_42, frames
+  14–94, not looped), scrubbed by `JumpArms` in step with the game's jump
   (cause 22). The builder rebuilds only the takes whose dumps it is given.
 - `scripts/mocap/amc-to-dump.ts` (ASF/AMC → JSON) and
   `scripts/build-mocap-clips.ts` (JSON → the shipped avatar's clips, then
