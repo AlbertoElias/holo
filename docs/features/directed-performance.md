@@ -1098,7 +1098,7 @@ bars in the brief to the artist.
 | **2c: the base** | One base in the picked style, neutral finish, neutral card, made the recommended way | Every audition row passes; three blind readers at 5 of 7 or better at card size; a review pack of `sheets/expressions.json` and the watering piece on the base beside the stock; the motion owner's report; `check_usdz_tools.sh`; a proof video | **Yes.** Loads through `?avatar=` and beat sheets only; edits nothing the mandates own |
 | **2d: traits** | The shared dressing function, used by `direct.ts` only; three builds; hair and glasses parts; the poem's two characters from cards. Built 2026-11-18 (see "Slice 2d evidence"); the turn row still fails, worse with garments | The audition on every trait value at its extreme; a contact sheet of the trait values; the poem's two characters made from cards alone, in a take whose GLB carries the look | **Yes.** A workspace package, authoring scripts and avatar files; nothing in `apps/capture/src/` |
 | **2c2: the base looks like the sheets** | Added 2026-11-18 on the owner's verdict: "the images its based on are great, we need to reach the point where the avatars look just like those images". The owner picked the route "Generate, then fit"; on 2026-11-19 the owner's licence decision replaced the generated shape with a visual hull carved from the sheet's own silhouettes (`house-base/carve.py`), and the house base's own mesh is wrapped onto it (`house-base/fit.py`), keeping the rig, the face shapes, the three builds and the trait parts | The likeness check (`house-likeness.ts`): silhouette overlap per turnaround view, "which is the drawing?" pairs for fresh readers, a contact sheet against each sheet. The audition and the blind reading unchanged, `house-traits.ts` over every trait value, the base at 1.8 MB or under, a proof video | **Yes.** Authoring scripts and avatar files; nothing in `apps/capture/src/`; `DEFAULT_AVATAR_URL` unchanged |
-| **2c3: the face matches the sheet** | Added 2026-11-19 on the owner's verdict on the default avatar: "issues with the eyes and mouth, it looks weird and uncanny as hell. it need to be much closer to the reference image". `build.py` rebuilds the eyes, lids, brows, nose and mouth to the clay expression sheet; the shared mixes, the body and the rig are unchanged. Built 2026-11-19 on `feature/house-face-match`, **not merged**: the ink and light blind readings fell below the gate in the AI round (see "Slice 2c3 evidence") | The face likeness check (`house-face-likeness.ts`) before and after; every 2c2 and 2f gate re-run unchanged; a new reader pack for people; a proof video | **Yes.** Authoring scripts, avatar files and `@holoim/avatar-look` colours; nothing in `apps/capture/src/` |
+| **2c3: the face matches the sheet** | Added 2026-11-19 on the owner's verdict on the default avatar: "issues with the eyes and mouth, it looks weird and uncanny as hell. it need to be much closer to the reference image". `build.py` rebuilds the eyes, lids, brows, nose and mouth to the clay expression sheet; the shared mixes, the body and the rig are unchanged. Built 2026-11-19 and merged 2026-11-20 on the owner's word "Merge as is", with the ink and light blind readings below the gate in the AI round and the turn row one vertex worse (see "Slice 2c3 evidence") | The face likeness check (`house-face-likeness.ts`) before and after; every 2c2 and 2f gate re-run unchanged; a new reader pack for people; a proof video | **Yes.** Authoring scripts, avatar files and `@holoim/avatar-look` colours; nothing in `apps/capture/src/` |
 | **2e: chosen per take** | `house:<finish>` and `look` in beat sheets; the dressing function in capture's avatar loading; height from the head-top bone; the "your look" step in the phone journey and the headset mirror; `?look=` | A phone e2e: set a look, record, upload, and the feed card shows it; an XR harness check of the mirror; a beat sheet re-dressed with another card; a proof video | **No.** Touches the phone journey (`CaptureOverlay.tsx` and its flow), owned by the phone mandate, and `src/avatar/` (loading, `AvatarRig`'s height fit), owned by the motion owner: built with both, after the phone's device checks |
 | **2f: finishes** | The other one or two finishes as material sets | Brow contrast and the blind reading per finish; one authored piece re-dressed in each | **Yes.** Avatar files. Built 2026-11-19: ink and light (see "Slice 2f evidence") |
 | **2g: the default and outside avatars** | `DEFAULT_AVATAR_URL` to the house base; the credit rule and verdict for outside avatars | Motion owner's agreement recorded; the phone journey's load measured against the 2.3 MB; an outside VRM passed and one refused, by name; a proof video | **No.** One constant in capture, on the motion owner's say |
@@ -1971,10 +1971,13 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
      40 px bar; a patch of skin behind MPFB's mouth slit, so a closed smile
      does not open a dark line; the glasses frames re-sized to the larger
      eyes.
-   - **Not merged, by the agent's call.** The clay gate is met, and ink
-     and light read below 5 of 7 with the AI readers in this round, and
-     the turn row counts 17 vertices against 16 (see the evidence). No bar is loosened; the owner decides whether to
-     merge, read with people first, or tune further.
+   - **Merged on the owner's word.** The agent left the branch unmerged
+     because the clay gate is met, ink and light read below 5 of 7 with the
+     AI readers in this round, and the turn row counts 17 vertices against
+     16 (see the evidence). Given those numbers and the options, the owner
+     answered on 2026-11-20: "Merge as is". No bar is changed by this: the
+     ink and light readings stay recorded as not met, and a reading with
+     people (the new pack) is still open.
    - **The "Pixar look"** (skin shading, blush, soft light) is not built:
      the owner said the smile was enough for now. It is a material and
      lighting question for the viewer, not this face's geometry.
@@ -3722,7 +3725,8 @@ result is recorded as measured; the bar was not loosened.
 
 ### Slice 2c3 evidence (2026-11-19): the face rebuilt to the clay sheet
 
-Branch `feature/house-face-match`, not merged (decision 12). Readers are
+Branch `feature/house-face-match`, merged on the owner's word of 2026-11-20
+(decision 12). Readers are
 AI throughout; people are the real test, and their pack is rebuilt (below).
 
 **The diagnosis (old face against the clay expression sheet).**
@@ -3825,7 +3829,7 @@ untextured base (see 2c). No physical device.
 **Options from here, with costs** (the owner's call):
 
 1. Merge as is. No cost. Clay is at the gate; ink and light are below it
-   with AI readers in this round.
+   with AI readers in this round. **The owner picked this on 2026-11-20.**
 2. Read with people first, with the new pack. No spend; the owner's and
    three readers' time. It is the test the brief names as the real one.
 3. More free tuning of held and looking down in `base.json`. No spend;
