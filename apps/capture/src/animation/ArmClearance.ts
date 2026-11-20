@@ -75,6 +75,17 @@ export class ArmClearance {
   /** Last opening per side (rad), for checks. */
   readonly lastOpenRad = { left: 0, right: 0 };
 
+  /**
+   * A new look on the live avatar: measures a freshly loaded copy of it at
+   * its rest pose (the live one is posed), and the live humanoid takes the
+   * widths. They are shares of the hip spacing, so the copy's scale does not matter.
+   */
+  measureFrom(restRoot: THREE.Object3D, restHumanoid: HumanoidSkeleton, live: HumanoidSkeleton): void {
+    this.measuredFor = undefined;
+    this.measure(restRoot, restHumanoid);
+    this.measuredFor = live;
+  }
+
   /** Measures the avatar's skin once (call with the avatar in its rest pose); a new humanoid measures again. */
   measure(root: THREE.Object3D, humanoid: HumanoidSkeleton | undefined): void {
     if (!humanoid || humanoid === this.measuredFor) return;

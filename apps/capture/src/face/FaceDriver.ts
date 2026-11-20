@@ -73,6 +73,11 @@ export class FaceDriver {
     this.rig = new FaceRig(avatar, bones);
   }
 
+  /** The avatar's meshes changed (a new look): the face drives the new ones. */
+  rebindMeshes(avatar: THREE.Object3D): void {
+    this.rig?.rebindMorphs(avatar);
+  }
+
   /** Automation: a full face (channels it omits are 0), or null to release. */
   setAutomationInput(sample: FaceSample | null): void {
     this.automation = sample;

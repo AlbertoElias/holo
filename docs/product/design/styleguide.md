@@ -495,6 +495,7 @@ a gesture zone.
 | Delete | Delete the hologram, for its creator only, after a confirmation | "Delete" | No glyph on a card: the word at the end of the byline, away from the controls a hand lands on by habit |
 | Search | Open the search sheet on the feed | "Search" (name) | A lens with its handle (`glyph.path.search`). In the top right corner, left of Settings |
 | Settings | Open the settings sheet | "Settings" (name) | Two sliders, each with its knob (`glyph.path.settings`). In the top right corner, the sheet's own side |
+| Look | Open the look sheet in capture, when the avatar is the house base and the take is idle (`docs/features/your-look.md`) | "Look" | No drawing yet: the word in the dock |
 | Halo | Summon the Halo (press and hold) | "Halo" (name) | Four arcs around a point, open at the diagonals (`glyph.path.halo`) |
 | Undo / Redo | The Halo's W and E: undo or redo the last authoring action of any kind (an object summoned, put back, placed or resized, a held mark, a hand trace, a tray change; `docs/features/archive/undo-redo.md`) | "Undo" / "Redo" (name) | An arrow back over a turn, and its mirror (`glyph.path.undo` / `redo`) |
 | Ink | The Halo's NW in a headset: start or end a hand trace while recording (PRD-023) | "Ink" (name); "Tracing 0:03" on the status line while on | A curving path into a fingertip dot (`glyph.path.ink`) |
@@ -821,6 +822,15 @@ the stop shape alone, since no text sits within arm's reach.
 - **Type:** the flat scale; the phone card title is 21.6 px.
 - **Glyphs:** drawn as SVG, never emoji or font symbols.
 - **Copy:** touch words on a touch device, never desktop keyboard help.
+- **Capture look sheet:** on the chip above the dock, in the slot of the
+  Find sheet and the Post panel, and never open with them or the tray; at
+  most 46% of the screen high, scrolling inside. Styles are word choices
+  (ring and gold dot); colours are discs of the colour inside the same
+  ring, and the chosen disc holds the gold dot on a small deep-sea lens.
+  The row's title names the chosen colour in words, so the state is never
+  colour alone. While the sheet is open, the view faces the avatar and
+  shifts up by half the sheet's height, so the face shows above it.
+  Desktop uses the same sheet.
 
 ### 9.4 Desktop
 

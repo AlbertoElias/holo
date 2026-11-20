@@ -5,6 +5,7 @@ import type { HaloAction } from '@holoim/xr-ui-core';
 
 import type { LocomotionProfile, LocomotionState } from '../animation/LocomotionAnimator';
 import type { HumanoidBindingReport } from '../avatar/HumanoidSkeleton';
+import type { HouseLook } from '../avatar/houseLook';
 import type { LandmarkFrame } from '../bodycam/types';
 import type { BodycamSnapshot } from '../bodycam/snapshot';
 import type { TrackerStats } from '../bodycam/BodycamTracker';
@@ -62,6 +63,9 @@ export interface AutomationHooks {
   __captureHandCalibrationPose: () => Record<VrHandSide, boolean>;
   __resetHandCalibrationPose: () => void;
   __loadObjectUrl: (url: string) => Promise<boolean>;
+  /** Changes the house base's look and waits for it to land; false when refused (not the house base, or a take is busy). */
+  __setHouseLook: (next: HouseLook) => Promise<boolean>;
+  __sampleHouseLook: () => { look: HouseLook | null; meshes: string[]; skeletons: number; lastChangeMs: number | null; fitErrorMm: number | null; memory: { geometries: number; textures: number } };
   __loadTrayUrls: (urls: readonly string[]) => Promise<boolean>;
   // A full face (weights and optional gaze) that overrides the camera and
   // liveness until released with null.

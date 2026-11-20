@@ -87,7 +87,8 @@ not reachable while a take runs.
 - [ ] Slice 2: in the IWER headset harness, the look panel beside the mirror
   changes the look, and the take carries it.
 - [ ] A live change from clay to ink, then a take: the posted GLB has face
-  morph tracks, one skin, and no leftover meshes.
+  morph tracks, one skeleton (every skin names the same joint nodes, and
+  no bone is there twice), and no leftover meshes.
 - [ ] After a live build change, the skinned vertices are within 3 mm of a
   fresh load of the same look.
 - [ ] Ten look changes do not grow `renderer.info.memory`.
@@ -102,7 +103,7 @@ not reachable while a take runs.
 |---|---|
 | A hidden hair mesh is exported (the export clones the avatar and forces every mesh visible) | Every mesh is removed and added, never hidden; the e2e reads the posted GLB's nodes and skins |
 | The face stops moving after a change (the face rig holds the old meshes) | Meshes with the same name keep their object; only geometry and material change; the face rig is bound again after each change; the e2e reads face weights after a change |
-| The recorder keeps morph bindings to removed meshes (`FrameCaptureStore` caches them per avatar object, and the object does not change) | A look change clears the recorder's bindings; the e2e reads face weights in the posted take |
+| The recorder keeps morph bindings to removed meshes (`FrameCaptureStore` caches them per avatar object, and the object does not change) | Each take clears them at its start; the kept last take is dropped on a change; the e2e reads face tracks in the posted take |
 | A new mesh (hair, glasses, ink line) is not driven by the skeleton | New meshes bind to the live skeleton by joint name; the three builds share joints within 2.2 mm (measured) |
 | A build change leaves the arm clearance measured for the old torso | The clearance is measured from the freshly loaded scene at rest, not from the posed live avatar |
 | Two quick taps race, and an older look lands last | Each change has a number; only the latest is applied; Record waits while a dressing runs |
@@ -143,8 +144,10 @@ changes. The changes are folded in below.
    mesh object of the new scene under the live object with its parent's
    name, keep its own local transform and `bindMatrix`, and bind all of
    them to one new `Skeleton` made from the live bones in the new file's
-   joint order, with the new file's inverse binds. One skin, so the export
-   and the Quick Look converter still see one skeleton.
+   joint order, with the new file's inverse binds. One skeleton, so the
+   export and the Quick Look converter still see one set of bones. (The
+   exporter writes a skin per skinned mesh, as it does for every take; each
+   skin names the same joint nodes.)
 3. **After each change, refresh what holds meshes:** the face rig
    (`face.attach`), the first-person head list, the material list (with the
    first-person state applied again), frustum culling,
@@ -192,10 +195,11 @@ Worker is a later option if the ink outline stalls the face on a phone.
 
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
-| Look step, post, feed | The phone journey e2e (`phone-capture.pipeline.spec.ts`), extended | Pending |
+| Look step, post, feed | The look e2e (`apps/viewer-web/e2e/phone-look.pipeline.spec.ts`): phone ink, phone light and desktop clay journeys | Pending |
 | GLB carries the look | The same e2e reads the posted GLB | Pending |
-| Height unchanged by hair | The same e2e reads the rig height after a hair change | Pending |
-| Quick Look | `check_usdz_tools.sh` on posted takes | Pending |
+| Height unchanged by hair | The same e2e loads four hairstyles and reads the rig height and eye height | Pending |
+| Memory, face after a change | The same e2e: twelve changes, then `renderer.info.memory` and the jaw influences | Pending |
+| Quick Look | Phone posts have Quick Look off (`quickLookEnabled` false, so `/usdz` answers 404), so the e2e saves each posted GLB to `output/test-results/your-look/takes/` and `apps/viewer-api/tools/check_usdz_tools.sh` runs on each by hand | Pending |
 | The whole flow | Proof video, real time, phone viewport | Pending |
 
 ### Baseline

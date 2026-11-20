@@ -24,6 +24,8 @@ import type { UiViewModel, XrEntryOffer } from '../types/contracts';
 import type { CaptureUiBridge } from './captureUiBridge';
 import { captureHelp, isTouchDevice } from './captureHelp';
 import { PostPanel } from './PostPanel';
+import { LookPanel } from './LookPanel';
+import { hasSavedHouseLook } from '../avatar/houseLook';
 import { isSelfieJourney } from '../post/postFlow';
 
 // Capture on a flat screen (styleguide 1.2, 5.2, 8.5; docs/features/ui-redesign.md
@@ -129,8 +131,42 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
   };
   const openFind = (): void => {
     if (document.pointerLockElement) document.exitPointerLock();
+    setLookOpen(false);
     setFindOpen(true);
   };
+  // The look panel (docs/features/your-look.md): only for the house base, only between takes.
+  const [lookOpen, setLookOpen] = useState(false);
+  const houseLook = state.houseLook;
+  const lookShown = flat && lookOpen && houseLook !== null && state.recordingState === 'idle' && !countdown.running;
+  const openLook = (): void => {
+    if (document.pointerLockElement) document.exitPointerLock();
+    setFindOpen(false);
+    if (trayOpen) bridge.setTrayOpen(false);
+    setLookOpen(true);
+  };
+  // The selfie journey opens it by itself the first time, before the first Record.
+  const lookOffered = useRef(false);
+  useEffect(() => {
+    if (lookOffered.current || !selfie || !houseLook || state.loadState === 'loading' || state.loadState === 'error') return;
+    lookOffered.current = true;
+    if (!hasSavedHouseLook()) openLook();
+  });
+  useEffect(() => {
+    if (trayOpen) setLookOpen(false);
+  }, [trayOpen]);
+  // A take closes it: after Stop, the slot above the dock belongs to the Post panel.
+  const takeBegun = state.recordingState !== 'idle' || countdown.running;
+  useEffect(() => {
+    if (takeBegun) setLookOpen(false);
+  }, [takeBegun]);
+  useEffect(() => {
+    if (!lookOpen) return undefined;
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setLookOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [lookOpen]);
 
   useEffect(() => {
     if (!trayOpen) trayOpenedByUi.current = false;
@@ -256,6 +292,9 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
         {flat && show('find') ? (
           <DockGlyphButton glyph="find" label="Find" testId="dock-find" input={input} highlighted={findOpen} expanded={findOpen} onPress={() => (findOpen ? setFindOpen(false) : openFind())} />
         ) : null}
+        {flat && houseLook && state.recordingState === 'idle' && !countdown.running ? (
+          <GlyphControl glyph={null} label="Look" input={input} data-testid="dock-look" aria-expanded={lookShown} onPress={() => (lookShown ? setLookOpen(false) : openLook())} />
+        ) : null}
         {vrMode && show('record') && !isRecording ? (
           <GlyphControl glyph={null} label="Refit height" input={input} disabled={!state.heightFit.enabled} onPress={() => bridge.refitHeight()} />
         ) : null}
@@ -268,7 +307,9 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
 
       {flat ? <TrayRow tray={state.tray} touch={touch} input={input} armedSlot={trayGlyph.armedSlot} bottom={aboveDock} addFiles={<TrayFilesPicker bridge={bridge} tray={state.tray} input={input} />} onSummon={summonSlot} onRemove={(slot) => bridge.removeTraySlot(slot)} /> : null}
 
-      <PostPanel input={input} target={target} bottom={aboveDock} hidden={isRecording || findOpen || trayOpen} exporting={state.recordingState === 'exporting'} />
+      <PostPanel input={input} target={target} bottom={aboveDock} hidden={isRecording || findOpen || trayOpen || lookShown} exporting={state.recordingState === 'exporting'} />
+
+      {lookShown && houseLook ? <LookPanel look={houseLook} input={input} target={target} bottom={aboveDock} onChange={(next) => bridge.setLook(next)} onHeight={bridge.setLookPanelHeight} /> : null}
 
       {flat && findOpen ? (
         <FindSheet
