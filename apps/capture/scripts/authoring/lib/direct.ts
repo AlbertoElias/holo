@@ -17,7 +17,8 @@ import { resetPose, type LoadedAvatar } from './avatar.ts';
 import { ArmMeter, armPoints, armSkin, BodySkin, measureArmBody, partDepth, propNormal, propParts, propSurface, type ArmBody, type ArmReport } from './arm-quality.ts';
 import { FACE_MIXES, GESTURES, STATE_FACES, envelope, gestureCycle, holdingsOf, pointObjects, resolveTiming, validateSheet, type BeatSheet, type Direction, type Holding, type ObjectSpec, type PerformerSpec, type Place, type Point, type Resolved, type Side } from './beats.ts';
 import { FINGERS, HAND_SHAPES, blendPose, shapePose, type FingerName, type HandPose } from './hands.ts';
-import { armRestOffset, bodyUp, hangArm, keepingTwist, rollHand, moveBoneWorld, orientHand, plantFeet, reachElbowHint, restElbowHint, rotateBoneWorld, solveArm, steadyTwist, easeTwist, toWorld, turnBody, TURN_SHARE } from './pose.ts';
+import { elbowPole } from '../../../src/ik/armPoseModel.ts';
+import { armRestOffset, bodyUp, hangArm, keepingTwist, rollHand, moveBoneWorld, orientHand, plantFeet, restElbowHint, rotateBoneWorld, solveArm, steadyTwist, easeTwist, toWorld, turnBody, TURN_SHARE } from './pose.ts';
 import { speakingAt, visemesAt, type LineLips } from './lips.ts';
 import { busy, faceAt, fidgetAt, finishedBy, GLANCE_BLINK_DEG, glanceAt, glanceChest, LIFE_FIDGET, LIFE_SIGH, LIFE_WEIGHT, lifeSchedule, MASK_PAD, MASKED_BY, postureAt, sighAt, weightAt, attendArmsAt, attendGate, attendNodAt, attendSchedule, ATTEND_ARMS, type AttendSchedule, type LifeSchedule } from './life.ts';
 import { buildProp, propWorld, type LoadedSource, type Prop } from './props.ts';
@@ -71,6 +72,27 @@ const RUB_ROLL_DEG = 15;
 const REST_WRIST = { forward: 12 * DEG, most: 45 * DEG } as const;
 /** The elbow reaches its working direction by this fraction of a lift (1 / ELBOW_LEAD). */
 const ELBOW_LEAD = 2;
+/**
+ * Where a reaching elbow points, from the recorded human arms (`elbowPole` in capture's arm pose model, the same
+ * pole the VR arms use): `wrist` is the wrist target and `palm` the world direction the palm faces. The result is
+ * in `a.frame`, as `solveArm` reads its hint.
+ */
+function reachPole(a: LoadedAvatar, s: Side, wrist: THREE.Vector3, palm: THREE.Vector3): THREE.Vector3 {
+  const arm = a.arms[s];
+  const bodyInv = a.body.getWorldQuaternion(new THREE.Quaternion()).invert();
+  const mirror = s === 'left' ? 1 : -1;
+  // The model's frame is the torso of one arm, x out of the body: the body frame with x mirrored for the right arm.
+  const toArm = (v: THREE.Vector3): THREE.Vector3 => { v.applyQuaternion(bodyInv); v.x *= mirror; return v; };
+  const reachWorld = wrist.clone().sub(arm.upperArm.getWorldPosition(new THREE.Vector3()));
+  const p = toArm(reachWorld.clone()).divideScalar(arm.upperLength + arm.lowerLength);
+  // Pinky to index finger: the hand's forward (along the reach) crossed with the palm, inward for a palm-down hand.
+  const across = toArm(reachWorld.clone().normalize().cross(palm).multiplyScalar(-mirror)).normalize();
+  const pole = new THREE.Vector3();
+  if (!elbowPole(p, across, pole)) return restElbowHint(a, s);
+  pole.x *= mirror;
+  return pole.applyQuaternion(a.body.getWorldQuaternion(new THREE.Quaternion())).applyQuaternion(a.frame.getWorldQuaternion(new THREE.Quaternion()).invert()).normalize();
+}
+
 /** How strongly the elbow keeps low at the middle of a lift (a down vector added to the hint, a unit vector). */
 const ELBOW_LIFT_DOWN = 1.5;
 /** How far out to the side a full lift's wrist path bows at its middle, in arm lengths. */
@@ -1418,7 +1440,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
       // The elbow turns from hanging (back) to a reaching elbow (down and a little out) in the first part of the lift:
       // an elbow still pointing back while the hand is in front puts the forearm level, a handshake.
       // On a drop the hand falls close past the shoulder: there the elbow goes back to hanging as the hand comes down.
-      const elbowHint = restElbowHint(a, s).lerp(reachElbowHint(a, s), clamp01(lerp(w, ELBOW_LEAD * w, lifting)) * elbowOut).normalize();
+      const elbowHint = restElbowHint(a, s).lerp(reachPole(a, s, wrist, toward), clamp01(lerp(w, ELBOW_LEAD * w, lifting)) * elbowOut).normalize();
       // Mid-lift the hint lies near the shoulder-to-wrist line, and only "back" is left for the elbow: the forearm
       // then points forward, a handshake. The elbow stays low instead (the forearm points out and up), as a person's does.
       elbowHint.add(new THREE.Vector3((s === 'left' ? 1 : -1) * 0.3, -1, 0).applyQuaternion(a.facingCorrection ?? new THREE.Quaternion()).multiplyScalar(ELBOW_LIFT_DOWN * arc * elbowOut * lifting)).normalize();
