@@ -294,6 +294,15 @@ found these; each was checked against the code:
   the bind pose right after the avatar loads, as the bone lengths already
   assume.
 
+## Owner feedback
+
+On the audit's proof videos the owner said: "Arm IK seems to be pretty good. I
+noticed some popping at the end of the controller one." The pop is the walk
+start, not the arm solve: at the first recorded step the body goes from rest to
+full speed in one frame (hips 33.7 m/s², the wrist 1.7 m/s² on the controller),
+so the elbows fold against the torso. Filed as B-077 for the walk owner
+(decision pending owner confirmation: `VrBodySolver` stays outside this brief).
+
 ## Physical-device limits
 
 All numbers above are IWER emulation and the replay of one real Quest 3 hand
