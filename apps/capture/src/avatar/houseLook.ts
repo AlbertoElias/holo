@@ -188,9 +188,10 @@ function disposeMeshes(root: THREE.Object3D): void {
  * GLTFLoader names a mesh's parts by load order. Each new mesh keeps its own
  * local transform and bind matrix, under the live object of its parent's
  * name, and binds to the live bones of the same names with the new file's
- * inverse binds. Throws before any change when a bone is missing.
+ * inverse binds. This call only checks and plans: it throws when a bone is
+ * missing, and changes nothing. The returned function makes the change.
  */
-export function transplantHouseMeshes(live: THREE.Object3D, fresh: THREE.Object3D): void {
+export function prepareHouseTransplant(live: THREE.Object3D, fresh: THREE.Object3D): () => void {
   const liveBones = new Map<string, THREE.Bone>();
   live.traverse((object) => {
     if (isThreeBone(object)) liveBones.set(object.name, object as THREE.Bone);
@@ -214,7 +215,16 @@ export function transplantHouseMeshes(live: THREE.Object3D, fresh: THREE.Object3
     const parentName = root.parent && root.parent !== fresh ? root.parent.name : '';
     return (parentName ? live.getObjectByName(parentName) : undefined) ?? live;
   });
+  return () => commitHouseTransplant(live, fresh, incoming, targets, skeletons);
+}
 
+function commitHouseTransplant(
+  live: THREE.Object3D,
+  fresh: THREE.Object3D,
+  incoming: THREE.Object3D[],
+  targets: THREE.Object3D[],
+  skeletons: Map<THREE.Skeleton, THREE.Skeleton>
+): void {
   // The renderer keeps each skeleton's bone matrices in a texture of its own, which only `dispose` frees.
   const oldSkeletons = new Set<THREE.Skeleton>();
   for (const old of avatarMeshRoots(live)) {

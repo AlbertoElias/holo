@@ -7,7 +7,7 @@ import type { RecordingSession } from '../recording/RecordingSession';
 import type { UIStateStore } from '../ui/UIStateStore';
 import type { AvatarRig } from './AvatarRig';
 import { HumanoidSkeleton } from './HumanoidSkeleton';
-import { avatarMeshRoots, currentHouseLook, dressHouseBase, saveHouseLook, sameHouseLook, transplantHouseMeshes, type HouseLook } from './houseLook';
+import { avatarMeshRoots, currentHouseLook, dressHouseBase, saveHouseLook, sameHouseLook, prepareHouseTransplant, type HouseLook } from './houseLook';
 
 interface HouseLookDeps {
   loader: GLTFLoader;
@@ -75,8 +75,7 @@ export class HouseLookController {
       if (stale()) return;
       const gltf = await this.deps.loader.parseAsync(bytes, '');
       if (stale()) return;
-      this.wear(gltf);
-      this.current = next;
+      this.wear(gltf, next);
       this.lastChangeMs = performance.now() - startedAt;
       saveHouseLook(next);
       console.info(`[look] ${next.look.build} ${next.finish} on the avatar in ${Math.round(performance.now() - startedAt)} ms`);
@@ -91,34 +90,45 @@ export class HouseLookController {
   }
 
   /** For the e2e (docs/features/your-look.md): what the live avatar wears, and how well the last change fits the live bones. */
-  sample(): { look: HouseLook | null; meshes: string[]; skeletons: number; lastChangeMs: number | null; fitErrorMm: number | null } {
+  sample(): { look: HouseLook | null; meshes: string[]; skeletons: number; jawOpen: number[]; lastChangeMs: number | null; fitErrorMm: number | null } {
     const live = this.deps.avatar.avatar;
     const skeletons = new Set<THREE.Skeleton>();
+    // The jaw as the meshes in the live tree show it: a face rig still bound to removed meshes leaves these at 0.
+    const jawOpen: number[] = [];
     live?.traverse((object) => {
-      if ((object as THREE.SkinnedMesh).isSkinnedMesh) skeletons.add((object as THREE.SkinnedMesh).skeleton);
+      const mesh = object as THREE.SkinnedMesh;
+      if (mesh.isSkinnedMesh) skeletons.add(mesh.skeleton);
+      const index = (object as THREE.Mesh).morphTargetDictionary?.jawOpen;
+      if (index !== undefined) jawOpen.push((object as THREE.Mesh).morphTargetInfluences?.[index] ?? 0);
     });
     return {
       look: this.current,
       meshes: live ? avatarMeshRoots(live).map((root) => root.name) : [],
       skeletons: skeletons.size,
+      jawOpen,
       lastChangeMs: this.lastChangeMs,
       fitErrorMm: this.fitErrorMm
     };
   }
 
-  private wear(gltf: GLTF): void {
+  private wear(gltf: GLTF, next: HouseLook): void {
     const { avatar, face, armClearance, recording } = this.deps;
     const live = avatar.avatar;
     const humanoid = avatar.humanoid;
     if (!live || !humanoid) throw new Error('No avatar to dress');
     const fresh: THREE.Object3D = gltf.scene;
+    // Throws on a missing bone before anything on the live avatar changes.
+    const commit = prepareHouseTransplant(live, fresh);
     // The new body is measured in its own rest pose: the live one is posed by the face and the idle motion.
     const restHumanoid = HumanoidSkeleton.bind(fresh, { json: gltf.parser.json, associations: gltf.parser.associations });
     restHumanoid.normalizeFacing(fresh);
     fresh.updateMatrixWorld(true);
     armClearance.measureFrom(fresh, restHumanoid, humanoid);
-    this.fitErrorMm = restFitErrorMm(fresh, this.liveRest);
-    transplantHouseMeshes(live, fresh);
+    const freshRest = restPoses(fresh);
+    commit();
+    // The new meshes are on the avatar from here, so the look is the new one even if a refresh below throws.
+    this.current = next;
+    this.fitErrorMm = liveFitErrorMm(live, freshRest, this.liveRest);
     avatar.refreshMeshes();
     face.rebindMeshes(live);
     recording.forgetLastTake();
@@ -136,30 +146,35 @@ function restPoses(root: THREE.Object3D): Map<string, THREE.Matrix4> {
 }
 
 /**
- * How far the new meshes' vertices land from their own rest shape when the
- * live bones (at the first build's rest pose) drive them: the largest offset,
- * in millimetres, over every vertex of every skinned mesh. Both rest poses are
- * in the avatar's own space, so the live fit scale does not count.
+ * How far the meshes now on the live avatar land from their own rest shape
+ * when the live bones, at the first build's rest pose, drive them: the largest
+ * offset, in millimetres, over every vertex of every skinned mesh. It reads
+ * each mesh's actual skeleton, inverse binds and bind matrix after the
+ * transplant, so a wrong bone or bind shows here. A bone with no rest pose is
+ * a failure (Infinity). Both rest poses are in the avatar's own space, so the
+ * live fit scale does not count.
  */
-function restFitErrorMm(fresh: THREE.Object3D, liveRest: Map<string, THREE.Matrix4>): number | null {
+function liveFitErrorMm(live: THREE.Object3D, freshRest: Map<string, THREE.Matrix4>, liveRest: Map<string, THREE.Matrix4>): number | null {
   if (liveRest.size === 0) return null;
-  const freshRest = restPoses(fresh);
   const own = new THREE.Vector3();
   const moved = new THREE.Vector3();
   const vertex = new THREE.Vector3();
   const part = new THREE.Vector3();
   const skin = new THREE.Matrix4();
   let worst = 0;
-  fresh.traverse((object) => {
+  live.traverse((object) => {
     const mesh = object as THREE.SkinnedMesh;
-    if (!mesh.isSkinnedMesh) return;
+    if (!mesh.isSkinnedMesh || worst === Infinity) return;
     const position = mesh.geometry.getAttribute('position');
     const index = mesh.geometry.getAttribute('skinIndex');
     const weight = mesh.geometry.getAttribute('skinWeight');
     const bones = mesh.skeleton.bones;
-    const live = bones.map((bone) => liveRest.get(bone.name));
+    const moving = bones.map((bone) => liveRest.get(bone.name));
     const rest = bones.map((bone) => freshRest.get(bone.name));
-    if (live.some((m) => !m) || rest.some((m) => !m)) return;
+    if (moving.some((m) => !m) || rest.some((m) => !m)) {
+      worst = Infinity;
+      return;
+    }
     for (let v = 0; v < position.count; v++) {
       vertex.fromBufferAttribute(position, v).applyMatrix4(mesh.bindMatrix);
       own.set(0, 0, 0);
@@ -170,7 +185,7 @@ function restFitErrorMm(fresh: THREE.Object3D, liveRest: Map<string, THREE.Matri
         const j = index.getComponent(v, k);
         const inverse = mesh.skeleton.boneInverses[j]!;
         own.addScaledVector(part.copy(vertex).applyMatrix4(skin.multiplyMatrices(rest[j]!, inverse)), w);
-        moved.addScaledVector(part.copy(vertex).applyMatrix4(skin.multiplyMatrices(live[j]!, inverse)), w);
+        moved.addScaledVector(part.copy(vertex).applyMatrix4(skin.multiplyMatrices(moving[j]!, inverse)), w);
       }
       // own and moved are in the skeleton's space; the mesh's own transform does not change their distance.
       worst = Math.max(worst, own.distanceTo(moved));

@@ -65,7 +65,7 @@ export interface AutomationHooks {
   __loadObjectUrl: (url: string) => Promise<boolean>;
   /** Changes the house base's look and waits for it to land; false when refused (not the house base, or a take is busy). */
   __setHouseLook: (next: HouseLook) => Promise<boolean>;
-  __sampleHouseLook: () => { look: HouseLook | null; meshes: string[]; skeletons: number; lastChangeMs: number | null; fitErrorMm: number | null; memory: { geometries: number; textures: number } };
+  __sampleHouseLook: () => { look: HouseLook | null; meshes: string[]; skeletons: number; jawOpen: number[]; lastChangeMs: number | null; fitErrorMm: number | null; memory: { geometries: number; textures: number } };
   __loadTrayUrls: (urls: readonly string[]) => Promise<boolean>;
   // A full face (weights and optional gaze) that overrides the camera and
   // liveness until released with null.

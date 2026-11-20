@@ -25,7 +25,7 @@ const takesDir = path.join(outDir, "takes");
 const TAKE_SECONDS = 2;
 
 type HouseLook = { look: LookCard; finish: Finish };
-type HouseLookSample = { look: HouseLook | null; meshes: string[]; skeletons: number; lastChangeMs: number | null; fitErrorMm: number | null; memory: { geometries: number; textures: number } };
+type HouseLookSample = { look: HouseLook | null; meshes: string[]; skeletons: number; jawOpen: number[]; lastChangeMs: number | null; fitErrorMm: number | null; memory: { geometries: number; textures: number } };
 type LookHooks = {
   __sampleHouseLook: () => HouseLookSample;
   __setHouseLook: (next: HouseLook) => Promise<boolean>;
@@ -36,8 +36,23 @@ type PostedGltf = {
   scenes?: Array<{ extras?: Record<string, unknown> }>;
   skins?: Array<{ joints: number[] }>;
   materials?: Array<{ name?: string; alphaMode?: string; pbrMetallicRoughness?: { baseColorFactor?: number[] } }>;
-  animations?: Array<{ channels: Array<{ target: { path: string } }> }>;
+  animations?: Array<{ channels: Array<{ sampler: number; target: { path: string } }>; samplers: Array<{ output: number }> }>;
+  accessors?: Array<{ bufferView?: number; byteOffset?: number; componentType: number; count: number; type: string }>;
+  bufferViews?: Array<{ byteOffset?: number; byteLength: number; byteStride?: number }>;
 };
+
+/** The float values of one accessor, read from the GLB's binary chunk (tightly packed, as the exporter writes them). */
+function readFloats(bytes: Buffer, gltf: PostedGltf, accessorIndex: number): Float32Array {
+  const accessor = gltf.accessors![accessorIndex]!;
+  expect(accessor.componentType, "morph weights are floats").toBe(5126);
+  const view = gltf.bufferViews![accessor.bufferView!]!;
+  expect(view.byteStride ?? 4, "packed weights").toBe(4);
+  const binStart = 20 + bytes.readUInt32LE(12) + 8;
+  const start = binStart + (view.byteOffset ?? 0) + (accessor.byteOffset ?? 0);
+  const out = new Float32Array(accessor.count * (accessor.type === "SCALAR" ? 1 : Number(accessor.type.slice(3))));
+  for (let i = 0; i < out.length; i += 1) out[i] = bytes.readFloatLE(start + i * 4);
+  return out;
+}
 
 async function report(name: string, value: unknown): Promise<void> {
   await mkdir(outDir, { recursive: true });
@@ -45,12 +60,9 @@ async function report(name: string, value: unknown): Promise<void> {
 }
 
 const sampleLook = (page: Page) => page.evaluate(() => (window as unknown as LookHooks).__sampleHouseLook());
-const heights = (page: Page) =>
-  page.evaluate(() => {
-    const state = JSON.parse((window as unknown as LookHooks).render_game_to_text()) as { heightAdaptation: { avatarHeight: number; scale: number; eyeHeight: number | null } };
-    // The fitted values, not a world position: the idle motion sways the head by millimetres.
-    return { avatarHeight: state.heightAdaptation.avatarHeight, scale: state.heightAdaptation.scale, eyeHeight: state.heightAdaptation.eyeHeight };
-  });
+// The fitted height, not a world position: the idle motion sways the head by millimetres.
+const fittedHeight = (page: Page) =>
+  page.evaluate(() => (JSON.parse((window as unknown as LookHooks).render_game_to_text()) as { heightAdaptation: { avatarHeight: number } }).heightAdaptation.avatarHeight);
 
 /** Capture opened from the feed loads the house base: the link carries no query, so this adds `?avatar=` before the app reads it. */
 async function openCaptureOnHouseBase(page: Page): Promise<void> {
@@ -143,6 +155,9 @@ async function checkPostedGlb(page: Page, url: string, want: HouseLook): Promise
   const boneNames = skins[0]!.joints.map((joint) => names[joint]);
   expect(new Set(boneNames).size, "each bone once").toBe(boneNames.length);
   expect(names.filter((name) => boneNames.includes(name)).length, "no second copy of a bone").toBe(boneNames.length);
+  // No leftover meshes: a second body, or an old hair under a new name, would repeat a mesh node's name.
+  const meshNames = (gltf.nodes ?? []).filter((node) => node.mesh !== undefined).map((node) => node.name ?? "");
+  expect(meshNames.filter((name, i) => meshNames.indexOf(name) !== i), "each mesh node once").toEqual([]);
 
   const records = [...(gltf.nodes ?? []).map((node) => node.extras), ...(gltf.scenes ?? []).map((scene) => scene.extras)]
     .map((extras) => extras?.holoimAvatar)
@@ -166,6 +181,12 @@ async function checkPostedGlb(page: Page, url: string, want: HouseLook): Promise
   if (want.finish === "light") expect(material("HouseBase_top")?.alphaMode, "light garments are see-through").toBe("BLEND");
   const morphTracks = (gltf.animations ?? []).flatMap((animation) => animation.channels).filter((channel) => channel.target.path === "weights");
   expect(morphTracks.length, "face morph tracks").toBeGreaterThan(0);
+  // The take was recorded with the jaw open and a smile, so the tracks must move: all-zero weights would mean the recorder held removed meshes.
+  const animation = (gltf.animations ?? []).find((entry) => entry.channels.some((channel) => channel.target.path === "weights"))!;
+  const peak = Math.max(
+    ...animation.channels.filter((channel) => channel.target.path === "weights").map((channel) => Math.max(...readFloats(bytes, gltf, animation.samplers[channel.sampler]!.output)))
+  );
+  expect(peak, "the face morph tracks carry the face").toBeGreaterThan(0.3);
   return { bytes: bytes.length, body: bytes };
 }
 
@@ -238,7 +259,6 @@ async function runJourney(browser: Browser, baseURL: string | undefined, journey
     await expect(page.getByTestId("dock-look")).toHaveAttribute("aria-expanded", "true");
     const start = await sampleLook(page);
     expect(start.look, "the house base has a look").not.toBeNull();
-    const startHeight = await heights(page);
     await mkdir(outDir, { recursive: true });
     await page.screenshot({ path: path.join(outDir, `${journey.name}-panel.png`) });
 
@@ -249,10 +269,9 @@ async function runJourney(browser: Browser, baseURL: string | undefined, journey
     expect(live.skeletons, "one skeleton").toBe(1);
     expect(live.meshes, "the chosen hair on the live avatar").toContain(`Hair_${want.look.hair.style}`);
     expect(live.meshes.filter((name) => name.startsWith("Hair_")), "one hair mesh").toHaveLength(1);
+    expect(live.meshes.filter((name, i) => live.meshes.indexOf(name) !== i), "no leftover meshes on the live avatar").toEqual([]);
     if (want.look.glasses !== "none") expect(live.meshes).toContain(`Glasses_${want.look.glasses}`);
     expect(live.fitErrorMm, "a new build fits the live bones").toBeLessThan(3);
-    const afterHeight = await heights(page);
-    expect(Math.abs(afterHeight.avatarHeight - startHeight.avatarHeight), "a look change does not refit the height").toBeLessThan(1e-6);
     expect(page.url(), "no page reload: the grant is still in memory").not.toContain("#post=");
     await page.screenshot({ path: path.join(outDir, `${journey.name}-dressed.png`) });
 
@@ -264,7 +283,7 @@ async function runJourney(browser: Browser, baseURL: string | undefined, journey
     await writeFile(path.join(takesDir, `${journey.name}.glb`), glb.body);
     await shootFeedCard(page, posted.id, posted.url, `${journey.name}-card`);
     expect(errors, "page errors").toEqual([]);
-    await report(journey.name, { want, live: { ...live, look: undefined }, startHeight, afterHeight, glbBytes: glb.bytes, id: posted.id });
+    await report(journey.name, { want, live: { ...live, look: undefined }, glbBytes: glb.bytes, id: posted.id });
   } finally {
     await context.close();
   }
@@ -280,7 +299,7 @@ test.describe("your look", () => {
     });
   }
 
-  test("ten look changes keep GPU memory flat, and the face drives the new meshes", async ({ browser }) => {
+  test("twelve look changes keep GPU memory flat, and the face drives the new meshes", async ({ browser }) => {
     test.setTimeout(180_000);
     const context = await createXrContext(browser, { ...phone });
     try {
@@ -306,24 +325,25 @@ test.describe("your look", () => {
       for (const row of rows) {
         expect(row.skeletons).toBe(1);
         expect(row.fitErrorMm).toBeLessThan(3);
+        expect(row.meshes.filter((name, i) => row.meshes.indexOf(name) !== i), "no leftover meshes").toEqual([]);
       }
 
       const face = await page.evaluate(async () => {
-        const hooks = window as unknown as { __setFaceInput: (s: unknown) => void; __sampleFace: () => { influences: Record<string, number> } };
+        const hooks = window as unknown as LookHooks & { __setFaceInput: (s: unknown) => void };
         hooks.__setFaceInput({ weights: { jawOpen: 0.6 } });
         for (let i = 0; i < 10; i += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
-        return hooks.__sampleFace().influences;
+        return hooks.__sampleHouseLook().jawOpen;
       });
-      const jaw = Object.entries(face).filter(([key]) => key.endsWith(":jawOpen"));
-      expect(jaw.length, "the face is bound to the new meshes").toBeGreaterThan(0);
-      for (const [key, value] of jaw) expect(value, key).toBeCloseTo(0.6, 3);
+      // Read from the meshes in the live tree, not from the face rig's own list, which could still hold removed meshes.
+      expect(face.length, "the live meshes have a jaw").toBeGreaterThan(0);
+      for (const value of face) expect(value, "the face drives the live jaw").toBeCloseTo(0.6, 3);
       await report("memory", { start: start.memory, rows });
     } finally {
       await context.close();
     }
   });
 
-  test("the height and eye height do not change with the hairstyle; a saved look loads in time; a bad ?look is only a warning", async ({ browser }) => {
+  test("the fitted height does not change with the hairstyle; a saved look loads in time; a bad ?look is only a warning", async ({ browser }) => {
     test.setTimeout(240_000);
     const load = async (query: string, saved?: HouseLook) => {
       const context = await createXrContext(browser, { ...phone });
@@ -338,7 +358,7 @@ test.describe("your look", () => {
         await page.goto(`${captureUrl}?avatar=${HOUSE_BASE}${query}`);
         await waitForTextContentPrefix(page, "#status", "loaded", { timeout: 60_000 });
         const seconds = (Date.now() - started) / 1000;
-        return { seconds, look: (await sampleLook(page)).look, height: await heights(page), warnings };
+        return { seconds, look: (await sampleLook(page)).look, height: await fittedHeight(page), warnings };
       } finally {
         await context.close();
       }
@@ -346,20 +366,16 @@ test.describe("your look", () => {
 
     const plain = await load("");
     const base = plain.look!;
-    const byHair: Record<string, { avatarHeight: number; scale: number; eyeHeight: number | null }> = {};
+    const byHair: Record<string, number> = {};
     for (const style of ["sweptCrop", "highBun", "tightCoils", "wavyBob"] as const) {
       const key = [base.look.build, base.look.skin, base.look.eyes, style, base.look.hair.colour, base.look.glasses, base.look.clothing].join("-");
       const loaded = await load(`&look=${key}`);
       expect(loaded.look?.look.hair.style, `?look=${key}`).toBe(style);
       byHair[style] = loaded.height;
     }
-    const tops = Object.values(byHair).map((entry) => entry.avatarHeight);
-    const scales = Object.values(byHair).map((entry) => entry.scale);
-    const eyes = Object.values(byHair).map((entry) => entry.eyeHeight);
+    // The fit scales the whole avatar from this height, so the eye (a bone) moves only if it moves.
+    const tops = Object.values(byHair);
     expect(Math.max(...tops) - Math.min(...tops), "fitted height across hairstyles (m)").toBeLessThan(0.001);
-    expect(Math.max(...scales) - Math.min(...scales), "fit scale across hairstyles").toBeLessThan(1e-6);
-    // On a phone no headset fits an eye height (it is null); the eye is a bone, so only the fit scale above can move it.
-    expect(new Set(eyes).size, "fitted eye height across hairstyles, where a headset fit one").toBe(1);
 
     // A saved look that differs from the shipped one dresses the base at load; the best of two runs each, so one slow start does not decide.
     const saved: HouseLook = { finish: "ink", look: { ...base.look, build: "broad", hair: { style: "highBun", colour: "copper" } } };

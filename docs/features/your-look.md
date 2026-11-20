@@ -1,7 +1,7 @@
 # Feature brief: Your look, on a phone (slice 2e, phone part)
 
 **Lead:** Claude (Opus)  
-**Status:** Reviewed  
+**Status:** Phone slice verified (emulation); slice 2, the headset, is next  
 **Layer:** event (who performs the take). See
 `docs/product/concepts/what-a-hologram-is.md`.
 
@@ -91,7 +91,7 @@ not reachable while a take runs.
   no bone is there twice), and no leftover meshes.
 - [ ] After a live build change, the skinned vertices are within 3 mm of a
   fresh load of the same look.
-- [ ] Ten look changes do not grow `renderer.info.memory`.
+- [ ] Twelve look changes do not grow `renderer.info.memory`.
 - [ ] Feed card screenshots in the clay, ink and light finishes; an ink take
   stays under the upload cap.
 - [ ] Quick Look conversion passes on posted ink and light takes, and on a
@@ -102,13 +102,13 @@ not reachable while a take runs.
 | Failure case | Prevention or evidence |
 |---|---|
 | A hidden hair mesh is exported (the export clones the avatar and forces every mesh visible) | Every mesh is removed and added, never hidden; the e2e reads the posted GLB's nodes and skins |
-| The face stops moving after a change (the face rig holds the old meshes) | Meshes with the same name keep their object; only geometry and material change; the face rig is bound again after each change; the e2e reads face weights after a change |
+| The face stops moving after a change (the face rig holds the old meshes) | Meshes with the same name keep their object; only geometry and material change; the face rig is bound again after each change; the e2e reads the jaw on the meshes in the live tree after twelve changes, and the posted take's morph weights must move |
 | The recorder keeps morph bindings to removed meshes (`FrameCaptureStore` caches them per avatar object, and the object does not change) | Each take clears them at its start; the kept last take is dropped on a change; the e2e reads face tracks in the posted take |
-| A new mesh (hair, glasses, ink line) is not driven by the skeleton | New meshes bind to the live skeleton by joint name; the three builds share joints within 2.2 mm (measured) |
-| A build change leaves the arm clearance measured for the old torso | The clearance is measured from the freshly loaded scene at rest, not from the posed live avatar |
+| A new mesh (hair, glasses, ink line) is not driven by the skeleton | New meshes bind to the live skeleton by joint name; the three builds share joints within 2.2 mm (measured); the fit check reads each live mesh's own skeleton and binds after the change, and a missing bone fails it |
+| A build change leaves the arm clearance measured for the old torso | The clearance is measured from the freshly loaded scene at rest, not from the posed live avatar, and only after the bone check passes |
 | Two quick taps race, and an older look lands last | Each change has a number; only the latest is applied; Record waits while a dressing runs |
 | The export names the old look (the export copies `userData.holoimAvatar`) | It is set again on each change; the e2e reads the posted extras |
-| Old geometries and materials stay in GPU memory | Disposed on removal; the e2e reads `renderer.info.memory` after ten changes |
+| Old geometries and materials stay in GPU memory | Disposed on removal; the e2e reads `renderer.info.memory` after twelve changes |
 | A change lands during a take, or between Stop and export | The control is hidden and the bridge refuses changes unless the take is idle |
 | The look sets the eye or height from the hair's top | The house base takes its height from the head-top bone, once, at load |
 | A bad `?look=` or stored value breaks the load | Parsed with `parseLook`; on error the default look loads and a warning is logged |
@@ -195,12 +195,12 @@ Worker is a later option if the ink outline stalls the face on a phone.
 
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
-| Look step, post, feed | The look e2e (`apps/viewer-web/e2e/phone-look.pipeline.spec.ts`): phone ink, phone light and desktop clay journeys | Pending |
-| GLB carries the look | The same e2e reads the posted GLB | Pending |
-| Height unchanged by hair | The same e2e loads four hairstyles and reads the rig height and eye height | Pending |
-| Memory, face after a change | The same e2e: twelve changes, then `renderer.info.memory` and the jaw influences | Pending |
-| Quick Look | Phone posts have Quick Look off (`quickLookEnabled` false, so `/usdz` answers 404), so the e2e saves each posted GLB to `output/test-results/your-look/takes/` and `apps/viewer-api/tools/check_usdz_tools.sh` runs on each by hand | Pending |
-| The whole flow | Proof video, real time, phone viewport | Pending |
+| Look step, post, feed | The look e2e (`apps/viewer-web/e2e/phone-look.pipeline.spec.ts`): phone ink, phone light and desktop clay journeys | 2026-11-20, IWER and SwiftShader: 5 of 5 pass in 4.1 min. Each journey posts and its feed card renders. Screenshots: `output/test-results/your-look/*-panel.png`, `*-dressed.png`, `*-card.png` (not committed) |
+| GLB carries the look | The same e2e reads the posted GLB | Only the chosen hair and glasses; one skeleton; each mesh node once; card and finish in the extras; face weights peak above 0.3. Ink take 10.85 MB, light 6.10 MB, clay 6.18 MB (cap 100 MB) |
+| Height unchanged by hair | The same e2e loads four hairstyles and reads the fitted height (the eye is a bone, so it moves only with the fit; on a phone no eye height is fitted) | 1.7109 m for sweptCrop, highBun, tightCoils and wavyBob (spread 0). Load 0.41 s without a saved look, 0.56 s with one (bar: +1.5 s). A bad `?look` and `?finish` give two warnings and load the default |
+| Memory, face after a change | The same e2e: twelve changes, then `renderer.info.memory` and the jaw on the live meshes | Memory at load g67/t8; ink g73/t10; back in clay g67/t8, the same on each lap. Live jaw 0.6 on every jaw mesh. Fit after a build change: 2.76 mm broad, 2.60 mm slight (bar 3 mm). A change takes 61 to 144 ms in emulation |
+| Quick Look | Phone posts have Quick Look off (`quickLookEnabled` false, so `/usdz` answers 404), so the e2e saves each posted GLB to `output/test-results/your-look/takes/` and `apps/viewer-api/tools/glb_to_usdz.py` and `inspect_usdz.py` run on each by hand (`check_usdz_tools.sh` needs a source with two textured materials, and the house base has none) | All three takes convert, and `inspect_usdz.py` reports no failures: ink 4.53 MB, light 4.33 MB, clay 4.11 MB |
+| The whole flow | Proof video, real time, phone viewport | Sent to the owner; not committed |
 
 ### Baseline
 
