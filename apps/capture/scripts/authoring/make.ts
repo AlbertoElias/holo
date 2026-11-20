@@ -36,7 +36,7 @@ import { BUILDS, CLOTHING, EYES, FINISHES, GLASSES, HAIR_COLOUR, HAIR_STYLES, pa
 import { actingReport, diffTakes, summarize } from './acting-report.ts';
 import { bodyLine, build, loadSheet, OBJECT_LIMITS, resolveAvatar } from './direct.ts';
 import { BAR } from './lib/audition-bar.ts';
-import { DEFAULT_TIMING, FACE_MIXES, GESTURES, houseFinish, parseSheetText, resolveTiming, STATES, validateSheet, type BeatSheet, type Place, type Point } from './lib/beats.ts';
+import { DEFAULT_TIMING, FACE_MIXES, GESTURES, houseFinish, parseSheetText, resolveTiming, STATES, validateSheet, type BeatSheet, type ObjectSpec, type Place, type Point } from './lib/beats.ts';
 import { solveTake } from './lib/direct.ts';
 import { parseGlb } from './lib/gltf-read.ts';
 import { HAND_SHAPES } from './lib/hands.ts';
@@ -115,66 +115,131 @@ function reachMarkDuring(sheet: BeatSheet, performer: string, side: string, from
   return undefined;
 }
 
-type Axis = { key: string; get: (p: Point) => number; set: (p: Point, v: number) => Point };
+/** One number in the sheet a fit may move, read and written on a copy. */
+interface Knob { readonly label: string; readonly steps: readonly number[]; get(s: BeatSheet): number; set(s: BeatSheet, v: number): BeatSheet }
 
-/** The numeric axes of a mark that a nudge may move. */
-function axesOf(p: Point): Axis[] {
-  if (Array.isArray(p)) return [0, 1, 2].map((i) => ({ key: ['x', 'y', 'z'][i]!, get: (q) => (q as number[])[i]!, set: (q, v) => (q as number[]).map((x, j) => (j === i ? v : x)) as unknown as Point }));
+const MOVE = [-0.2, -0.15, -0.1, -0.05, 0.05, 0.1, 0.15, 0.2];
+const LIFT = [-0.12, -0.08, -0.04, -0.02, 0.02, 0.04, 0.08, 0.12];
+const r2 = (v: number) => Math.round(v * 100) / 100;
+
+/** The numeric axes of a point (a mark or an object's `at`), at `read`/`write` in the sheet. */
+function pointKnobs(name: string, read: (s: BeatSheet) => Point | undefined, write: (s: BeatSheet, p: Point) => BeatSheet, start: BeatSheet): Knob[] {
+  const p = read(start);
+  if (Array.isArray(p)) {
+    return [0, 1, 2].map((i) => ({ label: `${name}[${i}]`, steps: MOVE,
+      get: (s) => (read(s) as readonly number[])[i]!,
+      set: (s, v) => write(s, (read(s) as readonly number[]).map((x, j) => (j === i ? r2(v) : x)) as unknown as Point) }));
+  }
   if (typeof p !== 'object' || p === null) return [];
   const place = p as Place;
-  return (['right', 'forward', 'height', 'up'] as const).filter((k) => k !== 'up' || place.height === undefined).map((k) => ({
-    key: k,
-    get: (q: Point) => { const v = (q as Place)[k]; return typeof v === 'number' ? v : 0; },
-    set: (q: Point, v: number) => ({ ...(q as Place), [k]: Math.round(v * 100) / 100 }) as Point
-  })).filter((a) => place[a.key as keyof Place] === undefined || typeof place[a.key as keyof Place] === 'number');
+  const keys = (['forward', 'right', place.height !== undefined ? 'height' : 'up'] as const).filter((k) => place[k] === undefined || typeof place[k] === 'number');
+  return keys.map((k) => ({ label: `${name}.${k}`, steps: MOVE,
+    get: (s) => { const v = (read(s) as Place)[k]; return typeof v === 'number' ? v : 0; },
+    set: (s, v) => write(s, { ...(read(s) as Place), [k]: r2(v) } as Point) }));
+}
+
+function markKnobs(sheet: BeatSheet, mark: string): Knob[] {
+  return pointKnobs(`marks.${mark}`, (s) => s.marks?.[mark], (s, p) => ({ ...s, marks: { ...s.marks, [mark]: p } as NonNullable<BeatSheet['marks']> }), sheet);
+}
+
+/** An object's place and, for a single box or cylinder, its height: the knobs that move where it is reached. */
+function objectKnobs(sheet: BeatSheet, id: string): Knob[] {
+  const o = sheet.objects?.[id];
+  if (!o) return [];
+  const put = (s: BeatSheet, next: ObjectSpec): BeatSheet => ({ ...s, objects: { ...s.objects, [id]: next } });
+  const knobs = o.at === undefined || typeof o.at === 'string' ? [] : pointKnobs(`objects.${id}.at`, (s) => s.objects?.[id]?.at, (s, p) => put(s, { ...s.objects![id]!, at: p }), sheet);
+  if (Array.isArray(o.size) && typeof o.size[1] === 'number') {
+    knobs.push({ label: `objects.${id}.size[1] (its height)`, steps: LIFT,
+      get: (s) => (s.objects![id]!.size as readonly number[])[1]!,
+      set: (s, v) => { const z = s.objects![id]!.size as readonly number[]; return put(s, { ...s.objects![id]!, size: [z[0]!, r2(v), z[2]!] } as ObjectSpec); } });
+  }
+  return knobs;
+}
+
+type Miss = { kind: 'aim' | 'put' | 'grip'; beat: string; side: string };
+
+/** How far a solve is from the bar for this miss: 1 or less lands, and the words for it. */
+function missScore(take: ReturnType<typeof solveTake>, m: Miss): { e: number; words: string } {
+  const L = OBJECT_LIMITS;
+  const reachMiss = take.tracks.flatMap((t) => t.reaches).some((x) => x.targetDistance - x.stopShort > 0.02 && x.outOfReach > 0.01);
+  const pen = reachMiss ? 100 : 0;
+  if (m.kind === 'aim') {
+    const a = take.objects.aims.find((x) => x.beat === m.beat && x.side === m.side);
+    return a ? { e: a.residual / L.aimResidual + pen, words: `${a.residual.toFixed(1)}°` } : { e: Infinity, words: 'no aim' };
+  }
+  if (m.kind === 'put') {
+    const p = take.objects.puts.find((x) => x.beat === m.beat && x.side === m.side);
+    return p ? { e: Math.max(p.distance / L.putDistance, p.tilt / L.putTilt) + pen, words: `${(p.distance * 1000).toFixed(1)} mm, ${p.tilt.toFixed(1)}°` } : { e: Infinity, words: 'no put' };
+  }
+  const g = take.objects.grips.find((x) => x.beat === m.beat && x.side === m.side);
+  return g ? { e: Math.max(g.distance / L.gripDistance, g.angle / L.gripAngle) + pen, words: `${(g.distance * 1000).toFixed(1)} mm, ${g.angle.toFixed(1)}°` } : { e: Infinity, words: 'no grip' };
+}
+
+/** The knobs that move where the hand has to be for this miss. */
+function knobsFor(sheet: BeatSheet, m: Miss): { knobs: Knob[]; none?: string } {
+  const b = sheet.beats.find((x) => x.id === m.beat)!;
+  const d = b.directions.find((x) => x.kind === m.kind && x.side === m.side) ?? b.directions.find((x) => x.kind === m.kind)!;
+  if (m.kind === 'aim') {
+    const r = resolveTiming(b, d);
+    const mark = reachMarkDuring(sheet, b.performer, m.side, r.start, r.end);
+    if (!mark) return { knobs: [], none: `no reach with the ${m.side} hand to a named mark during beat ${m.beat}: add one ("kind": "reach", "side": "${m.side}", "at": "<mark>", "stopShort": 0) with the mark beside and above what it pours on, so the hand is somewhere it can tip the tool from` };
+    return { knobs: markKnobs(sheet, mark) };
+  }
+  const knobs: Knob[] = [];
+  const target = d as { at?: Point; on?: string; object?: string };
+  if (m.kind === 'put') {
+    if (target.on) knobs.push(...objectKnobs(sheet, target.on));
+    else if (typeof target.at === 'string' && Object.hasOwn(sheet.marks ?? {}, target.at)) knobs.push(...markKnobs(sheet, target.at));
+    else if (typeof target.at === 'string' && target.at.includes('.')) knobs.push(...objectKnobs(sheet, target.at.split('.')[0]!));
+  } else {
+    const id = target.object;
+    if (id) {
+      knobs.push(...objectKnobs(sheet, id).filter((k) => !k.label.includes('size')));
+      const on = sheet.objects?.[id]?.on;
+      if (on) knobs.push(...objectKnobs(sheet, on));
+    }
+  }
+  return knobs.length ? { knobs } : { knobs, none: 'nothing in the sheet places it by numbers: give the surface or the mark a place ({ "of": "<performer>", "forward": … }) so it can be nudged' };
 }
 
 /**
- * For an aim that misses: moves the mark the hand reaches to (one axis at a
- * time, then the best two together) and solves again, so the build can say
- * which nudge makes the aim land. Solving only, about half a second each.
+ * For a grip, put or aim that misses: moves the numbers that decide where the
+ * hand must go (a mark, the object's place, the surface's place and height),
+ * one at a time and then the best two together, and solves again (about half
+ * a second each), so the build can print the edit that lands it.
  */
-async function fitAim(sheetFile: string, beat: string, side: string): Promise<string> {
+async function fitMiss(sheetFile: string, m: Miss): Promise<string> {
   const { sheet, avatars, sources } = await loadSheet(sheetFile);
-  const b = sheet.beats.find((x) => x.id === beat)!;
-  const aim = b.directions.find((d) => d.kind === 'aim' && d.side === side)!;
-  const r = resolveTiming(b, aim);
-  const mark = reachMarkDuring(sheet, b.performer, side, r.start, r.end);
-  if (!mark) return `no reach with the ${side} hand to a named mark during beat ${beat}: add one ("kind": "reach", "side": "${side}", "at": "<mark>", "stopShort": 0), with the mark beside and above what it pours on, so the hand is somewhere it can tip the tool from`;
-  const original = sheet.marks![mark]!;
-  const residual = (p: Point): number => {
-    const trial: BeatSheet = { ...sheet, marks: { ...sheet.marks, [mark]: p } as NonNullable<BeatSheet['marks']> };
-    if (validateSheet(trial).length) return Infinity;
-    try {
-      const take = solveTake(trial, avatars, sources);
-      const a = take.objects.aims.find((x) => x.beat === beat && x.side === side);
-      const reachMiss = take.tracks.flatMap((t) => t.reaches).some((x) => x.targetDistance - x.stopShort > 0.02 && x.outOfReach > 0.01);
-      return (a?.residual ?? Infinity) + (reachMiss ? 100 : 0);
-    } catch { return Infinity; }
+  const { knobs, none } = knobsFor(sheet, m);
+  if (none) return none;
+  const score = (s: BeatSheet) => {
+    if (validateSheet(s).length) return { e: Infinity, words: 'invalid' };
+    try { return missScore(solveTake(s, avatars, sources), m); } catch { return { e: Infinity, words: 'did not solve' }; }
   };
-  const start = residual(original);
-  const axes = axesOf(original);
-  if (!axes.length) return `mark ${mark} is not numbers, so it cannot be nudged: give it as [x, y, z] or a place with numbers`;
-  const tried: { p: Point; e: number; what: string }[] = [];
-  for (const a of axes) for (const step of [-0.2, -0.15, -0.1, -0.05, 0.05, 0.1, 0.15, 0.2]) {
-    const p = a.set(original, a.get(original) + step);
-    tried.push({ p, e: residual(p), what: `${a.key} ${a.get(original)} → ${a.get(p)}` });
+  const start = score(sheet);
+  type Try = { s: BeatSheet; e: number; words: string; edits: string[] };
+  const tried: Try[] = [];
+  for (const k of knobs) for (const step of k.steps) {
+    const v = k.get(sheet) + step;
+    const s = k.set(sheet, v);
+    tried.push({ s, ...score(s), edits: [`${k.label} ${k.get(sheet)} → ${r2(v)}`] });
   }
-  tried.sort((x, y) => x.e - y.e);
+  tried.sort((a, b) => a.e - b.e);
   let best = tried[0]!;
-  if (best.e > OBJECT_LIMITS.aimResidual) {
-    // Two axes together, around the best single nudge.
+  if (best.e > 1) {
     const base = best;
-    for (const a of axes) for (const step of [-0.1, -0.05, 0.05, 0.1]) {
-      if (base.what.startsWith(`${a.key} `)) continue;
-      const p = a.set(base.p, a.get(base.p) + step);
-      const e = residual(p);
-      if (e < best.e) best = { p, e, what: `${base.what}, ${a.key} ${a.get(original)} → ${a.get(p)}` };
+    for (const k of knobs) {
+      if (base.edits[0]!.startsWith(`${k.label} `)) continue;
+      for (const step of k.steps.filter((_, i) => i % 2 === 1)) {
+        const v = k.get(base.s) + step;
+        const s = k.set(base.s, v);
+        const t = score(s);
+        if (t.e < best.e) best = { s, ...t, edits: [...base.edits, `${k.label} ${k.get(sheet)} → ${r2(v)}`] };
+      }
     }
   }
-  if (best.e >= start) return `no nudge of mark ${mark} within 20 cm helps (still ${start.toFixed(1)}°): move what it pours on nearer the hand's side and lower, or take the reach out and let the aim turn the hand where it is`;
-  const lands = best.e <= OBJECT_LIMITS.aimResidual;
-  return `${lands ? 'lands' : 'best found'} with marks.${mark} ${best.what} (${best.e.toFixed(1)}° off${lands ? '' : `, limit ${OBJECT_LIMITS.aimResidual}°`}): ${JSON.stringify(best.p)}`;
+  if (best.e >= start.e) return `no nudge within ${Math.max(...knobs.flatMap((k) => k.steps))} m helps (still ${start.words}): move the performer or the object so the hand meets it in front of the body, between waist and chest height`;
+  return `${best.e <= 1 ? 'lands' : 'best found'} with ${best.edits.join(' and ')} (${best.words})`;
 }
 
 /** The face-box fix: what widens the card's frame. */
@@ -249,7 +314,17 @@ async function make(sheetFile: string, quick: boolean): Promise<boolean> {
     console.error(`FIX THE SHEET (${rel(sheetFile)}):\n  ${problems.join('\n  ')}`);
     return false;
   }
-  const { dir, previous } = await versionDir(sheetFile);
+  let { dir, previous } = await versionDir(sheetFile);
+  // A full run after a --quick one of the same sheet finishes that version rather than making an identical next one.
+  if (!quick && previous && !(await stat(join(previous, 'review')).then(() => true, () => false))) {
+    const before = await readFile(join(previous, basename(sheetFile)), 'utf8').catch(() => null);
+    if (before === (await readFile(sheetFile, 'utf8'))) {
+      dir = previous;
+      const n = Number(basename(previous).slice(1));
+      previous = n > 1 ? join(dirname(previous), `v${n - 1}`) : undefined;
+      notes.push(`the sheet is unchanged since the --quick build, so this run finishes ${basename(dir)}`);
+    }
+  }
   await mkdir(dir, { recursive: true });
   const take = join(dir, 'take.glb');
   console.log(`${rel(sheetFile)} → ${rel(dir)}/`);
@@ -266,11 +341,17 @@ async function make(sheetFile: string, quick: boolean): Promise<boolean> {
 
   // 3. Objects on their marks; reaches within reach.
   const L = OBJECT_LIMITS;
-  for (const g of built.take.objects.grips) rows.push({ id: `grip.${g.beat}`, bar: `fist within ${L.gripDistance * 1000} mm and ${L.gripAngle}° of the grip`, value: `${(g.distance * 1000).toFixed(1)} mm, ${g.angle.toFixed(1)}°`, pass: g.distance <= L.gripDistance && g.angle <= L.gripAngle, fix: `${g.object} is out of the hand's comfortable reach or turned awkwardly: put it within about 0.5 m of the performer, at waist to chest height, or give the take a palm (up, down, in, toward)` });
-  for (const p of built.take.objects.puts) rows.push({ id: `put.${p.beat}`, bar: `within ${L.putDistance * 1000} mm and ${L.putTilt}° of upright`, value: `${(p.distance * 1000).toFixed(1)} mm, ${p.tilt.toFixed(1)}°`, pass: p.distance <= L.putDistance && p.tilt <= L.putTilt, fix: `the place for ${p.object} is out of reach or not level: put it on an object's top ("on") within about 0.5 m of the performer` });
+  for (const g of built.take.objects.grips) {
+    const pass = g.distance <= L.gripDistance && g.angle <= L.gripAngle;
+    rows.push({ id: `grip.${g.beat}`, bar: `fist within ${L.gripDistance * 1000} mm and ${L.gripAngle}° of the grip`, value: `${(g.distance * 1000).toFixed(1)} mm, ${g.angle.toFixed(1)}°`, pass, ...(pass ? {} : { fix: await fitMiss(sheetFile, { kind: 'grip', beat: g.beat, side: g.side }) }) });
+  }
+  for (const p of built.take.objects.puts) {
+    const pass = p.distance <= L.putDistance && p.tilt <= L.putTilt;
+    rows.push({ id: `put.${p.beat}`, bar: `within ${L.putDistance * 1000} mm and ${L.putTilt}° of upright`, value: `${(p.distance * 1000).toFixed(1)} mm, ${p.tilt.toFixed(1)}°`, pass, ...(pass ? {} : { fix: await fitMiss(sheetFile, { kind: 'put', beat: p.beat, side: p.side }) }) });
+  }
   for (const a of built.take.objects.aims) {
     const pass = a.residual <= L.aimResidual;
-    rows.push({ id: `aim.${a.beat}`, bar: `${a.object}'s tool within ${L.aimResidual}° of its target`, value: `${a.residual.toFixed(1)}°`, pass, ...(pass ? {} : { fix: await fitAim(sheetFile, a.beat, a.side) }) });
+    rows.push({ id: `aim.${a.beat}`, bar: `${a.object}'s tool within ${L.aimResidual}° of its target`, value: `${a.residual.toFixed(1)}°`, pass, ...(pass ? {} : { fix: await fitMiss(sheetFile, { kind: 'aim', beat: a.beat, side: a.side }) }) });
   }
   for (const t of built.take.tracks) for (const r of t.reaches) {
     const out = r.targetDistance - r.stopShort > 0.02 && r.outOfReach > 0.01;

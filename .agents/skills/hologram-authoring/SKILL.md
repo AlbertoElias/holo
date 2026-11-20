@@ -28,12 +28,16 @@ Run everything from `apps/capture` on Node 24 (`eval "$(../../scripts/agent-node
 3. **Build and check fast.** `M <sheet> --quick` builds `v1/`, `v2/`, … beside
    the sheet (about 20 s plus a minute for twelve stills). It prints the look
    each performer actually wears and one row per bar, and every failing row
-   has a `fix:` line. Do what the fix says and run it again. For a missed aim,
-   the fix is the exact mark edit that lands it. Look at
+   has a `fix:` line. Do what the fix says and run it again. For a missed
+   grip, put or aim, the fix is the exact edit that lands it. Look at
    `vN/frames-sheet.jpg` (already a small contact sheet) to see whether the
    pose reads.
 4. **Review.** `M <sheet>` without `--quick` also records the review pack in
-   real time: about 40 s per second of take, so run it in the background. It
+   real time: about 40 s per second of take, so run it in the background
+   with its output in a log, and wait until the log has a line starting
+   `DONE`, `BUILT` or `NOT YET` (or the command exits). Run on an unchanged
+   sheet right after `--quick`, it finishes that version instead of making
+   another. It
    measures the face on the card (the 40 px bar) and writes
    `vN/review/reader/` (the video and stills a reader sees) and
    `vN/review/comparison.json` (your intents, with blanks for the reader).
@@ -100,6 +104,10 @@ production and needs the owner's word.
   `concerned` need the body too. Wave with `count` 3. Look at the viewer
   (`"at": "viewer"` with a `viewer` mark at `[0, 1.55, 2.5]`) to address the
   person holding the phone.
+- **What the body cannot do yet.** There is no laugh, no sitting, no
+  walking path, and no speech without a sound file (the README's "Sound").
+  Act a laugh as a broad `smile` (0.9) with quick `nod`s and a `shrug`, and
+  expect a reader to call it a smile.
 - **One idea per beat.** If a reader cannot say it in five words, split it.
 
 ## Recipes
@@ -115,9 +123,16 @@ production and needs the owner's word.
   the target while the reach holds. Add `world: [{ "kind": "pour", "object":
   "can" }]` for the stream. If the aim misses, `make.ts` says which mark edit
   lands it.
-- **Put something on a surface.** An object with `"on": "<other object>"`
-  rests on its top. A `bench`-like surface at `{ "of": "<performer>",
-  "forward": 0.45 }` with `"facing": "<performer>.hips"` is within reach.
+- **Pick up, show and put down.** A surface in reach:
+  `"counter": { "shape": "box", "size": [0.5, 0.9, 0.35], "at": { "of":
+  "<performer>", "forward": 0.45 }, "facing": "<performer>.hips" }`; the thing
+  on it: `"loaf": { "parts": [ … ], "grip": "<part>", "on": "counter" }` (it
+  rests on the counter's top). Beats: `{ "kind": "take", "side": "right",
+  "object": "loaf" }`, then a `reach` to a mark in front of the chest to show
+  it, then `{ "kind": "put", "side": "right", "object": "loaf", "on":
+  "counter" }`. A performer can also start holding it (`"hold": { "right":
+  "loaf" }`). When a take or put misses, `make.ts` tries moving the surface
+  and its height and prints the edit that lands it.
 - **Change the world.** `world: [{ "kind": "change", "object": "plant",
   "when": 6, "over": 1.5, "from": { "scale": [1, 0.8, 1], "color": "#8e8644" } }]`
   grows or recolours an object; see the README's "World change".
