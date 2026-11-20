@@ -1,5 +1,6 @@
 import type { Entity, World } from "@iwsdk/core";
 import type { XrUiTarget } from "@holoim/xr-ui-iwsdk";
+import type { CaptionTrack } from "@holoim/contracts";
 import type { Object3D, Vector3 } from "three";
 
 import type { HologramBubble } from "./hologramBubble";
@@ -36,6 +37,8 @@ export interface PlacedHologram {
   recenterRequested: boolean;
   /** Horizontal half-diagonal of its pointer box at recorded scale. */
   footprintRadius: number;
+  /** What is said in it (`HOLOIM_captions`), or null. */
+  captions: CaptionTrack | null;
 }
 
 /**

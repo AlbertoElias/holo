@@ -196,3 +196,4 @@ export const objectTranscribeResponseSchema = z.object({
 });
 export type ObjectTranscribeResponse = z.infer<typeof objectTranscribeResponseSchema>;
 export * from "./place.js";
+export * from "./captions.js";

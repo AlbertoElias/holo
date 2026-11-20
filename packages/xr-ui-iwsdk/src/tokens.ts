@@ -18,6 +18,7 @@ export const metresPerApx = (distanceM: number): number => distanceM / APX_PER_M
 export const COLOR = {
   gold: tokens.color.gold,
   highlight: tokens.color.highlight, // hover
+  text: tokens.color.text, // captions on a hologram
   textMuted: tokens.color.textMuted, // timecode
   deepSea: tokens.color.deepSea, // chip, shade
   record: tokens.color.record
@@ -67,7 +68,9 @@ export const HIT = {
 
 export const TYPE = {
   controlLabel: { size: tokens.type.controlLabel.fontSize, weight: tokens.type.controlLabel.fontWeight },
-  timecode: { size: tokens.type.timecode.fontSize, weight: tokens.type.timecode.fontWeight }
+  timecode: { size: tokens.type.timecode.fontSize, weight: tokens.type.timecode.fontWeight },
+  /** Text on a hologram, speech captions included (sound slice 3, choice 6). */
+  captionOnHologram: { size: tokens.type.captionOnHologram.fontSize, weight: tokens.type.captionOnHologram.fontWeight, lineHeight: tokens.type.captionOnHologram.lineHeight }
 } as const;
 
 export const MOTION = {

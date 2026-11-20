@@ -20,6 +20,7 @@ import {
 } from "@holoim/tooling-testing/xr-env";
 import { emulatePhone, phoneScreenPoint } from "@holoim/tooling-testing/iwer-phone";
 
+import { withCaptions } from "./captions-fixture";
 import { assertViewerShell, captureEvidence, expect, expectConsoleErrors, reachFor, test } from "./bootstrap";
 import { TERRAIN_DROP_M, terrainGltf } from "./bubble-fixture";
 import { settleScroll } from "./portal-helpers";
@@ -99,8 +100,10 @@ type FootProbe = {
   timeline: { worldStart: Vec3; worldEnd: Vec3; fraction: number; lengthApx: number };
   reachRow: { worldLeft: Vec3; worldRight: Vec3; widthApx: number };
 };
+type CaptionChipReading = { id: string; text: string; visible: boolean; opacity: number; worldPosition: Vec3; speaker: string | null; want: boolean; fromHeadM: number | null; toHologramM: number | null };
 type Controls = {
   target: "vr" | "ar-quest" | "ar-phone";
+  captions: CaptionChipReading[];
   foot: FootProbe;
   status: { visible: boolean; text: string; worldPosition: Vec3; interactive: boolean; chip: ScreenRect | null };
   dock: {
@@ -1149,8 +1152,8 @@ const galleryItem = (n: number) => ({
   createdAt: new Date(Date.UTC(2026, 9, 24) - n * 60_000).toISOString()
 });
 
-async function mockGalleryFeed(page: Page): Promise<{ feedRequests: Array<{ cursor: string | null; limit: number }> }> {
-  const glb = await avatarWithAudio();
+async function mockGalleryFeed(page: Page, glb?: Buffer): Promise<{ feedRequests: Array<{ cursor: string | null; limit: number }> }> {
+  glb ??= await avatarWithAudio();
   const items = Array.from({ length: GALLERY_FEED_SIZE }, (_, i) => galleryItem(i + 1));
   const feedRequests: Array<{ cursor: string | null; limit: number }> = [];
   await page.route("**/api/holograms?*", (route) => {
@@ -1640,9 +1643,9 @@ const toRig = (page: Page, points: Vec3[]) =>
   }, points);
 
 /** Steps inside from mock-1 and places mock-2 from the shelf; returns the eye at the floor origin. */
-async function stepInsideWithTwo(page: Page, markFirstCommit: (page: Page) => void): Promise<{ entered: GallerySnapshot; eye: Vec3 }> {
+async function stepInsideWithTwo(page: Page, markFirstCommit: (page: Page) => void, glb?: Buffer): Promise<{ entered: GallerySnapshot; eye: Vec3 }> {
   markFirstCommit(page);
-  await mockGalleryFeed(page);
+  await mockGalleryFeed(page, glb);
   await page.goto("/");
   await assertViewerShell(page);
   await waitForIwerRuntime(page);
@@ -1867,6 +1870,79 @@ test("VR recenter after moving: from a teleported spot, recenter brings the focu
     timeline: marks,
     recenter: { distanceM: horizontal(moved.worldPosition, viewer), headBefore: head.position, position: moved.worldPosition },
     shelfPlace: mock3.worldPosition
+  };
+});
+
+// Speech captions in a headset (docs/features/sound-voice-captions.md, slice 3,
+// the agent's choices 1 and 3 of 2026-11-19): only the focused hologram is
+// heard, so a hologram not heard shows its words on a chip above its
+// speaker's head, turned to the viewer; within 1 m of it the chip fades like
+// its other text, and focus moves the chip with the sound.
+const XR_CUES = [
+  { from: 0.2, to: 3.9, text: "Watch me run to the end.", kind: "speech" },
+  { from: 4.0, to: 7.8, text: "And back again.", kind: "speech" }
+];
+
+test("VR captions: a hologram not heard shows its words above its head, facing the viewer, fades within 1 m, and focus moves them", async ({ page }, testInfo) => {
+  test.setTimeout(240_000);
+  const { marks, mark, markFirstCommit } = createTimeline();
+  const { eye } = await stepInsideWithTwo(page, markFirstCommit, withCaptions(await avatarWithAudio(), XR_CUES));
+  mark("two-placed");
+  await setPose(page, "head", eye, [eye[0], eye[1], eye[2] - 2]);
+  const chipOf = (g: GallerySnapshot, id: string) => g.controls?.captions.find((c) => c.id === id);
+  const cueAt = (t: number) => XR_CUES.find((cue) => t >= cue.from && t < cue.to)?.text ?? "";
+
+  // mock-2 has focus and is heard: mock-1, not heard, shows its words.
+  const shown = await waitForGallery(page, (g) => g.focusedId === "mock-2" && chipOf(g, "mock-1")?.opacity === 1 && Boolean(chipOf(g, "mock-1")?.text), 15_000);
+  const one = readingOf(shown, "mock-1")!;
+  const chip = chipOf(shown, "mock-1")!;
+  expect(chipOf(shown, "mock-2")?.visible ?? false, "the heard hologram shows none").toBe(false);
+  expect(XR_CUES.map((c) => c.text)).toContain(chip.text);
+  expect(chip.speaker).toBe("RecordedAvatar");
+  const top = one.worldPosition[1] + one.recordedSize[1];
+  expect(chip.worldPosition[1], "its foot clear of the crown").toBeGreaterThan(top + 0.03);
+  expect(chip.worldPosition[1], "by the head, not floating off").toBeLessThan(top + 0.5);
+  expect(horizontal(chip.worldPosition, one.worldPosition), "over the speaker").toBeLessThan(one.footprintRadius + 0.1);
+  // The chip follows the clock: over one pass of the clip, read every 0.2 s of drawn frames and compare each to the cue at its clip time.
+  const samples: Array<{ t: number; text: string; opacity: number }> = [];
+  for (let i = 0; i < 40; i += 1) {
+    await stepXr(page, Math.max(1, Math.round(200 / XR_STEP_MS)));
+    const g = await gallerySnapshot(page);
+    const c = chipOf(g, "mock-1");
+    samples.push({ t: readingOf(g, "mock-1")!.clipTime, text: c?.visible ? c.text : "", opacity: c?.opacity ?? 0 });
+  }
+  // Away from an edge (where the chip is fading) a cue shows fully and only its own words; between cues, nothing.
+  const settled = samples.filter((s) => XR_CUES.every((cue) => Math.abs(s.t - cue.from) > 0.25 && Math.abs(s.t - cue.to) > 0.25));
+  const offCue = settled.filter((s) => (cueAt(s.t) ? s.opacity !== 1 || s.text !== cueAt(s.t) : s.opacity !== 0));
+  expect(new Set(settled.map((s) => cueAt(s.t))).size, "the reads span both cues and a gap").toBeGreaterThanOrEqual(2);
+  expect(offCue, "each read shows the cue its clock is in").toEqual([]);
+  mark("caption-shown");
+  await captureEvidence(page, testInfo, "vr-captions-unheard");
+
+  // Within 1 m of mock-1 the chip fades; back out, it returns.
+  const near: Vec3 = [one.worldPosition[0] + 0.6, eye[1], one.worldPosition[2] + 0.4];
+  await setPose(page, "head", near, [one.worldPosition[0], eye[1], one.worldPosition[2]]);
+  const faded = await waitForGallery(page, (g) => chipOf(g, "mock-1")?.opacity === 0, 9_000);
+  expect(chipOf(faded, "mock-1")!.visible).toBe(false);
+  mark("faded-near");
+  await setPose(page, "head", eye, [eye[0], eye[1], eye[2] - 2]);
+  await waitForGallery(page, (g) => chipOf(g, "mock-1")?.opacity === 1, 9_000);
+  mark("back");
+
+  // Focus mock-1: it is heard and its chip goes; mock-2, now unheard, shows its words.
+  await selectBody(page, "mock-1", eye);
+  const swapped = await waitForGallery(page, (g) => g.focusedId === "mock-1" && chipOf(g, "mock-1")?.opacity === 0 && chipOf(g, "mock-2")?.opacity === 1, 15_000);
+  const two = readingOf(swapped, "mock-2")!;
+  expect(horizontal(chipOf(swapped, "mock-2")!.worldPosition, two.worldPosition), "over mock-2 now").toBeLessThan(two.footprintRadius + 0.1);
+  mark("focus-moved");
+  await captureEvidence(page, testInfo, "vr-captions-focus-moved");
+  await endSession(page);
+
+  report.captions = {
+    timeline: marks,
+    chip: { text: chip.text, worldPosition: chip.worldPosition, headTopY: top, clipTime: one.clipTime },
+    samples,
+    nearHorizontalM: horizontal(near, one.worldPosition)
   };
 });
 

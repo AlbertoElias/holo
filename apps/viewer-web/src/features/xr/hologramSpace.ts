@@ -7,6 +7,8 @@ import { drawnBounds } from "../hologram/drawnPoints";
 import { boundsWithoutObjects, isCameraTake } from "../hologram/hologramScene";
 import { cloneHologram, disposeClone, type HologramAssetCache } from "./hologramAssets";
 import { HologramBubble } from "./hologramBubble";
+import type { CaptionTrack } from "@holoim/contracts";
+import { readCaptionTrack } from "../hologram/captions";
 import { createHologramRuntime, disposeHologramRuntime, HologramPlayback, setHologramPlaying, type HologramRuntime } from "./hologramPlayback";
 import { placedRecord, searchingPlacement, viewerContext, type PlacedHologram } from "./viewerContext";
 
@@ -71,7 +73,7 @@ export class HologramSpace {
         return "error";
       }
       const model = cloneHologram(loaded);
-      const record = this.createRecord(item, model, createHologramRuntime(model, loaded.clips, loaded.audio));
+      const record = this.createRecord(item, model, createHologramRuntime(model, loaded.clips, loaded.audio), readCaptionTrack(loaded.gltf.parser.json));
       viewerContext(this.world).placed.push(record);
       this.focus(record.entity);
       this.options.onPlaced?.(record);
@@ -119,7 +121,7 @@ export class HologramSpace {
     c.focused = null;
   }
 
-  private createRecord(item: SpaceItem, model: Object3D, built: { runtime: HologramRuntime; duration: number }): PlacedHologram {
+  private createRecord(item: SpaceItem, model: Object3D, built: { runtime: HologramRuntime; duration: number }, captions: CaptionTrack | null): PlacedHologram {
     const world = this.world;
     model.name = "HologramModel";
     const entity = world.createTransformEntity(undefined, { parent: world.activeLevel.value });
@@ -164,7 +166,8 @@ export class HologramSpace {
       bubble: new HologramBubble(object, model, built.runtime.actions.map((action) => action.getClip()), item.id),
       placement: searchingPlacement(),
       recenterRequested: false,
-      footprintRadius: Math.hypot(size.x, Math.max(size.z, 0.3)) / 2
+      footprintRadius: Math.hypot(size.x, Math.max(size.z, 0.3)) / 2,
+      captions
     };
     // After the bubble patches its materials, so the occlusion chains onto the clipping.
     if (this.options.occludable) entity.addComponent(DepthOccludable);
