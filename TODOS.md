@@ -413,6 +413,16 @@ session, not a child of the review.
   volumetric studios frame, light, block and direct a take. Output: a short
   concept doc in `docs/product/concepts/` that turns each borrowed method into
   a ranked list of capture changes, the first of which is shipped.
+- [ ] Agent-authored holograms that tell a story (the owner's verdict on
+  2026-11-20, after slice 7 of `docs/features/directed-performance.md`: "none
+  are good enough… theres no context… the loaf just appears. there's no slip…
+  there's storytelling missing here"). Every slice 7 piece passed the build
+  bars but none told a story. Needed: a setup a viewer gets without words (who
+  the person is and where), an event that happens (an object that falls, tips
+  or is dropped; a prop that comes from somewhere), then the reaction; arms
+  that handle things like a person; and a skill that asks the agent for a
+  story before beats. Judge it with a blind viewer on setup, event and
+  reaction. Gaps and causes: the owner's verdict under "Slice 7 evidence".
 - [ ] Agent-authored showcase holograms through the real pipeline: use the
   Blender MCP to author a few short, deliberately "wow" holograms aimed at
   different purposes, and send each through capture export → upload → render
