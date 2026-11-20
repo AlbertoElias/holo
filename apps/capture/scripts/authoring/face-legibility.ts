@@ -29,7 +29,7 @@ import { chromium, type Page } from 'playwright';
 
 import { resolveAvatar } from './direct.ts';
 import { loadAvatar } from './lib/avatar.ts';
-import { beatSpan, parseSheetText, resolveTiming, type BeatSheet } from './lib/beats.ts';
+import { beatSpan, parseSheetText, resolveTiming } from './lib/beats.ts';
 import { faceGeometry, type FaceRegions } from './lib/face-geometry.ts';
 import { REVIEW_PAGE, SHEET_PAGE } from './lib/review-page.ts';
 import { openTake, startViewer, type ViewerServers } from './lib/viewer-session.ts';

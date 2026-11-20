@@ -28,7 +28,7 @@ import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promi
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { beatSpan, parseSheetText, type BeatSheet } from './lib/beats.ts';
+import { beatSpan, parseSheetText } from './lib/beats.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUTPUT = join(HERE, '../../output/authoring/six-second');
