@@ -17,7 +17,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { build } from './direct.ts';
-import { publish, PRODUCTION_API, Refusal } from './publish.ts';
+import { LOCAL_API, publish, publishTarget, PRODUCTION_API, Refusal } from './publish.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '../../../..');
@@ -81,8 +81,8 @@ try {
   process.env.HOLOIM_AGENT_TOKEN = 'holoim_at_wrong';
   await refused('wrong token', () => publish({ input: takeFile, api: origin, quickLook: false }), /refused the agent token|refused HOLOIM_AGENT_TOKEN/);
   process.env.HOLOIM_AGENT_TOKEN = token;
-  await refused('production without --production', () => publish({ input: takeFile, api: PRODUCTION_API, quickLook: false }), /needs --production/);
-  await refused('production spelled with a trailing dot', () => publish({ input: takeFile, api: 'https://holoim-api.fly.dev.', quickLook: false }), /needs --production/);
+  row('the default target is production, --local the local API', publishTarget({}).origin === PRODUCTION_API && publishTarget({ local: true }).origin === LOCAL_API && publishTarget({ api: origin, local: true }).origin === origin, `${publishTarget({}).origin}; --local ${publishTarget({ local: true }).origin}`);
+  await refused('a remote host that is not production (a trailing dot)', () => publish({ input: takeFile, api: 'https://holoim-api.fly.dev.', quickLook: false }), /neither production/);
   const undeclared = join(OUT, 'undeclared.glb');
   await writeFile(undeclared, editGlb(take, (j) => stripKey(j, 'HOLOIM_humanoid')));
   await refused('no declared performer', () => publish({ input: undeclared, api: origin, title: 'x', quickLook: false }), /no declared performer/);
