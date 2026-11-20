@@ -7,6 +7,24 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
+### B-071 — Place take's second pointing link plays back 1.39 m from its hit (fails `verify:pr` on `main`)
+
+- **Area:** apps/viewer-web (place playback) or apps/capture (link export)
+- **Severity:** P1 (a stored link draws in the wrong place, and `verify:pr` fails on every branch)
+- **Observed:** 2026-11-20, on a clean `origin/main` worktree (`b84dde250fb2`) and on `bug/avatar-jump`, the same value each run
+- **Evidence:** `e2e/place-capture.pipeline.spec.ts:711` "link 1: the end plays back within 0.02 m of the hit": received 1.388 m. Link 0 passes, and so does the stored end of link 1 (line 705), so the error is in playback, not in the stored point.
+- **Expected:** both links draw within 0.02 m of where their rays landed.
+- **Reproduction:** `cd apps/viewer-web && RUN_E2E_PIPELINE=1 XR_TEST_MODE=iwer pnpm exec playwright test e2e/place-capture.pipeline.spec.ts --workers=1`
+
+### B-072 — Feed card's reach controls sometimes stay folded under a hover (bubble-capture flake)
+
+- **Area:** apps/viewer-web (feed card reach controls, `e2e/bootstrap.ts` `reachFor`)
+- **Severity:** P3 (test flake; not seen by a person)
+- **Observed:** 2026-11-20: failed 2 of 4 runs on `bug/avatar-jump` and 1 of 2 on a clean `origin/main`
+- **Evidence:** `e2e/bubble-capture.pipeline.spec.ts:134` `pressViewInAr`: `.portal-controls` stays `data-reach="hidden"` through 120 s of hovers.
+- **Expected:** a cursor move over the card brings out its controls every time.
+- **Reproduction:** `cd apps/viewer-web && RUN_E2E_PIPELINE=1 XR_TEST_MODE=iwer pnpm exec playwright test e2e/bubble-capture.pipeline.spec.ts --workers=1`, a few runs.
+
 ### B-069 — Desktop and phone object checks fail on `main` (outside `verify:pr`)
 
 - **Area:** apps/capture (objects)

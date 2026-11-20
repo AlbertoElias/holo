@@ -4,6 +4,7 @@ import { markChromeTree, nonDominantHand, playbackLabel, type Hand, type Hologra
 import { AimRays, FocusRing, FootControls, GRIP_PALM, HandDock, StatusLine, configureXrPointers, handPointerIds, isHandheldSession, phoneMetresPerApx, type XrUiTarget } from "@holoim/xr-ui-iwsdk";
 import { Vector3, type Object3D } from "three";
 
+import { CaptionChips } from "./captionChip";
 import { HologramPlayback, restartHologram, seekHologram, setHologramPlaying } from "./hologramPlayback";
 import { addTwoHandGrab, grabPointerIds, keepGrounded } from "./twoHandGrab";
 import { focusedRecord, viewerContext, type PlacedHologram } from "./viewerContext";
@@ -49,6 +50,8 @@ interface Ui {
   ring: FocusRing;
   /** Headsets only: a phone has no rays. */
   rays: AimRays | null;
+  /** Speech captions by each speaker's head (sound slice 3). */
+  captions: CaptionChips;
 }
 
 export class HologramControlsSystem extends createSystem() {
@@ -78,7 +81,7 @@ export class HologramControlsSystem extends createSystem() {
   /** Probe readings for the e2e spec. */
   probe(): unknown {
     if (!this.ui) return null;
-    return { target: this.ui.target, foot: this.ui.foot.probe(), status: this.ui.status.probe(), dock: { ...this.ui.dock.probe(), hand: this.ui.dockHand }, ring: this.ui.ring.probe(), rays: this.ui.rays?.probe().map((ray) => ({ ...ray, hit: ray.hit ? namedAncestor(ray.hit) : null })) ?? [], boundTo: focusedRecord(viewerContext(this.world))?.id ?? null };
+    return { target: this.ui.target, foot: this.ui.foot.probe(), status: this.ui.status.probe(), dock: { ...this.ui.dock.probe(), hand: this.ui.dockHand }, ring: this.ui.ring.probe(), rays: this.ui.rays?.probe().map((ray) => ({ ...ray, hit: ray.hit ? namedAncestor(ray.hit) : null })) ?? [], captions: this.ui.captions.probe(viewerContext(this.world).placed), boundTo: focusedRecord(viewerContext(this.world))?.id ?? null };
   }
 
   update(delta: number): void {
@@ -93,6 +96,8 @@ export class HologramControlsSystem extends createSystem() {
     const { foot, status, dock, ring, rays } = this.ui;
     rays?.update();
     status.update(delta * 1000);
+    // Every placed hologram's caption, focused or not: the XR camera carries the head pose.
+    this.ui.captions.update(c.placed, this.camera, delta * 1000);
     // A phone has no hands to grab with; its taps focus, pause and place instead.
     if (this.ui.target !== "ar-phone") {
       for (const placed of c.placed) {
@@ -215,7 +220,8 @@ export class HologramControlsSystem extends createSystem() {
     this.boundTo = null;
     const ring = new FocusRing(this.world.activeLevel.value.object3D!);
     markChromeTree(ring.mesh);
-    return { target, foot, status, dock, dockHand: target === "ar-phone" ? null : nonDominantHand(loadHandedness()), ring, rays };
+    const captions = new CaptionChips(this.world, target, phoneApx);
+    return { target, foot, status, dock, dockHand: target === "ar-phone" ? null : nonDominantHand(loadHandedness()), ring, rays, captions };
   }
 
   /** On the non-dominant hand or controller, as set in the feed's settings on this device (right-handed by default). */
@@ -261,6 +267,7 @@ export class HologramControlsSystem extends createSystem() {
     this.ui.dock.dispose();
     this.ui.ring.dispose();
     this.ui.rays?.dispose();
+    this.ui.captions.dispose();
     this.ui = null;
   }
 }
