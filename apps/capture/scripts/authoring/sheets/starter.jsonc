@@ -60,7 +60,7 @@
       "hold": 1.2,
       "intent": "They notice me and look up.",
       "directions": [
-        // Kinds: look, expression, gesture, state, reach, hand, weight, bend, turn, step, take, put, aim.
+        // Kinds: look, expression, gesture, state, reach, hand, weight, bend, crouch, turn, step, take, put, aim.
         // Each takes optional timing in seconds: anticipation, attack, hold, settle.
         { "kind": "state", "name": "noticing", "at": "viewer" },
         { "kind": "look", "at": "viewer", "head": 0.8 }
@@ -86,7 +86,7 @@
       "intent": "They wave hello.",
       "directions": [
         // Gestures: wave (side, count, at) | nod | head-shake | shrug | rub | hand-to-chest. States: noticing | concerned.
-        // Hand shapes ("kind": "hand", "side", "shape"): relaxed | open | reach | fist | point | grip | withheld.
+        // Hand shapes ("kind": "hand", "side", "shape"): relaxed | open | reach | fist | point | grip | withheld | pinch.
         { "kind": "gesture", "name": "wave", "side": "right", "count": 3 }
       ]
     },

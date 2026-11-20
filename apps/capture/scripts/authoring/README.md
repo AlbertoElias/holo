@@ -136,12 +136,17 @@ Each beat belongs to a performer, starts `at` a time and holds `directions`:
   (`smile`, `sad`) read at feed-card size; brow and lip-press shapes move
   the mesh under 5 mm and do not (`face-legibility.ts`);
 - `reach` with a hand toward a point, stopping `stopShort` metres from it;
-- `hand` shape (`relaxed`, `open`, `reach`, `fist`, `point`, `grip`, `withheld`);
+- `hand` shape (`relaxed`, `open`, `reach`, `fist`, `point`, `grip`, `withheld`,
+  `pinch`, thumb tip to index tip with the other fingers open);
 - `weight` shift, `turn` (`upper` twists and returns, `whole` stays), `step`;
 - `bend` forward from the waist by an `amount`, 0 to 1 of the deepest bend
   (`BEND` in `lib/direct.ts`: 45° through the spine, the hips 7 cm back and
   3.5 cm down; default 0.7), for leaning over something low; a reach or look
   in the same span is solved on the bent body;
+- `crouch` by an `amount`, 0 to 1 of the deepest crouch (`CROUCH` in
+  `lib/direct.ts`: the hips 30 cm down and 10 cm back over planted feet, the
+  chest 22° forward; default 0.7), to pick something up from the floor or to
+  talk to a child; the knees bend and the feet stay down;
 - `gesture` by `name`, in one line: `nod`, `head-shake`, `shrug`, `wave`
   (optionally `at` someone), `rub` (something between the fingers, eyes on
   the hand) and `hand-to-chest`; a hand gesture takes a `side` (right by
