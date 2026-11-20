@@ -1451,6 +1451,40 @@ through the API and writes `output/authoring/publish-check/report.json`; it
 also shows each refusal (no token, wrong token, take without a declared
 performer, over-budget load, oversize file, production without the flag).
 
+### Slice 7: an agent's path from an idea to a piece (2026-11-19)
+
+The owner asked for "a simple way for agents to use that avatar to create
+great holograms". Before this slice, an agent had to find six scripts, read
+a 1,400-line README and guess the trait names. A missed grip printed a number
+without a fix, and nothing said when a piece was done.
+
+**What it adds (authoring tool, skill and docs only).**
+
+- `scripts/authoring/make.ts`: one command that does the full loop.
+  - `make.ts new <name>` copies `sheets/starter.jsonc` into
+    `output/authoring/pieces/<name>/`.
+  - `make.ts <sheet> [--quick]` builds the next `vN/`. It prints the look
+    each performer wears, then one row per bar. Every failing row has a
+    `fix:` line in plain words.
+  - For a missed aim, put or grip, it searches small edits to the marks,
+    the surface (its position and height) and the take's `palm`. It prints
+    the edit that lands, or the best one it found.
+  - The full run records the review pack and the face-on-card bar.
+  - `make.ts verdict vN` reads the grader's `comparison.json` and says DONE
+    or NOT YET.
+  - `make.ts words` prints every choice.
+- `sheets/starter.jsonc`: a sheet that builds as it is. Its comments list
+  every look trait and direction.
+- Sheets can be JSONC (comments and trailing commas) in every script.
+- Errors name the fix.
+- A `bend` direction (from the hips, 45° at `amount` 1) for a performer who
+  leans over something low. The proof ideas needed it.
+- `.agents/skills/hologram-authoring/SKILL.md`: the loop, ready reader and
+  grader prompts, the bars, recipes (bend, pour, pick up, low pick-up, world
+  change, looks) and "what the body cannot do yet".
+
+No bar changed. `apps/capture/src/`, the viewer and contracts did not change.
+
 ### Later, each against the audition
 
 A second family (a new base with its own design language); per-style
