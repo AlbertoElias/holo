@@ -31,6 +31,10 @@
       "scale": 1.3
     }
   },
+  "rig": {
+    "$comment": "thumbBase: where the thumb's base joint sits, in hand lengths (wrist to middle knuckle) from the wrist: along the wrist-to-middle-knuckle line, toward the index side, out of the palm's plane on the thumb's side. Read from the tracked hands of capture's hand replays (headset 0.39, 0.24, 0.20; IWER 0.38, 0.26, 0.18; 2026-11-20). MPFB's mixamo rig has it in the plane (0.41, 0.25, 0.00), which the replay counted as 20 to 27 degrees of thumb curl error (bar 15).",
+    "thumbBase": [0.38, 0.26, 0.19]
+  },
   "fit": {
     "$comment": "The fit (slice 2c2, fit.py): the MPFB human, proportioned, is moved onto `target`, a visual hull carved by carve.py from clay-turnaround.png's silhouettes alone (no generator, no third-party weights: the owner's licence decision of 2026-11-19 retired the Hunyuan3D target, whose licence excludes the EU, UK and South Korea). stance: the sheet's pose against the human's rest (degrees: upper arms down, legs in), so a limb wraps onto the same limb. regions (strongest rig weight wins; a bone ending in * is every bone starting so): strength (1 wraps fully, 0 only follows its surroundings), inset (m, under the target's surface, where garments are eased out again) and rigid (the head: it moves as a whole, by the mean move to its matches, so the face made after the fit keeps its shape; its size is proportions.head.scale). rounds: smoothing passes of the move field per round; maxDistance (m) and minFacing (cosine) refuse a nearest point on another limb. The values are decided by the agent on 2026-11-19 against house-likeness.ts (brief: slice 2c2 evidence), owner's review pending (open decision 10).",
     "enabled": true,
