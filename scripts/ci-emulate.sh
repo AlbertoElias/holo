@@ -47,6 +47,11 @@ cpus="${CI_EMULATE_CPUS:-0-3}"
 # a time, or lower this.
 memory="${CI_EMULATE_MEMORY:-16g}"
 load="${CI_EMULATE_LOAD:-0}"
+# Node sizes its default heap from the memory it sees: about 4 GB on a 16 GB
+# runner, but about 2 GB in a smaller Docker Desktop VM, where the viewer's
+# Vite build then runs out of heap. Give it the runner's heap.
+node_heap="${CI_EMULATE_NODE_HEAP:-4096}"
+case "$node_heap" in ''|*[!0-9]*) echo "CI_EMULATE_NODE_HEAP must be a whole number of MB" >&2; exit 2 ;; esac
 case "$load" in ''|*[!0-9]*) echo "CI_EMULATE_LOAD must be a whole number" >&2; exit 2 ;; esac
 image="${CI_EMULATE_IMAGE:-node:24-bookworm}"
 platform="${CI_EMULATE_PLATFORM:-linux/amd64}"
@@ -70,7 +75,7 @@ done < <(compgen -e)
 
 docker run --rm --init --platform "$platform" \
   --cpuset-cpus="$cpus" --memory="$memory" --shm-size=2g \
-  -e CI=true -e HOME=/root ${env_args[@]+"${env_args[@]}"} \
+  -e CI=true -e HOME=/root -e NODE_OPTIONS="--max-old-space-size=${node_heap}" ${env_args[@]+"${env_args[@]}"} \
   -v "$root":/src:ro \
   -v "$out":/out \
   -v holoim-ci-pnpm-store:/root/.local/share/pnpm/store \
