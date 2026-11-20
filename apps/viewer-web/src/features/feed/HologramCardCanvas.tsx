@@ -27,6 +27,8 @@ import type { DomeClip, SphereClipResult } from "../hologram/useSphereClipping";
 import { useTakeAnimations } from "../hologram/useTakeAnimations";
 import { buildGroundField, cachedGroundField, groundFieldBudget, readRimTake, RimMotion, takeSamples, type RimTake } from "../hologram/groundField";
 import { useGltfAudio } from "../hologram/useGltfAudio";
+import { readCaptionTrack } from "../hologram/captions";
+import { activeCue } from "@holoim/contracts";
 import { createEarPose, earFromObject, type ScheduledGltfAudio, type SoundLayers } from "../hologram/gltfAudio";
 import { portalEar } from "../hologram/portalEar";
 import { drawnBounds, drawnPoints, motionPoints } from "../hologram/drawnPoints";
@@ -74,6 +76,8 @@ type HologramCardCanvasProps = {
   muted: boolean;
   onHasAudio: (hasAudio: boolean) => void;
   onCredits: (credits: ObjectCredit[]) => void;
+  /** The caption showing at the take's clock (slice 3), or null; called on change, on the focused card only. */
+  onCaption?: ((text: string | null) => void) | undefined;
   onRendered?: ((info: HologramRenderInfo) => void) | undefined;
   colorAccurateMode: boolean;
   portal: PortalStore;
@@ -233,7 +237,7 @@ function FrameFirst({ run }: { run: (delta: number) => void }) {
   return null;
 }
 
-function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, onHasAudio, onCredits, onRendered, portal, target, reducedMotion, seed, frameRect, soot, author, placeRequest }: {
+function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, onHasAudio, onCredits, onCaption, onRendered, portal, target, reducedMotion, seed, frameRect, soot, author, placeRequest }: {
   url: string;
   placeDetailUrl: string | null;
   textureDetailUrl: string | null;
@@ -248,6 +252,7 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
   muted: boolean;
   onHasAudio: (hasAudio: boolean) => void;
   onCredits: (credits: ObjectCredit[]) => void;
+  onCaption?: ((text: string | null) => void) | undefined;
   onRendered?: ((info: HologramRenderInfo) => void) | undefined;
   portal: PortalStore;
 }) {
@@ -329,6 +334,18 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
   useEffect(() => {
     onCredits(credits);
   }, [credits, onCredits]);
+  // Captions follow the take's own clock (the one its sound plays to), so they keep time with the voice through pause, seek and loop.
+  const captionTrack = useMemo(() => readCaptionTrack(gltf.parser.json), [gltf]);
+  const captionShown = useRef<string | null>(null);
+  useFrame(() => {
+    if (!onCaption) return;
+    const text = active && captionTrack ? activeCue(captionTrack, primaryActionRef.current?.time ?? 0)?.text ?? null : null;
+    if (text !== captionShown.current) {
+      captionShown.current = text;
+      onCaption(text);
+    }
+  });
+  useEffect(() => () => onCaption?.(null), [onCaption]);
   const pointingProbe = useRef<PointingProbe>({ links: [] }).current;
   const tracesProbe = useRef(createHandTracesProbe()).current;
   // Hand traces read the recorded author's fingertips and hips (PRD-023); a camera take has no author's body.
@@ -1089,6 +1106,7 @@ export function HologramCardCanvas({
   muted,
   onHasAudio,
   onCredits,
+  onCaption,
   onRendered,
   colorAccurateMode,
   portal,
@@ -1113,7 +1131,7 @@ export function HologramCardCanvas({
       }}
     >
       <HologramLighting colorAccurate={colorAccurateMode} />
-      <HologramModel url={modelUrl} placeDetailUrl={placeDetailUrl} textureDetailUrl={textureDetailUrl} active={active} muted={muted} onHasAudio={onHasAudio} onCredits={onCredits} onRendered={onRendered} portal={portal} target={target} reducedMotion={reducedMotion} seed={seed} frameRect={frameRect} soot={soot} author={author} placeRequest={placeRequest ?? null} />
+      <HologramModel url={modelUrl} placeDetailUrl={placeDetailUrl} textureDetailUrl={textureDetailUrl} active={active} muted={muted} onHasAudio={onHasAudio} onCredits={onCredits} onCaption={onCaption} onRendered={onRendered} portal={portal} target={target} reducedMotion={reducedMotion} seed={seed} frameRect={frameRect} soot={soot} author={author} placeRequest={placeRequest ?? null} />
     </Canvas>
   );
 }

@@ -267,6 +267,10 @@ export function HologramCard({ item, active, muted, onToggleMute, onDelete, link
   const onHasAudio = useCallback((value: boolean) => setHasAudio(value), []);
   const [credits, setCredits] = useState<ObjectCredit[]>([]);
   const onCredits = useCallback((value: ObjectCredit[]) => setCredits(value), []);
+  // What is said, while the viewer cannot hear it (slice 3, decisions 2 and 8): the focused card only, while muted.
+  const [caption, setCaption] = useState<string | null>(null);
+  const onCaption = useCallback((value: string | null) => setCaption(value), []);
+  const captionShown = active && muted ? caption : null;
   const cardRef = useRef<HTMLElement>(null);
   const portalRef = useRef<HTMLDivElement>(null);
   const portalBox = useElementBox(portalRef);
@@ -477,6 +481,7 @@ export function HologramCard({ item, active, muted, onToggleMute, onDelete, link
                 muted={muted}
                 onHasAudio={onHasAudio}
                 onCredits={onCredits}
+                onCaption={onCaption}
                 onRendered={setRenderInfo}
                 colorAccurateMode={colorAccurateMode}
                 portal={portal}
@@ -533,6 +538,17 @@ export function HologramCard({ item, active, muted, onToggleMute, onDelete, link
       </header>
 
       <div ref={portalRef} className="feed-card-portal" aria-hidden="true" />
+
+      {/* Over the bottom of the viewing box, outside the foot (its layout hooks watch it); one polite region, on the focused card. */}
+      {active ? (
+        <div className="feed-card-caption" aria-live="polite" data-testid="card-caption" data-caption={captionShown ?? ""}>
+          {captionShown ? (
+            <Chip className="feed-card-caption-chip" target={target} overPicture>
+              <Type variant="captionOnHologram" as="p">{captionShown}</Type>
+            </Chip>
+          ) : null}
+        </div>
+      ) : null}
 
       <div ref={footRef} className="feed-card-foot" data-reach-row={reachRow}>
         {controls && portalOpen > 0 ? (
