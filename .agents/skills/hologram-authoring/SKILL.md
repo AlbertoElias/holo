@@ -186,7 +186,10 @@ over the 40 px bar.
 4. **Review.** `M <sheet>` without `--quick` also records the review pack in
    real time: about 6 to 12 minutes for an 8 s take, so run it in the background
    with its output in a log, and wait until the log has a line starting
-   `DONE`, `BUILT` or `NOT YET` (or the command exits). Run on an unchanged
+   `DONE`, `BUILT` or `NOT YET` (or the command exits). If it stops at once
+   with "claimed by another review", another review holds those ports: run
+   the same command again when that review ends, or set other ports with
+   `VIEWER_CHECK_API_PORT` and `VIEWER_CHECK_WEB_PORT`. Run on an unchanged
    sheet right after `--quick`, it finishes that version instead of making
    another. It
    measures the face on the card (the 40 px bar) and writes
@@ -267,7 +270,12 @@ production and needs the owner's word.
     with `"head": 0.8` at a thing on a table cost about 3 px in a test.
   - Look at the viewer (`"at": "viewer"`) for more than half the take. The
     reaction is the best time for this.
-  - Keep a forward lean (a reach far forward, a bow) short.
+  - Keep a forward lean (a reach far forward, a bow) short. A `nod` tips
+    the head down too: two nods cost a slip piece about 16 px for two
+    seconds. Use one nod, or none.
+  - The faceBox fix names the seconds where the face is small, and
+    `review/on-screen.json` gives each second's face
+    (`travelPerSecond[].faceDevicePx`). Change the beats in those seconds.
   Two performers roughly halve the face.
   A table too high or too low for a take: change its height (its `size`).
   A fix line that moves its `at` down does the same to its top, but sinks
