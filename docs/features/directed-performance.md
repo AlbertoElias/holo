@@ -2071,10 +2071,10 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
     20% longer, enough to hold its cadence at 130 steps a minute (see
     "Slice 2g result"). Walk speed by leg length is not merged; it stays
     on `feature/walk-speed-by-leg`. `DEFAULT_AVATAR_URL` is the house
-    base. For the owner to see: the longer stride (the motion work
-    rejected a 1.1 stride on the stock avatar for its look; this one is
-    1.15 and on the house base only), and the arm stretch (about 17% on
-    controllers, up to about 26% with tracked hands).
+    base. The owner watched the proof video (the walk with the longer
+    stride, and the arm stretch on and off: about 17% on controllers, up
+    to about 26% with tracked hands) and accepted both on 2026-11-20
+    ("Videos 1, 2 and 3 look fine", through the lead session).
 
 ## Test plan and evidence
 
