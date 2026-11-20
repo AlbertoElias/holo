@@ -130,7 +130,7 @@ function emptyText(source: FeedSource, creatorName: string | null, creatorMissin
     case "one":
       return "This hologram is not here any more. It may have been deleted.";
     default:
-      return "No holograms yet. Upload one to start the feed.";
+      return "No holograms yet. Record or upload one to start the feed.";
   }
 }
 

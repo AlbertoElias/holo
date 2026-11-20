@@ -384,8 +384,15 @@ test.describe("phone by touch", () => {
     const home = page.getByRole("button", { name: "All holograms" });
     await expect(home).toBeVisible();
     const homeBox = (await home.boundingBox())!;
+    const chip = (await page.locator(".feed-context").boundingBox())!;
+    expect(chip.x, "the chip keeps clear of the left back-swipe edge").toBeGreaterThanOrEqual(PHONE_EDGES.side - 0.5);
+    expect(homeBox.x, "the word sits inside its chip").toBeGreaterThanOrEqual(chip.x - 0.5);
+    expect(homeBox.x + homeBox.width, "the word sits inside its chip").toBeLessThanOrEqual(chip.x + chip.width + 0.5);
     const pageTitle = (await page.locator(".feed-card-title").first().boundingBox())!;
-    expect(pageTitle.y, "the title starts below the All holograms chip").toBeGreaterThanOrEqual(homeBox.y + homeBox.height);
+    expect(pageTitle.y - (chip.y + chip.height), "the title starts a glyph gap below the chip").toBeGreaterThanOrEqual(tokens.glyph.gap - 1);
+    // Below the corners' row, the title no longer shares a line with Search and Settings, so it keeps the card's width.
+    const search = (await page.getByRole("button", { name: "Search" }).boundingBox())!;
+    expect(pageTitle.x + pageTitle.width, "the title runs past where the corner starts").toBeGreaterThan(search.x);
     await shot(page, "phone-one-hologram-title");
   });
 
