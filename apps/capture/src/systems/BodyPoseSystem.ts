@@ -1,7 +1,7 @@
 import { createSystem } from '@iwsdk/core';
 import * as THREE from 'three';
 import type { JumpPhase } from '../animation/JumpArms';
-import { WALK_HEIGHTS_PER_SEC } from '../physics/CharacterMotor';
+import { walkHeightsPerSec } from '../physics/CharacterMotor';
 import { type CaptureContext, captureContext } from './captureContext';
 
 /**
@@ -53,7 +53,7 @@ export class BodyPoseSystem extends createSystem() {
       moveIntent: input.moveState.forward || input.moveState.back || input.moveState.left || input.moveState.right,
       vrMode: frame.vrActive,
       // The walk's own target speed, for a clip without a measured gait.
-      referenceSpeed: avatar.avatarHeight * WALK_HEIGHTS_PER_SEC,
+      referenceSpeed: avatar.avatarHeight * walkHeightsPerSec(avatar.avatarHeight, c.animator.legLengthWorld()),
       position: avatar.avatarRoot.position
     });
     if (!body.active && body.posed) {
