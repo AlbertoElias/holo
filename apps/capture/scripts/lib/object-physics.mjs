@@ -612,7 +612,11 @@ export async function runIwerObjectPhysics({ browser, baseUrl, artifactDir, cons
         }
         const dir = around({ ...a, x: 0, y: 0, z: 0 }, -1, 0, 0);
         const along = (p) => p.linvel[0] * dir[0] + p.linvel[2] * dir[2];
-        const launch = trajectory[0] ? along(trajectory[0]) : 0;
+        // The launch is the prop's own speed along the throw over its last held steps. The first free sample is not used: the prop
+        // starts 0.42 m from the torso, so that sample can already include the hit (sub-millimetre arm differences decide which).
+        const carried = heldSpeed(held);
+        const carriedLength = Math.hypot(...carried.direction);
+        const launch = carriedLength > 1e-9 ? (carried.speed * (carried.direction[0] * dir[0] + carried.direction[2] * dir[2])) / carriedLength : 0;
         const airborne = trajectory.slice(0, 30).filter((p) => p.floorGapM > 0.05);
         const slowest = airborne.length ? Math.min(...airborne.map(along)) : launch;
         report.scenarios.bodyThrow = { heldSteps: held.length, launchAlongMps: round(launch, 3), slowestAlongAirborneMps: round(slowest, 3), trajectory: writeTrajectory(trajectory) };

@@ -88,6 +88,9 @@ const CHECK_TIMEOUT_MS: Partial<Record<CheckName, number>> = {
   face: 360000,
   // The keyboard row on the shipped avatar and seven skeletons, one page each: about 21 s locally (2026-11-18).
   'desktop-motion': 240000,
+  // The VR arm audit: about 19 scripted reach segments per input, hands then controllers, on a frozen
+  // page clock: about 300 s locally with video (2026-11-20). It is an audit, not in test:xr.
+  arms: 900000,
   // Seven skeletons × hand, body, passthrough walk, object and face replays: 854 s alone locally before the
   // passthrough walks, 917 s with them (2026-11-17); the headroom covers a loaded machine.
   avatars: 1500000
