@@ -7,6 +7,48 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
+### B-073 — VR elbows point out or up, not down (fixed elbow hint)
+
+- **Area:** apps/capture (`ArmIkSolver`, `AvatarRig.createArmIkChain`)
+- **Severity:** P2
+- **Observed:** 2026-11-20
+- **Evidence:** `test:xr:arms` and the Quest 3 hand take (`docs/features/realistic-avatar-motion.md`,
+  cause 24). The bend plane comes from a fixed avatar-space hint that points almost straight
+  sideways (`elbowHintLocal`). Elbow swivel about the shoulder–wrist line (0° down, 90° out):
+  Quest take median 92° (elbows straight out the whole take); scripted rest and walk 140° (forward
+  and up, 93–100% of frames above 120°); low side reach −175° (elbow up).
+- **Expected:** a relaxed arm's elbow hangs down and back; a reach bends it down and out.
+- **Reproduction:** `cd apps/capture && node --import tsx scripts/run-xr-checks.ts arms`, rows
+  rest, side-low and walk, column swivelMed.
+- **Decision needed (owner):** a better constant hint, or an elbow from the pose or from
+  recorded motion (the owner prefers recorded motion to hand-tuned springs).
+
+### B-074 — VR shoulders swing past a human range
+
+- **Area:** apps/capture (`ArmIkSolver` protraction)
+- **Severity:** P2
+- **Observed:** 2026-11-20
+- **Evidence:** cause 24. The clavicle aims at the target near full reach. Clavicle swing range:
+  Quest take 77°, scripted hands 103°, across and chest reaches 68° (a human clavicle moves
+  about 25–30°). The steep band (`smoothstep` 0.75–1.0 of the reach) still steps the clavicle
+  up to 21°/frame on the across reach and 22° on the Quest take.
+- **Expected:** the shoulder shrugs and protracts in a human range, without steps.
+- **Reproduction:** as B-073, columns clavPush and clavStep.
+- **Decision needed (owner):** cap the clavicle (a wrist then misses long reaches, the
+  height-fitted arm is short) or fit the avatar's arm length to the user's.
+
+### B-075 — Controllers miss long reaches by 15 cm
+
+- **Area:** apps/capture (`HandEmbodiment`, `ArmIkSolver` reach stretch)
+- **Severity:** P3
+- **Observed:** 2026-11-20
+- **Evidence:** cause 24: forward-far and overhead rows, controller wrist error 14.8 cm (hands
+  3.6 cm). The 8% reach stretch is for tracked hands only; on controllers it broke the IWER
+  resize take and desktop-reach-interruptions (gap 4).
+- **Expected:** the avatar's hand stays on the controller on a full reach.
+- **Reproduction:** as B-073 with `ARM_REACH_INPUTS=controller`.
+- **Decision needed (owner):** together with B-074 (arm-length fit would close both).
+
 ### B-069 — Desktop and phone object checks fail on `main` (outside `verify:pr`)
 
 - **Area:** apps/capture (objects)

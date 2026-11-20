@@ -29,6 +29,7 @@
     "test:xr:terrain": "node --import tsx scripts/run-xr-checks.ts terrain",
     "test:xr:body": "node --import tsx scripts/run-xr-checks.ts body",
     "test:xr:pointing": "node --import tsx scripts/run-xr-checks.ts pointing",
+    "test:xr:arms": "node --import tsx scripts/run-xr-checks.ts arms",
     "test:xr:ar-record": "node --import tsx scripts/run-xr-checks.ts ar-record",
     "test:xr:marks": "node --import tsx scripts/run-xr-checks.ts marks",
     "test:xr:object": "node --import tsx scripts/run-xr-checks.ts object",
