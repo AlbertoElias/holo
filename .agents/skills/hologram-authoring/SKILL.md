@@ -48,7 +48,17 @@ M() { node --conditions=development --import tsx scripts/authoring/make.ts "$@";
    measures the face on the card (the 40 px bar) and writes
    `vN/review/reader/` (the video and stills a reader sees) and
    `vN/review/comparison.json` (your intents, with blanks for the reader).
-5. **Have a fresh reader judge it.** Spawn a new subagent (`model: "sonnet"`)
+5. **Have a visual reviewer judge the motion.** The review also writes
+   `vN/review/visual/BRIEF.md`: the card, close and side stills, the worst
+   measured arm moments, and what to judge (arm motion, clipping, face). From
+   the repo root, run `scripts/gemini-review.sh <version dir>/review/visual/BRIEF.md`
+   (Gemini Neon, in the background: it can take minutes). On exit 75, give the
+   same brief to the `design-reviewer` subagent (`model: "opus"`) instead.
+   Save the JSON block at the end of its answer as
+   `vN/review/visual/verdict.json`. Look at the stills it names yourself too:
+   the measured bars do not see everything (a hand facing an odd way, an arm
+   that snaps). No piece goes to the owner before this review passes.
+6. **Have a fresh reader judge it.** Spawn a new subagent (`model: "sonnet"`)
    that is told nothing about the idea and gets only the path of
    `vN/review/reader/`. Prompt it with exactly this, filling the paths:
 
@@ -81,7 +91,7 @@ M() { node --conditions=development --import tsx scripts/authoring/make.ts "$@";
    Do not grade it yourself: you know what it means, so you will see it. If you cannot start subagents (you are
    one), stop here and hand the two paths to whoever started you, saying
    that the reader and grader are theirs to run.
-6. **Verdict.** `M verdict <vN dir>` reruns the bars with the grades. It says
+7. **Verdict.** `M verdict <vN dir>` reruns the bars with the grades and the visual verdict. It says
    `DONE` when every bar passes. Otherwise revise the sheet (step 3), and keep
    each version: the next build lists which seconds changed.
 
@@ -99,6 +109,11 @@ production and needs the owner's word.
 | `size.*` | each dressed avatar file is at most 1.8 MB (house avatars are about 1.1-1.5) |
 | `quickLook` | the take fits the iPhone Quick Look budget |
 | `faceBox.*` | the face is at least 40 device px brow to chin on the phone card |
+| `arms.body.*` | no arm or hand more than 2 cm into the torso, the legs or the head (measured on the posed skin, every frame) |
+| `arms.prop.*` | no arm or hand more than 1 cm into an object it does not hold or touch |
+| `arms.twist.*`, `arms.wrist.*` | the forearm twists at most 90° from neutral (palm up and palm down are each a quarter turn), the wrist bends at most 80° |
+| `arms.elbow.*` | the elbow goes at most 10° past straight and at most 15° off its hinge (an elbow bends only one way) |
+| `visual` | a visual reviewer (Gemini Neon, else the `design-reviewer`) passes the arm motion, the clipping and the face |
 | `reading` | a fresh reader reads every beat (each beat needs an `intent`), and the piece as a whole |
 | `body.*`, `still.*`, `onCard.*` | notes, not bars: feet planted, something moving every second, objects wholly on the card |
 

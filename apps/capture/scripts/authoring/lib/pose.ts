@@ -64,6 +64,17 @@ export function restElbowHint(a: LoadedAvatar, side: Side, out = new THREE.Vecto
 }
 
 /**
+ * Where the elbow points while the hand works in front: down and a little
+ * out. In recorded reaches (CMU, the VR arm work in B-073 to B-075) the elbow
+ * sits 25-45° from straight down toward out in nearly every reach; 35° is the
+ * middle. The rig's own hint points the elbow straight out, a wing.
+ */
+export function reachElbowHint(a: LoadedAvatar, side: Side, out = new THREE.Vector3()): THREE.Vector3 {
+  out.set((side === 'left' ? 1 : -1) * Math.sin(35 * DEG), -Math.cos(35 * DEG), 0);
+  return a.facingCorrection ? out.applyQuaternion(a.facingCorrection) : out;
+}
+
+/**
  * Hangs the arm at rest: the wrist `offsetWorld` from wherever the shoulder
  * settles. Capture's solver swings the clavicle toward a far target (its
  * shoulder protraction), so the target is re-aimed from the moved shoulder a
@@ -88,13 +99,153 @@ export interface ArmOptions {
   readonly elbowHint?: THREE.Vector3 | undefined;
 }
 
-/** Puts the wrist at a world point with capture's arm solver; the hand keeps its bind wrist unless rolled. */
+/** Forearm twist from neutral (bind: thumb forward), at most: pronation and supination are each about 80-90°; 85° keeps inside the 90° bar in `arm-quality.ts`, as the wrist roll in `WRIST_LIMITS` does. */
+export const FOREARM_TWIST_LIMIT = 85 * DEG;
+/** The forearm's own share of a palm roll; the hand takes the rest, as the radius turns over the ulna. */
+const FOREARM_TWIST_SHARE = 0.5;
+/** The elbow's flexion range: at most a little past straight, and about 150° bent. */
+const ELBOW_FLEX = { min: -2 * DEG, max: 150 * DEG } as const;
+
+/** The elbow's hinge in the upper arm's frame at bind (see `arm-quality.ts`, which measures against the same frame). */
+interface Hinge { readonly u0: THREE.Vector3; readonly d0: THREE.Vector3; readonly h: THREE.Vector3; readonly flexDir: THREE.Vector3; readonly basis: THREE.Matrix4 }
+const hinges = new WeakMap<object, Hinge>();
+function hingeOf(a: LoadedAvatar, side: Side): Hinge {
+  const ch = a.arms[side];
+  const known = hinges.get(ch);
+  if (known) return known;
+  const bindQ = a.bind.get(side === 'left' ? 'leftUpperArm' : 'rightUpperArm')!.rootQuaternion;
+  const u0 = ch.foreBindPosition.clone().normalize();
+  const d0 = ch.handBindPosition.clone().applyQuaternion(ch.foreBindQuaternion).normalize();
+  const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(bindQ.clone().invert());
+  const h = d0.clone().cross(forward).normalize();
+  const flexDir = h.clone().cross(d0).normalize();
+  const y = h.clone().addScaledVector(u0, -h.dot(u0)).normalize();
+  const basis = new THREE.Matrix4().makeBasis(u0, y, u0.clone().cross(y));
+  const hinge = { u0, d0, h, flexDir, basis };
+  hinges.set(ch, hinge);
+  return hinge;
+}
+
+/**
+ * Makes the elbow a hinge. Capture's solver aims the upper arm and the
+ * forearm by the shortest turn, which leaves the upper arm's roll wherever
+ * it was: the elbow then bends sideways or backward. This turns the upper
+ * arm about its own line until its hinge is square to the plane of the bend,
+ * and bends the forearm about that hinge only, within the elbow's range.
+ */
+function hingeElbow(a: LoadedAvatar, side: Side): void {
+  const ch = a.arms[side];
+  const hg = hingeOf(a, side);
+  ch.upperArm.updateMatrixWorld(true);
+  const S = ch.upperArm.getWorldPosition(new THREE.Vector3());
+  const E = ch.foreArm.getWorldPosition(new THREE.Vector3());
+  const W = ch.hand.getWorldPosition(new THREE.Vector3());
+  const u = E.clone().sub(S).normalize();
+  const f = W.clone().sub(E).normalize();
+  const p = f.clone().addScaledVector(u, -f.dot(u));
+  // The hinge a straight arm keeps: the bind hinge, swung (not rolled) to the arm's line.
+  const bindQ = ch.upperArm.parent!.getWorldQuaternion(new THREE.Quaternion()).multiply(ch.upperBindQuaternion);
+  const swing = new THREE.Quaternion().setFromUnitVectors(hg.u0.clone().applyQuaternion(bindQ), u);
+  const hSwing = hg.h.clone().applyQuaternion(bindQ).applyQuaternion(swing);
+  // A bend plane is sure only when the arm bends: near straight, a few millimetres turn it any way.
+  const bend = p.length();
+  const sure = THREE.MathUtils.smoothstep(bend, Math.sin(3 * DEG), Math.sin(20 * DEG));
+  const hW = hSwing.clone();
+  if (sure > 0) {
+    const hPlane = u.clone().cross(p.divideScalar(bend));
+    // Not sure of the plane: a bend the other way is a straight arm a little past, not an arm rolled over.
+    if (sure < 1 && hPlane.dot(hSwing) < 0) hPlane.negate();
+    hW.lerp(hPlane, sure);
+  }
+  hW.addScaledVector(u, -hW.dot(u)).normalize();
+  const world = new THREE.Matrix4().makeBasis(u, hW, u.clone().cross(hW));
+  const Ru = new THREE.Quaternion().setFromRotationMatrix(world.multiply(hg.basis.clone().transpose()));
+  ch.upperArm.quaternion.copy(ch.upperArm.parent!.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(Ru));
+  ch.upperArm.updateMatrixWorld(true);
+  const fl = f.clone().applyQuaternion(Ru.clone().invert());
+  const flex = THREE.MathUtils.clamp(Math.atan2(fl.dot(hg.flexDir), fl.dot(hg.d0)), ELBOW_FLEX.min, ELBOW_FLEX.max);
+  ch.foreArm.quaternion.copy(new THREE.Quaternion().setFromAxisAngle(hg.h, flex).multiply(ch.foreBindQuaternion));
+  ch.foreArm.updateMatrixWorld(true);
+}
+
+/** The elbow's flexion now, radians, about its hinge (0 is straight). */
+function elbowFlex(a: LoadedAvatar, side: Side): number {
+  const ch = a.arms[side];
+  const hg = hingeOf(a, side);
+  ch.upperArm.updateMatrixWorld(true);
+  const E = ch.foreArm.getWorldPosition(new THREE.Vector3());
+  const f = ch.hand.getWorldPosition(new THREE.Vector3()).sub(E).normalize().applyQuaternion(ch.upperArm.getWorldQuaternion(new THREE.Quaternion()).invert());
+  return Math.atan2(f.dot(hg.flexDir), f.dot(hg.d0));
+}
+
+/** The forearm's twist from neutral (bind), radians, about its own line; the same measure as `armAngles` in `arm-quality.ts`. */
+export function forearmTwist(a: LoadedAvatar, side: Side): number {
+  const ch = a.arms[side];
+  const hg = hingeOf(a, side);
+  const H = new THREE.Quaternion().setFromAxisAngle(hg.h, elbowFlex(a, side)).invert();
+  const T = H.multiply(ch.foreArm.quaternion).multiply(ch.hand.quaternion).multiply(ch.foreBindQuaternion.clone().multiply(ch.handBindQuaternion).invert());
+  const sign = T.w < 0 ? -1 : 1;
+  return 2 * Math.atan2(sign * (T.x * hg.d0.x + T.y * hg.d0.y + T.z * hg.d0.z), sign * T.w);
+}
+
+/** Rolls the hand about the forearm by `angle` (radians), no further than the forearm's twist range allows. */
+export function rollHand(a: LoadedAvatar, side: Side, angle: number): void {
+  const ch = a.arms[side];
+  const axis = ch.hand.getWorldPosition(new THREE.Vector3()).sub(ch.foreArm.getWorldPosition(new THREE.Vector3())).normalize();
+  const before = forearmTwist(a, side);
+  rotateBoneWorld(ch.hand, tmpQ.setFromAxisAngle(axis, angle));
+  const after = forearmTwist(a, side);
+  if (Math.abs(after) <= FOREARM_TWIST_LIMIT || Math.abs(after) <= Math.abs(before)) return;
+  // Past the range: take back the part beyond it.
+  const back = (Math.abs(after) - Math.max(FOREARM_TWIST_LIMIT, Math.abs(before))) * Math.sign(angle);
+  rotateBoneWorld(ch.hand, tmpQ.setFromAxisAngle(axis, -back));
+}
+
+/**
+ * Takes back the hand's roll beyond the forearm's twist range (a hand set to
+ * a held object's grip, say, can ask for more turn than a forearm has).
+ */
+export function limitTwist(a: LoadedAvatar, side: Side): void {
+  const ch = a.arms[side];
+  for (let k = 0; k < 3; k += 1) {
+    const tw = forearmTwist(a, side);
+    if (Math.abs(tw) <= FOREARM_TWIST_LIMIT + 1e-4) return;
+    const axis = ch.hand.getWorldPosition(new THREE.Vector3()).sub(ch.foreArm.getWorldPosition(new THREE.Vector3())).normalize();
+    rotateBoneWorld(ch.hand, tmpQ.setFromAxisAngle(axis, -(Math.abs(tw) - FOREARM_TWIST_LIMIT) * Math.sign(tw)));
+  }
+}
+
+/**
+ * Runs `move` (which re-solves the arm) and gives the forearm and the hand
+ * back the twist and the wrist turn they had: a small move of the arm does
+ * not turn the palm over.
+ */
+export function keepingTwist(a: LoadedAvatar, side: Side, move: () => void): void {
+  const ch = a.arms[side];
+  const hg = hingeOf(a, side);
+  const fore = ch.foreArm.quaternion.clone();
+  const hand = ch.hand.quaternion.clone();
+  const before = elbowFlex(a, side);
+  move();
+  const after = elbowFlex(a, side);
+  ch.foreArm.quaternion.copy(new THREE.Quaternion().setFromAxisAngle(hg.h, after - before).multiply(fore));
+  ch.hand.quaternion.copy(hand);
+  ch.foreArm.updateMatrixWorld(true);
+}
+
+/**
+ * Puts the wrist at a world point with capture's arm solver, the elbow a
+ * hinge; the hand keeps its bind wrist unless rolled. A roll toward
+ * `palmToward` is shared between the forearm and the hand and stops at the
+ * forearm's range: past it, the palm faces as near as the forearm can turn.
+ */
 export function solveArm(a: LoadedAvatar, side: Side, wristWorld: THREE.Vector3, options: ArmOptions = {}): boolean {
   const chain = a.arms[side];
   const rigHint = options.elbowHint ? chain.elbowHintLocal.clone() : undefined;
   if (options.elbowHint) chain.elbowHintLocal.copy(options.elbowHint).normalize();
   const ok = solver.solve(chain, wristWorld, IDENTITY, a.frame);
   if (rigHint) chain.elbowHintLocal.copy(rigHint);
+  hingeElbow(a, side);
   chain.hand.quaternion.copy(chain.handBindQuaternion);
   chain.hand.updateMatrixWorld(true);
   const hand = a.hands[side];
@@ -108,13 +259,17 @@ export function solveArm(a: LoadedAvatar, side: Side, wristWorld: THREE.Vector3,
     const w = want.clone().addScaledVector(axis, -want.dot(axis));
     if (p.lengthSq() > 1e-6 && w.lengthSq() > 1e-6) {
       p.normalize(); w.normalize();
-      const angle = Math.atan2(tmpV.crossVectors(p, w).dot(axis), p.dot(w));
-      rotateBoneWorld(chain.hand, tmpQ.setFromAxisAngle(axis, angle));
+      const angle = THREE.MathUtils.clamp(Math.atan2(tmpV.crossVectors(p, w).dot(axis), p.dot(w)), -FOREARM_TWIST_LIMIT, FOREARM_TWIST_LIMIT);
+      rotateBoneWorld(chain.foreArm, tmpQ.setFromAxisAngle(axis, angle * FOREARM_TWIST_SHARE));
+      rotateBoneWorld(chain.hand, tmpQ.setFromAxisAngle(axis, angle * (1 - FOREARM_TWIST_SHARE)));
     }
     if (options.wristBend) {
+      // A bend, not a roll: the turn's axis is kept across the forearm (the roll is limited above).
       const n = hand.palmNormal(new THREE.Vector3());
+      const fore = chain.hand.getWorldPosition(new THREE.Vector3()).sub(chain.foreArm.getWorldPosition(new THREE.Vector3())).normalize();
       const bendAxis = tmpV2.crossVectors(n, want);
-      const bend = Math.min(options.wristBend, Math.acos(THREE.MathUtils.clamp(n.dot(want), -1, 1)));
+      bendAxis.addScaledVector(fore, -bendAxis.dot(fore));
+      const bend = Math.min(options.wristBend, Math.asin(Math.min(1, bendAxis.length())));
       if (bendAxis.lengthSq() > 1e-8) rotateBoneWorld(chain.hand, tmpQ.setFromAxisAngle(bendAxis.normalize(), bend));
     }
   }
@@ -235,6 +390,7 @@ export function orientHand(a: LoadedAvatar, side: Side, wanted: THREE.Quaternion
   }
   hand.quaternion.copy(parent.clone().invert().multiply(result));
   hand.updateMatrixWorld(true);
-  return result.angleTo(wanted) / DEG;
+  limitTwist(a, side);
+  return hand.getWorldQuaternion(new THREE.Quaternion()).angleTo(wanted) / DEG;
 }
 

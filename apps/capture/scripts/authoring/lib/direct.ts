@@ -14,9 +14,10 @@ import { LivenessFace } from '../../../src/face/LivenessFace.ts';
 import type { JointName, MotionFrame, Vec3 } from '../../lib/motion-quality.ts';
 import type { FaceGaze, FaceWeights } from '../../../src/face/faceTypes.ts';
 import { resetPose, type LoadedAvatar } from './avatar.ts';
+import { ArmMeter, armPoints, armSkin, BodySkin, measureArmBody, partDepth, propNormal, propParts, propSurface, type ArmBody, type ArmReport } from './arm-quality.ts';
 import { FACE_MIXES, GESTURES, STATE_FACES, envelope, gestureCycle, holdingsOf, pointObjects, resolveTiming, validateSheet, type BeatSheet, type Direction, type Holding, type ObjectSpec, type PerformerSpec, type Place, type Point, type Resolved, type Side } from './beats.ts';
 import { FINGERS, HAND_SHAPES, blendPose, shapePose, type FingerName, type HandPose } from './hands.ts';
-import { armRestOffset, bodyUp, hangArm, moveBoneWorld, orientHand, plantFeet, restElbowHint, rotateBoneWorld, solveArm, toWorld, turnBody, TURN_SHARE } from './pose.ts';
+import { armRestOffset, bodyUp, hangArm, keepingTwist, rollHand, moveBoneWorld, orientHand, plantFeet, reachElbowHint, restElbowHint, rotateBoneWorld, solveArm, toWorld, turnBody, TURN_SHARE } from './pose.ts';
 import { speakingAt, visemesAt, type LineLips } from './lips.ts';
 import { busy, faceAt, fidgetAt, GLANCE_BLINK_DEG, glanceAt, glanceChest, LIFE_FIDGET, LIFE_SIGH, LIFE_WEIGHT, lifeSchedule, MASK_PAD, MASKED_BY, postureAt, sighAt, weightAt, attendArmsAt, attendGate, attendNodAt, attendSchedule, ATTEND_ARMS, type AttendSchedule, type LifeSchedule } from './life.ts';
 import { buildProp, propWorld, type LoadedSource, type Prop } from './props.ts';
@@ -99,6 +100,8 @@ export interface PerformerTrack {
   readonly reaches: { beat: string; side: Side; targetDistance: number; stopShort: number; outOfReach: number }[];
   /** World joint positions per frame, as `scripts/lib/motion-quality.ts` measures a body. */
   readonly motion: MotionFrame[];
+  /** Arm quality over the take (`arm-quality.ts`): overlaps with the body and props, joint ranges. */
+  arms?: ArmReport;
   /** The performer's life events (`life.ts`); undefined when the take has no life. */
   readonly life?: LifeSchedule;
   /** Attending life (`life.ts`), drawn when the take has life; plays only while facing someone. */
@@ -176,6 +179,9 @@ interface Cast {
   readonly morphing: { node: THREE.Object3D; meshes: THREE.Mesh[] }[];
   /** The performer's spoken lines (`lips.ts`), in take time. */
   readonly speech: readonly Speech[];
+  /** The body's skin and the arms' bind frames (`arm-quality.ts`), so the arms keep out of the body. */
+  readonly armBody: ArmBody;
+  readonly skin: BodySkin;
 }
 
 /** A spoken line's lips, starting at take time `at`. */
@@ -217,6 +223,7 @@ export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, 
       return flat ? { ...r, start: r.at, anticipation: 0 } : r;
     })).sort((x, y) => x.start - y.start);
     const ankles0 = { left: toWorld(a, a.legs.left.foot.rootPosition), right: toWorld(a, a.legs.right.foot.rootPosition) };
+    const armBody = measureArmBody(a);
     const morphing: Cast['morphing'] = [];
     const seenNodes = new Set<THREE.Object3D>();
     a.scene.traverse((o) => {
@@ -233,7 +240,8 @@ export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, 
       attend: life && spec.attend !== false ? attendSchedule(spec.seed ?? index + 1, sheet.duration + 1) : undefined, dirs, touched: { left: [], right: [] },
       turnDeg: new Map(), stepWorld: new Map(), fixed: { next: 0, yaw: spec.facing }, ankles0,
       feetMid0: ankles0.left.clone().add(ankles0.right).multiplyScalar(0.5),
-      seen: new Map(), seenBefore: new Map(), seenAt: { t: -Infinity, before: -Infinity }, shortfall: new Map(), morphing, speech: speech.get(spec.id) ?? []
+      seen: new Map(), seenBefore: new Map(), seenAt: { t: -Infinity, before: -Infinity }, shortfall: new Map(), morphing, speech: speech.get(spec.id) ?? [],
+      armBody, skin: new BodySkin(armBody.body)
     };
   });
   // A hand someone reaches to keeps still while they do (its fidget would move what they touch).
@@ -279,6 +287,7 @@ export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, 
     aimChecks.set(f, [...(aimChecks.get(f) ?? []), { c: ci, r }]);
   }));
 
+  const meters = cast.map((c) => new ArmMeter(c.a, c.armBody));
   for (let f = 0; f < frames; f += 1) {
     const t = times[f]!;
     solving.t = t;
@@ -292,6 +301,8 @@ export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, 
       c.a.frame.position.toArray(tr.root.position, f * 3);
       c.a.frame.quaternion.toArray(tr.root.rotation, f * 4);
       tr.motion.push(motionFrame(c.a, t));
+      c.a.scene.updateMatrixWorld(true);
+      meters[ci]!.sample(t, [...stage.props.values()].map((st) => st.prop), (s, prop) => mayTouch(c, s, prop, t));
       see(c, t);
     });
     // Measured as the file plays: every performer at this frame. (A performer
@@ -314,6 +325,7 @@ export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, 
     }
     props.forEach((pt) => { pt.prop.position.toArray(pt.position, f * 3); pt.prop.quaternion.toArray(pt.rotation, f * 4); });
   }
+  tracks.forEach((tr, ci) => { tr.arms = meters[ci]!.report(); });
   return { sheet, fps, times, tracks, props, objects: stage.report };
 }
 
@@ -475,6 +487,146 @@ function placeObjects(cast: Cast[], sheet: BeatSheet, sources: ReadonlyMap<strin
       yaw = Math.atan2(to.x, to.z) / DEG;
     }
     prop.quaternion.copy(yawQuat(yaw));
+  }
+}
+
+/** A hand may touch an object while it holds it or while a direction of that hand points at it. */
+function mayTouch(c: Cast, s: Side, prop: Prop, t: number): boolean {
+  if (gripOf(c.spec.id, s, t)?.prop === prop) return true;
+  const ids = new Set(stage.props.keys());
+  return c.dirs.some((r) => {
+    if (t < r.start || t > r.end + 0.3) return false;
+    const d = r.direction;
+    if (!('side' in d) || d.side !== s) return false;
+    const named = d.kind === 'take' ? [d.object] : d.kind === 'put' ? [d.object, ...(d.on ? [d.on] : []), ...pointObjects(d.at, ids, Object.fromEntries(stage.marks))] : 'at' in d ? pointObjects(d.at as Point, ids, Object.fromEntries(stage.marks)) : [];
+    return named.includes(prop.id);
+  });
+}
+
+/** The deepest point of one arm in the body or a prop it may not touch, metres. */
+function armDepth(c: Cast, t: number, s: Side, props: readonly Prop[]): number {
+  let worst = -Infinity;
+  for (const q of armSkin(c.a, c.armBody, s)) worst = Math.max(worst, c.skin.depth(q.p, q.x.part.endsWith('upper arm') ? (p) => p === 'torso' : undefined).depth);
+  const pts = armPoints(c.a, c.armBody, s);
+  for (const prop of props) {
+    const free = mayTouch(c, s, prop, t);
+    for (const part of propParts(prop)) for (const pt of pts) if (!(pt.hand && free)) worst = Math.max(worst, partDepth(prop, part, pt.p, pt.r));
+  }
+  return worst;
+}
+
+/** Elbow swivels tried about the shoulder-to-wrist line when the pushes leave an arm in something, degrees from where it is. */
+const SWIVELS = [30, -30, 60, -60, 90, -90, 120, -120, 150, -150, 180];
+
+/**
+ * The last resort for an arm the pushes cannot clear (a hand inside an oven,
+ * the forearm through its top): keep the wrist where it is and swing the
+ * elbow about the shoulder-to-wrist line to the clearest place, the nearest
+ * swivel that is clear, or else the one that is least deep.
+ */
+function swivelClear(cast: Cast[], c: Cast, t: number, s: Side, props: readonly Prop[]): void {
+  const a = c.a;
+  const ch = a.arms[s];
+  c.skin.pose();
+  const start = armDepth(c, t, s, props);
+  if (start <= CLEAR.slack) return;
+  const shoulder = ch.upperArm.getWorldPosition(new THREE.Vector3());
+  const wrist = ch.hand.getWorldPosition(new THREE.Vector3());
+  const line = wrist.clone().sub(shoulder).normalize();
+  const out = ch.foreArm.getWorldPosition(new THREE.Vector3()).sub(shoulder);
+  out.addScaledVector(line, -out.dot(line));
+  if (out.lengthSq() < 1e-8) return;
+  out.normalize();
+  const frameInv = a.frame.getWorldQuaternion(new THREE.Quaternion()).invert();
+  const fore = ch.foreArm.quaternion.clone();
+  const upper = ch.upperArm.quaternion.clone();
+  const hand = ch.hand.quaternion.clone();
+  const save = (): [THREE.Quaternion, THREE.Quaternion, THREE.Quaternion] => [ch.upperArm.quaternion.clone(), ch.foreArm.quaternion.clone(), ch.hand.quaternion.clone()];
+  const load = (q: [THREE.Quaternion, THREE.Quaternion, THREE.Quaternion]): void => { ch.upperArm.quaternion.copy(q[0]); ch.foreArm.quaternion.copy(q[1]); ch.hand.quaternion.copy(q[2]); a.frame.updateMatrixWorld(true); };
+  let best = { depth: start, pose: save() };
+  for (const deg of SWIVELS) {
+    load([upper, fore, hand]);
+    const hint = out.clone().applyAxisAngle(line, deg * DEG).applyQuaternion(frameInv);
+    keepingTwist(a, s, () => solveArm(a, s, wrist, { elbowHint: hint }));
+    a.frame.updateMatrixWorld(true);
+    const d = armDepth(c, t, s, props);
+    if (d < best.depth - 0.002) best = { depth: d, pose: save() };
+    if (d <= CLEAR.slack) break;
+  }
+  load(best.pose);
+  moveHeld(cast, c, t);
+}
+
+/** How far an arm may sink before the clearance moves it, and how far clear it lands, metres. */
+const CLEAR = { slack: 0.004, margin: 0.008, passes: 8 } as const;
+
+/**
+ * Keeps each arm out of the body, the head and the objects it is not
+ * touching. Each pass finds the deepest point of the arm under the skin or
+ * a surface: a hand (or what it holds) moves the wrist out along the
+ * surface's normal; a forearm or upper arm moves the elbow out instead, so
+ * the hand stays where it was sent. The hand keeps its turn and its fingers.
+ */
+function clearArms(cast: Cast[], c: Cast, t: number): void {
+  const a = c.a;
+  a.frame.updateMatrixWorld(true);
+  c.skin.pose();
+  const props = [...stage.props.values()].map((st) => st.prop);
+  for (const s of SIDES) {
+    const ch = a.arms[s];
+    // The first way out of each surface, kept for the later passes: in a thin slab the nearest face flips as the arm crosses its middle.
+    const ways = new Map<string, THREE.Vector3>();
+    let last = Infinity;
+    for (let pass = 0; pass < CLEAR.passes; pass += 1) {
+      let worst: { depth: number; normal: THREE.Vector3; along: number; upper: THREE.Vector3 | null } = { depth: CLEAR.slack, normal: new THREE.Vector3(), along: 1, upper: null };
+      for (const q of armSkin(a, c.armBody, s)) {
+        const d = c.skin.depth(q.p, q.x.part.endsWith('upper arm') ? (p) => p === 'torso' : undefined);
+        if (d.depth > worst.depth) worst = { depth: d.depth, normal: d.away, along: q.along, upper: q.x.part.endsWith('upper arm') ? q.p : null };
+      }
+      const pts = armPoints(a, c.armBody, s);
+      for (const prop of props) {
+        const free = mayTouch(c, s, prop, t);
+        for (const [k, part] of propParts(prop).entries()) for (const pt of pts) {
+          if (pt.hand && free) continue;
+          const d = partDepth(prop, part, pt.p, pt.r);
+          if (d <= worst.depth) continue;
+          const key = `${prop.id}/${k}`;
+          const way = ways.get(key) ?? propNormal(prop, part, pt.p, pt.r);
+          ways.set(key, way);
+          worst = { depth: d, normal: way, along: pt.along, upper: pt.upper ? pt.p : null };
+        }
+      }
+      const held = gripOf(c.spec.id, s, t);
+      if (held && held.weight > 0.5) {
+        for (const q of propSurface(held.prop)) {
+          const d = c.skin.depth(q);
+          if (d.depth > worst.depth) worst = { depth: d.depth, normal: d.away, along: 1, upper: null };
+        }
+      }
+      if (worst.depth <= CLEAR.slack) break;
+      const push = worst.normal.clone().multiplyScalar(worst.depth + CLEAR.margin);
+      const shoulder = ch.upperArm.getWorldPosition(new THREE.Vector3());
+      const elbow = ch.foreArm.getWorldPosition(new THREE.Vector3());
+      const wrist = ch.hand.getWorldPosition(new THREE.Vector3());
+      if (worst.upper) {
+        // A point on the upper arm moves its share of the elbow's move: as far along the upper arm as it is.
+        const bone = elbow.clone().sub(shoulder);
+        const k = THREE.MathUtils.clamp(worst.upper.clone().sub(shoulder).dot(bone) / Math.max(1e-6, bone.lengthSq()), 0.3, 1);
+        elbow.addScaledVector(push, 1 / k);
+        // The elbow alone did not get it out (the hand is held in place): move the whole arm.
+        if (worst.depth > 0.7 * last) wrist.add(push);
+      } else if (worst.along >= 0.75) { wrist.add(push); elbow.addScaledVector(push, 0.5); } else elbow.addScaledVector(push, 1 / Math.max(0.3, 1 - worst.along));
+      const line = wrist.clone().sub(shoulder).normalize();
+      const out = elbow.sub(shoulder);
+      out.addScaledVector(line, -out.dot(line));
+      if (out.lengthSq() < 1e-8) break;
+      const hint = out.normalize().applyQuaternion(a.frame.getWorldQuaternion(new THREE.Quaternion()).invert());
+      keepingTwist(a, s, () => solveArm(a, s, wrist, { elbowHint: hint }));
+      a.frame.updateMatrixWorld(true);
+      moveHeld(cast, c, t);
+      last = worst.depth;
+    }
+    swivelClear(cast, c, t, s, props);
   }
 }
 
@@ -1114,6 +1266,10 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
   for (const s of SIDES) {
     // The wrist's rest offset from the shoulder, turned with the torso and the body.
     const local = armRestOffset(a, s);
+    // Clear of the hip as it is now: a weight shift moves the hip out under the hanging arm.
+    a.frame.updateMatrixWorld(true);
+    const hipOut = (s === 'left' ? 1 : -1) * (a.body.worldToLocal(a.legs[s].upLeg.bone.getWorldPosition(new THREE.Vector3())).x - a.body.worldToLocal(a.arms[s].upperArm.getWorldPosition(new THREE.Vector3())).x);
+    local.x = (s === 'left' ? 1 : -1) * Math.max(Math.abs(local.x), c.armBody.restOut[s] + Math.max(0, hipOut - c.armBody.hipOut[s]));
     const held = gripOf(c.spec.id, s, t);
     if (held) local.x += (s === 'left' ? 1 : -1) * held.prop.halfWidth * held.weight;
     local.applyAxisAngle(new THREE.Vector3(0, 1, 0), torsoYaw);
@@ -1219,8 +1375,8 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
       if (!flat) point.addScaledVector(new THREE.Vector3(s === 'left' ? 1 : -1, 0, 0.6).applyQuaternion(bodyQ), 0.04 * arc);
       const toward = restNormal.clone().lerp(palm!, clamp01(w)).normalize();
       const wrist = a.arms[s].hand.getWorldPosition(new THREE.Vector3()).add(point.clone().sub(restAt));
-      // The elbow turns from hanging (back) to the rig's reaching bend (out) as the arm lifts.
-      const elbowHint = restElbowHint(a, s).lerp(a.arms[s].elbowHintLocal, clamp01(w) * elbowOut).normalize();
+      // The elbow turns from hanging (back) to a reaching elbow (down and a little out) as the arm lifts.
+      const elbowHint = restElbowHint(a, s).lerp(reachElbowHint(a, s), clamp01(w) * elbowOut).normalize();
       const at = new THREE.Vector3();
       // The elbow swung about the shoulder-to-hand line (the upper arm's rotation), in the avatar's frame.
       const solveWith = (swivel: number, withTurns: readonly { r: Resolved; e: number }[]): void => {
@@ -1263,7 +1419,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
   }
 
   // A flat take stops here: bind fingers, a still face, eyes fixed in the head (held objects still follow the hands).
-  if (flat) { moveHeld(cast, c, t); return; }
+  if (flat) { moveHeld(cast, c, t); clearArms(cast, c, t); return; }
 
   // 8. Hands: relaxed, opened by a reach, shaped by hand directions (fingers arrive one after another).
   for (const s of SIDES) {
@@ -1310,10 +1466,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
       pose = blendPose(pose, target, e);
     }
     if (clasp > 0) pose = blendPose(pose, CLASP_HAND, clasp);
-    if (rubRoll !== 0) {
-      const forearm = a.arms[s].hand.getWorldPosition(new THREE.Vector3()).sub(a.arms[s].foreArm.getWorldPosition(new THREE.Vector3())).normalize();
-      rotateBoneWorld(a.arms[s].hand, new THREE.Quaternion().setFromAxisAngle(forearm, rubRoll * DEG));
-    }
+    if (rubRoll !== 0) rollHand(a, s, rubRoll * DEG);
     if (life) {
       const curl = { ...pose.curl } as Record<FingerName, number>;
       const still = 1 - 0.7 * (held?.weight ?? 0);
@@ -1326,14 +1479,14 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
       pose = { curl, spread: pose.spread };
       const roll = free * fidgetAt(c.events, s, t);
       if (roll > 0) {
-        const forearm = a.arms[s].hand.getWorldPosition(new THREE.Vector3()).sub(a.arms[s].foreArm.getWorldPosition(new THREE.Vector3())).normalize();
-        rotateBoneWorld(a.arms[s].hand, new THREE.Quaternion().setFromAxisAngle(forearm, (s === 'left' ? 1 : -1) * LIFE_FIDGET.rollDeg * DEG * roll));
+        rollHand(a, s, (s === 'left' ? 1 : -1) * LIFE_FIDGET.rollDeg * DEG * roll);
       }
     }
     hand.apply(pose);
   }
   a.frame.updateMatrixWorld(true);
   moveHeld(cast, c, t);
+  clearArms(cast, c, t);
 
   // 9. Face: expressions summed, life's face under them, then blinks (always, and on a big look shift), then gaze.
   const weights: FaceWeights = {};
