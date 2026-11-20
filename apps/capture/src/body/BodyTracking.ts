@@ -52,6 +52,8 @@ export class BodyTracking {
   readonly head: BodyHeadInput = { worldPosition: new THREE.Vector3(), worldQuaternion: new THREE.Quaternion(), yaw: 0, localPosition: new THREE.Vector3() };
   // Root move planned toward the head, applied through the character motor.
   readonly displacement = new THREE.Vector3();
+  // The rig's last input move (the thumbstick), which the head carries too: the motor moves the root by it already.
+  readonly carried = new THREE.Vector3();
   readonly prevHeadLocal = new THREE.Vector3();
   hasPrevHeadLocal = false;
   private readonly raycaster = new THREE.Raycaster();
