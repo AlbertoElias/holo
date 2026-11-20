@@ -56,7 +56,7 @@ interface VrChromeDeps {
   /** A pick on the headset look panel: the house avatar wears it (docs/features/your-look.md, slice 2). */
   setLook: (next: HouseLook) => void;
   /** Runs the mirror's draw with the first-person head shown; returns how many head meshes showed. */
-  withHeadShown: (draw: () => void) => number;
+  withHeadShown: (draw: () => void, layer: number) => number;
   /** True when a first-person head mesh is visible to the eye now. */
   headVisibleToEye: () => boolean;
 }
@@ -156,6 +156,8 @@ export class VrChrome {
   private mirror: VrMirror | null = null;
   private lookOpen = false;
   private placeLook = false;
+  /** The look the mirror's layers were last set for: a change brings new meshes. */
+  private mirrorLayersFor: unknown = null;
   /** The select holding Speak: its release, tracking loss or blur ends the hold. */
   private speakHold: { hand: Hand; source: XRInputSource; session: XRSession; end: () => void } | null = null;
   /** The tray's item count when a pick was made, so the panel can say it landed. */
@@ -313,6 +315,7 @@ export class VrChrome {
 
   private closeLook(): void {
     this.lookOpen = false;
+    this.mirrorLayersFor = null;
     this.look?.setVisible(false);
     this.mirror?.setVisible(false);
   }
@@ -672,7 +675,12 @@ export class VrChrome {
     this.look.setVisible(shown);
     this.mirror.setVisible(shown);
     if (!this.lookOpen) return;
-    this.mirror.update(this.deps.scene);
+    const look = state.houseLook;
+    const layersKey = look && look.status === 'ready' ? look.look : null;
+    if (this.mirrorLayersFor === null || (layersKey !== null && layersKey !== this.mirrorLayersFor)) {
+      this.mirror.refreshLayers(this.deps.scene);
+      this.mirrorLayersFor = layersKey ?? this.mirrorLayersFor ?? true;
+    }
     this.look.update(camera, state.houseLook);
   }
 

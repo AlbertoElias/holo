@@ -32,8 +32,8 @@ export interface VrMirrorProbe {
 
 export interface VrMirrorOptions {
   getAvatarRoot(): THREE.Object3D | null;
-  /** Runs a draw with the first-person head shown; returns how many meshes it showed. */
-  withHeadShown(draw: () => void): number;
+  /** Runs a draw with the first-person head shown; returns how many head meshes it showed on `layer`. */
+  withHeadShown(draw: () => void, layer: number): number;
 }
 
 const headPosition = new THREE.Vector3();
@@ -62,8 +62,11 @@ export class VrMirror {
       // In passthrough there is no world behind the avatar: its ground is deep sea, not the camera's clear.
       const background = scene.background;
       if (!background) scene.background = GROUND;
-      const shown = this.options.withHeadShown(() => draw(renderer, scene, camera, geometry, material, group));
+      // The reflector draws nothing when its face turns from the camera (its own early return): count only real passes.
+      const faces = this.facesCamera(camera);
+      const shown = this.options.withHeadShown(() => draw(renderer, scene, camera, geometry, material, group), MIRROR_LAYER);
       scene.background = background;
+      if (!faces) return;
       this.renders += 1;
       if (shown > 0) this.headShownRenders += 1;
     };
@@ -94,13 +97,24 @@ export class VrMirror {
     this.group.lookAt(headPosition.x, at.y, headPosition.z);
   }
 
+  /** The reflector's own facing test: its +Z normal points toward the camera. */
+  private facesCamera(camera: THREE.Camera): boolean {
+    const mirrorAt = new THREE.Vector3().setFromMatrixPosition(this.reflector.matrixWorld);
+    const cameraAt = new THREE.Vector3().setFromMatrixPosition(camera.matrixWorld);
+    const normal = new THREE.Vector3(0, 0, 1).applyMatrix4(new THREE.Matrix4().extractRotation(this.reflector.matrixWorld));
+    return mirrorAt.sub(cameraAt).dot(normal) <= 0;
+  }
+
   setVisible(visible: boolean): void {
     this.group.visible = visible;
   }
 
-  /** While it shows: the avatar's meshes (new after each look change) and the lights join the mirror's layer. */
-  update(scene: THREE.Scene): void {
-    if (!this.group.visible) return;
+  /**
+   * The avatar's meshes and the lights join the mirror's layer. Run it on
+   * open and after each look change (a change brings new meshes), not each
+   * frame: it walks the whole scene.
+   */
+  refreshLayers(scene: THREE.Scene): void {
     this.options.getAvatarRoot()?.traverse((object) => object.layers.enable(MIRROR_LAYER));
     scene.traverse((object) => {
       if ((object as THREE.Light).isLight) object.layers.enable(MIRROR_LAYER);

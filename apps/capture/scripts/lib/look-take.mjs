@@ -98,7 +98,7 @@ export async function runIwerLookTake({ browser, baseUrl, artifactDir, consoleEr
       if (Math.abs(distance - tokens.placement.worldPanelDefaultM) > 0.05) fail(`the ${name} opened ${distance} m away`);
     }
     if (opened.gapRad <= 0) fail(`the mirror and the panel overlap (gap ${opened.gapRad} rad)`);
-    if (opened.panelSizeM[0] > 0.95 || opened.panelSizeM[1] > 0.65) fail(`the look panel is ${opened.panelSizeM.join(' × ')} m, over about 0.9 × 0.6 m`);
+    if (opened.panelSizeM[0] > 0.95 || opened.panelSizeM[1] > 0.65) fail(`the look panel is ${opened.panelSizeM.join(' × ')} m, over about 0.9 × 0.65 m`);
     if (opened.settingsVisible || opened.findVisible) fail(`settings=${opened.settingsVisible} find=${opened.findVisible} stayed open beside Look`);
     if (opened.tab !== 'body') fail(`Look opened on the ${opened.tab} tab`);
     if (opened.nearestLabelM < tokens.type.headsetLabelMinDistanceM) fail(`text shows ${opened.nearestLabelM} m from the head`);
@@ -150,8 +150,9 @@ export async function runIwerLookTake({ browser, baseUrl, artifactDir, consoleEr
     // Open it again, then a take: Record closes Look and Look leaves the wrist.
     await selectTarget(page, step, 'look');
     await until(page, step, (v) => v.look?.panel?.visible, 'Look open again', fail, 120);
-    await controller('right', REST.right, [0, 0, 0, 1]);
-    await clickButton(page, 'Start Recording');
+    // Record on the wrist, by the controller ray: the headset's own path.
+    const recordHit = await selectTarget(page, step, 'record');
+    if (recordHit.hit !== 'record') fail(`the right ray rested on ${recordHit.hit}, not the wrist's Record glyph`);
     await page.getByRole('button', { name: 'Stop Recording', exact: true }).waitFor({ timeout: 10_000 });
     await step(10);
     vr = await chrome(page);

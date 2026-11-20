@@ -214,7 +214,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     getOpenTrace: () => recording.recorder.pointSamples.openTrace(),
     // `houseLook` is built below; these run only once Look opens.
     setLook: (next) => void houseLook.setLook(next),
-    withHeadShown: (draw) => avatar.withFirstPersonHeadShown(draw),
+    withHeadShown: (draw, layer) => avatar.withFirstPersonHeadShown(draw, layer),
     headVisibleToEye: () => avatar.firstPersonHeadVisibleToEye()
   });
   // Recenter, from the AR control or the phone dock: refused while a take is starting, recording or exporting.

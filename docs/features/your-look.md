@@ -281,7 +281,7 @@ of eight fits in 0.87 m), each with the value's word under it. The chosen
 picture holds the gold ring and dot, and its word is full text colour; the
 others are muted. The chosen tab has the gold rule under its word. Rays
 only, as Find at 1.5 m; every hit area is at least 56 apx. The panel is
-about 0.9 m × 0.6 m at most, so it needs no scroll.
+about 0.9 m × 0.65 m at most, so it needs no scroll.
 
 **The glyph.** A provisional Look glyph (a head and shoulders, lines on the
 16 × 16 viewBox) in `packages/xr-ui-core/src/provisionalGlyphs.ts`, as

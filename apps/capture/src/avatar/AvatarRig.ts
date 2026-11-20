@@ -799,25 +799,37 @@ export class AvatarRig {
    * Runs `draw` with the first-person hidden meshes (the head) shown, then
    * hides them again: the headset mirror's own render sees the head, the eye's
    * does not (docs/features/your-look.md, slice 2). Returns how many head
-   * meshes showed in that draw.
+   * meshes showed in that draw and were on `layer`, the draw's camera layer.
    */
-  withFirstPersonHeadShown(draw: () => void): number {
+  withFirstPersonHeadShown(draw: () => void, layer: number): number {
+    const onLayer = (): number => this.firstPersonHiddenMeshes.filter((mesh) => mesh.visible && mesh.layers.isEnabled(layer)).length;
     if (this.firstPersonVisualMode === 'off') {
       draw();
-      return this.firstPersonHiddenMeshes.length;
+      return onLayer();
     }
     this.setFirstPersonHeadVisible(true);
+    let shown = 0;
     try {
+      shown = onLayer();
       draw();
     } finally {
       this.setFirstPersonHeadVisible(false);
     }
-    return this.firstPersonHiddenMeshes.length;
+    return shown;
   }
 
-  /** True when any first-person head mesh is visible to the eye now (for the headset look check). */
+  /**
+   * True when a head mesh is visible to the eye now (for the headset look
+   * check): one of the first-person hidden meshes, or a hair or glasses mesh
+   * the classification missed.
+   */
   firstPersonHeadVisibleToEye(): boolean {
-    return this.firstPersonHiddenMeshes.some((mesh) => mesh.visible);
+    if (this.firstPersonHiddenMeshes.some((mesh) => mesh.visible)) return true;
+    let missed = false;
+    this.avatarRoot.traverse((object) => {
+      if (isThreeMesh(object) && object.visible && /^(Hair|Glasses)_/.test(object.name) && !this.firstPersonHiddenMeshes.includes(object)) missed = true;
+    });
+    return missed;
   }
 
   private setFirstPersonHeadVisible(visible: boolean): void {
