@@ -29,8 +29,8 @@ export const HAND_SHAPES = {
   grip: { curl: { thumb: 0.55, index: 0.62, middle: 0.66, ring: 0.7, little: 0.74 }, spread: 0.1 },
   // The hand held back: fingers half-closed, not a fist.
   withheld: { curl: { thumb: 0.45, index: 0.48, middle: 0.55, ring: 0.6, little: 0.66 }, spread: 0.05 },
-  // Thumb tip to index tip, the other fingers loose. Measured gap: 2.2 to 3.4 mm on the house base, 14.6 mm on the stock avatar.
-  pinch: { curl: { thumb: 0.65, index: 0.55, middle: 0.25, ring: 0.3, little: 0.35 }, spread: 0.1 }
+  // Thumb tip to index tip, the other fingers open and fanned so the pinch stands out. Measured gap: 3.0 to 4.1 mm on the house base, 13.9 mm on the stock avatar.
+  pinch: { curl: { thumb: 0.65, index: 0.55, middle: 0.1, ring: 0.12, little: 0.15 }, spread: 0.2 }
 } as const satisfies Record<string, HandPose>;
 export type HandShapeName = keyof typeof HAND_SHAPES;
 
