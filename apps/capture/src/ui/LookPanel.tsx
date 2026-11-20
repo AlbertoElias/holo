@@ -168,7 +168,9 @@ function Pictures<T extends string>({ label, row, value, options: choices, input
                 alt=""
                 width={PICTURE}
                 height={PICTURE}
-                loading="lazy"
+                // Eager: in a row that scrolls sideways, a lazy picture starts loading
+                // only as it nears the screen, so a swipe met empty tiles. All rows
+                // together weigh about 300 KB.
                 decoding="async"
                 draggable={false}
                 style={{ display: 'block', width: PICTURE, height: PICTURE, borderRadius: tokens.chip.radius / 2, background: tokens.color.ground.mid }}

@@ -376,6 +376,26 @@ test.describe("phone by touch", () => {
     await expect.poll(async () => { const box = (await sheet.boundingBox())!; return Math.round(box.x + box.width); }, { message: "the sheet unfolds from that corner's side" }).toBe(PHONE.width);
   });
 
+  // Failure mode: the title of one hologram's page (a share link, or after Post) runs under its "All holograms" chip.
+  test("one hologram's page starts its title below the All holograms chip", async ({ page }) => {
+    const long = { ...first, hologramName: "The whole kitchen, the morning before the guests came" };
+    await mockFeed(page, [long]);
+    await page.goto(`/h/${long.id}`);
+    const home = page.getByRole("button", { name: "All holograms" });
+    await expect(home).toBeVisible();
+    const homeBox = (await home.boundingBox())!;
+    const chip = (await page.locator(".feed-context").boundingBox())!;
+    expect(chip.x, "the chip keeps clear of the left back-swipe edge").toBeGreaterThanOrEqual(PHONE_EDGES.side - 0.5);
+    expect(homeBox.x, "the word sits inside its chip").toBeGreaterThanOrEqual(chip.x - 0.5);
+    expect(homeBox.x + homeBox.width, "the word sits inside its chip").toBeLessThanOrEqual(chip.x + chip.width + 0.5);
+    const pageTitle = (await page.locator(".feed-card-title").first().boundingBox())!;
+    expect(pageTitle.y - (chip.y + chip.height), "the title starts a glyph gap below the chip").toBeGreaterThanOrEqual(tokens.glyph.gap - 1);
+    // Below the corners' row, the title no longer shares a line with Search and Settings, so it keeps the card's width.
+    const search = (await page.getByRole("button", { name: "Search" }).boundingBox())!;
+    expect(pageTitle.x + pageTitle.width, "the title runs past where the corner starts").toBeGreaterThan(search.x);
+    await shot(page, "phone-one-hologram-title");
+  });
+
   test("every reach control fits the screen at the touch minimum, clear of the gesture edges", async ({ page }) => {
     const sounding = await avatarWithSound();
     await installProbe(page);
@@ -540,6 +560,13 @@ plainTest("phone: feed-wide notices sit on the chip", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator('[data-notice="empty"]')).toBeVisible();
   expect(await chipBackground('[data-notice="empty"]'), "the empty feed's notice is on the phone chip").toContain(expected);
+  // Between the corners a phone has room for a word or two: the sentence stood one word to a line there.
+  const emptyChip = (await page.locator('[data-notice="empty"] .feed-notice-chip').boundingBox())!;
+  const lineHeight = await page.locator('[data-notice="empty"] .feed-notice-text').evaluate((text) => parseFloat(getComputedStyle(text).lineHeight));
+  const textHeight = (await page.locator('[data-notice="empty"] .feed-notice-text').boundingBox())!.height;
+  expect(textHeight, "the empty feed's sentence takes at most two lines").toBeLessThanOrEqual(2 * lineHeight + 1);
+  const corner = (await page.getByRole("button", { name: "Search" }).boundingBox())!;
+  expect(emptyChip.y >= corner.y + corner.height || emptyChip.x + emptyChip.width <= corner.x, "the notice clears the Search and Settings corner").toBe(true);
   await shot(page, "phone-notice-empty");
 
   await page.unroute("**/api/holograms?*");
