@@ -25,7 +25,12 @@ export class TrackedHandsSystem extends createSystem() {
     const c = this.capture;
     // The mirror view follows the camera source; CameraSystem (earlier in the step) reads it next step.
     c.camera.mirrorView = c.tracking.isCameraDriven();
-    if (c.frame.arCameraAuthor || !c.motor.hasSpawnResolved()) return;
+    if (c.frame.arCameraAuthor) {
+      // The camera author poses no arms: they go back to their bind lengths.
+      c.hands.restArmLengths();
+      return;
+    }
+    if (!c.motor.hasSpawnResolved()) return;
     if (!c.frame.vrActive) {
       if (c.tracking.isCameraDriven()) {
         c.point.idle();
@@ -51,7 +56,7 @@ export class TrackedHandsSystem extends createSystem() {
     // Once the height fit maps real meters to the avatar, hand offsets are
     // measured from the tracked head; otherwise from the avatar's eyes.
     const fromTrackedHead = tracking.isXrPresenting() && !tracking.mock.enabled && heightFit.eyeHeight !== undefined;
-    c.hands.update((out) => (fromTrackedHead ? tracking.getHeadWorldPosition(out) : avatar.getEyeAnchorWorldPosition(out, config.embodyOffset)));
+    c.hands.update((out) => (fromTrackedHead ? tracking.getHeadWorldPosition(out) : avatar.getEyeAnchorWorldPosition(out, config.embodyOffset)), { deltaSec: c.frame.deltaSec });
   }
 
   // The camera tracker: hands placed from the avatar's shoulders at the avatar's scale, then the head.

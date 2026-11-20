@@ -217,8 +217,9 @@ jitters"), fixed in 1b:
       144 → 74°, scripted hands 109 → 57°, controllers 92 → 51°.
     The wrist accuracy does not change (Quest take p95 0.19 → 0.20 cm,
     scripted hands 0.4 → 0.3 cm). Passthrough gives the same numbers as VR
-    (the same solve). Open, for the owner: the elbow direction (B-073), the
-    clavicle range (B-074) and the controller reach (B-075).
+    (the same solve). The elbow direction (B-073), the clavicle range (B-074)
+    and the controller reach (B-075) were fixed on 2026-11-20 from recorded
+    arms: [`archive/vr-arm-natural.md`](archive/vr-arm-natural.md).
 
 ## Scope
 

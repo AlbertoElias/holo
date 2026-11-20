@@ -25,6 +25,7 @@ import { writeContactSheet } from '@holoim/tooling-testing/preview';
 import type {} from '../src/runtime/automationHooks';
 import { analyzeHandReplay, formatHandReport, type HandReplayFrame, type HandReplayReport } from './lib/hand-fidelity.ts';
 import { framesFromBodySamples, judgeMotion, measureMotion } from './lib/motion-quality.ts';
+import { measureArms, type ArmFrame, type ArmMetrics } from './lib/arm-quality.ts';
 
 declare global {
   interface Window {
@@ -147,6 +148,9 @@ async function replay(fileName: string): Promise<HandReplayReport> {
     if (sheet) console.log(`[hand-replay] contact sheet: ${sheet}`);
   }
   await writeFile(path.join(artifactDir, `${label}-samples.json`), JSON.stringify(frames));
+  // Arm shape (elbow swivel, flips, clavicle range) on the recorded take.
+  const widths = await page.evaluate(() => window.__sampleArmClearance().widths);
+  const arms = measureArms(frames.map((frame) => armFrame(frame as ReplaySample)), widths?.torso ?? null);
   // Motion grading, strictly against the vr-hands row (natural-avatar-motion
   // brief): wrist error and latency against the tracked wrists, jerk, jitter
   // (bar: the target or the tracked input's own jitter), and joint limits on
@@ -159,10 +163,50 @@ async function replay(fileName: string): Promise<HandReplayReport> {
     label,
     durationMs,
     motion: { ...motion, inputJitterP95Mm },
-    failures: [...analysis.failures, ...motionMisses.map((v) => `motion ${v.metric}: ${v.value === null ? 'not measured' : +v.value.toFixed(3)} (target ≤ ${v.target.max})`)]
+    arms,
+    failures: [...analysis.failures, ...motionMisses.map((v) => `motion ${v.metric}: ${v.value === null ? 'not measured' : +v.value.toFixed(3)} (target ≤ ${v.target.max})`), ...armMisses(arms)]
   });
   await writeFile(path.join(artifactDir, `${label}-report.json`), JSON.stringify(report, null, 2));
   return report;
+}
+
+type ReplaySample = HandReplayFrame & { state: { tracking: Record<'left' | 'right', { poseValid: boolean; target: { x: number; y: number; z: number } }> } };
+function armFrame(frame: ReplaySample): ArmFrame {
+  const wrist: ArmFrame['wrist'] = {};
+  for (const side of ['left', 'right'] as const) {
+    const hand = frame.hands?.[side];
+    const tracking = frame.state.tracking[side];
+    // The IK target is what the avatar wrist must reach.
+    const tracked = tracking.poseValid ? ([tracking.target.x, tracking.target.y, tracking.target.z] as [number, number, number]) : hand?.tracked.wrist;
+    wrist[side] = { ...(hand?.source ? { source: hand.source } : {}), ...(tracked ? { tracked } : {}), ...(hand?.avatar.wrist ? { avatar: hand.avatar.wrist } : {}), ...(hand?.wristTwistDeg !== undefined ? { twistDeg: hand.wristTwistDeg } : {}) };
+  }
+  return { timeSec: frame.timeMs / 1000, bones: frame.body?.bones ?? {}, wrist };
+}
+
+// Arm shape bars (docs/features/archive/vr-arm-natural.md): elbows hang down and a
+// little out, no flips, a human clavicle range, no visible stretch, and the
+// wrist on the tracked wrist (up to about 1 cm short on a reach past the arm).
+// The Quest take is one segment, so its protraction bar is the segment bar (30°).
+const ARM_BARS: Array<{ metric: keyof ArmMetrics; min?: number; max: number }> = [
+  { metric: 'swivelMedianDeg', min: 0, max: 70 },
+  { metric: 'elbowFlipsPerMin', max: 0.5 },
+  { metric: 'clavicleElevRangeDeg', max: 30 },
+  { metric: 'claviclePushRangeDeg', max: 30 },
+  { metric: 'armLengthSpreadPct', max: 2.5 },
+  { metric: 'wristErrorP95Cm', max: 1 }
+];
+function armMisses(arms: ArmMetrics): string[] {
+  return ARM_BARS.flatMap(({ metric, min, max }) => {
+    const value = arms[metric];
+    // A metric the samples could not measure (no bones or no targets) fails.
+    if (typeof value !== 'number') return [`arms ${metric}: not measured`];
+    return (min !== undefined && value < min) || value > max ? [`arms ${metric}: ${value.toFixed(1)} (bar ${min ?? '-∞'}..${max})`] : [];
+  });
+}
+
+function formatArms(label: string, arms: ArmMetrics): string {
+  const f = (v: number | null) => (v === null ? '-' : v.toFixed(1));
+  return `[hand-replay] ${label} arms: wrist p95 ${f(arms.wristErrorP95Cm)} cm, swivel median ${f(arms.swivelMedianDeg)}°, elbow up ${f(arms.elbowUpShare === null ? null : arms.elbowUpShare * 100)}%, flips/min ${f(arms.elbowFlipsPerMin)}, clavicle elevation range ${f(arms.clavicleElevRangeDeg)}°, protraction range ${f(arms.claviclePushRangeDeg)}°, length spread ${f(arms.armLengthSpreadPct)}%`;
 }
 
 try {
@@ -175,7 +219,10 @@ try {
   // without changing results; videos render one at a time.
   const concurrency = videoFrameDir ? 1 : Number(process.env.HAND_REPLAY_CONCURRENCY ?? 2);
   reports.push(...await mapWithConcurrency(recordings, concurrency, replay));
-  for (const report of reports) console.log(formatHandReport(report));
+  for (const report of reports) {
+    console.log(formatHandReport(report));
+    if (report.arms) console.log(formatArms(report.label, report.arms));
+  }
   const failures = reports.flatMap((report) => report.failures.map((failure) => `${report.label}: ${failure}`));
   if (consoleErrors.length > 0) failures.push(`console errors:\n${consoleErrors.join('\n')}`);
   if (failures.length > 0) {
