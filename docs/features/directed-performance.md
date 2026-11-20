@@ -3593,11 +3593,13 @@ converter off); it is `upload.mjs`'s unchanged code.
 Three fresh subagents got only `.agents/skills/hologram-authoring/SKILL.md`, a one-line
 idea and a look each. Each had at most three revisions after its first full review.
 The readers and graders were fresh `sonnet` subagents run by the lead, because a
-subagent cannot start its own. No bar changed. All three pieces wear the house base that
-was on `main` on 2026-11-20, which is the old face the owner rejected as uncanny; the
-face-match work (`feature/house-face-match`) had not landed. Nothing was published. The
-pieces stay as local files under `apps/capture/output/authoring/pieces/` for the owner to
-choose from.
+subagent cannot start its own. No bar changed. The runs used the house base that was on
+`main` before the house face landed (4e2e1ee). After that merge the three finals were
+rebuilt from the same sheets on the new face and read again by fresh readers. Nothing was
+published. The pieces stay as local files under `apps/capture/output/authoring/pieces/`
+for the owner to choose from.
+
+Run history, on the old face:
 
 | Piece | Look | First sheet | Versions | Revisions | Final | Face box | Objects | Size | Quick Look | Beats read | Piece reads |
 |---|---|---|---|---|---|---|---|---|---|---|---|
@@ -3605,8 +3607,21 @@ choose from.
 | `shrug-it-off` (a slip laughed off) | broad, espresso, shortTwists silver, house:ink | built, every bar passed | 7 | 3 | v7 | 44.4 px | none | 1.46 MB | pass | 2 of 4 (shrug, laugh) | yes ("awkward to easy and cheerful") |
 | `the-stone` (a stone given as a gift) | medium, goldenSand, centrePart chestnut, house:clay | built; the grip missed until v16 | 23 | 3 | v20 | 40.3 px | grip 0.2 mm, 2.5° | 1.16 MB | pass | 4 of 5 (offer missed) | no |
 
-So no piece is DONE: every final passes the face, object, size and Quick Look bars, and
-every final fails the blind reading on at least one beat. Notes per run:
+Finals rebuilt on the new house face (same sheets, fresh reader and grader each):
+
+| Piece | Version | Face box | Objects | Size | Quick Look | Beats read | Piece reads |
+|---|---|---|---|---|---|---|---|
+| `baker` | v14 (v13 sheet) | 47.1 px | put 6.4 mm, 0.4° | 1.18 MB | pass | 5 of 6 (proud missed) | yes |
+| `shrug-it-off` | v8 (v7 sheet) | 41.3 px | none | 1.57 MB | pass | 3 of 4 (wince missed) | yes |
+| `the-stone` | v25 (v20 sheet) | **38.5 px, fails** | grip 0.2 mm, 2.5° | 1.26 MB | pass | 2 of 5 (notice, rise, offer missed) | no ("finding and then showing a stone") |
+
+So no piece is DONE. On the new face, baker and shrug pass every bar but the blind reading
+(one beat each), and the stone also fails the face bar: the new face is about 2 px shorter
+on the card, and v23's sheet rebuilt as v24 gives 38.1 px. No stone sheet passes the face
+bar on the new face. *Decided by the agent in the owner's absence, for review:* v25 (the
+v20 sheet) is the stone's final, and no further stone revision was made, since the run
+had used its three. The scalp-through-hair fault does not show on the new face (stone v24
+close view, 2.2 to 4.0 s). Notes per run:
 
 - `the-stone` v21 moved the stone further forward to make the offer plain; the face fell
   to 38.4 px. v23 (revision 3) fell to 38.9 px. So v20 stays its best version. *Decided by
@@ -3662,11 +3677,12 @@ Weaknesses that stay open:
 - No named laugh: only face channels give one.
 - A held object keeps the grip pose, and a push toward the camera barely shows on the card.
 - Objects far in front widen the dome and shrink the face under 40 px; the face margin is
-  thin (stone 38.4 to 40.3 px).
+  thin (stone 38.4 to 40.3 px on the old face, 38.1 to 38.5 px on the new one).
 - make.ts fits a grip by the object's place and the palm, not the grip axis; a full review
   takes 7 to 12 minutes of real time.
-- Outside this slice's files: copper hair on porcelain skin reads as bald at card size, and
-  the scalp shows through the top of the hair when the performer bends.
+- Outside this slice's files: copper hair on porcelain skin reads as bald at card size.
+  On the old face the scalp showed through the top of the hair when the performer bent;
+  on the new face it does not.
 - In stone v21 the stone passed into the chin.
 - `preview.mjs` writes its previews beside the image, so a reader leaves files in the
   reader folder.
@@ -3675,7 +3691,7 @@ Weaknesses that stay open:
 
 Proof video (ignored, not committed): `output/agent-path-proof/agent-path-proof.mp4`. It
 shows the stone's run from the idea through six versions with their bar rows, then the
-three finals on the phone card.
+three finals on the phone card, rebuilt on the new house face.
 
 ### Slice 4a evidence (2026-11-18)
 
