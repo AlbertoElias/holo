@@ -8,6 +8,8 @@ import { type HumanoidBoneRef, HumanoidSkeleton, type HumanoidSource } from './H
 import type { RuntimeConfig } from '../config/runtimeConfig';
 import type { TrackedHandJointName, VrHandSide } from '../types/contracts';
 import { palmFrameQuaternion } from '../xr/palmFrame';
+import { ARM_TO_SHOULDER_HEIGHT } from '../ik/armPoseCoefficients';
+import type { ClavicleAngles } from '../ik/armPoseModel';
 import { clamp, isFiniteQuaternionLike, isFiniteVector3Like } from '../shared/math';
 
 export interface ArmIkChain {
@@ -38,6 +40,18 @@ export interface ArmIkChain {
   // Hand twist about the forearm (radians) at the last solve that rolled the
   // forearm; ArmIkSolver unwraps the next twist against it.
   wristTwist?: number;
+  // Whether `shoulder` is a clavicle bone (false: the upper arm's parent stands in).
+  hasClavicle: boolean;
+  // The bone whose frame is the torso frame of the recorded arm model (the
+  // clavicle's parent, or the stand-in shoulder), and its bind rotation in the
+  // avatar root's frame.
+  torso: THREE.Object3D;
+  torsoBindInRoot: THREE.Quaternion;
+  // Arm length for a human ratio of arm to shoulder height (1 = bind; at most
+  // ARM_LENGTH_FIT_MAX). Only the VR solve applies it (ArmIkOptions.armLengthRatio).
+  armLengthFit: number;
+  // The clavicle angles the last modelled solve gave (degrees), for its rate limit.
+  clavicleAngles?: ClavicleAngles | undefined;
 }
 
 export interface HandFingerRetargetEntry {
@@ -152,6 +166,8 @@ const GRIP_TO_PALM: Readonly<Record<VrHandSide, THREE.Quaternion>> = {
   right: new THREE.Quaternion(0.577203, 0.445464, 0.335794, 0.596356)
 };
 
+// The most the VR arm grows for a human arm-to-height ratio (createArmIkChain).
+export const ARM_LENGTH_FIT_MAX = 1.08;
 const CROUCH_POSE_EPSILON = 1e-4;
 const CROUCH_MAX_POSE_AMOUNT = 1.45;
 const CROUCH_FOOT_GROUND_CLEARANCE_RATIO = 0.015;
@@ -549,6 +565,11 @@ export class AvatarRig {
     if (!palmInHand) return undefined;
     const handGripRotationOffset = GRIP_TO_PALM[side].clone().multiply(palmInHand.clone().invert());
 
+    const hasClavicle = Boolean(this.bone(`${side}Shoulder`));
+    const torso = hasClavicle && shoulder.parent ? shoulder.parent : shoulder;
+    const torsoBindInRoot = this.avatarRoot.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(torso.getWorldQuaternion(new THREE.Quaternion()));
+    const armLengthFit = this.armLengthFit(upperLength + lowerLength);
+
     return {
       side,
       shoulder,
@@ -570,8 +591,30 @@ export class AvatarRig {
       elbowHintLocal: new THREE.Vector3(side === 'left' ? 1 : -1, -0.05, 0.25).normalize(),
       foreBindPosition: foreArm.position.clone(),
       handBindPosition: hand.position.clone(),
-      stretch: 1
+      stretch: 1,
+      hasClavicle,
+      torso,
+      torsoBindInRoot,
+      armLengthFit
     };
+  }
+
+  /**
+   * The arm length ratio for a human arm: recorded arms are ARM_TO_SHOULDER_HEIGHT
+   * of the shoulder's height above the lowest foot or toe joint (the fit script
+   * measures the same way). A height-fitted avatar with short arms otherwise
+   * misses every long reach of a user with ordinary arms.
+   */
+  private armLengthFit(armLength: number): number {
+    const shoulderY = this.tmpUpperWorld.y;
+    let floor = Infinity;
+    for (const bone of ['leftFoot', 'rightFoot', 'leftToes', 'rightToes'] as const) {
+      const found = this.bone(bone);
+      if (found) floor = Math.min(floor, found.getWorldPosition(this.tmpForeWorld).y);
+    }
+    const shoulderHeight = shoulderY - floor;
+    if (!Number.isFinite(shoulderHeight) || shoulderHeight <= armLength) return 1;
+    return clamp((ARM_TO_SHOULDER_HEIGHT * shoulderHeight) / armLength, 1, ARM_LENGTH_FIT_MAX);
   }
 
   createHandFingerRetargetChain(side: VrHandSide): HandFingerRetargetChain | undefined {

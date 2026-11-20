@@ -9,6 +9,7 @@
 
 import type { BodySample, HandSample, VrHandSide } from '../../src/types/contracts';
 import type { MotionMetrics } from './motion-quality';
+import type { ArmMetrics } from './arm-quality';
 
 type Vec3 = [number, number, number];
 type Joints = Partial<Record<string, Vec3>>;
@@ -45,7 +46,7 @@ export type HandReplayAnalysis = {
   failures: string[];
 };
 // analyzeHandReplay's result once the check has labelled it.
-export type HandReplayReport = HandReplayAnalysis & { label: string; durationMs: number; motion?: MotionMetrics & { inputJitterP95Mm: number | null } };
+export type HandReplayReport = HandReplayAnalysis & { label: string; durationMs: number; motion?: MotionMetrics & { inputJitterP95Mm: number | null }; arms?: ArmMetrics };
 
 export const THRESHOLDS = Object.freeze({
   // Fraction of tracked frames that must arrive through real XRHand input

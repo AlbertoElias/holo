@@ -127,8 +127,8 @@ for (const [label, viewport] of [["desktop", DESKTOP], ["phone", PHONE]] as cons
     await stubSignedInCreator(page);
     await openFeed(page);
     await page.mouse.move(2, 2);
-    // Away from the card its reach controls fold.
-    await expect(page.locator(`.feed-card[data-card-id="${first.id}"] .portal-controls`)).not.toHaveAttribute("data-reach", "shown");
+    // Away from the card its reach controls fold, at the latest once their idle time has run.
+    await expect(page.locator(`.feed-card[data-card-id="${first.id}"] .portal-controls`)).not.toHaveAttribute("data-reach", "shown", { timeout: tokens.glyph.idleAfter + 5_000 });
     await settleTransitions(page);
     await shot(page, `${label}-feed`);
     const card = page.locator(`.feed-card[data-card-id="${first.id}"]`);
@@ -149,15 +149,20 @@ for (const [label, viewport] of [["desktop", DESKTOP], ["phone", PHONE]] as cons
 
     // A drawing whose word does not show names itself on the chip when a mouse rests on it.
     if (label === "desktop") {
-      const iconOnly = page.locator(".portal-controls button:visible, .feed-dock button:visible");
+      // Under load the hint checks can outlast the reach controls' idle time; folded, they have no width,
+      // so they would drop out of the list mid-loop. Hold the card reached while they are named.
+      const letGo = await holdReach(page, first.id);
+      await expect(controls).toHaveAttribute("data-reach", "shown");
+      const iconOnly = controls.locator("button:visible").or(page.locator(".feed-dock button:visible"));
       const names: string[] = [];
       for (let i = 0; i < await iconOnly.count(); i++) {
         const control = iconOnly.nth(i);
         if ((await control.innerText()).trim()) continue;
         const name = (await control.getAttribute("aria-label"))!;
         await control.hover();
-        const hint = page.locator("[data-hint]");
-        await expect(hint, `${name} names itself on hover`).toHaveText(name);
+        // The hint just left stays mounted while it fades out (Hint.tsx), so pick this control's by its word.
+        const hint = page.locator("[data-hint]").filter({ hasText: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`) });
+        await expect(hint, `${name} names itself on hover`).toHaveCount(1);
         await expect(hint).toHaveCSS("opacity", "1");
         const [at, own] = [await control.boundingBox(), await hint.boundingBox()];
         expect(own!.y + own!.height, `${name}'s hint sits above it`).toBeLessThanOrEqual(at!.y + 1);
@@ -167,6 +172,7 @@ for (const [label, viewport] of [["desktop", DESKTOP], ["phone", PHONE]] as cons
       }
       expect(names, "the foot's drawings and Upload's lantern are all hinted").toEqual(expect.arrayContaining(["Upload a hologram"]));
       expect(names.length).toBeGreaterThanOrEqual(2);
+      await letGo();
       await page.mouse.move(2, 2);
       await expect(page.locator("[data-hint]")).toHaveCount(0);
     }
@@ -376,6 +382,26 @@ test.describe("phone by touch", () => {
     await expect.poll(async () => { const box = (await sheet.boundingBox())!; return Math.round(box.x + box.width); }, { message: "the sheet unfolds from that corner's side" }).toBe(PHONE.width);
   });
 
+  // Failure mode: the title of one hologram's page (a share link, or after Post) runs under its "All holograms" chip.
+  test("one hologram's page starts its title below the All holograms chip", async ({ page }) => {
+    const long = { ...first, hologramName: "The whole kitchen, the morning before the guests came" };
+    await mockFeed(page, [long]);
+    await page.goto(`/h/${long.id}`);
+    const home = page.getByRole("button", { name: "All holograms" });
+    await expect(home).toBeVisible();
+    const homeBox = (await home.boundingBox())!;
+    const chip = (await page.locator(".feed-context").boundingBox())!;
+    expect(chip.x, "the chip keeps clear of the left back-swipe edge").toBeGreaterThanOrEqual(PHONE_EDGES.side - 0.5);
+    expect(homeBox.x, "the word sits inside its chip").toBeGreaterThanOrEqual(chip.x - 0.5);
+    expect(homeBox.x + homeBox.width, "the word sits inside its chip").toBeLessThanOrEqual(chip.x + chip.width + 0.5);
+    const pageTitle = (await page.locator(".feed-card-title").first().boundingBox())!;
+    expect(pageTitle.y - (chip.y + chip.height), "the title starts a glyph gap below the chip").toBeGreaterThanOrEqual(tokens.glyph.gap - 1);
+    // Below the corners' row, the title no longer shares a line with Search and Settings, so it keeps the card's width.
+    const search = (await page.getByRole("button", { name: "Search" }).boundingBox())!;
+    expect(pageTitle.x + pageTitle.width, "the title runs past where the corner starts").toBeGreaterThan(search.x);
+    await shot(page, "phone-one-hologram-title");
+  });
+
   test("every reach control fits the screen at the touch minimum, clear of the gesture edges", async ({ page }) => {
     const sounding = await avatarWithSound();
     await installProbe(page);
@@ -540,6 +566,13 @@ plainTest("phone: feed-wide notices sit on the chip", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator('[data-notice="empty"]')).toBeVisible();
   expect(await chipBackground('[data-notice="empty"]'), "the empty feed's notice is on the phone chip").toContain(expected);
+  // Between the corners a phone has room for a word or two: the sentence stood one word to a line there.
+  const emptyChip = (await page.locator('[data-notice="empty"] .feed-notice-chip').boundingBox())!;
+  const lineHeight = await page.locator('[data-notice="empty"] .feed-notice-text').evaluate((text) => parseFloat(getComputedStyle(text).lineHeight));
+  const textHeight = (await page.locator('[data-notice="empty"] .feed-notice-text').boundingBox())!.height;
+  expect(textHeight, "the empty feed's sentence takes at most two lines").toBeLessThanOrEqual(2 * lineHeight + 1);
+  const corner = (await page.getByRole("button", { name: "Search" }).boundingBox())!;
+  expect(emptyChip.y >= corner.y + corner.height || emptyChip.x + emptyChip.width <= corner.x, "the notice clears the Search and Settings corner").toBe(true);
   await shot(page, "phone-notice-empty");
 
   await page.unroute("**/api/holograms?*");
@@ -628,7 +661,7 @@ test("left-handed, set in the feed's settings: kept on this device, and AR puts 
   const container = page.locator(".xr-view-container");
   await expect(container).toHaveAttribute("data-xr-state", /ready|immersive/, { timeout: 20_000 });
   if ((await container.getAttribute("data-xr-state")) === "ready") await page.getByRole("button", { name: "View in your room" }).click();
-  await waitForIwerSession(page, { environmentBlendMode: "alpha-blend" });
+  await waitForIwerSession(page, { environmentBlendMode: "alpha-blend", timeout: 30_000 });
   await expect.poll(() => page.evaluate(() => {
     const dock = (window as { __HOLOIM_XR_VIEWER__?: { snapshot(): { controls: { dock: { mount: string; hand: string | null } } | null } } }).__HOLOIM_XR_VIEWER__?.snapshot().controls?.dock;
     return dock ? { mount: dock.mount, hand: dock.hand } : null;
@@ -648,7 +681,7 @@ test("AR (R3F fallback): controls at the hologram's foot on the chip, Exit alway
   await page.goto("/?shell=r3f");
   await waitForFeedCardPresented(page);
   await pressViewInAr(page);
-  await waitForIwerSession(page, { environmentBlendMode: "alpha-blend" });
+  await waitForIwerSession(page, { environmentBlendMode: "alpha-blend", timeout: 30_000 });
   const view = page.locator(".ar-view-container");
 
   // Exit is there from the first frame, before anything is placed.

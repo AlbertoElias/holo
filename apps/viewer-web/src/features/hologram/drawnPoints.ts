@@ -86,7 +86,8 @@ export function drawnPoints(root: Object3D, bubble: DrawnBubble, into?: Object3D
  * Where the take moves through, at evenly spaced times: the bones' world
  * positions, with head room over the highest, and the box corners of every
  * mesh the take moves by its own transform (a recorded object, a walk not
- * driven by bones; not the objects with `withoutObjects`), kept to `bubble`
+ * driven by bones; not the objects with `withoutObjects`; with `only`, the
+ * bones and meshes inside it alone, such as the performer's reach), kept to `bubble`
  * when there is one. With `anchor` (a
  * bubble that follows its author), each sample is taken relative to where
  * the anchor is then, and put back where it is now: the dome travels with the
@@ -101,13 +102,13 @@ export function drawnPoints(root: Object3D, bubble: DrawnBubble, into?: Object3D
 export function motionPoints(
   root: Object3D,
   clips: readonly AnimationClip[],
-  { into, anchor, bubble = null, withoutObjects = false }: { into?: Object3D | undefined; anchor?: Object3D | undefined; bubble?: DrawnBubble; withoutObjects?: boolean } = {}
+  { into, anchor, bubble = null, withoutObjects = false, only }: { into?: Object3D | undefined; anchor?: Object3D | undefined; bubble?: DrawnBubble; withoutObjects?: boolean; only?: Object3D | undefined } = {}
 ): Vector3[] {
   const played = clips.filter((clip) => clip.duration > 0);
   if (played.length === 0) return [];
   const bones: Bone[] = [];
   const meshes: Mesh[] = [];
-  root.traverse((child) => {
+  (only ?? root).traverse((child) => {
     const mesh = child as Mesh & Partial<SkinnedMesh>;
     if ((child as Bone).isBone) bones.push(child as Bone);
     else if (mesh.isMesh && !mesh.isSkinnedMesh && mesh.geometry && !isHidden(child, root) && !isInChrome(child) && !(withoutObjects && isInsideRecordedObject(child))) meshes.push(mesh);

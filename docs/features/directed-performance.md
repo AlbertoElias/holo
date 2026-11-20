@@ -4215,7 +4215,7 @@ walk and 34.9 of 35 on the VR walk.
   referent now share the point (their mean). Both avatars read 0 cm.
 
 **Open on the house base (outside `verify:pr`):** the floor reach sinks
-the hips to 0.08 m (B-076). The `object` suite's other failures are on
+the hips to 0.08 m (B-083). The `object` suite's other failures are on
 `main` with the stock avatar too (B-069).
 
 **Emulation only.** None of this was seen on a headset or a phone.

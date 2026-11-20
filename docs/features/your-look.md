@@ -294,7 +294,8 @@ while a dressing runs. The mirror hangs under the chrome root and the
 panel is one of the chrome's IWSDK roots, so recording, export and
 pointing skip them.
 
-**Decided by the agent with the owner away (2026-11-20), for review:**
+**Decided by the agent with the owner away (2026-11-20); the owner agreed
+to all three the same day:**
 
 - D10. A mirror is added in VR, because the brief's mirror does not exist
   there. Other options: no mirror (the author sees only hands and torso), or
@@ -304,8 +305,14 @@ pointing skip them.
   panel: eight rows at 1.5 m would be 0.87 m × 1.2 m or more, past a
   comfortable look up and down (design review, Neon, 2026-11-20). Other
   options: all rows with smaller pictures, or one tab per row (one more
-  step per change). Undo: one panel of all rows.
-- D12. The Look glyph is provisional, as Find's was.
+  step per change). Undo: one panel of all rows. The owner kept the three
+  tabs.
+- D12. The Look glyph is provisional, as Find's was. The owner kept it for
+  now.
+- D13. Under Quest multiview the mirror stays as shipped (flat: three draws
+  it once for both eyes). The owner chose this over a per-eye mirror render
+  now; the physical Quest check stays open, and a fail there brings the
+  per-eye render.
 
 **Failure cases for slice 2:**
 
