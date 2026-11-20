@@ -191,8 +191,9 @@ export class ArmIkSolver {
     this.toTorso(chain, this.tmpP.subVectors(target, this.tmpUpperWorld)).multiplyScalar(1 / armLength);
     const want = clavicleAngles(this.tmpP, this.tmpAngles);
     const last = chain.clavicleAngles;
-    if (last && deltaSec > 0) {
-      const room = CLAVICLE_RATE_DEG_PER_SEC * deltaSec;
+    if (last) {
+      // A step that does not advance time (deltaSec 0) keeps the last angles.
+      const room = CLAVICLE_RATE_DEG_PER_SEC * Math.max(0, deltaSec);
       last.elevationDeg += clamp(want.elevationDeg - last.elevationDeg, -room, room);
       last.protractionDeg += clamp(want.protractionDeg - last.protractionDeg, -room, room);
     } else {
