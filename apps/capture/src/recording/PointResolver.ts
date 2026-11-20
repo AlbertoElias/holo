@@ -456,7 +456,8 @@ export class PointResolver {
     const direction = this.tmpDirection.set(sample.direction.x, sample.direction.y, sample.direction.z).normalize();
     perpendicularBasis(direction, this.tmpBasisU, this.tmpBasisV);
 
-    interface Candidate { target: Target; quality: number; distance: number; localPoint: THREE.Vector3 }
+    // `hits` counts the rays behind `localPoint`, which is their mean.
+    interface Candidate { target: Target; quality: number; distance: number; localPoint: THREE.Vector3; hits: number }
     const candidates = new Map<string, Candidate>();
     let center: Candidate | undefined;
     const ray = new THREE.Vector3();
@@ -471,8 +472,15 @@ export class PointResolver {
         const hit = this.nearestHit(origin, ray, capsules);
         if (!hit) continue;
         const existing = candidates.get(hit.target.key);
-        if (!existing || ring.quality > existing.quality || (ring.quality === existing.quality && hit.distance < existing.distance)) {
-          candidates.set(hit.target.key, { target: hit.target, quality: ring.quality, distance: hit.distance, localPoint: hit.localPoint });
+        if (!existing || ring.quality > existing.quality) {
+          candidates.set(hit.target.key, { target: hit.target, quality: ring.quality, distance: hit.distance, localPoint: hit.localPoint, hits: 1 });
+        } else if (ring.quality === existing.quality) {
+          // The rays of one ring that meet a referent share the point. The nearest ray alone was not stable:
+          // two rays mirrored about the aim meet a surface at the same distance, and noise chose between them,
+          // so one hold gave points 3 cm apart under two placements of the set.
+          existing.localPoint.multiplyScalar(existing.hits).add(hit.localPoint).multiplyScalar(1 / (existing.hits + 1));
+          existing.hits += 1;
+          existing.distance = Math.min(existing.distance, hit.distance);
         }
         if (ring.angleDeg === 0) center = candidates.get(hit.target.key);
       }

@@ -114,9 +114,19 @@ export class FaceRig {
   /**
    * The avatar's meshes changed (a new look): binds the morph targets again.
    * The eye and head bindings stay, because they were read at the bind pose
-   * and the live avatar is posed now.
+   * and the live avatar is posed now. The eye pivot is measured again on the
+   * new eye meshes: it reads each vertex through its skin against the eye
+   * bone, so the pose does not change it.
    */
   rebindMorphs(avatar: THREE.Object3D): void {
+    avatar.updateMatrixWorld(true);
+    for (const side of ['left', 'right'] as const) {
+      const eye = this.eyes[side];
+      if (!eye) continue;
+      const eyeNode = findFirst(avatar, EYE_MESH_NAMES[side], (o) => (o as THREE.Bone).isBone !== true && meshesOf(o).length > 0);
+      const eyeMeshes = eyeNode ? meshesOf(eyeNode) : [];
+      eye.pivotOffsetMm = eyeMeshes.length ? pivotOffset(eye.bone, eyeMeshes) : null;
+    }
     this.morphs.length = 0;
     this.unresolved.length = 0;
     this.suppressed.length = 0;
