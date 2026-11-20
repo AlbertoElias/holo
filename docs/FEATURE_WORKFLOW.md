@@ -16,6 +16,11 @@ and validation tiers.
 | Session pointer | `HANDOFF.md` (next action + unverified only) | Briefs, trackers |
 | Completed features | `docs/features/archive/` | Live brief index status beyond Complete |
 
+Every TODO item ends its first line with an id marker `<!-- T-xxxxxx -->`. A
+new item gets 6 random lowercase hex characters. Never change or reuse an id.
+The marker keeps an item's id when its text changes; `pnpm run doctor` checks
+that every item has one and that no two items share one.
+
 Use this workflow for product behavior changes. Start by copying
 [`templates/FEATURE_BRIEF.md`](templates/FEATURE_BRIEF.md). A small change can keep
 all roles with one agent, but the lead must preserve the review and verification
