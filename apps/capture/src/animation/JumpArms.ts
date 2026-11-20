@@ -37,6 +37,13 @@ const DRIVE_SHARE = 0.18;
 /** The landing holds the clip's arms this long after touch-down, then hands back to the playing pose over LAND_OUT_SEC. */
 const LAND_HOLD_SEC = 0.3;
 const LAND_OUT_SEC = 0.35;
+/**
+ * The clip time runs at most this many times its own pace. The game's wind-up and push-off are shorter than the
+ * recorded ones (the drive to lift-off, 0.4 s of clip, maps onto the flight's first 0.13 s), and played that fast the
+ * arm throw reached 455 m/s² at the wrists; capped, the arms finish the throw early in the flight, which is longer
+ * than the clip's.
+ */
+const MAX_CLIP_RATE = 1.5;
 /** Time constants (s) for the weight rising into a jump (fast: the wind-up is under 0.2 s) and a fall. */
 const IN_SEC = 0.05;
 const FALL_IN_SEC = 0.12;
@@ -104,6 +111,11 @@ export class JumpArms {
     this.sinceTouch = Infinity;
   }
 
+  /** Moves the clip time forward toward `time`, never back and never faster than MAX_CLIP_RATE. */
+  private advance(time: number, dt: number): void {
+    if (time > this.time) this.time = Math.min(time, this.time + dt * MAX_CLIP_RATE);
+  }
+
   update(humanoid: HumanoidSkeleton | undefined, deltaSec: number, phase: JumpPhase, owned: Readonly<Record<'left' | 'right', boolean>>): void {
     const dt = Math.max(0, deltaSec);
     if (humanoid !== this.humanoid || !this.clip) return;
@@ -122,7 +134,7 @@ export class JumpArms {
         ? DRIVE + (LIFT - DRIVE) * (u / DRIVE_SHARE)
         : LIFT + (TOUCH - LIFT) * ((u - DRIVE_SHARE) / (1 - DRIVE_SHARE));
       if (!this.airborne && this.weight < 0.05) this.time = time;
-      this.time = Math.max(this.time, time);
+      this.advance(time, dt);
       if (!this.airborne) this.sinceTouch = Infinity;
       this.airborne = true;
       target = 1;
@@ -130,17 +142,17 @@ export class JumpArms {
     } else if (phase.windup > 0) {
       this.airborne = false;
       this.sinceTouch = Infinity;
-      this.time = SQUAT + (DRIVE - SQUAT) * THREE.MathUtils.clamp(phase.windup, 0, 1);
+      if (this.weight < 0.05) this.time = SQUAT;
+      this.advance(SQUAT + (DRIVE - SQUAT) * THREE.MathUtils.clamp(phase.windup, 0, 1), dt);
       target = 1;
     } else {
       if (this.airborne) {
         // Touch-down: the landing runs from the clip's own touch-down, at its own pace.
         this.airborne = false;
         this.sinceTouch = this.weight > 0.05 ? 0 : Infinity;
-        this.time = Math.max(this.time, TOUCH - 2 / FPS);
       } else this.sinceTouch += dt;
       if (this.sinceTouch < LAND_HOLD_SEC + LAND_OUT_SEC) {
-        this.time = Math.min(ABSORBED, this.time + dt);
+        this.advance(Math.min(ABSORBED, Math.max(this.time + dt, TOUCH - 2 / FPS)), dt);
         target = this.sinceTouch < LAND_HOLD_SEC ? 1 : 0;
         tau = LAND_OUT_SEC / 3;
       } else {

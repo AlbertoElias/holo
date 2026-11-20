@@ -185,6 +185,13 @@ const PELVIS_REACH_DROP_TIME_SEC = 0.06;
 const PELVIS_HOLD_STEP_METERS = 0.01;
 // Feet tuck this far (leg lengths) above the capsule's floor level in the air.
 const AIRBORNE_FOOT_TUCK = 0.08;
+// The tuck grows with the height above the ground over this many tucks, so the
+// feet leave the ground and meet it again with the body instead of jumping by
+// the tuck in one frame.
+const AIRBORNE_TUCK_FADE_TUCKS = 2;
+// In the air the feet ease to their slots under the body with this time
+// constant (s), from where they left the ground.
+const AIRBORNE_FOOT_SETTLE_SEC = 0.08;
 // Standing knee flex is capped (leg lengths); a head lower than that is a crouch.
 const MAX_STANDING_KNEE_FLEX = 0.08;
 // To reach a lean the pelvis may rise this far (leg lengths) above standing.
@@ -665,7 +672,7 @@ export class VrBodySolver {
     this.rootVelocity.lerp(velocityStep, 1 - Math.exp(-dt / ROOT_SPEED_TIME_SEC));
     const landed = this.airborne && grounded;
     this.airborne = !grounded;
-    if (this.airborne || landed) this.placeFeetUnderRoot(rootPosition, ground, this.airborne);
+    if (this.airborne || landed) this.placeFeetUnderRoot(rootPosition, ground, this.airborne, dt);
     else this.updateFeet(rootPosition, dt, ground);
     this.solvePose(head, rootPosition, ground, embodyOffset);
   }
@@ -728,21 +735,34 @@ export class VrBodySolver {
     out.y = y - 0.01;
   }
 
-  // Airborne: feet hang in their slots a little above the capsule's floor
-  // level; on landing they plant there on the ground.
-  private placeFeetUnderRoot(rootPosition: THREE.Vector3, ground: GroundSampler, inAir: boolean): void {
+  // Airborne: the feet ease from where they left the ground to their slots,
+  // tucked a little above the capsule's floor level as the body rises off the
+  // ground; on landing each plants on the ground where it is.
+  private placeFeetUnderRoot(rootPosition: THREE.Vector3, ground: GroundSampler, inAir: boolean, dt: number): void {
     const bind = this.bind!;
+    const leg = bind.dims.legLength;
+    const floorY = rootPosition.y + bind.groundLocalY;
+    const follow = 1 - Math.exp(-dt / AIRBORNE_FOOT_SETTLE_SEC);
     for (const side of ['left', 'right'] as const) {
       const foot = this.feet[side];
-      this.slotWorld(side, rootPosition, this.bodyYawValue, foot.planted);
       if (inAir) {
-        foot.planted.y = rootPosition.y + bind.groundLocalY + AIRBORNE_FOOT_TUCK * bind.dims.legLength;
+        const slot = this.slotWorld(side, rootPosition, this.bodyYawValue, this.stepTarget);
+        foot.planted.x = foot.current.x + (slot.x - foot.current.x) * follow;
+        foot.planted.z = foot.current.z + (slot.z - foot.current.z) * follow;
+        // No ground under the foot (off a ledge) is all the height in the world.
+        const groundY = ground(foot.planted.x, foot.planted.z, this.stepNormal);
+        const height = groundY === undefined ? Infinity : floorY - (groundY - 0.01);
+        const tuck = AIRBORNE_FOOT_TUCK * leg;
+        foot.planted.y = floorY + tuck * clamp(height / (AIRBORNE_TUCK_FADE_TUCKS * tuck), 0, 1);
         foot.normal.set(0, 1, 0);
+        foot.yaw = foot.currentYaw + wrapAngle(this.bodyYawValue - foot.currentYaw) * follow;
       } else {
-        this.footGroundAt(foot.planted, this.bodyYawValue, foot.normal, ground, rootPosition.y + bind.groundLocalY, bind.legs[side].toeForward);
+        foot.planted.x = foot.current.x;
+        foot.planted.z = foot.current.z;
+        this.footGroundAt(foot.planted, foot.currentYaw, foot.normal, ground, floorY, bind.legs[side].toeForward);
+        foot.yaw = foot.currentYaw;
         this.sinceLastLanding = 0;
       }
-      foot.yaw = this.bodyYawValue;
       foot.swinging = false;
       foot.roll = 0;
       foot.current.copy(foot.planted);
