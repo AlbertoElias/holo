@@ -101,7 +101,9 @@ scripts/ci-emulate.sh pnpm --filter @holoim/web exec playwright test e2e/ar.spec
 
 `CI_EMULATE_CPUS` overrides the pinned CPUs (default `0-3`), and
 `CI_EMULATE_PLATFORM` the platform (default `linux/amd64`). `CI_EMULATE_MEMORY` overrides the memory
-limit (default `16g`). One emulation runs at a time: Docker Desktop's VM is
+limit (default `16g`). `CI_EMULATE_NODE_HEAP` sets Node's heap in MB (default
+`4096`, what Node picks on a 16 GB runner; in a smaller Docker VM Node picks
+about 2 GB, and the viewer's Vite build runs out of heap). One emulation runs at a time: Docker Desktop's VM is
 usually smaller than two runners, and overlapping runs crash pages and time
 out navigations that pass on their own, so `ci-emulate.sh` takes the same
 machine-wide lock as `verify:pr` (`scripts/verify-lock.ts`; a second run
