@@ -19,7 +19,7 @@ import {
 import { writeContactSheet } from '@holoim/tooling-testing/preview';
 
 import type {} from '../src/runtime/automationHooks';
-import { measureArms, measureArmsBySegment, type ArmFrame, type TorsoSection } from './lib/arm-quality.ts';
+import { measureArms, measureArmsBySegment, type ArmFrame, type ArmMetrics, type TorsoSection } from './lib/arm-quality.ts';
 import { framesFromBodySamples, measureMotion } from './lib/motion-quality.ts';
 
 // Drives the IWER headset through scripted arm reaches (forward, overhead,
@@ -257,14 +257,63 @@ async function run(browser: Awaited<ReturnType<typeof launchXrBrowser>>, input: 
   return report;
 }
 
+// Gates (docs/features/vr-arm-natural.md). The far forward and overhead
+// targets lie 10% (hand) and about 20% (controller) past the avatar's full
+// reach; their bars stop a regression, they do not ask for a stretch.
+type Gate = { segment?: string; metric: keyof ArmMetrics; min?: number; max?: number };
+const GATES: Record<'hand' | 'controller', Gate[]> = {
+  hand: [
+    { segment: 'forward', metric: 'wristErrorP95Cm', max: 1.5 },
+    { segment: 'forward-far', metric: 'wristErrorP95Cm', max: 6.5 },
+    { segment: 'overhead', metric: 'wristErrorP95Cm', max: 6.5 }
+  ],
+  controller: [
+    { segment: 'forward', metric: 'wristErrorP95Cm', max: 1.5 },
+    { segment: 'forward-far', metric: 'wristErrorP95Cm', max: 13 },
+    { segment: 'overhead', metric: 'wristErrorP95Cm', max: 13 }
+  ]
+};
+const SHARED_GATES: Gate[] = [
+  // Elbows hang down and a little out (B-073).
+  ...['rest', 'stand', 'walk'].map((segment) => ({ segment, metric: 'swivelMedianDeg' as const, min: 0, max: 70 })),
+  { segment: 'side-low', metric: 'swivelMedianDeg', min: -90, max: 90 },
+  { metric: 'elbowFlipsPerMin', max: 0.5 },
+  // A human clavicle range (B-074).
+  { metric: 'clavicleElevRangeDeg', max: 30 },
+  { metric: 'claviclePushRangeDeg', max: 45 },
+  { metric: 'clavicleMaxStepDeg', max: 8 },
+  // No visible stretch (B-075).
+  { metric: 'armLengthSpreadPct', max: 2.5 }
+];
+const SEGMENT_CLAVICLE_MAX_DEG = 30;
+
+function judge(report: Awaited<ReturnType<typeof run>>): string[] {
+  const misses: string[] = [];
+  const check = (where: string, metrics: ArmMetrics | undefined, gate: Gate) => {
+    const value = metrics?.[gate.metric];
+    if (typeof value !== 'number') return misses.push(`${where} ${gate.metric}: not measured`);
+    if ((gate.min !== undefined && value < gate.min) || (gate.max !== undefined && value > gate.max)) misses.push(`${where} ${gate.metric}: ${value.toFixed(1)} (bar ${gate.min ?? '-∞'}..${gate.max ?? '∞'})`);
+  };
+  for (const gate of [...SHARED_GATES, ...GATES[report.label as 'hand' | 'controller']]) {
+    if (gate.segment && only && !gate.segment.startsWith(only)) continue;
+    check(gate.segment ?? 'overall', gate.segment ? report.segments[gate.segment] : report.overall, gate);
+  }
+  for (const [name, m] of Object.entries(report.segments)) {
+    for (const metric of ['clavicleElevRangeDeg', 'claviclePushRangeDeg'] as const) check(name, m, { metric, max: SEGMENT_CLAVICLE_MAX_DEG });
+  }
+  return misses;
+}
+
 const fmt = (v: number | null) => (v === null ? '  -  ' : Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(1));
 await mkdir(artifactDir, { recursive: true });
 const browser = await launchXrBrowser(chromium);
 const consoleErrors: string[] = [];
+const misses: string[] = [];
 try {
   for (const input of inputs) {
     const report = await run(browser, input, consoleErrors);
-    console.log(`\n[arm-reach] ${report.label}: wristP95 ${fmt(report.overall.wristErrorP95Cm)} cm, flips/min ${fmt(report.overall.elbowFlipsPerMin)}, torso min ${fmt(report.overall.elbowTorsoMinCm)} cm, pops ${JSON.stringify((report.motion as Record<string, unknown>).popsPerMin ?? null)}`);
+    misses.push(...judge(report).map((miss) => `${report.label} ${miss}`));
+    console.log(`\n[arm-reach] ${report.label}: wristP95 ${fmt(report.overall.wristErrorP95Cm)} cm, flips/min ${fmt(report.overall.elbowFlipsPerMin)}, torso min ${fmt(report.overall.elbowTorsoMinCm)} cm, length spread ${fmt(report.overall.armLengthSpreadPct)}%, pops ${JSON.stringify((report.motion as Record<string, unknown>).popsPerMin ?? null)}`);
     console.log('segment       wristP95 wristMax swivelMed up%  in%  flips maxStep torsoMin foreMin clavElev clavPush clavStep twistP95 snapMax stepMax');
     for (const [name, m] of Object.entries(report.segments)) {
       console.log(`${name.padEnd(13)} ${fmt(m.wristErrorP95Cm).padStart(8)} ${fmt(m.wristErrorMaxCm).padStart(8)} ${fmt(m.swivelMedianDeg).padStart(9)} ${fmt(m.elbowUpShare === null ? null : m.elbowUpShare * 100).padStart(4)} ${fmt(m.elbowInShare === null ? null : m.elbowInShare * 100).padStart(4)} ${String(m.elbowFlips).padStart(5)} ${fmt(m.swivelMaxStepDeg).padStart(7)} ${fmt(m.elbowTorsoMinCm).padStart(8)} ${fmt(m.forearmTorsoMinCm).padStart(7)} ${fmt(m.clavicleElevRangeDeg).padStart(8)} ${fmt(m.claviclePushRangeDeg).padStart(8)} ${fmt(m.clavicleMaxStepDeg).padStart(8)} ${fmt(m.twistP95Deg).padStart(8)} ${fmt(m.wristSnapMaxCm).padStart(7)} ${fmt(m.wristStepMaxCm).padStart(7)}`);
@@ -274,3 +323,5 @@ try {
 } finally {
   await browser.close();
 }
+if (misses.length) throw new Error(`Arm reach gates failed:\n- ${misses.join('\n- ')}`);
+console.log('[arm-reach] all gates passed');
