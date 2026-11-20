@@ -140,6 +140,17 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Expected:** the take plays in the feed on every run.
 - **Reproduction:** the B-083 command on `main` after the revert, at plain load and at load 2.
 
+### B-085 — Deep zoom: the camera mode is "follow", not "free", when the wheel stops (hosted, once)
+
+- **Area:** apps/viewer-web (`e2e/deep-zoom.spec.ts`, portal wheel gesture)
+- **Severity:** P3 (test flake; no person has seen a wrong camera)
+- **Observed:** 2026-11-20, hosted run 44815715770 (caf7cad), job "Portal view end-to-end"
+- **Evidence:** `deep-zoom.spec.ts:241`: `expect(stopped.mode).toBe("free")` received `"follow"`. The next run on `main`
+  (44826449489, 12b0a45) passed the same job. caf7cad holds the performer floor (85ee704b62ba, B-083), which
+  changes the card's camera fit, so a slow fit is a suspect.
+- **Expected:** the wheel gesture that stops at the inside end leaves the camera in free mode on every run.
+- **Reproduction:** not tried yet. Try `CI_EMULATE_LOAD=2 scripts/ci-emulate.sh bash -c "cd apps/viewer-web && VITE_IWER_SEM_SCENE=office_small RUN_E2E_PIPELINE=1 XR_TEST_MODE=iwer npx playwright test e2e/deep-zoom.spec.ts --workers=1 --repeat-each=5"` on caf7cad.
+
 ## Entry template
 
 ```md
