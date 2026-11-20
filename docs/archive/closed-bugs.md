@@ -1559,6 +1559,8 @@ bug above.)
 - **Reproduction:** `pnpm --filter @holoim/capture run test:xr:walk-direction`, head rows, `start` column.
 - **After:** 7.1–9.2 m/s² in every direction (forward 8.1, left 7.1, back 8.6, right 9.2, diagonals 8.2 and 7.1). Steps,
   pelvis and posture do not change; the stops are the same (peak 2–3.7 m/s², the root ends at the same place).
+  In the `arms` check the walk-start frame is 10 m/s² (from 33.7). Its later 16–26 m/s² spikes are single samples
+  that hold three frames instead of two (the speed reads 1.38, 2.22, then 1.62 m/s): the check's sampling, not the body.
 - **Cause:** before the walk is detected (smoothed head speed above 0.55 m/s), the root holds inside the lean leash.
   Then the leash or the walk's full head step takes it to walking speed in one frame.
 - **Fix:** `planRoot` changes the root's planned velocity by at most 8 m/s² (`ROOT_ACCEL`); meanwhile the head may run
