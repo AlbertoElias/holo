@@ -332,13 +332,13 @@ export function faceAt(s: LifeSchedule, t: number, glanceK = 1): FaceWeights {
  * level easing in and out under every reach moved the hips in jerks.
  */
 export const MASKED_BY = {
-  weight: { weight: 1, step: 1, aim: 1 },
+  weight: { weight: 1, step: 1, aim: 1, bend: 1 },
   glance: { look: 0.65, reach: 0.8, take: 0.8, put: 0.8, aim: 0.8, gesture: 1, 'state:noticing': 1, 'state:concerned': 0.5 },
   hand: { hand: 1, reach: 1, take: 1, put: 1, aim: 1, 'gesture:shrug': 1, 'gesture:wave': 1, 'gesture:rub': 1, 'gesture:hand-to-chest': 1, 'state:noticing': 1 },
   /** A directed expression owns the face while it plays, as a state's face and a shrug's do. */
   face: { expression: 1, state: 1, 'gesture:shrug': 1 },
   /** The attending layer's nods give way to whatever moves the head; under a held look they go on, smaller. */
-  nod: { look: 0.5, reach: 1, take: 1, put: 1, aim: 1, turn: 1, step: 1, gesture: 1, state: 1 },
+  nod: { look: 0.5, reach: 1, take: 1, put: 1, aim: 1, turn: 1, step: 1, gesture: 1, state: 1, bend: 1 },
   /** Its arm changes need both hands free (checked per side, so a hand directed on either side masks it). */
   arms: { hand: 1, reach: 1, take: 1, put: 1, aim: 1, turn: 1, step: 1, 'gesture:shrug': 1, 'gesture:wave': 1, 'gesture:rub': 1, 'gesture:hand-to-chest': 1, state: 1 }
 } as const satisfies Record<string, Readonly<Record<string, number>>>;

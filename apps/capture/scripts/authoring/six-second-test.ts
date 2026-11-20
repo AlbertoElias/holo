@@ -28,7 +28,7 @@ import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promi
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { beatSpan, type BeatSheet } from './lib/beats.ts';
+import { beatSpan, parseSheetText, type BeatSheet } from './lib/beats.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUTPUT = join(HERE, '../../output/authoring/six-second');
@@ -95,7 +95,7 @@ export async function prepare(sheetFile: string, options: { avatars?: string[]; 
   const sidecar = await readFile(join(dirname(sheetPath), sidecarName), 'utf8').then((t) => JSON.parse(t) as Sidecar, () => {
     throw new Error(`no sidecar ${sidecarName}: name the beats that are the point of the piece ({ "hesitation": [...], "feeling": [...] })`);
   });
-  const sheet = JSON.parse(await readFile(sheetPath, 'utf8')) as BeatSheet;
+  const sheet = parseSheetText(await readFile(sheetPath, 'utf8'), sheetPath);
   const ids = new Set(sheet.beats.map((b) => b.id));
   for (const id of [...sidecar.hesitation, ...sidecar.feeling]) {
     const beat = sheet.beats.find((b) => b.id === id);

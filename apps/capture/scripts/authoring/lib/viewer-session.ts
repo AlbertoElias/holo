@@ -5,7 +5,9 @@
  * card and waits until it has rendered. `viewer-check.ts` and `review.ts`
  * both read the take through this.
  *
- * Ports: VIEWER_CHECK_API_PORT (3341) and VIEWER_CHECK_WEB_PORT (3214).
+ * Ports: VIEWER_CHECK_API_PORT (3341) and VIEWER_CHECK_WEB_PORT (3214). When
+ * neither is set and another run holds the defaults, the next free pair 10
+ * apart is used (3351/3224, …), so two reviews can run side by side.
  */
 import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
@@ -16,10 +18,12 @@ import { chromium, request, type Browser, type BrowserContext, type Locator, typ
 import { XR_CHROMIUM_ARGS, XR_CONTEXT_OPTIONS } from '@holoim/tooling-testing/xr-env';
 
 const ROOT = fileURLToPath(new URL('../../../../../', import.meta.url));
-export const API_PORT = Number(process.env.VIEWER_CHECK_API_PORT ?? 3341);
-export const WEB_PORT = Number(process.env.VIEWER_CHECK_WEB_PORT ?? 3214);
-const WEB = `https://localhost:${WEB_PORT}`;
-const API = `http://127.0.0.1:${API_PORT}`;
+const PORTS_SET = process.env.VIEWER_CHECK_API_PORT !== undefined || process.env.VIEWER_CHECK_WEB_PORT !== undefined;
+const API_PORT = Number(process.env.VIEWER_CHECK_API_PORT ?? 3341);
+const WEB_PORT = Number(process.env.VIEWER_CHECK_WEB_PORT ?? 3214);
+
+/** Set once `close()` has been called, so a server stopped on purpose is not reported as failing. */
+let stopping = false;
 
 function start(name: string, command: string, args: string[], env: Record<string, string>): ChildProcess {
   const child = spawn(command, args, { cwd: ROOT, env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
@@ -27,7 +31,7 @@ function start(name: string, command: string, args: string[], env: Record<string
   const keep = (b: Buffer) => { tail.push(b.toString()); if (tail.length > 40) tail.shift(); };
   child.stdout!.on('data', keep);
   child.stderr!.on('data', keep);
-  child.on('exit', (code) => { if (code) console.error(`${name} exited ${code}:\n${tail.join('').slice(-2000)}`); });
+  child.on('exit', (code) => { if (code && !stopping) console.error(`${name} exited ${code}:\n${tail.join('').slice(-2000)}`); });
   return child;
 }
 
@@ -62,15 +66,26 @@ async function answers(url: string): Promise<boolean> {
 
 /** Starts the test API and the viewer test build; `close()` stops both, as does Ctrl-C. */
 export async function startViewer(): Promise<ViewerServers> {
-  for (const [url, variable] of [[API, 'VIEWER_CHECK_API_PORT'], [WEB, 'VIEWER_CHECK_WEB_PORT']] as const) {
-    if (await answers(url)) throw new Error(`${url} is already in use (another review, or one stopped with Ctrl-C): stop it, or set ${variable}`);
+  let API = '';
+  let WEB = '';
+  for (let k = 0; ; k += 1) {
+    const api = `http://127.0.0.1:${API_PORT + 10 * k}`;
+    const web = `https://localhost:${WEB_PORT + 10 * k}`;
+    const busy = (await answers(api)) ? api : (await answers(web)) ? web : undefined;
+    if (!busy) { API = api; WEB = web; break; }
+    if (PORTS_SET) throw new Error(`${busy} is already in use (another review, or one stopped with Ctrl-C): stop it, or set VIEWER_CHECK_API_PORT and VIEWER_CHECK_WEB_PORT to free ports`);
+    if (k === 20) throw new Error(`no free viewer ports from ${API_PORT}/${WEB_PORT} upward in steps of 10: set VIEWER_CHECK_API_PORT and VIEWER_CHECK_WEB_PORT to free ports`);
   }
-  const api = start('api', 'pnpm', ['--filter', '@holoim/api', 'exec', 'tsx', '../../scripts/test-api.ts'], { TEST_API_PORT: String(API_PORT), WEB_ORIGIN: WEB, USDZ_WORKER_ENABLED: 'false' });
-  const web = start('web', 'node', ['packages/tooling-testing/src/test-build.mjs', 'serve', 'web', '--', '--host', '0.0.0.0', '--port', String(WEB_PORT), '--strictPort'], { VITE_API_PROXY_TARGET: API, VITE_HMR_CLIENT_PORT: String(WEB_PORT) });
+  if (WEB !== `https://localhost:${WEB_PORT}`) console.log(`  viewer ports ${API_PORT}/${WEB_PORT} are in use; using ${new URL(API).port}/${new URL(WEB).port}`);
+  stopping = false;
+  const API_PORT_NOW = new URL(API).port;
+  const WEB_PORT_NOW = new URL(WEB).port;
+  const api = start('api', 'pnpm', ['--filter', '@holoim/api', 'exec', 'tsx', '../../scripts/test-api.ts'], { TEST_API_PORT: API_PORT_NOW, WEB_ORIGIN: WEB, USDZ_WORKER_ENABLED: 'false' });
+  const web = start('web', 'node', ['packages/tooling-testing/src/test-build.mjs', 'serve', 'web', '--', '--host', '0.0.0.0', '--port', WEB_PORT_NOW, '--strictPort'], { VITE_API_PROXY_TARGET: API, VITE_HMR_CLIENT_PORT: WEB_PORT_NOW });
   const onSignal = () => { stop(api); stop(web); process.exit(130); };
   process.once('SIGINT', onSignal);
   process.once('SIGTERM', onSignal);
-  const close = () => { process.off('SIGINT', onSignal); process.off('SIGTERM', onSignal); stop(api); stop(web); };
+  const close = () => { stopping = true; process.off('SIGINT', onSignal); process.off('SIGTERM', onSignal); stop(api); stop(web); };
   try {
     await waitFor(`${API}/api/holograms?limit=1`, 120_000);
     await waitFor(WEB, 240_000);

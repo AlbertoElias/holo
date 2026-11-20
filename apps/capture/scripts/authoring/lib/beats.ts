@@ -96,6 +96,8 @@ export type Direction = Timing & (
   | { readonly kind: 'reach'; readonly side: Side; readonly at: Point; /** Metres the palm stops short of `at`. */ readonly stopShort: number; readonly palm?: 'up' | 'down' | 'in' | 'toward' }
   | { readonly kind: 'hand'; readonly side: Side | 'both'; readonly shape: HandShapeName; readonly strength?: number }
   | { readonly kind: 'weight'; readonly toward: 'left' | 'right' | 'forward' | 'back'; /** 0..1, default 1 (about 6 cm). */ readonly amount?: number }
+  /** Bend forward from the waist, hips back and knees soft, as over a plant or a low table; the arms and the look are solved on the bent body. */
+  | { readonly kind: 'bend'; /** 0..1 of the deepest bend (`BEND` in `direct.ts`: 45° at the waist), default 0.7. */ readonly amount?: number }
   | { readonly kind: 'turn'; readonly degrees?: number; readonly toward?: Point; /** `upper` twists and comes back; `whole` turns the performer and stays. */ readonly body?: 'upper' | 'whole' }
   | { readonly kind: 'step'; readonly foot: Side; /** Metres in the performer's frame: [left, forward]. */ readonly by: readonly [number, number]; /** Bring the other foot alongside. */ readonly follow?: boolean }
   | { readonly kind: 'take'; readonly side: Side; readonly object: string; readonly palm?: 'up' | 'down' | 'in' | 'toward' }
@@ -251,12 +253,53 @@ export const EXPRESSIONS = {
 } as const satisfies Record<string, Partial<Record<FaceChannel, number>>>;
 export type ExpressionName = keyof typeof EXPRESSIONS;
 
+/**
+ * Reads a beat sheet's text: JSON, with `//` and `/* *\/` comments and
+ * trailing commas allowed (the starter sheet lists every choice in comments
+ * beside the field it is for). A syntax error names the line and column.
+ */
+export function parseSheetText(text: string, file = 'sheet'): BeatSheet {
+  let out = '';
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i]!;
+    if (ch === '"') {
+      let j = i + 1;
+      while (j < text.length && text[j] !== '"') j += text[j] === '\\' ? 2 : 1;
+      out += text.slice(i, j + 1);
+      i = j;
+    } else if (ch === '/' && text[i + 1] === '/') {
+      while (i < text.length && text[i] !== '\n') i += 1;
+      out += '\n';
+    } else if (ch === '/' && text[i + 1] === '*') {
+      const end = text.indexOf('*/', i + 2);
+      const skipped = text.slice(i, end === -1 ? text.length : end + 2);
+      out += skipped.replace(/[^\n]/g, ' ');
+      i += skipped.length - 1;
+    } else out += ch;
+  }
+  // A trailing comma (only space before the closing bracket); strings are matched first and kept as they are.
+  out = out.replace(/("(?:[^"\\]|\\.)*")|,(\s*[\]}])/g, (_m, str: string | undefined, close: string | undefined) => str ?? close!);
+  try {
+    return JSON.parse(out) as BeatSheet;
+  } catch (e) {
+    const at = /position (\d+)/.exec(String((e as Error).message));
+    if (!at) throw new Error(`${file}: not valid JSON: ${(e as Error).message}`);
+    const pos = Number(at[1]);
+    const before = out.slice(0, pos).split('\n');
+    const line = before.length;
+    const col = before[before.length - 1]!.length + 1;
+    const shown = text.split('\n')[line - 1] ?? '';
+    throw new Error(`${file}:${line}:${col}: not valid JSON (${(e as Error).message.replace(/ in JSON at position \d+.*$/, '')}):\n    ${shown.trim()}\n  check for a missing comma or quote at the end of this line or the one before it`);
+  }
+}
+
 export const DEFAULT_TIMING: Readonly<Record<DirectionKind, Required<Omit<Timing, 'delay' | 'hold'>>>> = {
   look: { anticipation: 0.08, attack: 0.35, settle: 0.5 },
   expression: { anticipation: 0, attack: 0.35, settle: 0.6 },
   reach: { anticipation: 0.25, attack: 0.75, settle: 0.8 },
   hand: { anticipation: 0, attack: 0.3, settle: 0.5 },
   weight: { anticipation: 0.2, attack: 0.6, settle: 0.7 },
+  bend: { anticipation: 0.2, attack: 0.8, settle: 0.8 },
   turn: { anticipation: 0.2, attack: 0.8, settle: 0.5 },
   step: { anticipation: 0.15, attack: 0.6, settle: 0.3 },
   take: { anticipation: 0.2, attack: 0.8, settle: 0.8 },
@@ -614,6 +657,7 @@ export function validateSheet(sheet: BeatSheet): string[] {
       }
       if (d.kind === 'state' && !Object.hasOwn(STATES, d.name)) problems.push(`${where}: no state ${String(d.name)} (${Object.keys(STATES).join(', ')})`);
       if ((d.kind === 'gesture' || d.kind === 'state') && d.strength !== undefined && !(d.strength >= 0)) problems.push(`${where}: strength is 0 or more`);
+      if (d.kind === 'bend' && d.amount !== undefined && !(d.amount >= 0 && d.amount <= 1)) problems.push(`${where}: amount is 0 to 1 (1 is the deepest bend)`);
       if (d.kind === 'reach' && !(d.stopShort >= 0)) problems.push(`${where}: stopShort must be ≥ 0`);
       if (d.kind === 'turn' && d.degrees === undefined && d.toward === undefined) problems.push(`${where}: needs degrees or toward`);
       if ((d.kind === 'take' || d.kind === 'put') && !objects.has(d.object)) problems.push(`${where}: no object ${d.object}`);

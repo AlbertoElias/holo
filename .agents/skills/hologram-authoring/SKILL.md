@@ -1,0 +1,114 @@
+---
+name: hologram-authoring
+description: Make a hologram from a one-line idea with the customisable house avatar - write a beat sheet, build and check it with one command (make.ts), have a fresh reader judge it, and revise until every bar passes. Use whenever an agent is asked to create, direct, animate, revise or audition a hologram, a take, a beat sheet or a piece with the house avatar.
+---
+
+# Make a hologram with the house avatar
+
+A hologram is a recorded event, seen through a portal on a phone's feed card
+(`docs/product/concepts/what-a-hologram-is.md`). You write it as a **beat
+sheet**: who performs, what they hold, and what they do when. `make.ts`
+builds the sheet into a take, checks every bar, records the review pack and
+says what to fix. You revise the sheet, not the take.
+
+Run everything from `apps/capture` on Node 24 (`eval "$(../../scripts/agent-node-env.sh)"`).
+`M` below stands for `node --conditions=development --import tsx scripts/authoring/make.ts`.
+
+## The loop
+
+1. **Start a piece.** `M new <name>` (lower-case, dashes) writes
+   `output/authoring/pieces/<name>/sheet.jsonc`: one house avatar who notices
+   you, smiles, waves and nods. It builds as it is. Its comments list every
+   choice. `M words` prints the same list from the code.
+2. **Write the idea into the sheet.** Set the `look` card (every field is
+   required; values only from the comments), then write beats, one per thing
+   the reader should see. Give the sheet an `intent` and every beat an
+   `intent` in plain words ("She waters the plant."): the reading bar is
+   checked against those. Comments and trailing commas are fine.
+3. **Build and check fast.** `M <sheet> --quick` builds `v1/`, `v2/`, … beside
+   the sheet (about 20 s plus a minute for twelve stills). It prints the look
+   each performer actually wears and one row per bar, and every failing row
+   has a `fix:` line. Do what the fix says and run it again. For a missed aim,
+   the fix is the exact mark edit that lands it. Look at
+   `vN/frames-sheet.jpg` (already a small contact sheet) to see whether the
+   pose reads.
+4. **Review.** `M <sheet>` without `--quick` also records the review pack in
+   real time: about 40 s per second of take, so run it in the background. It
+   measures the face on the card (the 40 px bar) and writes
+   `vN/review/reader/` (the video and stills a reader sees) and
+   `vN/review/comparison.json` (your intents, with blanks for the reader).
+5. **Have a fresh reader judge it.** Spawn a new subagent (`model: "sonnet"`)
+   that is told nothing about the idea and gets only the path of
+   `vN/review/reader/`. Tell it to read that folder's `README.md` and answer
+   it. Tell it to look at images only through
+   `node packages/tooling-testing/src/preview.mjs <file>` (run from the repo
+   root). Save its answer as `vN/review/reader.md`. Then spawn a second fresh
+   subagent (the grader) with `reader.md` and `comparison.json`. It fills, per
+   beat, `seen` (what the reader said, quoted), `reads` (true when the reader
+   saw the intent without being told) and `revise` (what would make a missed
+   beat plain), and the same for `piece`. Do not grade it yourself: you know
+   what it means, so you will see it. If you cannot start subagents (you are
+   one), stop here and hand the two paths to whoever started you, saying
+   that the reader and grader are theirs to run.
+6. **Verdict.** `M verdict <vN dir>` reruns the bars with the grades. It says
+   `DONE` when every bar passes. Otherwise revise the sheet (step 3), and keep
+   each version: the next build lists which seconds changed.
+
+Stop when `make.ts` says DONE. If a bar will not pass after three revisions,
+stop and report which bar and why, rather than weakening the piece's idea in
+secret. Never loosen a bar, and never publish: `publish.ts` targets
+production and needs the owner's word.
+
+## The bars
+
+| Row | Bar |
+|---|---|
+| `grip.*`, `put.*`, `aim.*` | the hand lands on the object's grip (1 cm, 5°), puts it level (1 cm, 3°), and points its tool at the target (10°) |
+| `reach.*` | the palm gets to its point (leaning allowed) |
+| `size.*` | each dressed avatar file is at most 1.8 MB (house avatars are about 1.1-1.5) |
+| `quickLook` | the take fits the iPhone Quick Look budget |
+| `faceBox.*` | the face is at least 40 device px brow to chin on the phone card |
+| `reading` | a fresh reader reads every beat |
+| `body.*`, `still.*`, `onCard.*` | notes, not bars: feet planted, something moving every second, objects wholly on the card |
+
+## What works at card size
+
+- **The face is small.** The card frames the performers, every object and
+  everything that moves, so each thing you add shrinks the face. One
+  performer, objects within about 0.6 m and below the head, no steps. Two
+  performers roughly halve the face.
+- **Big and slow reads, small and fast does not.** Hold an expression for 1 s
+  or more at `strength` 0.7-0.9. `smile` and `sad` read best, `noticing` and
+  `concerned` need the body too. Wave with `count` 3. Look at the viewer
+  (`"at": "viewer"` with a `viewer` mark at `[0, 1.55, 2.5]`) to address the
+  person holding the phone.
+- **One idea per beat.** If a reader cannot say it in five words, split it.
+
+## Recipes
+
+- **Bend over something low.** `{ "kind": "bend", "amount": 0.8 }` bends from
+  the waist and pushes the hips back; reach and look are solved on the bent
+  body. Use 0.5 for a lean, 1 for the deepest bend. Give it `attack` 0.8-1.0.
+- **Pour or point a tool.** An object with `"grip"` and `"tool"` parts, held
+  from the start (`"hold": { "right": "can" }` on the performer). Bring the
+  hand to a mark beside and above the target
+  (`{ "of": "<performer>", "forward": 0.45, "right": 0.45, "height": 0.95 }`)
+  with a `reach` (`"stopShort": 0`, `"palm": "down"`), then add an `aim` at
+  the target while the reach holds. Add `world: [{ "kind": "pour", "object":
+  "can" }]` for the stream. If the aim misses, `make.ts` says which mark edit
+  lands it.
+- **Put something on a surface.** An object with `"on": "<other object>"`
+  rests on its top. A `bench`-like surface at `{ "of": "<performer>",
+  "forward": 0.45 }` with `"facing": "<performer>.hips"` is within reach.
+- **Change the world.** `world: [{ "kind": "change", "object": "plant",
+  "when": 6, "over": 1.5, "from": { "scale": [1, 0.8, 1], "color": "#8e8644" } }]`
+  grows or recolours an object; see the README's "World change".
+- **Customise the look.** Every trait is a fixed menu (`M words`). There are
+  three outfits (`oatmealSlate`, `rustWalnut`, `stormGraphite`) and no other
+  clothing colours or garments, so say so rather than inventing one.
+  `house:clay`, `house:ink` and `house:light` are three finishes of the same
+  avatar.
+
+Everything else (sound and speech, a recorded take as the base, the
+six-second test, every field) is in `apps/capture/scripts/authoring/README.md`.
+Read the section you need, not the whole file.
