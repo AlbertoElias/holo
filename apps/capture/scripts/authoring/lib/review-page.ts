@@ -10,12 +10,13 @@
  *   recorded objects `HOLOIM_objects` declares (name, source, holds).
  * - `seek(t)`: pauses the take at `t` and waits two frames so the card's
  *   camera and dome follow, as they would in playback.
- * - `card()`: per performer, key points and the face's box projected with
- *   the card's own camera, in CSS pixels of the card canvas; per recorded
- *   object, its box the same way.
- * - `faceTruth(i)`: performer `i`'s face drawn alone in one colour by the
- *   card's renderer and camera (the GPU skins it), and its box read from the
- *   pixels, CSS px: the review checks `card()`'s face box against it.
+ * - `card(withBound, restore)`: per performer, key points projected with
+ *   the card's own camera, in CSS pixels of the card canvas, and the face's
+ *   box in the drawn pixels (`face`: the performers drawn alone, unlit, so
+ *   a turned head hides its face); with `withBound`, also the box of every
+ *   face vertex (`faceBound`, which must hold `face`; slow, so only on a few
+ *   frames); per recorded object, its box the same way. The face pass
+ *   leaves the canvas unfit to show unless `restore` (default true).
  * - `close(i, view)`: renders performer `i` with the viewer's renderer and
  *   scene from a camera placed by `view`, returns a JPEG data URL (and,
  *   with `view.faceBox`, the face's box: brow line to chin when `init` had
@@ -44,7 +45,7 @@ export const REVIEW_PAGE = String.raw`
   const V = () => new (state.probe.camera.position.constructor)();
   const vertex = (mesh, i, out) => {
     // A skinned mesh's getVertexPosition already applies the morphs and the bones; skin it a second time and
-    // the vertex moves by the pose twice (measured against the drawn face: up to 2.3 px short, see the brief).
+    // the vertex moves by the pose twice (the review's face box now comes from the drawn pixels; see "Face measure" in slice 8 of the brief).
     if (mesh.getVertexPosition) mesh.getVertexPosition(i, out);
     else {
       out.fromBufferAttribute(mesh.geometry.attributes.position, i);
@@ -52,27 +53,89 @@ export const REVIEW_PAGE = String.raw`
     }
     return out.applyMatrix4(mesh.matrixWorld);
   };
-  // The face as the camera sees it, projected to [x, y] with \`to\` (from NDC): the box of the face triangles
-  // that face the camera. A head turned from the camera hides its face, and a box of every face vertex then
-  // reports a face nobody sees (a pair's turned head measured 25.9 CSS px where 0.7 px of face was drawn).
-  // Null when no face triangle faces the camera.
-  const seenFace = (p, cam, to) => {
+  // The box of every \`step\`th face vertex, projected to [x, y] with \`to\` (from NDC): with step 1 the drawn face
+  // must lie inside it. Each vertex is skinned with its morphs on the CPU, which is slow: use step 1 only on a few
+  // frames. Null when the performer has no face vertices.
+  const vertexFace = (p, cam, to, step = 1) => {
     let box = null;
     const v = V();
-    for (const f of p.face) {
-      const at = new Map();
-      const ndc = (k) => { let q = at.get(k); if (!q) { q = vertex(f.mesh, k, v).project(cam); q = [q.x, q.y]; at.set(k, q); } return q; };
-      for (let t = 0; t < f.tris.length; t += 3) {
-        const a = ndc(f.tris[t]), b = ndc(f.tris[t + 1]), c = ndc(f.tris[t + 2]);
-        // Counter-clockwise in NDC is a front face (three's default winding).
-        if ((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]) <= 0) continue;
-        for (const q of [a, b, c]) {
-          const [x, y] = to(q);
-          box = box ? [Math.min(box[0], x), Math.min(box[1], y), Math.max(box[2], x), Math.max(box[3], y)] : [x, y, x, y];
-        }
-      }
+    for (const f of p.face) for (let j = 0; j < f.all.length; j += step) {
+      const q = vertex(f.mesh, f.all[j], v).project(cam);
+      const [x, y] = to([q.x, q.y]);
+      box = box ? [Math.min(box[0], x), Math.min(box[1], y), Math.max(box[2], x), Math.max(box[3], y)] : [x, y, x, y];
     }
     return box;
+  };
+  // Each performer's face box in the drawn pixels, CSS px of the card canvas: in one render, every performer's face
+  // vertices drawn magenta (blue 64 × (i + 1) tells performer i) and the rest of their meshes green, unlit, with the
+  // card's own renderer and camera (the GPU skins them, and the depth test hides what a head or a body hides), every
+  // other mesh hidden. This is the face a viewer sees; a box of the face vertices also counts a face turned away and
+  // the mouth's inside (a pair's turned head measured 25.9 CSS px where 0.7 px of face was drawn). Null for a
+  // performer with no face pixel. Objects do not hide a face here. \`restore\` renders the card again afterwards (the
+  // headless renderer is software, so each render costs; the review takes its screenshot first and skips it).
+  const drawnFaces = (restore) => {
+    const r = state.probe.renderer, scene = state.probe.scene, cam = state.probe.camera;
+    const own = new Map();
+    state.performers.forEach((p, i) => p.wrapper.traverse((o) => { if (o.isMesh) own.set(o, { i, all: (p.face.find((f) => f.mesh === o) || { all: [] }).all }); }));
+    const hidden = [];
+    scene.traverse((o) => { if (o.visible && (o.isMesh || o.isPoints || o.isLine || o.isSprite) && !own.has(o)) { o.visible = false; hidden.push(o); } });
+    const flat = (m) => {
+      const c = m.clone();
+      for (const k of ['map', 'emissiveMap', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'alphaMap']) if (k in c) c[k] = null;
+      if (c.color) c.color.setRGB(1, 1, 1);
+      if (c.emissive) c.emissive.setRGB(0, 0, 0);
+      if ('roughness' in c) c.roughness = 1;
+      if ('metalness' in c) c.metalness = 0;
+      c.vertexColors = true; c.transparent = false; c.opacity = 1; c.needsUpdate = true;
+      // Unlit: the pixel is the vertex colour, so a face turned from the light still shows (lit, it went too dark to read).
+      c.onBeforeCompile = (shader) => { shader.fragmentShader = shader.fragmentShader.replace('#include <dithering_fragment>', '#include <dithering_fragment>\n  gl_FragColor = vec4(vColor.rgb, 1.0);'); };
+      c.customProgramCacheKey = () => 'holoim-face-truth';
+      return c;
+    };
+    const saved = [];
+    for (const [mesh, { i, all }] of own) {
+      if (!mesh.visible) continue;
+      const g = mesh.geometry;
+      const colour = g.attributes.position.clone();
+      for (let k = 0; k < colour.count; k += 1) colour.setXYZ(k, 0, 1, 0);
+      for (const k of all) colour.setXYZ(k, 1, 0, (64 * (i + 1)) / 255);
+      saved.push({ mesh, colour: g.attributes.color, material: mesh.material });
+      g.setAttribute('color', colour);
+      mesh.material = Array.isArray(mesh.material) ? mesh.material.map(flat) : flat(mesh.material);
+    }
+    const background = scene.background, fog = scene.fog;
+    scene.background = null; scene.fog = null;
+    const alpha = r.getClearAlpha();
+    r.setClearAlpha(0);
+    r.render(scene, cam);
+    const w = r.domElement.width, h = r.domElement.height;
+    const out = document.createElement('canvas');
+    out.width = w; out.height = h;
+    const ctx = out.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(r.domElement, 0, 0);
+    const px = ctx.getImageData(0, 0, w, h).data;
+    const boxes = state.performers.map(() => null);
+    for (let y = 0; y < h; y += 1) for (let x = 0; x < w; x += 1) {
+      const k = (y * w + x) * 4;
+      if (px[k + 3] === 0 || px[k] <= 128 || px[k + 1] >= 64) continue;
+      const i = Math.round(px[k + 2] / 64) - 1;
+      if (i < 0 || i >= boxes.length) continue;
+      const b = boxes[i];
+      boxes[i] = b ? [Math.min(b[0], x), Math.min(b[1], y), Math.max(b[2], x + 1), Math.max(b[3], y + 1)] : [x, y, x + 1, y + 1];
+    }
+    for (const s of saved) {
+      const g = s.mesh.geometry;
+      if (s.colour) g.setAttribute('color', s.colour); else g.deleteAttribute('color');
+      (Array.isArray(s.mesh.material) ? s.mesh.material : [s.mesh.material]).forEach((c) => c.dispose());
+      s.mesh.material = s.material;
+    }
+    for (const o of hidden) o.visible = true;
+    scene.background = background; scene.fog = fog;
+    r.setClearAlpha(alpha);
+    if (restore) r.render(scene, cam);
+    const rect = r.domElement.getBoundingClientRect();
+    const sx = rect.width / w, sy = rect.height / h;
+    return boxes.map((box) => (box ? [box[0] * sx, box[1] * sy, box[2] * sx, box[3] * sy].map((v) => Math.round(v * 10) / 10) : null));
   };
   // Every vertex of a recorded object, thinned to about 1500 per object: enough for its box.
   const objectPoints = (node, each) => {
@@ -158,24 +221,14 @@ export const REVIEW_PAGE = String.raw`
               if (dx * dx + dy * dy + dz * dz > 0.0005 * 0.0005) { idx.push(i); break; }
             }
           }
-          // The face triangles: every corner a moved vertex (the box keeps only those that face the camera).
-          const moved = new Set(idx);
-          const tris = [];
-          const ix = o.geometry.index;
-          const corner = (t) => (ix ? ix.getX(t) : t);
-          const count = ix ? ix.count : n;
-          for (let t = 0; t + 2 < count; t += 3) {
-            const a = corner(t), b = corner(t + 1), c = corner(t + 2);
-            if (moved.has(a) && moved.has(b) && moved.has(c)) tris.push(a, b, c);
-          }
-          face.push({ mesh: o, all: idx, tris });
+          face.push({ mesh: o, all: idx });
         });
         return { name: w.name, wrapper: w, bones, face };
       });
       state.objects = (state.probe.objects || []).map(({ entry, node }) => ({ name: entry.name, source: entry.source && entry.source.name, holds: entry.holds || [], node }));
       const actions = Object.values(state.probe.actions).filter(Boolean);
       const duration = Math.max(...actions.map((a) => a.getClip().duration));
-      return { duration, performers: state.performers.map((p) => ({ name: p.name, bones: Object.keys(p.bones), faceVertices: p.face.reduce((s, f) => s + f.all.length, 0), faceTriangles: p.face.reduce((s, f) => s + f.tris.length / 3, 0) })), fov: state.probe.camera.fov, pixelRatio: state.probe.renderer.getPixelRatio(), objects: state.objects.map((o) => ({ name: o.name, source: o.source, holds: o.holds })) };
+      return { duration, performers: state.performers.map((p) => ({ name: p.name, bones: Object.keys(p.bones), faceVertices: p.face.reduce((s, f) => s + f.all.length, 0) })), fov: state.probe.camera.fov, pixelRatio: state.probe.renderer.getPixelRatio(), objects: state.objects.map((o) => ({ name: o.name, source: o.source, holds: o.holds })) };
     },
     async seek(t) {
       for (const a of Object.values(state.probe.actions)) if (a) { a.paused = true; a.time = t; }
@@ -184,7 +237,7 @@ export const REVIEW_PAGE = String.raw`
       await frames();
     },
     resume() { for (const a of Object.values(state.probe.actions)) if (a) a.paused = false; },
-    card() {
+    card(withBound = false, restore = true) {
       const cam = state.probe.camera;
       cam.updateMatrixWorld();
       const rect = state.probe.renderer.domElement.getBoundingClientRect();
@@ -193,15 +246,16 @@ export const REVIEW_PAGE = String.raw`
         return [Math.round(((v.x + 1) / 2) * rect.width * 10) / 10, Math.round(((1 - v.y) / 2) * rect.height * 10) / 10];
       };
       state.probe.model.updateWorldMatrix(true, true);
+      const drawn = drawnFaces(restore);
       return {
         canvas: { width: rect.width, height: rect.height, pixelRatio: state.probe.renderer.getPixelRatio() },
-        performers: state.performers.map((p) => {
+        performers: state.performers.map((p, i) => {
           const points = {};
           for (const [k, b] of Object.entries(p.bones)) points[k] = project(b.getWorldPosition(V()));
           if (p.bones.head) points.headTop = project(p.bones.head.getWorldPosition(V()).add(V().set(0, 0.17, 0)));
           const r1 = (n) => Math.round(n * 10) / 10;
-          const box = seenFace(p, cam, ([x, y]) => [r1(((x + 1) / 2) * rect.width), r1(((1 - y) / 2) * rect.height)]);
-          return { name: p.name, points, face: box };
+          const bound = withBound && vertexFace(p, cam, ([x, y]) => [r1(((x + 1) / 2) * rect.width), r1(((1 - y) / 2) * rect.height)]);
+          return { name: p.name, points, face: drawn[i], faceBound: bound || null };
         }),
         objects: state.objects.map((o) => {
           let box = null;
@@ -247,72 +301,6 @@ export const REVIEW_PAGE = String.raw`
       };
     },
     /**
-     * The face's box from rendered pixels, to check card(): performer i's face vertices (all of them) drawn
-     * magenta and the rest of their mesh green, with the card's own renderer and camera, so the GPU skins them;
-     * every other mesh is hidden. Returns the box in CSS px of the card canvas, or null when no face pixel shows.
-     */
-    faceTruth(i) {
-      const r = state.probe.renderer, scene = state.probe.scene, cam = state.probe.camera;
-      const faces = state.performers[i].face.filter((f) => f.all.length);
-      const own = new Set(faces.map((f) => f.mesh));
-      const hidden = [];
-      scene.traverse((o) => { if (o.visible && (o.isMesh || o.isPoints || o.isLine || o.isSprite) && !own.has(o)) { o.visible = false; hidden.push(o); } });
-      const saved = faces.map((f) => {
-        const g = f.mesh.geometry;
-        const colour = g.attributes.position.clone();
-        for (let k = 0; k < colour.count; k += 1) colour.setXYZ(k, 0, 1, 0);
-        for (const k of f.all) colour.setXYZ(k, 1, 0, 1);
-        const before = { colour: g.attributes.color, material: f.mesh.material };
-        g.setAttribute('color', colour);
-        const flat = (m) => {
-          const c = m.clone();
-          for (const k of ['map', 'emissiveMap', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'alphaMap']) if (k in c) c[k] = null;
-          if (c.color) c.color.setRGB(1, 1, 1);
-          if (c.emissive) c.emissive.setRGB(0, 0, 0);
-          if ('roughness' in c) c.roughness = 1;
-          if ('metalness' in c) c.metalness = 0;
-          c.vertexColors = true; c.transparent = false; c.opacity = 1; c.needsUpdate = true;
-          // Unlit: the pixel is the vertex colour, so a face turned from the light still shows (lit, it went too dark to read).
-          c.onBeforeCompile = (shader) => { shader.fragmentShader = shader.fragmentShader.replace('#include <dithering_fragment>', '#include <dithering_fragment>\n  gl_FragColor = vec4(vColor.rgb, 1.0);'); };
-          c.customProgramCacheKey = () => 'holoim-face-truth';
-          return c;
-        };
-        f.mesh.material = Array.isArray(before.material) ? before.material.map(flat) : flat(before.material);
-        return before;
-      });
-      const background = scene.background, fog = scene.fog;
-      scene.background = null; scene.fog = null;
-      const alpha = r.getClearAlpha();
-      r.setClearAlpha(0);
-      r.render(scene, cam);
-      const w = r.domElement.width, h = r.domElement.height;
-      const out = document.createElement('canvas');
-      out.width = w; out.height = h;
-      const ctx = out.getContext('2d', { willReadFrequently: true });
-      ctx.drawImage(r.domElement, 0, 0);
-      const px = ctx.getImageData(0, 0, w, h).data;
-      let box = null;
-      for (let y = 0; y < h; y += 1) for (let x = 0; x < w; x += 1) {
-        const k = (y * w + x) * 4;
-        const R = px[k], G = px[k + 1], B = px[k + 2];
-        if (px[k + 3] > 0 && R > 128 && B > 128 && G < 64) box = box ? [Math.min(box[0], x), Math.min(box[1], y), Math.max(box[2], x + 1), Math.max(box[3], y + 1)] : [x, y, x + 1, y + 1];
-      }
-      faces.forEach((f, j) => {
-        const g = f.mesh.geometry;
-        if (saved[j].colour) g.setAttribute('color', saved[j].colour); else g.deleteAttribute('color');
-        const m = f.mesh.material;
-        (Array.isArray(m) ? m : [m]).forEach((c) => c.dispose());
-        f.mesh.material = saved[j].material;
-      });
-      for (const o of hidden) o.visible = true;
-      scene.background = background; scene.fog = fog;
-      r.setClearAlpha(alpha);
-      r.render(scene, cam);
-      const rect = r.domElement.getBoundingClientRect();
-      const sx = rect.width / w, sy = rect.height / h;
-      return box ? [box[0] * sx, box[1] * sy, box[2] * sx, box[3] * sy].map((v) => Math.round(v * 10) / 10) : null;
-    },
-    /**
      * view: { position: [x,y,z], target: [x,y,z], fov, width, height, label, background (hex number), far (m, optional: clips the stage behind the performer) }.
      * Returns a JPEG data URL and, when asked, the face box in output pixels.
      */
@@ -354,7 +342,7 @@ export const REVIEW_PAGE = String.raw`
         const xs = q.brow.map((b) => b[0]);
         if (xs.length && q.browTop !== null && q.chinBottom !== null) face = [Math.min(...xs), q.browTop, Math.max(...xs), q.chinBottom];
       } else if (view.faceBox) {
-        face = seenFace(state.performers[i], cam, ([x, y]) => [((x + 1) / 2) * view.width, ((1 - y) / 2) * view.height]);
+        face = vertexFace(state.performers[i], cam, ([x, y]) => [((x + 1) / 2) * view.width, ((1 - y) / 2) * view.height], 4);
       }
       let regions = null;
       if (view.regions) {

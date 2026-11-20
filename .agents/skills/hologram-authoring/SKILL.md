@@ -33,6 +33,24 @@ done. These faults made earlier pieces fail:
   was too small to see until it was lifted.
 - The event happened nowhere. (A "slip" was a look at an empty point.)
 
+A piece that a reader gets can still make no sense. The owner watched a
+stone that turned into a gift box and asked: "The stone turns into a
+present??? Why doesn't a present turn into a stone instead?" So before
+step 1, check the premise:
+
+- **Say the premise in one sentence that a stranger accepts at once.** "She
+  knocks over a glass and laughs." "He lifts a loaf from the oven and smiles
+  at it." When the sentence needs magic, a trick or a "somehow", find
+  another premise. Use magic only when the request asks for it.
+- **The change goes in the direction that carries the meaning.** For "a
+  stone given as a gift", the stone itself is the gift: it stays a stone,
+  and the giving shows that it matters (she picks the best stone from a
+  few, wipes it, and holds it out). A stone that becomes a present says
+  that the stone was not good enough, which is the opposite of the request.
+- **Ask what a viewer asks.** Why does this happen? Why now? Where did the
+  thing come from? When a part has no plain answer, change the premise
+  before you write any part.
+
 Do these steps and write the result into the sheet's `story` (step 5).
 Copy the request word for word into `story.request`: the review checks the
 story against it.
@@ -91,9 +109,13 @@ story against it.
      waits there: the viewer is the receiver. Pride shows the thing to the
      viewer and smiles. Show or offer an object in both hands, elbows bent,
      in front of the chest (the recipe "Show or offer in both hands"); never
-     one arm held straight out. A laugh is face channels
-     (`mouthSmileLeft`/`Right` 0.9, `jawOpen` 0.35, `eyeSquintLeft`/`Right`
-     0.6, `cheekSquintLeft`/`Right` 0.5) with a small `nod` or a `shrug`.
+     one arm held straight out. A laugh is these face channels and nothing
+     stronger: `mouthSmileLeft`/`Right` 0.6, `jawOpen` 0.33,
+     `eyeSquintLeft`/`Right` 0.42, `cheekSquintLeft`/`Right` 0.36, held 1 s
+     or more. Above them the rig breaks: squint over 0.5 pushes dark dots
+     through the skin under the eyes, and the open mouth is a black hole
+     with no teeth. `mouthSmile` alone stretches the lips thin. Add no `nod`
+     or `shrug` to a laugh: neither reads on the card.
 3. **Check each "must see" against what the tool can show.** Use the table
    below. `M words` lists the names of directions, expressions and looks.
    For objects and world lines, read `apps/capture/scripts/authoring/README.md`,
@@ -247,7 +269,22 @@ over the 40 px bar.
    `DONE` when every bar passes. Otherwise revise the sheet (step 3), and keep
    each version: the next build lists which seconds changed.
 
-Stop when `make.ts` says DONE. When the `story` row fails, fix the story
+7. **Quality review.** A reader that gets the story does not prove that the
+   piece looks good: the owner rejected pieces that read, for bad arm
+   motion, arms through a prop and an ugly laugh. Before you hand a piece
+   on, watch `review/reader/review.mp4` yourself (frames into a scratch
+   folder of your own, then `preview.mjs`). Then ask a design reviewer.
+   Write a prompt file that gives the premise sentence and the paths of
+   the contact sheets, and asks for: one line on whether the premise makes
+   sense; arm motion (smooth, natural, no snap or twist); clipping (a hand
+   or an arm through a prop or the body); and the face (does the
+   expression look natural and fit the moment). Run
+   `scripts/gemini-review.sh <prompt file> <repo root>`. On exit 75, give
+   the same prompt to a Claude `design-reviewer` subagent. Fix each fault
+   that the reviewer names, then build again. Put the reviewer's words in
+   your report.
+
+Stop when `make.ts` says DONE and the quality review finds no fault. When the `story` row fails, fix the story
 first (a part the reader missed needs more to see), not single beats. If a bar will not pass after three revisions,
 stop and report which bar and why, rather than weakening the piece's idea in
 secret. Never loosen a bar, and never publish: `publish.ts` targets
@@ -293,8 +330,9 @@ production and needs the owner's word.
   person holding the phone.
 - **What the body cannot do yet.** There is no laugh, no sitting, no
   walking path, and no speech without a sound file (the README's "Sound").
-  Act a laugh as a broad `smile` (0.9) with quick `nod`s and a `shrug`, and
-  expect a reader to call it a smile.
+  Act a laugh only with the face channels in "The reaction is big, slow and
+  points at the cause", at the strengths given there. Nods and shrugs do
+  not read on the card.
 - **One idea per beat.** If a reader cannot say it in five words, split it.
 
 ## Recipes

@@ -1570,6 +1570,29 @@ skill tells the agent to keep the set narrow and behind or beside the body.
 **The owner's pick** (2026-11-20, "Open decisions for the user", item 14): keep A, B
 and C. D and real models are not in this slice.
 
+**Face measure (2026-11-20).** The review used the box of the face vertices as the
+face size. That box does not know whether the face is turned away, so it counted a
+hidden face as visible. Now `review.ts` measures the drawn face: one unlit id render
+colours each performer's face, and depth hides a face that turns away. On three frames
+per take (0.2, 0.5 and 0.8 of the take) it also computes the vertex box. The review
+fails when the drawn box is outside the vertex box plus 1.5 CSS px.
+
+Proof on five takes (drawn CSS px, vertex-box CSS px, at 0.2 / 0.5 / 0.8):
+
+| Take | 0.2 | 0.5 | 0.8 | Median device px (old) |
+|---|---|---|---|---|
+| iso-her | 32 / 31.9 | 30.6 / 30.6 | 33.3 / 32.9 | 48.9 (47.5) |
+| slip v13 | 26 / 25.7 | 34 / 33.6 | 30 / 29.3 | 45 (43.8) |
+| stone v9 | 24.6 / 24.7 | 30 / 29.1 | 24 / 23.8 | 44 (42.5) |
+| goodbye flat, her | 18.7 / 18.6 | 19.3 / 18.5 | 16.7 / 16.5 | 28 |
+| goodbye flat, him | 0.7 / 26.3 | 23.4 / 25.1 | 1.4 / 25 | 35.1 |
+
+The old error had two directions. For a frontal face the old measure was 1 to 1.5
+device px low, so no past 40 px pass becomes a fail. For a turned head it was high by
+up to the full face (26 px for a face drawn 0.7 px). The goodbye takes now measure:
+flat her 28 and him 35.1; directed her 33 and him 41 (his last second is 8.1, where
+he turns away).
+
 **Done when** fresh agents get only the skill and the same three ideas, remake the
 pieces, and a blind reader gets the setup, the event and the reaction in each. Then a
 proof video goes to the owner, `verify:pr` passes, and the work merges to `main`.
@@ -2164,14 +2187,11 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
     - Not built: a door the hand pulls, a second performer who takes a gift, real
       low-poly models (Poly Pizza). Each is a later slice if the owner wants it.
 
-15. **Slice 8: should the per-beat reading become advisory?** Open. The first draft of
-    slice 8 made the story row the main bar and the per-beat `reading` row a note. The
-    owner did not approve that in their own words, so both stay bars (default, easy to
-    reverse: one `advisory: true` in `make.ts` `readingRow`). The evidence is each
-    piece's two results (story parts read, beats read), in the slice 8 evidence below.
-    - **Keep both as bars** (now). A piece is done only when the story and every beat read.
-    - **Story as the bar, beats as a note.** A piece that tells its story is done even
-      when a beat (a nod, a shrug) does not read on its own.
+15. **Slice 8: should the per-beat reading become advisory?** Answered 2026-11-20:
+    "Agree with recommendations". Both stay bars: a piece is done only when the story
+    and every beat read. (Reversible: one `advisory: true` in `make.ts` `readingRow`.)
+    The evidence is each piece's two results (story parts read, beats read), in the
+    slice 8 evidence below. This is not approval of a piece or of a piece video.
 
 ## Test plan and evidence
 

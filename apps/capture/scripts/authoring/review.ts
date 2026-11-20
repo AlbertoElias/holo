@@ -72,7 +72,7 @@ export const BACKGROUND = Number.parseInt(tokens.color.ground.mid.slice(1), 16);
 const STILL_PX = 1;
 
 type Vec = [number, number, number];
-interface CardPerformer { name: string; points: Record<string, [number, number]>; face: [number, number, number, number] | null }
+interface CardPerformer { name: string; points: Record<string, [number, number]>; /** The drawn face pixels. */ face: ScreenBox | null; /** The box of every face vertex. */ faceBound: ScreenBox | null }
 type ScreenBox = [number, number, number, number];
 interface CardReading { canvas: { width: number; height: number; pixelRatio: number }; performers: CardPerformer[]; objects: { name: string; box: ScreenBox | null }[] }
 interface WorldBox { name: string; min: Vec; max: Vec }
@@ -107,38 +107,32 @@ export interface OnScreen {
     readonly faceMmOnPhone: number;
     /** Head top to feet, CSS px, median. */
     readonly bodyCssPx: number;
-    /** The face's measured height (CSS px) beside its height in the rendered pixels, at three moments: the check on the measure. */
+    /** The drawn face's height (CSS px) beside the height of the box of its face vertices, at three moments: the check on the measure. */
     readonly faceCheck: readonly FaceCheck[];
     /** Per second: how far head and hands travel (CSS px), whether nothing moves, and the face's median height in device px (null when no frame has a face). */
     readonly travelPerSecond: { readonly from: number; readonly head: number; readonly hands: number; readonly still: boolean; readonly faceDevicePx: number | null }[];
   }[];
 }
 
-interface FaceCheck { readonly t: number; readonly measuredCssPx: number; readonly renderedCssPx: number }
-/** How far the measured face height may stand from the rendered one: the pixels add up to one pixel of edge, and a nose or a cheek can hide a front face from the camera. */
-const FACE_CHECK_TOLERANCE = { cssPx: 1.5, share: 0.06 };
+interface FaceCheck { readonly t: number; readonly drawnCssPx: number; readonly boundCssPx: number }
+/** How far the drawn face may reach past the box of its vertices: the pixels add one pixel of edge. */
+const FACE_CHECK_TOLERANCE_CSS_PX = 1.5;
 
 /**
- * At each time, every performer's face box from card() (CPU-skinned face triangles that face the camera) against the
- * face the GPU draws (faceTruth). Throws when the heights disagree beyond FACE_CHECK_TOLERANCE: the measure, not the
- * take, is wrong. A face that one side sees and the other does not counts as 0 px on the other side.
+ * On the checked frames (0.2, 0.5 and 0.8 of the take), each performer's drawn face (the face pixels) must lie inside the box of its face vertices: a
+ * face drawn outside its own vertices, or drawn with no vertices, means the measure is wrong, not the take. Throws
+ * on the first fault; returns the heights on those frames for the report.
  */
-async function checkFaceBox(R: (fn: string, ...a: unknown[]) => Promise<unknown>, performers: number, at: readonly number[]): Promise<FaceCheck[][]> {
-  const out: FaceCheck[][] = Array.from({ length: performers }, () => []);
-  for (const t of at) {
-    await R('seek', t);
-    const card = await R('card') as CardReading;
-    for (let p = 0; p < performers; p += 1) {
-      const measured = card.performers[p]!.face;
-      const rendered = await R('faceTruth', p) as [number, number, number, number] | null;
-      if (!measured && !rendered) continue;
-      const m = measured ? round(measured[3] - measured[1]) : 0, r = rendered ? round(rendered[3] - rendered[1]) : 0;
-      out[p]!.push({ t: round(t, 100), measuredCssPx: m, renderedCssPx: r });
-      if (Math.abs(m - r) > Math.max(FACE_CHECK_TOLERANCE.cssPx, FACE_CHECK_TOLERANCE.share * r)) {
-        throw new Error(`face measure fault: performer ${p} at ${t.toFixed(2)} s measures ${m} CSS px tall, but its face is drawn ${r} CSS px tall (the review's face box is wrong; fix lib/review-page.ts, not the sheet)`);
-      }
+function checkFaceBox(cards: readonly CardReading[], times: readonly number[], checked: ReadonlySet<number>): FaceCheck[][] {
+  const out: FaceCheck[][] = (cards[0]?.performers ?? []).map(() => []);
+  cards.forEach((card, f) => checked.has(f) && card.performers.forEach((perf, p) => {
+    const drawn = perf.face, bound = perf.faceBound, t = times[f]!;
+    if (drawn && (!bound || drawn[0] < bound[0] - FACE_CHECK_TOLERANCE_CSS_PX || drawn[1] < bound[1] - FACE_CHECK_TOLERANCE_CSS_PX
+      || drawn[2] > bound[2] + FACE_CHECK_TOLERANCE_CSS_PX || drawn[3] > bound[3] + FACE_CHECK_TOLERANCE_CSS_PX)) {
+      throw new Error(`face measure fault: performer ${p} at ${t.toFixed(2)} s is drawn at [${drawn.join(', ')}] CSS px, outside the box of its face vertices [${bound ? bound.join(', ') : 'none'}] (the review's face measure is wrong; fix lib/review-page.ts, not the sheet)`);
     }
-  }
+    out[p]!.push({ t: round(t, 100), drawnCssPx: drawn ? round(drawn[3] - drawn[1]) : 0, boundCssPx: bound ? round(bound[3] - bound[1]) : 0 });
+  }));
   return out;
 }
 
@@ -299,16 +293,16 @@ export async function review(take: string, options: ReviewOptions = {}): Promise
     // Pass 1: the card as it plays (its camera follows frame to frame), and where each body is.
     const cards: CardReading[] = [];
     const bodies: Bodies[] = [];
+    const checked = new Set([0.2, 0.5, 0.8].map((k) => Math.round(k * (frames - 1))));
     for (let f = 0; f < frames; f += 1) {
       await R('seek', times[f]);
-      cards.push(await R('card') as CardReading);
-      bodies.push(await R('bodies') as Bodies);
       await page.screenshot({ path: join(frameDir, 'card', `${String(f).padStart(4, '0')}.jpg`), type: 'jpeg', quality: 88 });
+      // After the screenshot: the face pass draws over the canvas, and the next seek draws the card again.
+      cards.push(await R('card', checked.has(f), false) as CardReading);
+      bodies.push(await R('bodies') as Bodies);
     }
 
-    // The face box is skinned on the CPU; check it against the face drawn by the GPU on three frames per performer,
-    // so a fault in the measure (a vertex skinned twice once made faces a third too short) stops the review.
-    const faceCheck = await checkFaceBox(R, init.performers.length, [0.2, 0.5, 0.8].map((k) => times[Math.round(k * (frames - 1))]!));
+    const faceCheck = checkFaceBox(cards, times, checked);
     
     const acts = actedOn(sheetData, init.performers.map((x) => x.name), init.objects);
     // Pass 2: a close view per performer, its camera smoothed over a second so it does not hide small movement.
