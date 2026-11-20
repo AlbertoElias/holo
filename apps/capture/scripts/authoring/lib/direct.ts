@@ -17,7 +17,7 @@ import { resetPose, type LoadedAvatar } from './avatar.ts';
 import { ArmMeter, armPoints, armSkin, BodySkin, measureArmBody, partDepth, propNormal, propParts, propSurface, type ArmBody, type ArmReport } from './arm-quality.ts';
 import { FACE_MIXES, GESTURES, STATE_FACES, envelope, gestureCycle, holdingsOf, pointObjects, resolveTiming, validateSheet, type BeatSheet, type Direction, type Holding, type ObjectSpec, type PerformerSpec, type Place, type Point, type Resolved, type Side } from './beats.ts';
 import { FINGERS, HAND_SHAPES, blendPose, shapePose, type FingerName, type HandPose } from './hands.ts';
-import { armRestOffset, bodyUp, hangArm, keepingTwist, rollHand, moveBoneWorld, orientHand, plantFeet, reachElbowHint, restElbowHint, rotateBoneWorld, solveArm, toWorld, turnBody, TURN_SHARE } from './pose.ts';
+import { armRestOffset, bodyUp, hangArm, keepingTwist, rollHand, moveBoneWorld, orientHand, plantFeet, reachElbowHint, restElbowHint, rotateBoneWorld, solveArm, steadyTwist, easeTwist, toWorld, turnBody, TURN_SHARE } from './pose.ts';
 import { speakingAt, visemesAt, type LineLips } from './lips.ts';
 import { busy, faceAt, fidgetAt, GLANCE_BLINK_DEG, glanceAt, glanceChest, LIFE_FIDGET, LIFE_SIGH, LIFE_WEIGHT, lifeSchedule, MASK_PAD, MASKED_BY, postureAt, sighAt, weightAt, attendArmsAt, attendGate, attendNodAt, attendSchedule, ATTEND_ARMS, type AttendSchedule, type LifeSchedule } from './life.ts';
 import { buildProp, propWorld, type LoadedSource, type Prop } from './props.ts';
@@ -67,7 +67,37 @@ const SHRUG = { shoulderDeg: 14, headRollDeg: 5 } as const;
 const WAVE_SWING = 0.055;
 const RUB_ROLL_DEG = 15;
 /** Where a gesture's hand goes, from its shoulder per arm length (out, up, forward in the body frame). */
-const GESTURE_HAND = { shrug: [0.38, -0.72, 0.38], wave: [0.38, 0.12, 0.25], rub: [0.22, -0.3, 0.62] } as const;
+/** A hanging hand: fingers this far forward of straight down (radians), the wrist turned at most `most` to get there. */
+const REST_WRIST = { forward: 12 * DEG, most: 45 * DEG } as const;
+/** The elbow reaches its working direction by this fraction of a lift (1 / ELBOW_LEAD). */
+const ELBOW_LEAD = 2;
+/** How strongly the elbow keeps low at the middle of a lift (a down vector added to the hint, a unit vector). */
+const ELBOW_LIFT_DOWN = 1.5;
+/** How far out to the side a full lift's wrist path bows at its middle, in arm lengths. */
+const LIFT_ARC = 0.3;
+/** On the way down the arm falls nearly straight: this share of `LIFT_ARC` (a wide arc down reads as an offering hand). */
+const DROP_ARC = 0.15;
+/** How fast (per second) the arc changes between a lift and a drop. */
+const DROP_EASE = 6;
+/** A lift's weight over which the palm takes its wanted turn (smoothstep from, to); below it the forearm stays neutral. */
+const PALM_TURN = { from: 0.35, to: 1 } as const;
+const liftState = new WeakMap<LoadedAvatar, Partial<Record<Side, { t: number; w: number; k: number }>>>();
+/** 1 while a hand rises, eased to `DROP_ARC` while it falls (frames in time order; a jump in time starts again). */
+function liftShare(a: LoadedAvatar, side: Side, t: number, dt: number, w: number): number {
+  const rec = liftState.get(a) ?? {};
+  liftState.set(a, rec);
+  const prev = rec[side];
+  if (prev && t === prev.t) return prev.k;
+  let k = 1;
+  if (prev && t > prev.t && t - prev.t <= 2.5 * dt) {
+    const goal = w < prev.w - 1e-5 ? DROP_ARC : w > prev.w + 1e-5 ? 1 : prev.k;
+    const step = DROP_EASE * (t - prev.t);
+    k = prev.k + Math.max(-step, Math.min(step, goal - prev.k));
+  }
+  rec[side] = { t, w, k };
+  return k;
+}
+const GESTURE_HAND = { shrug: [0.38, -0.72, 0.38], wave: [0.38, 0.12, 0.15], rub: [0.22, -0.3, 0.62] } as const;
 /** Hand to chest: the palm this far in front of the chest bone (metres), toward the other side. */
 const CHEST_HAND = { forward: 0.13, across: 0.04, down: 0.02 } as const;
 /** States: head pitch down and roll, spine lean forward and shoulders up (degrees); how much of the head turns to an `at`. */
@@ -1368,15 +1398,28 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
     const hand = a.hands[s];
     if (goal && w !== 0) {
       const restAt = effector(new THREE.Vector3());
-      const restNormal = hand ? hand.palmNormal(new THREE.Vector3()) : bodyUp(a).negate();
       const point = restAt.clone().lerp(goal, w);
       // A little outward and forward on the way, so the hand clears the thigh.
       const arc = Math.sin(Math.PI * clamp01(w));
-      if (!flat) point.addScaledVector(new THREE.Vector3(s === 'left' ? 1 : -1, 0, 0.6).applyQuaternion(bodyQ), 0.04 * arc);
-      const toward = restNormal.clone().lerp(palm!, clamp01(w)).normalize();
+      // 1 on a lift, `DROP_ARC` on a drop.
+      const share = liftShare(a, s, t, dt, w);
+      const lifting = (share - DROP_ARC) / (1 - DROP_ARC);
+      // A lift to above the waist arcs out to the side too, so the wrist does not pass close under the shoulder
+      // (there the elbow pops up and the forearm hangs forward).
+      const rise = clamp01(goal.clone().sub(restAt).dot(bodyUp(a)) / (a.arms[s].upperLength + a.arms[s].lowerLength)) * share;
+      if (!flat) point.addScaledVector(new THREE.Vector3(s === 'left' ? 1 : -1, 0, 0.6 - 0.4 * rise).applyQuaternion(bodyQ), (0.04 + LIFT_ARC * rise * (a.arms[s].upperLength + a.arms[s].lowerLength)) * arc);
+      // The palm's own turn comes in the second part of the lift (see `PALM_TURN`): blending the palm's direction
+      // instead aims a rising hand at the thigh it left, and turns the forearm over on the way.
+      const toward = palm!.clone();
+      const turnK = THREE.MathUtils.smoothstep(clamp01(w), PALM_TURN.from, PALM_TURN.to);
       const wrist = a.arms[s].hand.getWorldPosition(new THREE.Vector3()).add(point.clone().sub(restAt));
-      // The elbow turns from hanging (back) to a reaching elbow (down and a little out) as the arm lifts.
-      const elbowHint = restElbowHint(a, s).lerp(reachElbowHint(a, s), clamp01(w) * elbowOut).normalize();
+      // The elbow turns from hanging (back) to a reaching elbow (down and a little out) in the first part of the lift:
+      // an elbow still pointing back while the hand is in front puts the forearm level, a handshake.
+      // On a drop the hand falls close past the shoulder: there the elbow goes back to hanging as the hand comes down.
+      const elbowHint = restElbowHint(a, s).lerp(reachElbowHint(a, s), clamp01(lerp(w, ELBOW_LEAD * w, lifting)) * elbowOut).normalize();
+      // Mid-lift the hint lies near the shoulder-to-wrist line, and only "back" is left for the elbow: the forearm
+      // then points forward, a handshake. The elbow stays low instead (the forearm points out and up), as a person's does.
+      elbowHint.add(new THREE.Vector3((s === 'left' ? 1 : -1) * 0.3, -1, 0).applyQuaternion(a.facingCorrection ?? new THREE.Quaternion()).multiplyScalar(ELBOW_LIFT_DOWN * arc * elbowOut * lifting)).normalize();
       const at = new THREE.Vector3();
       // The elbow swung about the shoulder-to-hand line (the upper arm's rotation), in the avatar's frame.
       const solveWith = (swivel: number, withTurns: readonly { r: Resolved; e: number }[]): void => {
@@ -1385,7 +1428,8 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
         const hint = elbowHint.clone().applyAxisAngle(line, swivel * DEG);
         const wr = wrist.clone();
         for (let i = 0; i < 8; i += 1) {
-          solveArm(a, s, wr, { palmToward: toward, wristBend: flat ? 0 : 0.35 * clamp01(w), elbowHint: hint });
+          solveArm(a, s, wr, { palmToward: toward, wristBend: flat ? 0 : 0.35 * turnK, elbowHint: hint });
+          easeTwist(a, s, turnK);
           a.frame.updateMatrixWorld(true);
           turnHand(cast, c, s, withTurns);
           effector(at);
@@ -1416,6 +1460,18 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
       }
       solveWith(swivel, turns);
     } else if (turns.length) turnHand(cast, c, s, turns);
+    // A hanging hand continues the forearm: fingers down and a little forward, the palm to the thigh. The bind
+    // wrist points them well forward, over the front of the thigh. Faded out as a reach or a gesture takes the hand.
+    if (hand && !flat && w < 1) {
+      a.frame.updateMatrixWorld(true);
+      const fingers = new THREE.Vector3(0, 1, 0).applyQuaternion(hand.palmFrame(new THREE.Quaternion()));
+      const down = bodyVec(0, -Math.cos(REST_WRIST.forward), Math.sin(REST_WRIST.forward)).normalize();
+      const q = new THREE.Quaternion().setFromUnitVectors(fingers, down);
+      const angle = 2 * Math.acos(Math.min(1, Math.abs(q.w)));
+      const k = (1 - clamp01(w)) * Math.min(1, REST_WRIST.most / Math.max(angle, 1e-6));
+      rotateBoneWorld(a.arms[s].hand, new THREE.Quaternion().slerp(q, k));
+    }
+    steadyTwist(a, s, t, dt);
   }
 
   // A flat take stops here: bind fingers, a still face, eyes fixed in the head (held objects still follow the hands).

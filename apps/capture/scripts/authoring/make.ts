@@ -311,7 +311,7 @@ const SIDE_ORBIT = 70;
 async function visualRow(reviewDir: string): Promise<Row> {
   const dir = join(reviewDir, 'visual');
   const bar = 'a visual reviewer passes the arm motion, the clipping and the face';
-  const fix = `run scripts/gemini-review.sh ${rel(join(dir, 'BRIEF.md'))} from the repository root (on exit 75, give the same brief to the design-reviewer subagent, model opus), save its JSON answer as ${rel(join(dir, 'verdict.json'))}, then run make.ts verdict ${rel(dirname(reviewDir))}`;
+  const fix = `give ${rel(join(dir, 'BRIEF.md'))} to the design-reviewer subagent (model opus; its paths are relative to apps/capture), save its JSON answer as ${rel(join(dir, 'verdict.json'))}, then run make.ts verdict ${rel(dirname(reviewDir))}`;
   let v: { reviewer?: string; pass?: unknown; findings?: { t?: number; what?: string; fix?: string }[] };
   try { v = JSON.parse(await readFile(join(dir, 'verdict.json'), 'utf8')); } catch {
     try { await stat(join(dir, 'BRIEF.md')); } catch { return { id: 'visual', bar, value: 'no review', pass: null, fix: 'run without --quick to make the review pack' }; }

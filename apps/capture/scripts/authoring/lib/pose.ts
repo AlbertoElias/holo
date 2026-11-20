@@ -215,6 +215,49 @@ export function limitTwist(a: LoadedAvatar, side: Side): void {
   }
 }
 
+/** Scales the forearm's twist from neutral by `k` (0 neutral, 1 as it is), rolling the hand about the forearm. */
+export function easeTwist(a: LoadedAvatar, side: Side, k: number): void {
+  if (k >= 1) return;
+  const ch = a.arms[side];
+  const axis = ch.hand.getWorldPosition(new THREE.Vector3()).sub(ch.foreArm.getWorldPosition(new THREE.Vector3())).normalize();
+  rotateBoneWorld(ch.hand, tmpQ.setFromAxisAngle(axis, (k - 1) * forearmTwist(a, side)));
+}
+
+/** How fast the forearm turns over at most (radians a second): a quick, deliberate turn of the palm. */
+export const TWIST_SPEED = 540 * DEG;
+const lastTwist = new WeakMap<LoadedAvatar, Partial<Record<Side, { t: number; twist: number }>>>();
+
+/**
+ * Keeps the forearm's twist continuous from frame to frame: within its range,
+ * at most `TWIST_SPEED`, and from the last frame the short way. The wanted
+ * palm can cross the far end of the range (a palm turned past what the
+ * forearm can give, then let go), where the measured twist jumps from one
+ * limit to the other; the hand then unwinds back through neutral instead.
+ * Call once a frame, after the arm is solved; `t` is the take time.
+ */
+export function steadyTwist(a: LoadedAvatar, side: Side, t: number, dt: number): void {
+  const ch = a.arms[side];
+  const rec = lastTwist.get(a) ?? {};
+  lastTwist.set(a, rec);
+  const prev = rec[side];
+  const tw = forearmTwist(a, side);
+  let target = THREE.MathUtils.clamp(tw, -FOREARM_TWIST_LIMIT, FOREARM_TWIST_LIMIT);
+  if (prev && t > prev.t && t - prev.t <= 2.5 * dt) {
+    const d = THREE.MathUtils.euclideanModulo(tw - prev.twist + Math.PI, 2 * Math.PI) - Math.PI;
+    const goal = THREE.MathUtils.clamp(prev.twist + d, -FOREARM_TWIST_LIMIT, FOREARM_TWIST_LIMIT);
+    const step = TWIST_SPEED * (t - prev.t);
+    target = prev.twist + THREE.MathUtils.clamp(goal - prev.twist, -step, step);
+  }
+  for (let k = 0; k < 3; k += 1) {
+    const now = forearmTwist(a, side);
+    const turn = THREE.MathUtils.euclideanModulo(target - now + Math.PI, 2 * Math.PI) - Math.PI;
+    if (Math.abs(turn) < 1e-3) break;
+    const axis = ch.hand.getWorldPosition(new THREE.Vector3()).sub(ch.foreArm.getWorldPosition(new THREE.Vector3())).normalize();
+    rotateBoneWorld(ch.hand, tmpQ.setFromAxisAngle(axis, turn));
+  }
+  rec[side] = { t, twist: forearmTwist(a, side) };
+}
+
 /**
  * Runs `move` (which re-solves the arm) and gives the forearm and the hand
  * back the twist and the wrist turn they had: a small move of the arm does

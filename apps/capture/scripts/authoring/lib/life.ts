@@ -59,7 +59,7 @@ const SIGH_BACK = 1.5;
 const SIGH_REST = 3;
 
 /** A hanging hand's fidget at its peak: extra finger curl, the hand lifted (metres) and the forearm rolled (degrees). */
-export const LIFE_FIDGET = { curl: 0.22, lift: 0.04, rollDeg: 25, stagger: 0.05 } as const;
+export const LIFE_FIDGET = { curl: 0.1, lift: 0.04, rollDeg: 10, stagger: 0.05 } as const;
 const FIDGET_EVERY: Range = [3, 6];
 const FIDGET_FIRST: Range = [1.2, 3.5];
 const FIDGET_IN = 0.6;
