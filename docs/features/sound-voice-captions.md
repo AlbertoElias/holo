@@ -155,24 +155,25 @@ written first.
 `extensionsRequired` (the converter refuses unknown required extensions and
 only warns on used ones), with a `language` per track so a second language
 can come later, and PRD-009's referent links added later as an optional
-field on a cue. A cue names its `speaker` by performer name from
-`HOLOIM_humanoid`, not a node index, which `edit-take.ts` and `recast-take.ts`
-rewrite. **Proof:** an extension round trip in the authoring writer's check
+field on a cue. A cue names its `speaker` by the performer's wrapper node name
+(`RecordedAvatar` for the first, `Performer_<id>` for others), not a node
+index, which `edit-take.ts` and `recast-take.ts` rewrite. (`HOLOIM_humanoid`
+declares only the first performer's bones and no names, so it cannot name a
+speaker; corrected at the slice 3 design review.) **Proof:** an extension round trip in the authoring writer's check
 (the cues read back equal), and a viewer e2e (below).
 
 ### 4. Where captions render
 
 | Option | Notes |
 |---|---|
-| A. On the card: one line on the chip above the control row while the card is muted, or always if the viewer turns captions on | Feed starts muted (`FeedPage.tsx:213`), so this is where most people meet it. Figtree, on the chip, as the styleguide requires for text over a hologram |
+| A. On the card (the flat-screen portal, zoomed out or inside): one line on the chip above the control row while the card is muted, or always if the viewer turns captions on | Feed starts muted (`FeedPage.tsx:213`), so this is where most people meet it. Figtree, on the chip, as the styleguide requires for text over a hologram |
 | B. Near the speaker (PRD-009): a chip by the head that faces the viewer | Right for AR and the headset, where the card's foot does not exist; on a phone it can cover the face |
 | C. Inside Quick Look | Not possible without breaking the styleguide's "no text in Quick Look" (option 3C); Quick Look keeps the voice and lips only |
 
-**Recommendation:** A on the card and in the portal, B in WebXR AR and the
+**Recommendation:** A on the card (the card is the portal), B in WebXR AR and the
 headset, none in Quick Look. This differs from PRD-009, which makes the
 phone the primary moment and puts words near the speaker there too; which
-wins on the phone was decision 8: the card's foot (2026-11-19). Titles show centred on the chip at their cue
-time on the card, and as a chip in front of the hologram in XR. **Proof:** a
+wins on the phone was decision 8: the card's foot (2026-11-19). No titles (decision 7). **Proof:** a
 viewer-web e2e on a captioned fixture: the cue's text is on the card during
 its span and gone after, contrast at least 4.5:1 on the chip, captions
 follow mute; in AR, an IWER screenshot of the chip by the head, with a
@@ -249,8 +250,8 @@ capture, it is a meaning edit (undone out of the take), to be specified there.
    Its licences (weights, voices, the GPL phonemiser run as a separate
    process) recorded beside the cache.
 3. **Captions (titles out: decision 7).** The `HOLOIM_captions` contract type in
-   `packages/contracts`, written by the authoring tool from `say` lines and
-   title cues, read by viewer-web on the card (chip, follows mute) and in
+   `packages/contracts`, written by the authoring tool from `say` lines,
+   read by viewer-web on the card (chip, follows mute) and in
    WebXR (chip by the head). Design review against the styleguide and a
    viewer e2e. Codex screenshot validation when it has quota.
 4. **Effects from events (no music bed: decision 7).** Sounds attached to solver events
@@ -371,6 +372,40 @@ stronger lip fallback for avatars without viseme shapes (`mouthLowerDown`,
 `mouthUpperUp` with `jawOpen`, in `packages/avatar-face`), since the stock
 avatar's lips read as closed; an unknown Kokoro voice to fail at validation,
 and a sound past the clip end to fail rather than warn.
+
+## Slice 3: design review (2026-11-19)
+
+Design reviewer: `design-reviewer` subagent (Opus), fresh context, read-only,
+before any code. Folded into the plan:
+
+- **Contract** in `packages/contracts/src/captions.ts`: root extension
+  `HOLOIM_captions` `{ version: 1, tracks: [{ language, cues: [{ from, to,
+  text, kind, speaker? }] }] }`, in `extensionsUsed` only. `language` is a
+  BCP-47 tag (`en-US` for Kokoro's `a` voices, `en-GB` for `b`; a `file:`
+  voice says its own). `kind` is any string so a later kind does not void a
+  file; viewers show `speech` only (decision 7). `speaker` is optional (the
+  first performer when absent). The reader drops a bad cue, not the track,
+  and ignores an invalid extension with a warning, as `findStoredPlace` does.
+- **No API change.** Captions are JSON only; `hologram-process.ts` keeps root
+  extensions, and `HOLOIM_meaning` has no upload check either. The Quick Look
+  converter warns on an unknown used extension; `check_usdz_tools.sh` runs
+  once on a captioned file.
+- **Cue times** from the line's voiced sound, not its file: from `at` plus
+  the first voiced group's start to `at` plus the last group's end, clamped
+  to the clip. A line splits into cues at its sentence ends only when its
+  phonemiser phrases match its voiced groups one to one; otherwise it is one
+  cue.
+- **Captions share audio's lifecycle.** `direct.ts` adds them with the audio
+  after `writeTake`, so `edit-take.ts` and `recast-take.ts` drop both alike
+  (a limit, as for sound today).
+- **The card:** the chip is drawn outside `.feed-card-foot` (whose layout
+  hooks watch its subtree and would move Play), absolutely over the bottom of
+  the viewing box, so the cloche and camera never reframe when a cue starts
+  or ends. Only the focused card shows captions: the others are paused and
+  drawn on demand ("the others hold", styleguide 9.3). The text follows the
+  primary action's time, the clock unmuting starts the audio from and the
+  lips follow, set only when the cue changes; paused, it shows the cue at the
+  paused time. One polite live region, on the focused card only.
 
 ## Acceptance criteria (slice 1a)
 
