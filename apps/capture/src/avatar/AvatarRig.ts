@@ -332,7 +332,11 @@ export class AvatarRig {
     this.avatarRoot.rotation.y = lookYaw + avatarForwardOffset;
   }
 
+  /** The view mode the camera last set, so a debug view that shows the whole body can put it back. */
+  firstPersonVisualMode: 'off' | 'desktop' | 'vr' = 'off';
+
   setFirstPersonVisualState(mode: 'off' | 'desktop' | 'vr'): void {
+    this.firstPersonVisualMode = mode;
     const isFirstPerson = mode !== 'off';
     this.setFirstPersonHeadVisible(!isFirstPerson);
     // Local body clipping is only used for desktop first-person. In VR it creates

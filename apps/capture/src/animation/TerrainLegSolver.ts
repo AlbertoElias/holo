@@ -20,6 +20,8 @@ type Leg = {
   toeRatio: number;
   correction: number; planted: boolean; plantCorrection: number;
   heldTarget: THREE.Vector3; heldQuat: THREE.Quaternion; release: number; releaseSec: number;
+  /** The last grounded frame's leg rotations (upper, lower, foot), which fade out over LIFT_OFF_SEC in the air. */
+  airQuats: [THREE.Quaternion, THREE.Quaternion, THREE.Quaternion]; airFade: number;
   /** Where the foot was put last frame and how fast it was moving, so a step out of a stride carries its speed. */
   last: THREE.Vector3 | undefined; velocity: THREE.Vector3; stepVelocity: THREE.Vector3; lastQuat: THREE.Quaternion | undefined;
   /** Set down before the clip's footfall; held until that stance ends. */
@@ -44,6 +46,8 @@ const PLANT_RELEASE_SEC = 0.15;
 const GAIT_RELEASE_SEC = 0.25;
 /** Time constant for a planted foot settling onto the floor. */
 const PIN_SETTLE_SEC = 0.06;
+/** Leaving the ground, the feet ease from where the ground had them to the pose's over this long (s), not in one frame. */
+const LIFT_OFF_SEC = 0.1;
 /** Mid-swing clearance added to the walk's swing foot, as a share of the avatar's height. */
 const SWING_LIFT_RATIO = 0.03;
 /** Share of the leg's length over which a walking leg eases into full extension. */
@@ -120,6 +124,7 @@ export class TerrainLegSolver {
         side, upper, lower, foot, toe, ankleRatio, toeRatio,
         upInFoot: this.up.clone().applyQuaternion(foot.getWorldQuaternion(new THREE.Quaternion()).invert()),
         correction: 0, planted: false, plantCorrection: 0, heldTarget: new THREE.Vector3(), heldQuat: new THREE.Quaternion(), release: 0, releaseSec: PLANT_RELEASE_SEC,
+        airQuats: [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()], airFade: 0,
         last: undefined, velocity: new THREE.Vector3(), stepVelocity: new THREE.Vector3(), lastQuat: undefined, early: false, soft: 0,
         mode: 'free', anchor: new THREE.Vector3(), stepFrom: new THREE.Vector3(), step: 0, wasStance: false
       });
@@ -234,7 +239,14 @@ export class TerrainLegSolver {
           leg.lastQuat = leg.foot.getWorldQuaternion(new THREE.Quaternion());
         }
       } else {
-        // No inferred contact during flight or over a ledge.
+        // No inferred contact during flight or over a ledge. The last grounded correction fades out, so the stance
+        // foot leaves the floor with the body rather than dropping to the pose (through the floor) in one frame.
+        leg.airFade = Math.max(0, leg.airFade - Math.max(0, deltaSec) / LIFT_OFF_SEC);
+        if (leg.airFade > 0) {
+          const share = smooth(leg.airFade);
+          [leg.upper, leg.lower, leg.foot].forEach((bone, i) => bone.quaternion.slerp(leg.airQuats[i]!, share));
+          leg.upper.updateWorldMatrix(false, true);
+        }
         leg.correction = 0;
         leg.planted = false;
         leg.release = 0;
@@ -242,6 +254,10 @@ export class TerrainLegSolver {
         leg.wasStance = false;
         leg.last = undefined;
         leg.lastQuat = undefined;
+      }
+      if (surface && center) {
+        [leg.upper, leg.lower, leg.foot].forEach((bone, i) => leg.airQuats[i]!.copy(bone.quaternion));
+        leg.airFade = 1;
       }
       const resolved = leg.foot.getWorldPosition(new THREE.Vector3());
       this.samples.push({ side: leg.side, foot: { x: resolved.x, y: resolved.y, z: resolved.z }, groundY: surface?.point.y ?? null, correction: leg.correction, upper: leg.upper.quaternion.toArray(), lower: leg.lower.quaternion.toArray(), mode: leg.mode });
@@ -270,6 +286,7 @@ export class TerrainLegSolver {
   }
 
   private resetLeg(leg: Leg): void {
+    leg.airFade = 0;
     leg.mode = 'free';
     leg.planted = false;
     leg.release = 0;

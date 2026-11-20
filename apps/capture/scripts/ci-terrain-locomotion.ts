@@ -169,14 +169,14 @@ async function runMode(page: Page, mode: 'desktop' | 'xr'): Promise<void> {
       assert(stanceSpeed !== undefined, `${mode}: the desktop walk has no measured gait`);
       assert(stanceSpeed > 0.5 && stanceSpeed < 2.5, `${mode}: measured stance speed ${stanceSpeed} m/s is not a walking foot's`);
     }
-    const expected = Math.max(0.15, Math.min(stanceSpeed ? 3 : 2.4, stanceSpeed ? meanSpeed(states) / stanceSpeed : 1.4 * meanSpeed(states) / 3.24));
+    const expected = Math.max(0.15, Math.min(stanceSpeed ? 3 : 2.4, stanceSpeed ? meanSpeed(states) / stanceSpeed : 1.4 * meanSpeed(states) / 1.8));
     assert(Math.abs(meanCadence(states) - expected) < 0.15, `${mode}: cadence fails to follow actual corrected travel`);
   }
   if (meanSpeed(crouchWalk) < meanSpeed(walk) * 0.85) {
     assert(meanCadence(crouchWalk) < meanCadence(walk) * 0.85, `${mode}: crouch cadence fails to follow slower travel`);
   }
-  // The keyboard walks one avatar height per second on a flat screen and 1.8 in XR.
-  assert(meanSpeed(walk) > (mode === 'xr' ? 3.24 : 1.8) * 0.75, `${mode}: unobstructed standing walk stuck on ramp`);
+  // Every input walks one avatar height per second (1.8 m/s).
+  assert(meanSpeed(walk) > 1.8 * 0.75, `${mode}: unobstructed standing walk stuck on ramp`);
   assert(Math.abs(meanCadence(crouchWalk) - meanCadence(walk)) > 0.1, `${mode}: fixed cadence despite distinct measured speeds`);
   await screenshot(page, `${mode}-crouch-walk.png`);
 

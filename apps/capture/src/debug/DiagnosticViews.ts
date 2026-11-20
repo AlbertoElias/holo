@@ -82,7 +82,7 @@ export class DiagnosticViews {
     this.updateHandOverlay();
   }
 
-  /** Extra views after the main draw; only while an XR session presents. */
+  /** Extra views after the main draw: while an XR session presents, or the body view over a flat screen (automation proof videos). */
   render(): void {
     const { renderer, scene } = this.deps;
     if (this.heightEvidence && renderer.xr.isPresenting) {
@@ -90,7 +90,12 @@ export class DiagnosticViews {
       return;
     }
     const spectator = this.spectatorCamera;
-    if (!spectator || !renderer.xr.isPresenting) return;
+    if (!spectator) return;
+    if (!renderer.xr.isPresenting) {
+      if (this.spectatorMode !== 'body' && this.spectatorMode !== 'body-fixed') return;
+      this.renderBodySpectator(spectator, renderer.domElement.width / renderer.getPixelRatio(), renderer.domElement.height / renderer.getPixelRatio());
+      return;
+    }
     const width = renderer.domElement.width / renderer.getPixelRatio();
     const height = renderer.domElement.height / renderer.getPixelRatio();
     renderer.xr.enabled = false;
@@ -156,11 +161,12 @@ export class DiagnosticViews {
     const lookTarget = fixed ? root : this.spectatorFocus;
     spectator.lookAt(lookTarget.x, lookTarget.y + avatar.avatarHeight * 0.45, lookTarget.z);
     renderer.setViewport(0, 0, width, height);
+    const mode = avatar.firstPersonVisualMode;
     avatar.setFirstPersonVisualState('off');
     this.setHeadPathOverlayVisible(true);
     renderer.render(scene, spectator);
     this.setHeadPathOverlayVisible(false);
-    avatar.setFirstPersonVisualState('vr');
+    avatar.setFirstPersonVisualState(mode);
   }
 
   // A portrait of the face from in front of the eyes, following the head:

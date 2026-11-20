@@ -102,6 +102,8 @@ const RATTLE_SEC = 0.3;
 const WALK_FADE_SEC = 0.08;
 /** The desktop body is all clip: its walk eases in over most of a step, or the hips drop and the knees jump at the first frame. */
 const DESKTOP_WALK_IN_SEC = 0.25;
+/** A walk that starts from the rest pose (no idle clip) eases in this long, or the feet jump at the first frame. */
+const WALK_IN_FROM_REST_SEC = DESKTOP_WALK_IN_SEC;
 const WALK_ENTRY_TIME_OFFSET_SEC = 0.12;
 
 /** Node key (leaf name, namespace and path trimmed, lowercased) and property of a track. */
@@ -520,8 +522,9 @@ export class LocomotionAnimator {
     if (!this.activeAction) {
       nextAction.reset().setEffectiveWeight(1).play();
       this.applyEntryOffsets(state, previousState, nextAction);
-      // Without an idle clip the desktop body stands in its rest pose; ease out of it rather than snapping to the walk.
-      if (fadeSec > 0 && profile === 'desktop-full') nextAction.fadeIn(fadeSec);
+      // Without an idle clip the body stands in its rest pose (the VR legs never have one); ease out of it over most
+      // of a step rather than snapping to the walk, on either profile.
+      if (fadeSec > 0) nextAction.fadeIn(state === 'walk' ? Math.max(fadeSec, WALK_IN_FROM_REST_SEC) : fadeSec);
     } else if (fadeSec <= 0) {
       this.activeAction.stop();
       nextAction.reset().setEffectiveWeight(1).play();
