@@ -36,6 +36,7 @@ import { BUILDS, CLOTHING, EYES, FINISHES, GLASSES, HAIR_COLOUR, HAIR_STYLES, pa
 import { actingReport, diffTakes, summarize } from './acting-report.ts';
 import { bodyLine, build, loadSheet, OBJECT_LIMITS, resolveAvatar } from './direct.ts';
 import { BAR } from './lib/audition-bar.ts';
+import { FACE_CHANNELS } from '@holoim/avatar-face';
 import { DEFAULT_TIMING, FACE_MIXES, GESTURES, houseFinish, parseSheetText, resolveTiming, STATES, validateSheet, type BeatSheet, type ObjectSpec, type Place, type Point } from './lib/beats.ts';
 import { solveTake } from './lib/direct.ts';
 import { parseGlb } from './lib/gltf-read.ts';
@@ -81,7 +82,8 @@ function words(): string {
     `  clothing  ${Object.entries(CLOTHING).map(([k, v]) => `${k} (top rgb ${v.top.join(',')}, trousers rgb ${v.trousers.join(',')})`).join('\n            ')}`,
     '            fixed outfits: no other colours',
     `directions  ${list(Object.keys(DEFAULT_TIMING))}`,
-    `expression  ${list(Object.keys(FACE_MIXES))}   (or face channels; at card size smile and sad read best)`,
+    `expression  ${list(Object.keys(FACE_MIXES))}   (at card size smile and sad read best)`,
+    `            or face channels, each 0..1: { "jawOpen": 0.5, … } from ${list(FACE_CHANNELS)}`,
     `gesture     ${list(Object.keys(GESTURES))}   (wave takes side, count, at)`,
     `state       ${list(Object.keys(STATES))}`,
     `hand shape  ${list(Object.keys(HAND_SHAPES))}`,

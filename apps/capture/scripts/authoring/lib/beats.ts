@@ -114,6 +114,24 @@ export type Direction = Timing & (
 );
 export type DirectionKind = Direction['kind'];
 
+/** Fields each direction kind takes (the type above, at run time), so a sheet with a wrong field name fails with the name. */
+const TIMING_FIELDS: readonly string[] = ['anticipation', 'attack', 'hold', 'settle', 'delay'];
+const DIRECTION_FIELDS = {
+  look: { required: ['at'], optional: ['head'] },
+  expression: { required: ['shape'], optional: ['strength'] },
+  reach: { required: ['side', 'at', 'stopShort'], optional: ['palm'] },
+  hand: { required: ['side', 'shape'], optional: ['strength'] },
+  weight: { required: ['toward'], optional: ['amount'] },
+  bend: { required: [], optional: ['amount'] },
+  turn: { required: [], optional: ['degrees', 'toward', 'body'] },
+  step: { required: ['foot', 'by'], optional: ['follow'] },
+  take: { required: ['side', 'object'], optional: ['palm'] },
+  put: { required: ['side', 'object'], optional: ['at', 'on'] },
+  aim: { required: ['side', 'at'], optional: [] },
+  gesture: { required: ['name'], optional: ['side', 'count', 'strength', 'at'] },
+  state: { required: ['name'], optional: ['strength', 'at'] },
+} as const satisfies Record<Direction['kind'], { required: readonly string[]; optional: readonly string[] }>;
+
 export interface Beat {
   readonly id: string;
   readonly performer: string;
@@ -640,6 +658,12 @@ export function validateSheet(sheet: BeatSheet): string[] {
     for (const d of b.directions) {
       const where = `beat ${b.id} ${d.kind}`;
       if (!Object.hasOwn(DEFAULT_TIMING, d.kind)) { problems.push(`${where}: no direction kind ${d.kind} (${Object.keys(DEFAULT_TIMING).join(', ')})`); continue; }
+      const fields: { readonly required: readonly string[]; readonly optional: readonly string[] } = DIRECTION_FIELDS[d.kind];
+      const loose = d as unknown as Record<string, unknown>;
+      for (const k of Object.keys(loose)) {
+        if (k !== 'kind' && !TIMING_FIELDS.includes(k) && !fields.required.includes(k) && !fields.optional.includes(k)) problems.push(`${where}: no field ${k} (it takes ${[...fields.required, ...fields.optional].join(', ')})`);
+      }
+      for (const k of fields.required) if (loose[k] === undefined) problems.push(`${where}: needs ${k}`);
       const side = d.kind === 'step' ? d.foot : 'side' in d ? d.side : undefined;
       if (side !== undefined && side !== 'left' && side !== 'right' && !(d.kind === 'hand' && side === 'both')) problems.push(`${where}: side ${side} is left or right${d.kind === 'hand' ? ' or both' : ''}`);
       if (d.kind === 'expression' && typeof d.shape === 'object') {
