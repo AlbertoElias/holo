@@ -60,9 +60,7 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   ankle (limit 0.02 m above) and a thigh turns 11.3–11.6° in one step (limit 10°). The
   stock avatar in the same runs: hips 0.24–0.25 m, no knee or thigh failure (its own
   failures are B-069). The crouch depth is in metres tuned on the stock avatar's legs;
-  the base's legs are shorter. Also on the house base only: the IWER resize take compares
-  15 frames (needs more than 20) because the released prop comes to rest sooner and the
-  take is shorter; all its behaviour rows pass.
+  the base's legs are shorter.
 - **Expected:** the reach crouch fits the avatar's leg length; the hips stay above the limit.
 - **Reproduction:** `cd apps/capture && OBJECT_ONLY=desktop,mouse,phone,reach,resizeIwer node --import tsx scripts/run-xr-checks.ts object`
 
