@@ -1,7 +1,7 @@
 # Feature brief: natural VR arms from recorded motion
 
 **Lead:** Claude Code session (Opus), started by the realistic-motion lead
-**Status:** Implementing (design review: approved with changes, all applied)
+**Status:** Delivered 2026-11-20 (design review: approved with changes, all applied; verifier and code review findings fixed or recorded); Quest check open
 **Layer:** event (the recorded body motion of a take; see
 `docs/product/concepts/what-a-hologram-is.md`)
 
@@ -61,32 +61,32 @@ The numbers come from `test:xr:arms` (IWER, deterministic; VR and AR give the
 same numbers) and the `hands` replay of the real Quest 3 take. "Before" is
 `main` at 55f4215.
 
-- [ ] B-073: elbow swivel (0° down, 90° out, ±180° up) is in the human band at
+- [x] B-073: elbow swivel (0° down, 90° out, ±180° up) is in the human band at
       rest and while walking: median 0°–70° on rest, walk and stand (before
       141°, 138°, 131° on hands). The low side reach has the elbow down (median
       between −90° and 90°; before −175°). The Quest take swivel median is in
       0°–70° (before 92°).
-- [ ] B-073: no elbow flips. A flip is a swivel jump over 25° in one 30 Hz
+- [x] B-073: no elbow flips. A flip is a swivel jump over 25° in one 30 Hz
       frame (`arm-quality.ts`); the swivel is not measured at an elbow angle of
       165° or more, where the bend plane is not visible. Flips per minute are
       0.5 or less on the arms check (before 1.0/min) and not above the before
       value on the Quest take.
-- [ ] B-074: the clavicle elevation and protraction ranges are 30° or less on
+- [x] B-074: the clavicle elevation and protraction ranges are 30° or less on
       every segment of the arms check and on the Quest take (before up to 83°).
       Over a whole run the protraction range (retraction to protraction) is 45°
       or less. The largest clavicle step is 8° per frame or less (before about
       21°); the clavicle turns at 150°/s or less.
-- [ ] B-075: the forward rows have a wrist p95 of 1.5 cm or less on both
+- [x] B-075: the forward rows have a wrist p95 of 1.5 cm or less on both
       sources. The forward-far and overhead targets of the arms check lie past
       the avatar's full reach (hand 1.10 × the arm length from the pushed
       shoulder, controller about 1.2 ×), so the arm cannot reach them without
       a visible stretch. Their bars stop a regression: hands 6.5 cm, controllers
       13 cm (before 14.8 cm and 14.5 cm on controllers).
-- [ ] No visible stretch: the arm length change over a run
+- [x] No visible stretch: the arm length change over a run
       (`armLengthSpreadPct`) is 2.5% or less on both sources. The dynamic
       reserve is 1.8% (under the 2% collider rebuild threshold of
       `AvatarColliders`); the hands' 8% stretch goes away.
-- [ ] The Quest take: wrist p95 1.0 cm or less, arm length spread 2.5% or
+- [x] The Quest take: wrist p95 1.0 cm or less, arm length spread 2.5% or
       less. Before, the wrist p95 was 0.2 cm only because the arm stretched
       7.9% (over the hip spacing; up to 19% in world size). The user reaches
       1%–3% past the fitted arm several times and 13% at the end of the take;
@@ -244,7 +244,7 @@ growing.
 | The Quest take (swivel, clavicle, wrist p95, stretch) | the `hands` replay (`XR_REPLAY_ONLY=headset-open-fist-pinch-point-wave-reach`, gated) | `output/quest-after/…-report.json`; before in `output/quest-before/` |
 | Desktop arms unchanged | arms check desktop rows, `desktop-reach-interruptions` | reports (pending) |
 | No regressions | avatars (no-fingers first), body, object, hands, the IWER resize take | check reports (pending) |
-| Fit is repeatable | `node --import tsx scripts/mocap/fit-arm-pose.ts` writes the same `armPoseModel.ts` | git diff empty after a rerun (pending) |
+| Fit is repeatable | `node --import tsx scripts/mocap/fit-arm-pose.ts --write` writes the same `armPoseCoefficients.ts` | git diff empty after a rerun; the verifier matched it byte for byte |
 | The arms look natural | before/after proof video (H.264) in `output/` | sent to the owner (pending) |
 
 Results (IWER arms check, `output/arm-before` and `output/arm-after2`; Quest
@@ -271,6 +271,28 @@ take, `output/quest-before` and `output/quest-after`):
 
 The arms check gates fail `main` (22 misses on hands, 25 on controllers) and
 pass this change.
+
+## Review and verification
+
+The independent verifier (Opus, brief and diff only) and `/code-review high`
+found these; each was checked against the code:
+
+- Fixed: a step with `deltaSec` 0 skipped the clavicle rate limit and snapped
+  the shoulder to its target.
+- Fixed: the rate limit moves each axis on its own, so the combined clavicle
+  angle passed 30° for a few frames (32° in a random probe). It is now scaled
+  back to the limit.
+- Fixed: the Quest replay passed when an arm metric could not be measured; it
+  now fails. Its protraction bar is the 30° segment bar (was 45°).
+- Fixed: the AR camera author returned before `restArmLengths`, so a fitted
+  arm could stay long there (latent: the house avatar's fit is ×1).
+- Recorded in `TODOS.md`: a wrist behind the back lies outside the recorded
+  arms (hands put the elbow up there, controllers do not); the overall arms
+  gates also apply to a partial `ARM_REACH_ONLY` run; the replay swivel bar
+  (0°–70°) may not suit a future take of mostly overhead reaches.
+- Not changed: `armLengthFit` reads the pose when the chain is built, which is
+  the bind pose right after the avatar loads, as the bone lengths already
+  assume.
 
 ## Physical-device limits
 

@@ -257,7 +257,7 @@ async function run(browser: Awaited<ReturnType<typeof launchXrBrowser>>, input: 
   return report;
 }
 
-// Gates (docs/features/vr-arm-natural.md). The far forward and overhead
+// Gates (docs/features/archive/vr-arm-natural.md). The far forward and overhead
 // targets lie 10% (hand) and about 20% (controller) past the avatar's full
 // reach; their bars stop a regression, they do not ask for a stretch.
 type Gate = { segment?: string; metric: keyof ArmMetrics; min?: number; max?: number };

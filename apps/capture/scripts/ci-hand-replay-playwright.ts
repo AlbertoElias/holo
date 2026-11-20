@@ -183,7 +183,7 @@ function armFrame(frame: ReplaySample): ArmFrame {
   return { timeSec: frame.timeMs / 1000, bones: frame.body?.bones ?? {}, wrist };
 }
 
-// Arm shape bars (docs/features/vr-arm-natural.md): elbows hang down and a
+// Arm shape bars (docs/features/archive/vr-arm-natural.md): elbows hang down and a
 // little out, no flips, a human clavicle range, no visible stretch, and the
 // wrist on the tracked wrist (up to about 1 cm short on a reach past the arm).
 // The Quest take is one segment, so its protraction bar is the segment bar (30°).
