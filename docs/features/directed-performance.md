@@ -1531,7 +1531,8 @@ outfit, a laugh mix, and how much change is enough for an event. The skill answe
 where? What happens? How do they react?" The grader writes
 `story: { setup, event, reaction }` into `comparison.json`, each with `says`, `seen`,
 `reads` and `revise`. `make.ts` gets a `story` row: it passes when all three parts
-read. It is the main bar. The per-beat reading row becomes advisory. A sheet with no
+read. It is the main bar. The per-beat reading row stays a bar (no owner approval to
+make it advisory; open decision 15). A sheet with no
 `story` gets a fix line that points to the skill step.
 
 **3. Tool gaps the story step found.** The dry runs and the slice 7 faults show four
@@ -2162,6 +2163,15 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
       Recommended; no tool change.
     - Not built: a door the hand pulls, a second performer who takes a gift, real
       low-poly models (Poly Pizza). Each is a later slice if the owner wants it.
+
+15. **Slice 8: should the per-beat reading become advisory?** Open. The first draft of
+    slice 8 made the story row the main bar and the per-beat `reading` row a note. The
+    owner did not approve that in their own words, so both stay bars (default, easy to
+    reverse: one `advisory: true` in `make.ts` `readingRow`). The evidence is each
+    piece's two results (story parts read, beats read), in the slice 8 evidence below.
+    - **Keep both as bars** (now). A piece is done only when the story and every beat read.
+    - **Story as the bar, beats as a note.** A piece that tells its story is done even
+      when a beat (a nod, a shrug) does not read on its own.
 
 ## Test plan and evidence
 

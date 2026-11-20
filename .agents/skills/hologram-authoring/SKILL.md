@@ -168,7 +168,7 @@ over the 40 px bar.
    the story"); the `story` bar fails until the sheet has one. Then write
    beats, one per thing the reader should see. Give the sheet an `intent`
    and every beat an `intent` in plain words ("She waters the plant."): the
-   advisory reading row is checked against those. Comments and trailing
+   `reading` bar is checked against those. Comments and trailing
    commas are fine.
 3. **Build and check fast.** `M <sheet> --quick` builds `v1/`, `v2/`, … beside
    the sheet (about 20 s plus a minute for twelve stills). It prints the look
@@ -250,7 +250,8 @@ production and needs the owner's word.
 | `quickLook` | the take fits the iPhone Quick Look budget |
 | `faceBox.*` | the face is at least 40 device px brow to chin on the phone card |
 | `story` | the main bar: a fresh reader, told nothing, gets the setup (who and where), the event and the reaction. Fails at once when the sheet has no `story` |
-| `reading`, `body.*`, `still.*`, `onCard.*` | notes, not bars: every beat read (each beat needs an `intent`), feet planted, something moving every second, objects wholly on the card |
+| `reading` | a fresh reader reads every beat (each beat needs an `intent`) and the piece as a whole |
+| `body.*`, `still.*`, `onCard.*` | notes, not bars: feet planted, something moving every second, objects wholly on the card |
 
 ## What works at card size
 

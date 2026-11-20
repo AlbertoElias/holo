@@ -304,7 +304,7 @@ async function storyRow(reviewDir: string, sheet: BeatSheet | undefined): Promis
     ...(missed.length ? { fix: missed.map(({ k, p }) => `${k}: ${p!.revise ?? `the reader saw "${p!.seen}"; make "${p!.says}" plainer`}`).join('; ') } : {}) };
 }
 
-/** The reading bar from a filled comparison.json; pending while any beat is unread. Advisory since slice 8: the story row is the main bar. */
+/** The reading bar from a filled comparison.json; pending while any beat is unread. A bar beside the story row (slice 8). */
 async function readingRow(reviewDir: string): Promise<Row> {
   const file = join(reviewDir, 'comparison.json');
   let c: { beats: { beat: string; intent: string | null; seen: string | null; reads: boolean | null; revise: string | null }[]; piece?: { reads: boolean | null } };
@@ -321,7 +321,7 @@ async function readingRow(reviewDir: string): Promise<Row> {
       fix: `give a fresh reader only ${rel(join(reviewDir, 'reader'))}/ (its README.md says what to answer), save the account as ${rel(join(reviewDir, 'reader.md'))}, have a fresh grader fill seen/reads/revise in ${rel(file)} from it, then run make.ts verdict ${rel(dirname(reviewDir))}` };
   }
   return { id: 'reading', bar: 'a fresh reader reads every beat', value: `${beats.length - missed.length} of ${beats.length} beats read${c.piece?.reads === false ? '; the piece as a whole did not' : ''}`,
-    pass: missed.length === 0 && c.piece?.reads !== false, advisory: true,
+    pass: missed.length === 0 && c.piece?.reads !== false,
     ...(missed.length ? { fix: missed.map((b) => `${b.beat}: ${b.revise ?? `the reader saw "${b.seen}"; make "${b.intent}" plainer`}`).join('; ') } : {}) };
 }
 
