@@ -1488,6 +1488,16 @@ bug above.)
 - **Fix:** the build samples each mix over a weight grid, at the mouth's points and at points inside each of its faces, and pushes each shape's mouth forward one column at a time, so every sampled mix keeps the mouth 0.4 mm in front of the skin. Largest push 3.0 mm (jawOpen); the report lists them under `mouthMixes`.
 - **Closed:** 2026-11-20.
 
+### B-080 — The feed card's hover-hint check reads the hint still fading out, and races the reach fold
+
+- **Area:** `apps/viewer-web/e2e/redesign.spec.ts` ("desktop/phone: the feed card in the new look": the fold check and the hover-hint loop)
+- **Severity:** P2 (test flake: hosted run 44789036601 on `7fcacf540c50` went red in Viewer shard 2/4; that merge changed no viewer code)
+- **Observed:** 2026-11-20, hosted CI: `strict mode violation: locator('[data-hint]') resolved to 2 elements` ("Step inside" and "Pause"). Under `CI_EMULATE_LOAD=2` two more failures in the same test: `locator.hover` timing out on a reach control that `.portal-controls` intercepts, and `data-reach` still `shown` after 5 s at the first fold check.
+- **Evidence:** `packages/ui-dom/src/Hint.tsx` keeps a hint mounted until its fade-out ends, and within `WARM_MS` the next control's hint shows at once, so two `[data-hint]` nodes exist for one fade; the check took any hint on the page. `useReach` (`HologramCard.tsx`) folds the reach controls `tokens.glyph.idleAfter` (4 s) after the last pointer or focus event, to no width (`max-width: 0`), so a slow loop lost them from its live `:visible` list mid-way, and a 5 s wait for the fold left 1 s of slack. The product behaviour is intended in all three.
+- **Expected:** each step judges the hovered control's own hint, with the reach controls present while they are named, and the fold check allows the idle time it waits on.
+- **Reproduction:** load-dependent; the whole spec ×5 at CI's 2 workers under `CI_EMULATE_LOAD=2` failed 3 of 45 before the reach part of the fix.
+- **Fix:** the hint locator keeps only the hint whose text is the control's name and needs exactly one at opacity 1; the loop holds the card reached with the spec's `holdReach` and lets go before the final "no hint after the mouse leaves" check; the fold check waits `idleAfter` + 5 s. The loop names only this card's controls and the dock (another card's folded controls keep a clipped, non-empty box, so they count as visible but cannot be hovered), and the spec's two AR session waits allow 30 s (one timed out at the 10 s default under load). The whole spec ×5 at 2 workers under `CI_EMULATE_LOAD=2 scripts/ci-emulate.sh` then passed 45/45.
+
 ### B-074 — Dressed house avatars show no glasses (specks instead of frames)
 
 - **Area:** packages/avatar-look (`dressAvatar` in `src/dress.ts`), so the phone's live avatar, posted takes and authored takes
