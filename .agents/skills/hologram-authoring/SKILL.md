@@ -124,6 +124,22 @@ production and needs the owner's word.
 - **Bend over something low.** `{ "kind": "bend", "amount": 0.8 }` bends from
   the waist and pushes the hips back; reach and look are solved on the bent
   body. Use 0.5 for a lean, 1 for the deepest bend. Give it `attack` 0.8-1.0.
+- **Lower the body.** `{ "kind": "crouch", "amount": 1 }` bends the knees and
+  sinks the hips over planted feet, the chest a little forward. Add a `look`
+  at the floor or at a child so a reader knows why. The head drops about
+  0.25 m at 1, so a reader names "crouch" or "sinks down", not "kneels". Use
+  `bend` for leaning from the waist with straight legs.
+- **Wave.** `{ "kind": "gesture", "name": "wave", "side": "right", "count":
+  3 }`, with a `look` at the viewer. It reads at card size.
+- **Pinch.** The `pinch` hand shape (thumb tip to index tip, the other fingers
+  open) reads in the close view only: at card size the hand is about 25 px
+  and a reader sees a flat hand. Stage it beside the face, not in front of
+  the mouth: a `reach` to `{ "of": "<performer>", "forward": 0.3, "right":
+  0.32, "height": "chin" }` with `"palm": "toward"` and the hand `open`, then
+  a later beat that changes the hand to `pinch`. The close from open is what
+  a reader sees. Palm down or the back of the hand to the camera reads as a
+  watch check or a flat hand. The gap is 3 to 4 mm on the house base and
+  14 mm on the stock avatar.
 - **Pour or point a tool.** An object with `"grip"` and `"tool"` parts, held
   from the start (`"hold": { "right": "can" }` on the performer). Bring the
   hand to a mark beside and above the target
