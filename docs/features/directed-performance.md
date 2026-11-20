@@ -1102,7 +1102,7 @@ bars in the brief to the artist.
 | **2c3: the face matches the sheet** | Added 2026-11-19 on the owner's verdict on the default avatar: "issues with the eyes and mouth, it looks weird and uncanny as hell. it need to be much closer to the reference image". `build.py` rebuilds the eyes, lids, brows, nose and mouth to the clay expression sheet; the shared mixes, the body and the rig are unchanged. Built 2026-11-19 and merged 2026-11-20 on the owner's word "Merge as is", with the ink and light blind readings below the gate in the AI round and the turn row one vertex worse (see "Slice 2c3 evidence") | The face likeness check (`house-face-likeness.ts`) before and after; every 2c2 and 2f gate re-run unchanged; a new reader pack for people; a proof video | **Yes.** Authoring scripts, avatar files and `@holoim/avatar-look` colours; nothing in `apps/capture/src/` |
 | **2e: chosen per take** | `house:<finish>` and `look` in beat sheets; the dressing function in capture's avatar loading; height from the head-top bone; the "your look" step in the phone journey and the headset mirror; `?look=` | A phone e2e: set a look, record, upload, and the feed card shows it; an XR harness check of the mirror; a beat sheet re-dressed with another card; a proof video | **No.** Touches the phone journey (`CaptureOverlay.tsx` and its flow), owned by the phone mandate, and `src/avatar/` (loading, `AvatarRig`'s height fit), owned by the motion owner: built with both, after the phone's device checks |
 | **2f: finishes** | The other one or two finishes as material sets | Brow contrast and the blind reading per finish; one authored piece re-dressed in each | **Yes.** Avatar files. Built 2026-11-19: ink and light (see "Slice 2f evidence") |
-| **2g: the default and outside avatars** | `DEFAULT_AVATAR_URL` to the house base; the credit rule and verdict for outside avatars. The owner lifted the hold on the default on 2026-11-20; the swap first failed five capture checks (see "Slice 2g attempt" and "Slice 2g fixes"); with the owner's yes to walk speed by leg length all 15 pass and the house base is the default (see "Slice 2g result") | Motion owner's agreement recorded; the phone journey's load measured against the 2.3 MB; an outside VRM passed and one refused, by name; a proof video | **No.** One constant in capture, on the motion owner's say |
+| **2g: the default and outside avatars** | `DEFAULT_AVATAR_URL` to the house base; the credit rule and verdict for outside avatars. The owner lifted the hold on the default on 2026-11-20; the swap first failed five capture checks (see "Slice 2g attempt" and "Slice 2g fixes"); with the walk rule of 2026-11-13 unchanged and no bar changed, all 16 pass on the house base and on the stock avatar, and the house base is the default (see "Slice 2g result") | Motion owner's agreement recorded; the phone journey's load measured against the 2.3 MB; an outside VRM passed and one refused, by name; a proof video | **No.** One constant in capture, on the motion owner's say |
 
 2a and 2b start together and need nothing else. 2c needs both. 2d and 2f
 need 2c and can run side by side; 2f also waits on 2c2, so the ink finish
@@ -2064,12 +2064,17 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
       rejected it for its look.
     - **Leave the stock avatar as the default.**
 
-    **Update, same day: decided.** The owner chose walk speed by leg
-    length ("Yes, by leg length", through the lead session). All 15
-    capture XR checks pass on the house base with no bar changed, and
-    `DEFAULT_AVATAR_URL` is the house base (see "Slice 2g result"). One
-    thing for the owner to see on a headset: with tracked hands the
-    base's short arms stretch up to about 26% to reach the hand.
+    **Update, same day: decided, then replaced.** The owner chose walk
+    speed by leg length ("Yes, by leg length", through the lead session).
+    The lead session then asked for a route that leaves the 2026-11-13
+    rule as it is, and one passes: the house base lays its stride up to
+    20% longer, enough to hold its cadence at 130 steps a minute (see
+    "Slice 2g result"). Walk speed by leg length is not merged; it stays
+    on `feature/walk-speed-by-leg`. `DEFAULT_AVATAR_URL` is the house
+    base. For the owner to see: the longer stride (the motion work
+    rejected a 1.1 stride on the stock avatar for its look; this one is
+    1.15 and on the house base only), and the arm stretch (about 17% on
+    controllers, up to about 26% with tracked hands).
 
 ## Test plan and evidence
 
@@ -4160,46 +4165,58 @@ unmerged. The choice is open decision 13.
 **Not run:** all 15 checks together, `verify:pr`, and a proof video (done
 later, see "Slice 2g result").
 
-### Slice 2g result (2026-11-20): the house base is the default; all 15 capture XR checks pass
+### Slice 2g result (2026-11-20): the house base is the default; all 16 capture XR checks pass
 
-No bar was changed. The stock avatar stays under test (`STOCK_AVATAR_URL`:
-desktop-motion's `stock` row; body, hands and `ar-record` were also run on
-it with `XR_AVATAR_URL=/gltf/models/avatar.glb` and pass).
+No bar was changed, and the walk rule of 2026-11-13 (`WALK_HEIGHTS_PER_SEC`
+1.0) is unchanged. All 16 checks of `verify:pr`'s capture tier pass on the
+house base and, with `XR_AVATAR_URL=/gltf/models/avatar.glb`, on the stock
+avatar.
 
 | Check | House base | Stock avatar | Bar |
 |---|---|---|---|
-| desktop-motion, flat | Pops p99 46.5 m/s²; jitter 0.72 mm; cadence 133.3; 1.62 m/s | 48.8; cadence 128.6; 1.80 m/s | 50; 3 mm; 100 to 140 |
-| body, walk-ramp | Pops p99 34.3 | 33.6 | 35 |
-| body, still eyes p95 | 1.3 cm at most | 1.1 cm | 2.0 |
-| hands, headset fixture | Wrist p95 0.4 cm | 0.2 cm | 2 |
-| face | Eye pivot measured | (unchanged) | Under 5 mm |
+| desktop-motion, flat | Pops p99 49.7 m/s²; cadence 128.6; foot skate 1.3 cm | 49.0; 128.6; 2.5 cm | 50; 100 to 140; 3 cm |
+| body, walk fixtures | Pops p99 34.9 at most; planted foot drift 0.7 cm at most | 33.1; 0.8 cm | 35; 2 cm |
+| object, throw launch against held speed | 3.15 against 3.18 m/s | 2.96 against 3.02 m/s | Within 20% |
 | `ar-record`, marks across placements | 0, 0, 0, 0 cm | 0, 0, 0, 0 cm | 1 |
+
+The margins on the house base are thin: pops 49.7 of 50 on the desktop
+walk and 34.9 of 35 on the VR walk.
 
 **What changed in capture.**
 
-- **Walk speed by leg length** (`walkHeightsPerSec` in `CharacterMotor.ts`):
-  one avatar height per second on the stock avatar's leg share
-  (`WALK_REFERENCE_LEG_SHARE` 0.5072), scaled by the avatar's leg and held
-  between 0.8 and 1.1. The stock avatar walks as before; the base walks
-  1.62 m/s. The body solver and the clip rate use the same speed.
-- **Body solver** (`VrBodySolver.ts`): a strained foot is an urgent step
-  only when it is behind the hip. A short leg lands strained ahead of the
-  hip; stepping it again left the other leg locked straight and its knee
-  popped (walk-ramp 36.7). Five pelvis passes instead of three hold the
-  eyes.
-- **Arm reach** (`HandEmbodiment.ts`): with tracked hands an arm may
-  stretch to the reach the stock arm has at the same eye height (arm 0.3222
-  of eye height). The base's arm is 0.276, so it stretches up to about 26%;
-  the stock avatar keeps 8%. This is what brings the wrist from 2.25 cm to
-  0.4 cm. The owner has not seen it on a headset.
+- **Stride** (`LocomotionAnimator.ts`): an avatar whose own stride would
+  step faster than 130 steps a minute at the walk speed lays its stride
+  longer, by 20% at most (`WALK_CADENCE_MAX_STEPS_PER_MIN`,
+  `WALK_STRIDE_SCALE_MAX`). The house base's own cadence at one height per
+  second is 150; with a 1.15 stride it is 128.6. The stock avatar's is
+  128.6 already, so its stride is unchanged. Desktop and phone walk only;
+  the VR body keeps the clip's own stride.
+- **Body solver** (`VrBodySolver.ts`): a recorded swing eases into the
+  clip's travel together with its lift. Before, the sole moved 2.5 cm in
+  the first swing frame while it was still under 1 cm from the ground, and
+  on the house base's quicker steps that read as a planted foot sliding
+  2.8 cm. Also: a strained foot is an urgent step only when it is behind
+  the hip, and five pelvis passes instead of three hold the eyes.
+- **Arm reach** (`HandEmbodiment.ts`): an arm may stretch to the reach the
+  stock arm has at the same eye height (arm 0.3222 of eye height). The
+  base's arm is 0.276, so it stretches about 17% on controllers and up to
+  about 26% with tracked hands; the stock avatar keeps 0 and 8%. Without
+  it a held prop falls through the base's palm. The owner has not seen it
+  on a headset.
+- **Throw** (`ObjectPhysics.ts`): the velocity fit drops a reused hand
+  pose anywhere in the last 100 ms, not only at its end.
+- **Take root** (export): the hips sit on the avatar root and a take
+  records the model's position. Every exported node moves by the same
+  4 cm, so a take recorded before the change and one recorded after it
+  render in the same place relative to their objects.
 - **Face** (`FaceRig.ts`): the eye is found in its group node, and the eye
   pivot is measured again when a look rebinds the morphs.
 - **Marks** (`PointResolver.ts`): the rays of one cone ring that meet a
-  referent now share the point (their mean). Before, the nearest ray alone
-  gave the point; the check's hold aims at the empty middle of the L-shaped
-  bracket, two mirrored rays tied, and noise chose between them, so on the
-  base one hold read 2.9 cm apart under two placements. Both avatars now
-  read 0 cm. A hold whose centre ray meets the referent is unchanged.
+  referent now share the point (their mean). Both avatars read 0 cm.
+
+**Open on the house base (outside `verify:pr`):** the floor reach sinks
+the hips to 0.08 m (B-076). The `object` suite's other failures are on
+`main` with the stock avatar too (B-069).
 
 **Emulation only.** None of this was seen on a headset or a phone.
 
