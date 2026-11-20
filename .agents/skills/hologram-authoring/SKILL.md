@@ -39,15 +39,33 @@ Run everything from `apps/capture` on Node 24 (`eval "$(../../scripts/agent-node
    `vN/review/comparison.json` (your intents, with blanks for the reader).
 5. **Have a fresh reader judge it.** Spawn a new subagent (`model: "sonnet"`)
    that is told nothing about the idea and gets only the path of
-   `vN/review/reader/`. Tell it to read that folder's `README.md` and answer
-   it. Tell it to look at images only through
-   `node packages/tooling-testing/src/preview.mjs <file>` (run from the repo
-   root). Save its answer as `vN/review/reader.md`. Then spawn a second fresh
-   subagent (the grader) with `reader.md` and `comparison.json`. It fills, per
-   beat, `seen` (what the reader said, quoted), `reads` (true when the reader
-   saw the intent without being told) and `revise` (what would make a missed
-   beat plain), and the same for `piece`. Do not grade it yourself: you know
-   what it means, so you will see it. If you cannot start subagents (you are
+   `vN/review/reader/`. Prompt it with exactly this, filling the paths:
+
+   > You are a reader. You have been told nothing about what you are about to
+   > watch. Read `<reader dir>/README.md` and answer it, using only the files
+   > in that folder. To look at an image, never open the full file: run
+   > `node packages/tooling-testing/src/preview.mjs <file>` from the repo root
+   > and look at the small JPEG it prints. Watch the video too, since motion
+   > such as a wave shows only there: extract frames at 10 fps with ffmpeg into
+   > a folder in your scratch directory and preview that folder (a contact
+   > sheet), one stretch of a second or two at a time. Write your answer to
+   > `<version dir>/review/reader.md`.
+
+   Then spawn a second fresh subagent (the grader, `model: "sonnet"`):
+
+   > You are a grader. In `<version dir>/review/`, `reader.md` is a blind
+   > reader's account of a short hologram, and `comparison.json` holds the
+   > author's intent per beat (with its time span) and for the whole `piece`,
+   > with `seen`, `reads` and `revise` null. Fill only those fields, in place.
+   > Per beat: `seen` is what the reader said about that span, quoted or
+   > closely paraphrased; `reads` is true only if the reader saw that beat's
+   > intent without being told (a near synonym counts, a different meaning
+   > does not); `revise`, when `reads` is false, is one concrete sentence on
+   > what would make the intent plain at phone-card size. For `piece`: `seen`
+   > is the reader's overall line and `reads` whether it matches. Keep valid
+   > JSON, be strict, and open no other file.
+
+   Do not grade it yourself: you know what it means, so you will see it. If you cannot start subagents (you are
    one), stop here and hand the two paths to whoever started you, saying
    that the reader and grader are theirs to run.
 6. **Verdict.** `M verdict <vN dir>` reruns the bars with the grades. It says
