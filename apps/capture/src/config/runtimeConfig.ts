@@ -31,7 +31,10 @@ export interface RuntimeConfig {
   placeFlip: boolean | null;
 }
 
-export const DEFAULT_AVATAR_URL = '/gltf/models/avatar.glb';
+/** The house base in its clay finish with the neutral card (docs/features/directed-performance.md, slice 2g). */
+export const DEFAULT_AVATAR_URL = '/gltf/models/house-base.glb';
+/** The stock avatar, kept for the fixtures and the clip library: the only avatar file that carries its own clips. */
+export const STOCK_AVATAR_URL = '/gltf/models/avatar.glb';
 
 export function loadRuntimeConfig(search = window.location.search): RuntimeConfig {
   const query = new URLSearchParams(search);

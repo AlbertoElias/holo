@@ -12,7 +12,7 @@ import { AvatarRig } from '../avatar/AvatarRig';
 import { BodyTracking } from '../body/BodyTracking';
 import { CrouchState } from '../body/crouch';
 import { CameraController } from '../camera/CameraController';
-import { DEFAULT_AVATAR_URL, loadRuntimeConfig } from '../config/runtimeConfig';
+import { STOCK_AVATAR_URL, loadRuntimeConfig } from '../config/runtimeConfig';
 import { applyIwerMockVrPoseInput } from '../debug/iwerRuntime';
 import { ChromeProbe } from '../debug/chromeProbe';
 import { DiagnosticViews } from '../debug/DiagnosticViews';
@@ -354,10 +354,10 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
   const loadAssets = async (): Promise<void> => {
     const load = (url: string): Promise<GLTF> => new Promise((resolve, reject) => stage.loader.load(url, resolve, undefined, reject));
     try {
-      // A non-shipped avatar most likely needs the locomotion library: fetch it alongside.
+      // Only the stock avatar carries its own clips; any other most likely needs the locomotion library: fetch it alongside.
       let library: Promise<GLTF> | undefined;
       const loadLibrary = () => (library ??= load(config.locomotionLibraryUrl));
-      if (config.avatarUrl !== DEFAULT_AVATAR_URL) void loadLibrary().catch(() => undefined);
+      if (config.avatarUrl !== STOCK_AVATAR_URL) void loadLibrary().catch(() => undefined);
       const [sceneGltf, avatarGltf] = await Promise.all([load(config.sceneUrl), load(config.avatarUrl)]);
       avatar.applyLoadedModels(sceneGltf.scene, avatarGltf.scene, config, {
         json: avatarGltf.parser.json,
