@@ -10,6 +10,7 @@ import {
   LoopRepeat,
   MathUtils,
   PerspectiveCamera,
+  Quaternion,
   Raycaster,
   SRGBColorSpace,
   Vector2,
@@ -121,9 +122,22 @@ const RETURN_SECONDS = 0.45;
 const STAGE_LIGHT_TOWARD_VIEWER = 0.35;
 /** and this far below the Follow target, near the floor at the author's feet. */
 const STAGE_LIGHT_DROP_METERS = 0.7;
-/** Follow looks at the cloche from a little right of front and above (3.4). */
+/** Follow looks at the cloche from a little right of front and above (3.4): front is world +Z, */
 const FOLLOW_DIRECTION = new Vector3().copy(clocheFollowDirection());
+/** or the performer's front when the take has one: her avatar node's +Z at the first frame (capture's `facingWorld`). */
+const UP = new Vector3(0, 1, 0);
 const scratchFloor = new Vector3();
+const scratchFacing = new Vector3();
+const scratchQuaternion = new Quaternion();
+
+/** The Follow direction turned about the vertical so that its front is `performer`'s front. */
+function followDirectionFor(performer: Object3D | undefined, out: Vector3): Vector3 {
+  out.copy(FOLLOW_DIRECTION);
+  if (!performer) return out;
+  const facing = scratchFacing.set(0, 0, 1).applyQuaternion(performer.getWorldQuaternion(scratchQuaternion));
+  if (Math.hypot(facing.x, facing.z) < 1e-3) return out;
+  return out.applyAxisAngle(UP, Math.atan2(facing.x, facing.z));
+}
 /** Inside end never comes closer than this share of the Follow distance. */
 const MAX_INSIDE_SHARE = 0.6;
 const RIM = tokens.edge.cloche.rim;
@@ -376,6 +390,8 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
   const castClocheRef = useRef<ClocheShape | null>(null);
   // The dome fitted to the performer and her reach alone, for a performer's take: her own size, so a wide recorded set cannot shrink her either.
   const performerClocheRef = useRef<ClocheShape | null>(null);
+  // Follow's direction for this take: the performer's front, read once with the dome.
+  const followDirectionRef = useRef(new Vector3().copy(FOLLOW_DIRECTION));
   const clocheShift = useRef(new Vector3()).current;
   const fittedCentre = useRef<Vector3 | null>(null);
   const frameRectRef = useRef(frameRect);
@@ -449,6 +465,7 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
     }
     performerClocheRef.current = null;
     const performer = isCameraTake(clonedScene) ? undefined : clonedScene.getObjectByName("RecordedAvatar");
+    followDirectionFor(performer, followDirectionRef.current);
     if (performer) {
       const performerPoints = [...drawnPoints(performer, bubble), ...motionPoints(clonedScene, animations, { anchor, bubble, only: performer })];
       performerClocheRef.current = fitCloche(performerPoints);
@@ -876,7 +893,8 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
       if (framingRef.current?.key !== key) {
         // A take whose rim lifts is framed bent by its lowest rim over the path, fixed for the take.
         const rimFraming = rimRef.current?.take.lifts ? rimRef.current.take.framing : null;
-        const view = { fovY: MathUtils.degToRad(baseFov), aspect: rect.width / rect.height };
+        const direction = followDirectionRef.current;
+        const view = { fovY: MathUtils.degToRad(baseFov), aspect: rect.width / rect.height, direction };
         let framing = clocheFraming(shape, { ...view, rim: rimFraming });
         // A far recorded object must not shrink her below the floor: the camera stops pulling back (the far-object rule, 3.4).
         const castShape = castClocheRef.current;
@@ -887,14 +905,14 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
         if (performerShape) {
           const alone = clocheFraming(performerShape, view);
           const floored = clocheFramingFloor(framing, { cast: alone, plainFull: clocheFraming(shape, view) });
-          const herDepth = (candidate: ClocheFraming) => candidate.distance - FOLLOW_DIRECTION.dot(scratchFloor.set(alone.target.x - candidate.target.x, alone.target.y - candidate.target.y, alone.target.z - candidate.target.z));
+          const herDepth = (candidate: ClocheFraming) => candidate.distance - direction.dot(scratchFloor.set(alone.target.x - candidate.target.x, alone.target.y - candidate.target.y, alone.target.z - candidate.target.z));
           if (herDepth(floored) < herDepth(framing)) framing = floored;
         }
         framingRef.current = { key, framing };
       }
       const { target: middle, distance } = framingRef.current.framing;
       pose.followTarget.set(middle.x, middle.y, middle.z).add(clocheShift);
-      pose.followPosition.copy(pose.followTarget).addScaledVector(FOLLOW_DIRECTION, distance);
+      pose.followPosition.copy(pose.followTarget).addScaledVector(followDirectionRef.current, distance);
       const reach = Math.max(shape.radii.x, shape.radii.y, shape.radii.z);
       preferred.near = Math.max(DEFAULT_CAMERA_FRAMING_CONFIG.minNear, (distance - reach * 1.5) / 40);
       preferred.far = distance + reach * 4;

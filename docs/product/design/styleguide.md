@@ -389,7 +389,9 @@ enter.
   no back wall, no fog.
 - **Framing.** Follow frames the whole dome in the card's viewing box (the
   space between the title and the controls) at 78% of its size, from 18°
-  right of front and 16° above. Return frames it again. The performer comes
+  right of front and 16° above. Front is the performer's front at the
+  take's first frame, so a viewer meets her face; a take with no performer
+  (a camera take) keeps the world's front. Return frames it again. The performer comes
   first: a recorded object far from her, or a recorded set wider than her
   reach (a phone take's scene), widens the dome and would shrink her. The
   camera stops pulling back when she would fall below 75% of her own size, as
