@@ -34,6 +34,8 @@ done. These faults made earlier pieces fail:
 - The event happened nowhere. (A "slip" was a look at an empty point.)
 
 Do these steps and write the result into the sheet's `story` (step 5).
+Copy the request word for word into `story.request`: the review checks the
+story against it.
 
 1. **Say the story in three parts.**
    - **Setup:** who the person is and where they are.
@@ -97,13 +99,14 @@ Do these steps and write the result into the sheet's `story` (step 5).
 
    ```jsonc
    "story": {
+     "request":  "a baker proud of a loaf",
      "setup":    { "says": "A baker at work in her bakery.",
-                   "see": ["an oven with a warm glow behind her", "loaves on a shelf", "she opens the oven"] },
+                   "see": ["an oven with a warm glow behind her", "loaves on a shelf", "she wears an apron", "she looks into the oven"] },
      "event":    { "says": "She takes a fresh loaf out of the oven.",
-                   "see": ["the loaf comes out of the oven on a tray", "steam rises from it"] },
+                   "see": ["the loaf comes out of the oven mouth in her hands", "steam rises from it"] },
      "reaction": { "says": "She is proud of it and shows it to you.",
                    "see": ["she lifts it near her face and smells it", "she holds it out to you, smiling"] },
-     "changes":  ["No apron or hat exists, so the oven and the shelf show the role."]
+     "changes":  ["No oven door opens, so the loaf waits in the open oven mouth and she takes it out."]
    }
    ```
 
@@ -207,6 +210,10 @@ over the 40 px bar.
    > `says` in meaning (who and where; the thing that changes; the reaction
    > to it), and false for "I cannot tell"; `revise`, when false, is one
    > concrete sentence on what a viewer must see, using `see` as a guide.
+   > When `story.request` is there: `seen` is the reader's three answers in
+   > one line; `reads` is true only if that line fits the request in meaning
+   > (the request's person, thing and feeling); `revise`, when false, says
+   > which part of the story moved away from the request.
    > Keep valid JSON, be strict, and open no other file.
 
    Do not grade it yourself: you know what it means, so you will see it. If you cannot start subagents (you are

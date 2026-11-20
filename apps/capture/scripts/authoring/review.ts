@@ -199,7 +199,7 @@ export function actedOn(sheet: BeatSheet | undefined, performers: readonly strin
       if (p < 0) continue;
       const span = beatSpan(beat);
       const named = new Set(beat.directions.flatMap((d) => [
-        ...(d.kind === 'take' || d.kind === 'put' ? [d.object] : []),
+        ...(d.kind === 'take' || d.kind === 'put' || d.kind === 'drop' ? [d.object] : []),
         ...directionPoints(d).flatMap((pt) => (typeof pt === 'string' && ids.has(pt) ? [pt] : pointObjects(pt, ids, sheet.marks ?? {})))
       ]));
       for (const id of named) spans.push({ performer: p, object: declared(id), from: span.from - ACT_MARGIN_S, to: span.to + ACT_MARGIN_S });
@@ -458,7 +458,7 @@ export async function review(take: string, options: ReviewOptions = {}): Promise
       sheet: basename(sheetFile),
       reader: null,
       piece: { intent: sheetData.intent ?? null, seen: null, reads: null },
-      story: sheetData.story ? Object.fromEntries(STORY_PARTS.map((k) => [k, { says: sheetData.story![k].says, see: sheetData.story![k].see, seen: null, reads: null, revise: null }])) : null,
+      story: sheetData.story ? { ...Object.fromEntries(STORY_PARTS.map((k) => [k, { says: sheetData.story![k].says, see: sheetData.story![k].see, seen: null, reads: null, revise: null }])), ...(sheetData.story.request ? { request: { says: sheetData.story.request, seen: null, reads: null, revise: null } } : {}) } : null,
       beats: sheetData.beats.map((b) => {
         const s = beatSpan(b);
         return { beat: b.id, performer: b.performer, from: round(s.from, 100), to: round(s.to, 100), intent: b.intent ?? null, seen: null, reads: null, revise: null };

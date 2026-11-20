@@ -1566,8 +1566,8 @@ the ignored `apps/capture/output/authoring/demos/`.
 face gets smaller. Slice 7 asked to keep objects within 0.6 m for the faceBox bar. The
 skill tells the agent to keep the set narrow and behind or beside the body.
 
-**The owner decides** (see "Open decisions for the user", item 14): which of A, B and C
-to keep, and whether D or real models come next.
+**The owner's pick** (2026-11-20, "Open decisions for the user", item 14): keep A, B
+and C. D and real models are not in this slice.
 
 **Done when** fresh agents get only the skill and the same three ideas, remake the
 pieces, and a blind reader gets the setup, the event and the reaction in each. Then a
@@ -2150,7 +2150,8 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
       rejected it for its look.
     - **Leave the stock avatar as the default.**
 
-14. **Slice 8: which tool gaps to keep (asked 2026-11-20).** Demos are under
+14. **Slice 8: which tool gaps to keep.** Answered 2026-11-20: "Keep A, B and C".
+    Demos are under
     `apps/capture/output/authoring/demos/` (`mech`: a hat, an apron, a knocked glass
     and a dropped loaf; `hands`: a two-hand show).
     - **(A)** `drop` and `fall` under gravity. Recommended: the slip and every

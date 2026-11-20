@@ -11,6 +11,7 @@ import type { HandShapeName } from './hands.ts';
 import { HAND_SHAPES } from './hands.ts';
 import { measureProblem, placeProblem } from './stage.ts';
 import { objectCreditSchema } from '@holoim/objects';
+import { VRM_HUMANOID_BONES } from '@holoim/meaning';
 
 export type Side = 'left' | 'right';
 /**
@@ -273,6 +274,8 @@ export interface StoryPart {
 }
 
 export interface Story {
+  /** The one-line idea as it was asked, word for word: the review checks the story against it, not only against its own parts. */
+  readonly request?: string;
   readonly setup: StoryPart;
   readonly event: StoryPart;
   readonly reaction: StoryPart;
@@ -281,6 +284,9 @@ export interface Story {
 }
 
 export const STORY_PARTS = ['setup', 'event', 'reaction'] as const;
+
+/** The setup's time on screen before the event may start, seconds. */
+export const EVENT_AFTER_S = 1.5;
 
 /** Problems in a sheet's `story`; none when it has no story (make.ts asks for one). */
 export function storyProblems(story: unknown): string[] {
@@ -294,7 +300,8 @@ export function storyProblems(story: unknown): string[] {
     if (!part || !Array.isArray(part.see) || !part.see.length || !part.see.every((x) => typeof x === 'string' && x.trim())) problems.push(`story.${k}: give "see", a list of what a viewer must see`);
   }
   if (s.changes !== undefined && !(Array.isArray(s.changes) && s.changes.every((x) => typeof x === 'string'))) problems.push('story.changes: a list of sentences');
-  for (const k of Object.keys(s)) if (![...STORY_PARTS, 'changes'].includes(k)) problems.push(`story.${k}: unknown field (setup, event, reaction, changes)`);
+  if (s.request !== undefined && !(typeof s.request === 'string' && s.request.trim())) problems.push('story.request: the one-line idea, word for word');
+  for (const k of Object.keys(s)) if (![...STORY_PARTS, 'changes', 'request'].includes(k)) problems.push(`story.${k}: unknown field (request, setup, event, reaction, changes)`);
   return problems;
 }
 
@@ -667,8 +674,11 @@ export function validateSheet(sheet: BeatSheet): string[] {
     if (held.has(id) && (o.at !== undefined || o.on !== undefined)) problems.push(`${where}: it is in a hand from the first frame, so it takes no at or on`);
     if (o.wear !== undefined) {
       if (o.at !== undefined || o.on !== undefined || held.has(id)) problems.push(`${where}: a worn object takes no at, on or hold`);
-      if (typeof o.wear.on !== 'string') problems.push(`${where}: wear.on must name a bone (head, hips, chest, ...)`);
+      if (typeof o.wear.on !== 'string' || !(VRM_HUMANOID_BONES as readonly string[]).includes(o.wear.on)) problems.push(`${where}: wear.on must name a bone (head, hips, chest, upperChest, neck, leftHand, ...)`);
       if (o.wear.performer !== undefined && !sheet.performers.some((p) => p.id === o.wear!.performer)) problems.push(`${where}: wear.performer ${o.wear.performer}: no such performer`);
+      if (sheet.beats.some((b) => b.directions.some((d) => d.kind === 'take' && d.object === id))) problems.push(`${where}: a worn object is not taken`);
+      if (Object.values(sheet.objects ?? {}).some((x) => x.on === id)) problems.push(`${where}: nothing stands on a worn object`);
+      if (o.wear.performer === undefined && sheet.performers.length > 1) problems.push(`${where}: two or more performers; give wear.performer`);
       for (const [k, v] of [['at', o.wear.at], ['turn', o.wear.turn]] as const) if (v !== undefined && !(Array.isArray(v) && v.length === 3 && v.every((n) => typeof n === 'number'))) problems.push(`${where}: wear.${k} must be [x, y, z]`);
     } else if (!held.has(id) && o.at === undefined && o.on === undefined) problems.push(`${where}: needs at or on (or a performer's hold)`);
     for (const p of [o.at, typeof o.facing === 'number' ? undefined : o.facing]) {
@@ -790,6 +800,14 @@ export function validateSheet(sheet: BeatSheet): string[] {
   }
   problems.push(...soundProblems(sheet));
   problems.push(...worldProblems(sheet, holdings));
+  if (sheet.story) {
+    // The event changes the world where a viewer sees it, after the setup has had its 1.5 s.
+    const changes = [
+      ...holdings.flatMap((h) => [...(h.take ? [h.from] : []), ...(h.put || h.drop ? [h.to] : [])]),
+      ...(sheet.world ?? []).flatMap((w) => { if (!('when' in w)) return []; try { const t = cueTime(sheet, w.when); return t === undefined ? [] : [t]; } catch { return []; } })
+    ];
+    if (!changes.some((t) => t >= EVENT_AFTER_S)) problems.push(`story: nothing changes in the world at ${EVENT_AFTER_S} s or later; the event needs a take, put or drop, or a world line, after the setup`);
+  }
   return problems;
 }
 
@@ -874,9 +892,10 @@ function worldProblems(sheet: BeatSheet, holdings: readonly Holding[]): string[]
       color(w.color, `${where} color`);
     } else if (w.kind === 'fall') {
       if (!objects[w.object]) { problems.push(`${where}: no object ${w.object}`); continue; }
-      cue(w.when, `${where} when`);
+      const t = cue(w.when, `${where} when`);
       if (w.push !== undefined && (!Array.isArray(w.push) || w.push.length !== 3 || w.push.some((x) => !Number.isFinite(x)))) problems.push(`${where} push: [x, y, z] in m/s`);
-      if (holdings.some((h) => h.object === w.object)) problems.push(`world: ${w.object} is held; a held object falls with a drop direction`);
+      if (t !== undefined && holdings.some((h) => h.object === w.object && h.from <= t && t < h.to)) problems.push(`${where}: ${w.object} is in a hand then; a held object falls with a drop direction`);
+      if (objects[w.object]!.wear) problems.push(`${where}: ${w.object} is worn; a worn object does not fall`);
     } else {
       const spec = objects[w.object];
       if (!spec) { problems.push(`${where}: no object ${w.object}`); continue; }

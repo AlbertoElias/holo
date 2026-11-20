@@ -293,11 +293,12 @@ async function storyRow(reviewDir: string, hasStory: boolean): Promise<Row> {
   let c: { story?: Record<string, Part> | null };
   try { c = JSON.parse(await readFile(file, 'utf8')); } catch { return { id: 'story', bar: STORY_BAR, value: 'no review', pass: null, fix: 'run without --quick to make the review pack' }; }
   if (!c.story) return { id: 'story', bar: STORY_BAR, value: 'comparison.json has no story', pass: null, fix: `run make.ts again without --quick to write a fresh ${rel(file)}` };
-  const parts = STORY_PARTS.map((k) => ({ k, p: c.story![k] }));
+  // The request part (when the sheet gives one) checks the story against what was asked, not only against itself.
+  const parts = [...STORY_PARTS, ...(c.story.request ? ['request' as const] : [])].map((k) => ({ k, p: c.story![k] }));
   const unread = parts.filter(({ p }) => typeof p?.reads !== 'boolean');
-  if (unread.length) return { id: 'story', bar: STORY_BAR, value: `${parts.length - unread.length} of 3 parts graded`, pass: null, fix: `have a fresh grader fill story.{setup,event,reaction}.seen/reads/revise in ${rel(file)} from the reader's part 4, then run make.ts verdict ${rel(dirname(reviewDir))}` };
+  if (unread.length) return { id: 'story', bar: STORY_BAR, value: `${parts.length - unread.length} of ${parts.length} parts graded`, pass: null, fix: `have a fresh grader fill story.{${parts.map(({ k }) => k).join(',')}}.seen/reads/revise in ${rel(file)} from the reader's part 4, then run make.ts verdict ${rel(dirname(reviewDir))}` };
   const missed = parts.filter(({ p }) => p!.reads === false);
-  return { id: 'story', bar: STORY_BAR, value: missed.length ? `missed: ${missed.map(({ k }) => k).join(', ')}` : 'setup, event and reaction read', pass: missed.length === 0,
+  return { id: 'story', bar: STORY_BAR, value: missed.length ? `missed: ${missed.map(({ k }) => k).join(', ')}` : `${parts.map(({ k }) => k).join(', ')} read`, pass: missed.length === 0,
     ...(missed.length ? { fix: missed.map(({ k, p }) => `${k}: ${p!.revise ?? `the reader saw "${p!.seen}"; make "${p!.says}" plainer`}`).join('; ') } : {}) };
 }
 

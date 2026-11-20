@@ -193,6 +193,8 @@ export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, 
   stage.props.clear();
   stage.bodies.clear();
   stage.runs.clear();
+  stage.fallen.clear();
+  stage.restBones.clear();
   stage.goals.clear();
   stage.swivels.clear();
   stage.report = { grips: [], puts: [], aims: [] };
@@ -248,6 +250,13 @@ export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, 
   for (const c of cast) {
     solveFrame(cast, { ...c, dirs: [] }, 0, 1 / fps, false, false);
     stage.bodies.set(c.spec.id, measureBody(c.a));
+    const bones = new Map<string, THREE.Matrix4>();
+    for (const o of Object.values(sheet.objects ?? {})) {
+      if (!o.wear || (o.wear.performer ?? stage.first) !== c.spec.id) continue;
+      const bone = c.a.bind.get(o.wear.on as VrmHumanoidBone)?.bone;
+      if (bone) bones.set(o.wear.on, new THREE.Matrix4().compose(bone.getWorldPosition(new THREE.Vector3()), bone.getWorldQuaternion(new THREE.Quaternion()), new THREE.Vector3(1, 1, 1)));
+    }
+    stage.restBones.set(c.spec.id, bones);
   }
   for (const c of cast) see(c, -Infinity);
   const { holdings } = holdingsOf(sheet);
@@ -304,10 +313,10 @@ export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, 
     }
     settleReleased(t);
     for (const w of sheet.world ?? []) {
-      if (w.kind !== 'fall') continue;
+      if (w.kind !== 'fall' || stage.fallen.has(w)) continue;
       const when = cueTime(sheet, w.when)!;
       const st = stage.props.get(w.object)!;
-      if (!st.fall && t >= when - 1e-6) startFall(st, new THREE.Vector3(...(w.push ?? [0, 0, 0])));
+      if (t >= when - 1e-6) { stage.fallen.add(w); delete st.release; startFall(st, new THREE.Vector3(...(w.push ?? [0, 0, 0])), w.push === undefined); }
     }
     stepFalls(t, 1 / fps);
     for (const { c, r } of aimChecks.get(f) ?? []) {
@@ -389,6 +398,10 @@ const stage = {
   props: new Map<string, PropState>(),
   bodies: new Map<string, Body>(),
   runs: new Map<Holding, { offset?: THREE.Matrix4; released?: boolean }>(),
+  /** The world fall lines already started. */
+  fallen: new Set<object>(),
+  /** Each performer's bone world matrices in the rest pose, for worn objects. */
+  restBones: new Map<string, Map<string, THREE.Matrix4>>(),
   goals: new Map<Direction, { point: THREE.Vector3; axis?: THREE.Vector3; upright?: THREE.Quaternion }>(),
   report: { grips: [], puts: [], aims: [] } as ObjectReport,
   swivels: new Map<Direction, number>()
@@ -650,9 +663,11 @@ const GRAVITY = 9.81;
 const FALL_SETTLE = 0.35;
 
 /** Starts a fall with a velocity; the spin tips it the way it travels, plus a little of its own. */
-function startFall(st: PropState, v: THREE.Vector3): void {
+function startFall(st: PropState, v: THREE.Vector3, tumble = false): void {
+  const speed = Math.hypot(v.x, v.z);
   const across = new THREE.Vector3(0, 1, 0).cross(new THREE.Vector3(v.x, 0, v.z));
-  const w = across.lengthSq() > 1e-6 ? across.normalize().multiplyScalar(-Math.min(9, 3 + 6 * Math.hypot(v.x, v.z))) : new THREE.Vector3(2.5, 0, 1.5);
+  // A gentle drop (under 0.3 m/s across) falls without a spin; a fall with no push tumbles a little.
+  const w = speed >= 0.3 ? across.normalize().multiplyScalar(-Math.min(9, 3 + 6 * speed)) : tumble ? new THREE.Vector3(2.5, 0, 1.5) : new THREE.Vector3();
   st.fall = { v: v.clone(), w, bounces: 0 };
 }
 
@@ -668,7 +683,7 @@ function lowest(prop: Prop, q: THREE.Quaternion): number {
 function surfaceUnder(self: PropState, p: THREE.Vector3, below: number): number {
   let best = 0;
   for (const st of stage.props.values()) {
-    if (st === self || st.fall || st.holdings.some((h) => h.from <= solving.t && solving.t < h.to)) continue;
+    if (st === self || st.fall || st.prop.spec.wear || st.holdings.some((h) => h.from <= solving.t && solving.t < h.to)) continue;
     const box = st.prop.bounds.clone().applyMatrix4(new THREE.Matrix4().compose(st.prop.position, st.prop.quaternion, new THREE.Vector3(1, 1, 1)));
     if (p.x >= box.min.x && p.x <= box.max.x && p.z >= box.min.z && p.z <= box.max.z && box.max.y <= below + 0.02) best = Math.max(best, box.max.y);
   }
@@ -680,12 +695,19 @@ function stepFalls(t: number, dt: number): void {
   for (const st of stage.props.values()) {
     const f = st.fall;
     if (!f) continue;
+    // Taken while it falls or rests: the hand has it now.
+    if (st.holdings.some((h) => h.from <= t + 1e-6 && t < h.to)) { delete st.fall; continue; }
     const prop = st.prop;
     if (f.settle) {
       const u = smooth(clamp01((t - f.settle.t0) / FALL_SETTLE));
       prop.quaternion.slerpQuaternions(f.settle.fromQ, f.settle.toQ, u);
       prop.position.addScaledVector(f.settle.slide, dt * (1 - u));
+      // Slid off its surface (past a table edge): it falls again from here.
+      const surface = surfaceUnder(st, prop.position, prop.position.y + lowest(prop, prop.quaternion) + 0.001);
+      if (surface < f.settle.surface - 0.02) { f.v.set(f.settle.slide.x * (1 - u), 0, f.settle.slide.z * (1 - u)); delete f.settle; continue; }
       prop.position.y = f.settle.surface - lowest(prop, prop.quaternion);
+      // At rest: no longer falling, so a hand can take it and other objects can stand on it.
+      if (u >= 1) delete st.fall;
       continue;
     }
     const n = 4;
@@ -734,11 +756,14 @@ function moveWorn(c: Cast): void {
     bone.updateWorldMatrix(true, false);
     const boneM = new THREE.Matrix4().compose(bone.getWorldPosition(new THREE.Vector3()), bone.getWorldQuaternion(new THREE.Quaternion()), new THREE.Vector3(1, 1, 1));
     if (!st.worn) {
+      const rest = stage.restBones.get(c.spec.id)?.get(wear.on);
+      if (rest) boneM.copy(rest);
       const facing = yawQuat(c.spec.facing);
       const at = new THREE.Vector3(-(wear.at?.[0] ?? 0), wear.at?.[1] ?? 0, wear.at?.[2] ?? 0).applyQuaternion(facing);
       const turn = new THREE.Quaternion().setFromEuler(new THREE.Euler(...(wear.turn ?? [0, 0, 0]).map((d) => d * DEG) as [number, number, number], 'XYZ'));
       const want = new THREE.Matrix4().compose(new THREE.Vector3().setFromMatrixPosition(boneM).add(at), facing.clone().multiply(turn), new THREE.Vector3(1, 1, 1));
       st.worn = boneM.clone().invert().multiply(want);
+      if (rest) boneM.compose(bone.getWorldPosition(new THREE.Vector3()), bone.getWorldQuaternion(new THREE.Quaternion()), new THREE.Vector3(1, 1, 1));
     }
     const m = boneM.multiply(st.worn);
     m.decompose(st.prop.position, st.prop.quaternion, new THREE.Vector3());
