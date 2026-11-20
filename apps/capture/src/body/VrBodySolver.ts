@@ -216,6 +216,11 @@ const STRAIN_STEP = 0.6;
 // A swing lasts long enough that the foot averages at most this speed (peak
 // about 1.7×, near human swing speeds).
 const MAX_MEAN_SWING_SPEED = 3.0;
+// A walking swing may go faster: the swing foot covers a stride in 40% of the
+// gait cycle, so its mean speed is about 2.5× the body's. Capped at 3.0, a
+// 1.8 m/s walk's swings took 0.55 s, and the planted foot stayed down until
+// it was past the leg's reach and lifted 30 cm off the ground.
+const WALK_SWING_SPEED_RATIO = 2.5;
 
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -1006,7 +1011,8 @@ export class VrBodySolver {
     foot.fromYaw = foot.yaw;
     foot.toYaw = this.bodyYawValue;
     foot.t = 0;
-    foot.duration = Math.max(duration, distance / MAX_MEAN_SWING_SPEED);
+    const maxSwingSpeed = walking ? Math.max(MAX_MEAN_SWING_SPEED, WALK_SWING_SPEED_RATIO * this.gaitVelocity.length()) : MAX_MEAN_SWING_SPEED;
+    foot.duration = Math.max(duration, distance / maxSwingSpeed);
     foot.lift = clamp(0.02 + 0.12 * distance, 0.02, 0.08 * leg);
     this.sinceLastStepStart = 0;
     this.stepCount += 1;
