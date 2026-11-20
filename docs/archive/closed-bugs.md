@@ -1499,3 +1499,48 @@ bug above.)
 - **Cause:** the wardrobe's two glasses kinds share one index accessor (same tube topology). `dressAvatar` disposed every accessor of the kind it removed, the shared index list too, so the kept kind lost its faces and drew its points three at a time as slivers.
 - **Fix:** `dressAvatar` disposes a removed primitive's accessor only when nothing else uses it. The look e2e checks that the posted hair and glasses keep an index list longer than their point list.
 - **Closed:** 2026-11-20.
+
+### B-076 — VR head walk: the legs seem to walk forward in every direction
+
+- **Area:** apps/capture (`VrBodySolver` gait)
+- **Severity:** P2
+- **Observed:** 2026-11-20 (owner, on a Quest: "When using headset movement, the legs are always moving forward,
+  even when lateral or backwards.")
+- **Evidence:** the IWER head walk at 1.14 m/s (ignored audit `output/motion-audit/direction.ts`, tag `before-dir`).
+  The recorded (forward) walk plays only forward and front-right, as decision 4 = B asks; every step lands within
+  8° of the travel. Sideways the feet trail the pelvis: hips 51 cm (left) and 45 cm (right) ahead of the feet's
+  midpoint, against 11 cm forward. The legs reach back under a body that slides sideways.
+- **Expected:** the feet step in the travel direction and stay under the pelvis in every direction.
+- **Reproduction:** `pnpm --filter @holoim/capture run test:xr:walk-direction`, head rows left and right.
+- **After:** head sideways 10 cm (left) and 12 cm (right), forward 11 cm; every step within 12° of the travel;
+  the recorded walk plays only forward and front-right.
+- **Cause:** a sideways step cannot pass the other foot, so it covers about half a forward stride. The gait kept its
+  forward cadence, so the feet fell behind a body that slid sideways.
+- **Fix:** `VrBodySolver.sideCadence` raises the step rate (procedural gait and recorded clock) to what the sideways
+  share of the travel needs, up to 4.5 steps a second. A sideways walk starts with the foot on the side of travel.
+  `test:xr:walk-direction` checks the step direction and the pelvis over the feet in six directions.
+- **Open:** the emulator did not show legs "always walking forward" (each step lands in the travel direction). The
+  owner confirms on a Quest; reopen with a recording if it still shows.
+- **Closed:** 2026-11-20.
+
+### B-077 — VR stick walk: the body and the legs are not vertically aligned
+
+- **Area:** apps/capture (`VrBodySolver.planRoot`, `MovementSystem`)
+- **Severity:** P1
+- **Observed:** 2026-11-20 (owner, on a Quest: "With stick, the body and the legs don't seem to be vertically
+  aligned.")
+- **Evidence:** full stick (1.83 m/s), audit tag `before-dir`. Forward: torso leans back 10.5° (neck 6 cm behind its
+  standing place), pelvis 13 cm ahead of the feet. The root ran 8 cm ahead of the tracked eyes in the travel
+  direction (backward too). Sideways the pelvis is 50–52 cm ahead of the feet; diagonals 41–45 cm ahead and 34–35 cm
+  aside. Desktop at the same speed: 12.5 cm, no lean.
+- **Expected:** the torso keeps its standing posture and the pelvis stays over the feet.
+- **Reproduction:** `pnpm --filter @holoim/capture run test:xr:walk-direction`, stick rows.
+- **After:** forward 14 cm ahead, no lean (torso offsets equal to standing, posture change 0.1 cm); sideways
+  12.5 cm (left) and 14 cm (right); diagonals 5–12 cm ahead and 5–10 cm aside.
+- **Cause:** the stick move was counted twice. `planRoot` read the head after the rig had carried it, so the root
+  plan already held the stick move, and the motor then added the same move again. The root ran ahead of the eyes and
+  the torso leaned back to reach the head. Sideways, the feet also trailed (as in B-076).
+- **Fix:** `MovementSystem` records the rig's move in `BodyTracking.carried`, and `planRoot` takes it out of the root
+  plan. Side cadence and the travel-side first step as in B-076. The stick strafe moves at 65% of the forward speed
+  (`STICK_STRAFE_SHARE`), so a sideways stride can keep pace (pending owner confirmation).
+- **Closed:** 2026-11-20.
