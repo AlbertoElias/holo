@@ -34,6 +34,16 @@ it from the item below instead of duplicating its status here.
 
 ## Next
 
+- [ ] Recorded VR walk, the gaps left by
+  [`docs/features/archive/vr-recorded-walk.md`](docs/features/archive/vr-recorded-walk.md)
+  (see its Deviations): the stick-walk stance share (0.55 against the desktop
+  0.46; the toe pivots too long at push-off), the walk-start, back → stop and
+  crouch → crouch-walk transition peaks above the baseline, the house avatar's
+  knee swing (16° under its desktop walk), the turn-walk knee (48°), the
+  head-walk mid-stance knee (42°, limit 40), and a crouch-walk gait window
+  long enough to measure. The owner also checks a room-scale walk and a stick
+  walk on a Quest.
+
 - [ ] Realistic avatar motion, slice 2 (follow-up to
   [`docs/features/realistic-avatar-motion.md`](docs/features/realistic-avatar-motion.md)):
   directional (back, strafe) and crouch mocap clips with phase-synced blending,

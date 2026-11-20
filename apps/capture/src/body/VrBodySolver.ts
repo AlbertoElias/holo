@@ -253,7 +253,7 @@ const MAX_MEAN_SWING_SPEED = 3.0;
 // it was past the leg's reach and lifted 30 cm off the ground.
 const WALK_SWING_SPEED_RATIO = 2.5;
 
-// The recorded walk (docs/features/vr-recorded-walk.md): walking steps take
+// The recorded walk (docs/features/archive/vr-recorded-walk.md): walking steps take
 // their timing and shape from the desktop walk clip. Its clock runs at the
 // travel speed over the clip's stance speed; below that speed at the square
 // root of the ratio (cadence and step length each rise with about the square
@@ -1059,9 +1059,10 @@ export class VrBodySolver {
     const stickShare = this.walkSpeed > 0.1 && this.hasPrevHeadLocal ? clamp(1 - this.localHeadSpeed / this.walkSpeed, 0, 1) : 0;
     this.bobWeight += ((this.recordedMode ? stickShare : 0) - this.bobWeight) * (1 - Math.exp(-dt / BOB_WEIGHT_SEC));
     if (!this.recordedMode && !inFlight) return;
-    if (this.recordedMode && !wasRecorded) {
+    if (this.recordedMode && !wasRecorded && !inFlight) {
       // The walk starts with the foot furthest behind: the clock jumps to
-      // just before its lift.
+      // just before its lift. A recorded swing still in the air keeps the
+      // clock, or it lands in one frame.
       const side = this.furthestBehind(rootPosition, travel);
       this.walkPhase = (walk.gait.stance[side].lift - 1e-4 + 1) % 1;
       this.prevWalkPhase = this.walkPhase;
@@ -1518,7 +1519,7 @@ export class VrBodySolver {
     if (toe) {
       toe.bone.quaternion.copy(toe.local);
       // Heel up: the toes bend at the ball and stay on the ground.
-      if (foot.roll > 0 && !foot.swinging) {
+      if (foot.roll > 0 && !(foot.swinging && foot.recorded)) {
         const toeQuat = this.legQuat.setFromAxisAngle(UP, foot.currentYaw - this.bodyYawValue).multiply(rootQuat).multiply(toe.rootQuaternion).premultiply(tilt);
         this.setWorldQuaternion(toe.bone, toeQuat);
       }

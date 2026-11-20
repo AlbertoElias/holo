@@ -1,7 +1,7 @@
 # Feature brief: the recorded walk in real VR
 
 **Lead:** Claude (Opus), session `local_…` started by the avatar-motion audit
-**Status:** Approved (owner, 2026-11-20: decision 3 = A, decision 4 = B); in implementation
+**Status:** Delivered 2026-11-20 with the deviations listed under "Deviations" (approved by the owner, 2026-11-20: decision 3 = A, decision 4 = B); the Quest check is open
 **Layer:** event (how the recorded body moves; see `docs/product/concepts/what-a-hologram-is.md`)
 
 ## User outcome
@@ -241,7 +241,7 @@ the reference run in the same harness.
       gait rows.
 - [x] The XR checks pass: body, locomotion, loco-states, mock-vr, terrain,
       hands, held-states, desktop-motion; `pnpm run verify:pr` passes.
-- [ ] A proof video (H.264 MP4, ignored `output/`): the desktop walk, the VR
+- [x] A proof video (H.264 MP4, ignored `output/`): the desktop walk, the VR
       stick walk and the VR head walk side by side, in real time.
 
 ## Failure cases considered
@@ -249,6 +249,8 @@ the reference run in the same harness.
 | Failure case | Prevention or evidence |
 |---|---|
 | A swing skims a rising floor (the clip's toe clearance dips at mid-swing; the ball is higher than the heel on an upslope) | The swing floor is the ground under the heel and under the ball plus `SWING_MIN_CLEARANCE`; the `iwer-walk-ramp` body replay (it failed with 22 cm drift before the fix) |
+| Recorded mode turns back on while a recorded foot is in the air (a diagonal mid-swing) | The clock does not jump to the next lift while a recorded swing is in flight, or that foot lands in one frame (code review) |
+| Toes held at bind on the procedural swings | Only a recorded swing holds the toes at bind; the procedural swings keep today's toe bend (verifier) |
 | Recorded swing skips the planner's clamps (feet cross, over-long stride) | The planner still picks every landing; only the shape and timing change |
 | Clip swing longer than a step period (two feet in the air) | The clock lifts each foot at its recorded phase; overlap is allowed only as far as the clip has it; stance share in the audit |
 | Planted foot slides on slow head walks with stops | Stance pinned at the contact point; skate on the slow stick and head walk |
@@ -278,9 +280,11 @@ the reference run in the same harness.
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
 | Gait, skate, seam, pops | `output/motion-audit/rebuild-audit.sh <tag> desktop-third vr-stick ar-stick vr-head mock-vr` | `output/motion-audit/<tag>/*-report.json`; before → after in this table |
-| Checks | `DEV_PORT=5181 node --import tsx scripts/run-xr-checks.ts desktop-motion body hands locomotion loco-states mock-vr terrain held-states` | all pass (`apps/capture/output/xr-checks-after8.log`) |
-| Pre-merge | `pnpm run verify:pr` | pending |
-| Looks right | proof video in ignored `output/` | pending |
+| Checks | `DEV_PORT=5181 node --import tsx scripts/run-xr-checks.ts desktop-motion body hands locomotion loco-states mock-vr terrain held-states` | all pass, again after the review fixes |
+| Recorded walk in use | the body replay fails a walk fixture with 0 recorded steps (`scripts/ci-body-replay-playwright.ts`) | `iwer-walk-forward-back-side`, `iwer-walk-ramp` |
+| Pre-merge | `pnpm run verify:pr` | passed (1787 s) |
+| Looks right | proof video in ignored `output/` | desktop, VR stick and VR head side by side; sent to the owner |
+| Independent review | `verifier` and code-review subagents (Opus) on the diff | no blocker; two fixes below; the audit reports did not change |
 
 ### Baseline (before), 2026-11-20
 
@@ -326,6 +330,12 @@ Every walk, slow-walk, turn-walk and crouch-walk step is recorded-shape (stick
 - The turn-walk knee is 48° (62° before); one stride only in the window.
 - The head-walk mid-stance knee is 42.2° (limit 40; baseline 40.8°).
 - The crouch-walk gait is not measured: the window holds no full stride.
+- The table holds the clip's foot pitch but not its toe bend. The toes bend
+  from the ground contact (heel up at the ball) in stance and stay at bind in
+  a recorded swing; the procedural swings keep today's toes.
+- The walk stops on a frame with both feet down. The clip has little double
+  support, so the stop could miss that frame; on the audit stops the clock
+  lifts no foot in place (0 recorded steps in every stop phase).
 
 These go to `TODOS.md` as one follow-up.
 
