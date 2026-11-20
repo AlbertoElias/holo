@@ -701,7 +701,8 @@ existing expression mix value changes.
    sees, which slice 1d's lateral weight shifts and yaw glances are not.
    It gives way to every direction that moves the head or the hands, to a
    held object and to being reached for, as life does. `attend: false` on
-   a performer turns it off.
+   a performer turns it off. **Decided by the owner on 2026-11-20:** "yes
+   keep the nods". Attending life stays on by default.
 
 **Rejected:** larger amplitude of slice 1d's events (failed twice); event
 density keyed to a hold's length (breaks the seed-only schedule); asking
@@ -1900,6 +1901,7 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
    - Attending life is on by default for a performer facing another;
      `attend: false` turns it off. It changes `goodbye` and
      `defaults-test` (slice 1e evidence).
+     Decided by the owner on 2026-11-20: "yes keep the nods".
    - The attending gaps were tightened once after the first blind
      reading: nods every 1.6 to 3.2 s (was 2.2 to 4.5), arms apart 0.6 to
      1.4 s (was 1.5 to 3.5).
