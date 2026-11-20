@@ -47,7 +47,7 @@ export class BodyTracking {
   // The solver posed the skeleton last frame; when it stops, its bones go back
   // to bind for the animation path.
   posed = false;
-  readonly head: BodyHeadInput = { worldPosition: new THREE.Vector3(), worldQuaternion: new THREE.Quaternion(), yaw: 0 };
+  readonly head: BodyHeadInput = { worldPosition: new THREE.Vector3(), worldQuaternion: new THREE.Quaternion(), yaw: 0, localPosition: new THREE.Vector3() };
   // Root move planned toward the head, applied through the character motor.
   readonly displacement = new THREE.Vector3();
   readonly prevHeadLocal = new THREE.Vector3();
@@ -72,6 +72,7 @@ export class BodyTracking {
   copyHead(pose: XrHeadPose): void {
     this.head.worldPosition.copy(pose.worldPosition);
     this.head.worldQuaternion.copy(pose.worldQuaternion);
+    this.head.localPosition?.copy(pose.localPosition);
     this.head.yaw = headYawFromQuaternion(pose.worldQuaternion, this.head.yaw);
   }
 
@@ -139,7 +140,7 @@ export class BodyTracking {
       bones,
       eyes: leftEye && rightEye ? { left: tuple(leftEye.getWorldPosition(scratch)), right: tuple(rightEye.getWorldPosition(scratch)) } : null,
       ground,
-      solver: { aligned: debug.aligned, translating: debug.translating, turning: debug.turning, bodyYaw: debug.bodyYaw, steps: debug.steps, swinging: { left: debug.feet.left.swinging, right: debug.feet.right.swinging } },
+      solver: { aligned: debug.aligned, translating: debug.translating, turning: debug.turning, bodyYaw: debug.bodyYaw, steps: debug.steps, recordedSteps: debug.recordedSteps, swinging: { left: debug.feet.left.swinging, right: debug.feet.right.swinging } },
       dims: this.solver.dimensions ?? null
     };
   }

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { VrmHumanoidBone } from '@holoim/meaning';
 
 import type { AvatarRig } from '../avatar/AvatarRig';
+import { sampleWalkTrajectory, type WalkTrajectory } from '../animation/LocomotionAnimator';
 import { clamp } from '../shared/math';
 import { LEG_SOFT_REACH_START, solveTwoBoneLeg } from './legIk';
 
@@ -32,6 +33,8 @@ export interface BodyHeadInput {
   worldPosition: THREE.Vector3;
   worldQuaternion: THREE.Quaternion;
   yaw: number;
+  /** The head in tracking space: its motion there is the user's own (room scale), not the stick's. */
+  localPosition?: THREE.Vector3;
 }
 
 export type GroundSampler = (x: number, z: number, outNormal: THREE.Vector3) => number | undefined;
@@ -83,6 +86,17 @@ interface FootState {
   // How close the planted leg came to running out of reach last frame
   // (0 flat foot … 1 fully rolled or overstretched).
   strain: number;
+  // A walking step on the recorded walk's clock and shape: it lifts at
+  // startPhase and lands span later (clip phase).
+  recorded: boolean;
+  startPhase: number;
+  span: number;
+  // The clock passed this foot's lift while the other foot was in the air.
+  pendingLift: boolean;
+  // The recorded walk's foot pitch this frame (radians, heel up positive).
+  recordedRoll: number;
+  // A recorded swing's heel lift (roll) at lift-off.
+  liftRoll: number;
 }
 
 export interface BodySolverDebug {
@@ -91,6 +105,8 @@ export interface BodySolverDebug {
   turning: boolean;
   bodyYaw: number;
   steps: number;
+  // Steps laid on the recorded walk (a subset of steps).
+  recordedSteps: number;
   feet: Record<'left' | 'right', { swinging: boolean; planted: [number, number, number] }>;
 }
 
@@ -148,6 +164,21 @@ const STATIC_STEP_YAW_RAD = THREE.MathUtils.degToRad(25);
 const STATIC_STEP_DURATION_SEC = 0.32;
 const MIN_STANCE_SEC = 0.08;
 const MAX_STEP_LENGTH = 1.0;
+// A recorded stride may reach further: the clip's feet stand about 1.04 legs
+// apart at double support, and a walk that starts slow and lands short
+// regains its stride in one step instead of staying short.
+const RECORDED_MAX_STEP_LENGTH = 1.2;
+// The recorded foot pitch shows only this high above the ground, in eye
+// heights (desktop: 2.5-15% of the avatar's height).
+const ROLL_GROUND_FADE = [0.027, 0.16] as const;
+// The push-off's heel lift holds through this share of the swing.
+const PUSH_OFF_HOLD = 0.25;
+// A recorded swing's clearance eases in over this share of the swing.
+const LIFT_EASE = 0.2;
+// The least sole clearance in a recorded swing, in eye heights (about 3 cm
+// above the sampled floor, which sits 1 cm under the surface): a real
+// walk's toe clears the ground by 1-2 cm at mid-swing.
+const SWING_MIN_CLEARANCE = 0.02;
 // A swing re-aims its landing at most this fast, so velocity changes bend
 // the step's path instead of snapping the foot.
 const MAX_REAIM_SPEED = 1.5;
@@ -222,6 +253,24 @@ const MAX_MEAN_SWING_SPEED = 3.0;
 // it was past the leg's reach and lifted 30 cm off the ground.
 const WALK_SWING_SPEED_RATIO = 2.5;
 
+// The recorded walk (docs/features/vr-recorded-walk.md): walking steps take
+// their timing and shape from the desktop walk clip. Its clock runs at the
+// travel speed over the clip's stance speed; below that speed at the square
+// root of the ratio (cadence and step length each rise with about the square
+// root of walking speed). The travel speed eases at the desktop walk's rate.
+const WALK_SPEED_EASE_PER_SEC = 12;
+// Never slower: a swing in flight at a stop still lands.
+const WALK_RATE_MIN = 0.5;
+const WALK_RATE_MAX = 3;
+// Sideways and backward travel keep the procedural step (decision 4).
+const RECORDED_ON_COS = Math.cos(THREE.MathUtils.degToRad(40));
+const RECORDED_OFF_COS = Math.cos(THREE.MathUtils.degToRad(50));
+// The clip's hips bob, weighted by how much of the travel is not the user's
+// own head motion (a stick walk), eased (decision 3).
+const BOB_WEIGHT_SEC = 0.3;
+const LOCAL_HEAD_SPEED_SEC = 0.15;
+const MAX_LOCAL_HEAD_SPEED = 5;
+
 const UP = new THREE.Vector3(0, 1, 0);
 
 function wrapAngle(angle: number): number {
@@ -278,6 +327,20 @@ export class VrBodySolver {
   private sinceLastStepStart = 0;
   private sinceLastLanding = 0;
   private stepCount = 0;
+  private recordedStepCount = 0;
+  private walk: WalkTrajectory | undefined;
+  private walkPhase = 0;
+  private prevWalkPhase = 0;
+  private walkRate = 1;
+  private walkSpeed = 0;
+  private walkFacing = true;
+  private recordedMode = false;
+  private bobWeight = 0;
+  private localHeadSpeed = 0;
+  private hasPrevHeadLocal = false;
+  private readonly prevHeadLocal = new THREE.Vector3();
+  private readonly swingGround = new THREE.Vector3();
+  private readonly swingGroundNormal = new THREE.Vector3();
   private headSpeed = 0;
   private pelvisReachDrop = 0;
   private leanDrop = 0;
@@ -361,7 +424,13 @@ export class VrBodySolver {
       currentNormal: new THREE.Vector3(0, 1, 0),
       currentYaw: 0,
       roll: 0,
-      strain: 0
+      strain: 0,
+      recorded: false,
+      startPhase: 0,
+      span: 1,
+      pendingLift: false,
+      recordedRoll: 0,
+      liftRoll: 0
     });
     this.feet = { left: foot(), right: foot() };
   }
@@ -516,6 +585,37 @@ export class VrBodySolver {
   reset(): void {
     this.aligned = false;
     this.stepCount = 0;
+    this.recordedStepCount = 0;
+    this.clearWalk();
+  }
+
+  // The walk clip's measured step shape (LocomotionAnimator), or undefined
+  // for the procedural steps alone. A new table restarts the walk clock.
+  setWalkTrajectory(walk: WalkTrajectory | undefined): void {
+    if (walk === this.walk) return;
+    this.walk = walk;
+    this.clearWalk();
+  }
+
+  private clearWalk(): void {
+    this.recordedMode = false;
+    this.walkPhase = 0;
+    this.prevWalkPhase = 0;
+    this.walkSpeed = 0;
+    this.bobWeight = 0;
+    this.localHeadSpeed = 0;
+    this.hasPrevHeadLocal = false;
+    for (const foot of Object.values(this.feet)) {
+      foot.recorded = false;
+      foot.pendingLift = false;
+      foot.recordedRoll = 0;
+    }
+  }
+
+  // Rest hips height above the sole: the recorded walk's unit of length.
+  private hipsHeight(): number {
+    const bind = this.bind!;
+    return bind.hips.rootPosition.y - bind.groundLocalY;
   }
 
   // The avatar was uniformly rescaled by `ratio` about its node's origin (XR
@@ -571,6 +671,14 @@ export class VrBodySolver {
     this.prevHead.copy(head.worldPosition);
     const instantSpeed = headStep.length() / dt;
     this.headSpeed += (instantSpeed - this.headSpeed) * (1 - Math.exp(-dt / HEAD_SPEED_TIME_SEC));
+    if (head.localPosition) {
+      if (this.hasPrevHeadLocal) {
+        const local = Math.min(MAX_LOCAL_HEAD_SPEED, Math.hypot(head.localPosition.x - this.prevHeadLocal.x, head.localPosition.z - this.prevHeadLocal.z) / dt);
+        this.localHeadSpeed += (local - this.localHeadSpeed) * (1 - Math.exp(-dt / LOCAL_HEAD_SPEED_SEC));
+      }
+      this.prevHeadLocal.copy(head.localPosition);
+      this.hasPrevHeadLocal = true;
+    }
 
     // How far the head has dropped below standing tells a lean (the torso
     // pivots at the hips, so the head comes down) from a step (it does not).
@@ -693,6 +801,7 @@ export class VrBodySolver {
       turning: this.turning,
       bodyYaw: this.bodyYawValue,
       steps: this.stepCount,
+      recordedSteps: this.recordedStepCount,
       feet: { left: foot('left'), right: foot('right') }
     };
   }
@@ -769,6 +878,9 @@ export class VrBodySolver {
         this.sinceLastLanding = 0;
       }
       foot.swinging = false;
+      foot.recorded = false;
+      foot.pendingLift = false;
+      foot.recordedRoll = 0;
       foot.roll = 0;
       foot.current.copy(foot.planted);
       foot.currentNormal.copy(foot.normal);
@@ -781,6 +893,7 @@ export class VrBodySolver {
     const leg = bind.dims.legLength;
     this.sinceLastStepStart += dt;
     this.sinceLastLanding += dt;
+    this.advanceWalkClock(rootPosition, dt);
 
     for (const side of ['left', 'right'] as const) {
       const foot = this.feet[side];
@@ -794,6 +907,10 @@ export class VrBodySolver {
         foot.current.copy(foot.planted);
         foot.currentNormal.copy(foot.normal);
         foot.currentYaw = foot.yaw;
+        continue;
+      }
+      if (foot.recorded && this.walk) {
+        this.updateRecordedSwing(side, rootPosition, dt, ground);
         continue;
       }
       foot.t = Math.min(1, foot.t + dt / foot.duration);
@@ -824,6 +941,7 @@ export class VrBodySolver {
       }
     }
     if (this.faults.has('feet-glued-to-root')) return;
+    this.recordedLifts(rootPosition, ground);
     if (this.feet.left.swinging || this.feet.right.swinging) return;
 
     // Walking follows the head's motion; otherwise the root's own motion
@@ -862,6 +980,9 @@ export class VrBodySolver {
           mostBehind = behind;
         }
       }
+      // Forward walking lifts on the recorded walk's clock (recordedLifts);
+      // only a foot left behind or strained steps here.
+      if (!urgent && this.walk && this.walkFacing) return;
       if (!urgent && this.sinceLastStepStart < period * (this.gaitSteps < 2 ? 0.7 : 1)) return;
       // Land slightly short of symmetric: the trailing foot has more reach
       // (heel roll) than the leading one.
@@ -911,6 +1032,165 @@ export class VrBodySolver {
     }
   }
 
+  // The recorded walk's clock: the clip phase advances at the travel speed
+  // over the clip's stance speed (square root below it). It runs while the
+  // body walks forward, and on after a stop until a recorded swing lands.
+  private advanceWalkClock(rootPosition: THREE.Vector3, dt: number): void {
+    const walk = this.walk;
+    this.prevWalkPhase = this.walkPhase;
+    if (!walk) return;
+    const travel = this.translating ? this.targetVelocity : this.rootVelocity;
+    const speed = Math.hypot(travel.x, travel.z);
+    this.walkSpeed += (speed - this.walkSpeed) * (1 - Math.exp(-WALK_SPEED_EASE_PER_SEC * dt));
+    const forwardDot = speed > 1e-3 ? (-travel.x * Math.sin(this.bodyYawValue) - travel.z * Math.cos(this.bodyYawValue)) / speed : 1;
+    this.walkFacing = forwardDot >= (this.walkFacing ? RECORDED_OFF_COS : RECORDED_ON_COS);
+    const wasRecorded = this.recordedMode;
+    this.recordedMode = this.gaitActive && this.walkFacing;
+    // A recorded walk seldom has both feet down, where the procedural gait
+    // refreshes its lead velocity: refresh it here, or the steps aim with
+    // the walk's start-up speed and land short.
+    if (this.recordedMode) this.gaitVelocity.copy(travel);
+    const ratio = this.walkSpeed / Math.max(1e-6, walk.stanceSpeed * this.hipsHeight());
+    let rate = ratio >= 1 ? ratio : Math.sqrt(ratio);
+    // The first steps from standing are quicker, as the body accelerates.
+    if (this.gaitSteps < 2) rate /= 0.7;
+    this.walkRate = clamp(rate, WALK_RATE_MIN, WALK_RATE_MAX);
+    const inFlight = (this.feet.left.swinging && this.feet.left.recorded) || (this.feet.right.swinging && this.feet.right.recorded);
+    const stickShare = this.walkSpeed > 0.1 && this.hasPrevHeadLocal ? clamp(1 - this.localHeadSpeed / this.walkSpeed, 0, 1) : 0;
+    this.bobWeight += ((this.recordedMode ? stickShare : 0) - this.bobWeight) * (1 - Math.exp(-dt / BOB_WEIGHT_SEC));
+    if (!this.recordedMode && !inFlight) return;
+    if (this.recordedMode && !wasRecorded) {
+      // The walk starts with the foot furthest behind: the clock jumps to
+      // just before its lift.
+      const side = this.furthestBehind(rootPosition, travel);
+      this.walkPhase = (walk.gait.stance[side].lift - 1e-4 + 1) % 1;
+      this.prevWalkPhase = this.walkPhase;
+    }
+    this.walkPhase = (this.walkPhase + (this.walkRate * dt) / walk.duration) % 1;
+  }
+
+  private furthestBehind(rootPosition: THREE.Vector3, velocity: THREE.Vector3): 'left' | 'right' {
+    let best: 'left' | 'right' = this.nextGaitSide;
+    let most = -Infinity;
+    const speed = Math.max(1e-6, Math.hypot(velocity.x, velocity.z));
+    for (const side of ['left', 'right'] as const) {
+      if (this.feet[side].swinging) continue;
+      const slot = this.slotWorld(side, rootPosition, this.bodyYawValue, this.stepSlot);
+      const planted = this.feet[side].planted;
+      const behind = ((slot.x - planted.x) * velocity.x + (slot.z - planted.z) * velocity.z) / speed;
+      if (behind > most) {
+        most = behind;
+        best = side;
+      }
+    }
+    return best;
+  }
+
+  // A planted foot lifts when the clock passes its recorded lift-off, once
+  // the other foot is down (walking has no flight). A lift held up past half
+  // its swing is skipped: the foot then steps when it is left behind.
+  private recordedLifts(rootPosition: THREE.Vector3, ground: GroundSampler): void {
+    const walk = this.walk;
+    for (const side of ['left', 'right'] as const) {
+      const foot = this.feet[side];
+      // A planted foot stays flat, as on desktop; a heel the reach lifts
+      // stays up into the swing (updateRecordedSwing).
+      if (!foot.swinging) foot.recordedRoll = 0;
+    }
+    if (!walk || !this.recordedMode) {
+      this.feet.left.pendingLift = false;
+      this.feet.right.pendingLift = false;
+      return;
+    }
+    const prev = this.prevWalkPhase;
+    const advanced = (this.walkPhase - prev + 1) % 1;
+    for (const side of ['left', 'right'] as const) {
+      const foot = this.feet[side];
+      const other = this.feet[side === 'left' ? 'right' : 'left'];
+      if (foot.swinging) {
+        foot.pendingLift = false;
+        continue;
+      }
+      const { land, lift } = walk.gait.stance[side];
+      const swingLength = (land - lift + 1) % 1 || 1;
+      if ((lift - prev + 1) % 1 <= advanced && advanced > 0) foot.pendingLift = true;
+      const intoSwing = (this.walkPhase - lift + 1) % 1;
+      if (foot.pendingLift && intoSwing > 0.5 * swingLength) foot.pendingLift = false;
+      if (!foot.pendingLift || other.swinging) continue;
+      foot.pendingLift = false;
+      const span = (land - this.walkPhase + 1) % 1;
+      if (span <= 1e-3) continue;
+      const toSec = walk.duration / this.walkRate;
+      // Land ahead of the moving slot by a little under half the stance's
+      // travel, so the planted foot ends as far behind it at lift-off.
+      const stanceSec = (1 - swingLength) * toSec;
+      this.startStep(side, rootPosition, 0.85 * (stanceSec / 2), span * toSec, true, ground, RECORDED_MAX_STEP_LENGTH);
+      foot.recorded = true;
+      foot.liftRoll = Math.max(0, foot.roll);
+      foot.startPhase = this.walkPhase;
+      foot.span = span;
+      this.recordedStepCount += 1;
+      this.gaitSteps += 1;
+      this.nextGaitSide = side === 'left' ? 'right' : 'left';
+    }
+  }
+
+  // A recorded swing: its progress, clearance and pitch come from the walk
+  // clip at the matching phase of the clip's own swing; the planner still
+  // re-aims the landing. The sole never dips below the ground under it.
+  private updateRecordedSwing(side: 'left' | 'right', rootPosition: THREE.Vector3, dt: number, ground: GroundSampler): void {
+    const walk = this.walk!;
+    const foot = this.feet[side];
+    const { land, lift } = walk.gait.stance[side];
+    const swingLength = (land - lift + 1) % 1 || 1;
+    const u = clamp(((this.walkPhase - foot.startPhase + 1) % 1) / foot.span, 0, 1);
+    foot.t = Math.max(foot.t, u);
+    if (foot.t < 0.85) {
+      const remaining = ((1 - foot.t) * foot.span * walk.duration) / this.walkRate;
+      const aim = this.stepTargetFor(side, rootPosition, this.gaitVelocity, remaining + foot.landLeadSec, ground, this.aimTarget, this.aimNormal, true, RECORDED_MAX_STEP_LENGTH);
+      const shift = aim.distanceTo(foot.to);
+      const allowed = MAX_REAIM_SPEED * dt;
+      foot.to.lerp(aim, shift > allowed ? allowed / shift : 1);
+      foot.toNormal.copy(this.aimNormal);
+      foot.toYaw = this.bodyYawValue;
+    }
+    const clipPhase = lift + foot.t * swingLength;
+    const s = foot.t >= 1 ? 1 : clamp(sampleWalkTrajectory(walk.legs[side].progress, clipPhase), 0, 1);
+    // The clip's sole already rises at its lift-off (its heel rose in
+    // stance); a flat stance foot eases into that rise instead.
+    const liftEase = THREE.MathUtils.smoothstep(foot.t, 0, LIFT_EASE);
+    const clearance = foot.t >= 1 ? 0 : liftEase * sampleWalkTrajectory(walk.legs[side].clearance, clipPhase) * this.hipsHeight();
+    foot.current.lerpVectors(foot.from, foot.to, s);
+    foot.currentNormal.lerpVectors(foot.normal, foot.toNormal, s).normalize();
+    foot.currentYaw = foot.fromYaw + wrapAngle(foot.toYaw - foot.fromYaw) * s;
+    const sole = THREE.MathUtils.lerp(foot.from.y, foot.to.y, s);
+    // The clip's toe clearance is small at mid-swing: keep the sole clear of
+    // the ground under the heel and under the ball (higher on an upslope).
+    this.swingGround.copy(foot.current);
+    this.footGroundAt(this.swingGround, foot.currentYaw, this.swingGroundNormal, ground, sole, this.bind!.legs[side].toeForward);
+    const floor = Math.max(this.swingGround.y, this.footBall.y);
+    const eye = this.bind!.dims.eyeHeight;
+    const minLift = foot.t >= 1 ? 0 : SWING_MIN_CLEARANCE * eye * liftEase * (1 - THREE.MathUtils.smoothstep(foot.t, 0.8, 1));
+    foot.current.y = Math.max(sole + clearance, floor + minLift);
+    // As on desktop (TerrainLegSolver), the clip's pitch fades out near the
+    // ground, so the foot leaves and lands flat. The heel the push-off had
+    // at lift-off eases down over the early swing instead of dropping.
+    const air = THREE.MathUtils.smoothstep(foot.current.y - floor, ROLL_GROUND_FADE[0] * eye, ROLL_GROUND_FADE[1] * eye);
+    const held = foot.liftRoll * Math.max(0, 1 - foot.t / PUSH_OFF_HOLD);
+    const clipRoll = air * sampleWalkTrajectory(walk.legs[side].roll, clipPhase);
+    foot.recordedRoll = foot.t >= 1 ? 0 : held > clipRoll ? held : clipRoll;
+    if (foot.t >= 1) {
+      foot.swinging = false;
+      foot.recorded = false;
+      foot.planted.copy(foot.to);
+      foot.normal.copy(foot.toNormal);
+      foot.yaw = foot.toYaw;
+      foot.current.copy(foot.planted);
+      foot.currentYaw = foot.yaw;
+      this.sinceLastLanding = 0;
+    }
+  }
+
   // The foot on the side the body is moving toward, when the move is mostly
   // sideways.
   private leadingSideFor(rootPosition: THREE.Vector3): 'left' | 'right' | undefined {
@@ -931,7 +1211,7 @@ export class VrBodySolver {
   // Where a step should land: the foot's slot around the root, led by the
   // body's velocity, kept on its own side and within a stride of the other
   // foot, on the ground.
-  private stepTargetFor(side: 'left' | 'right', rootPosition: THREE.Vector3, velocity: THREE.Vector3, leadSec: number, ground: GroundSampler, out: THREE.Vector3, outNormal: THREE.Vector3, walking = false): THREE.Vector3 {
+  private stepTargetFor(side: 'left' | 'right', rootPosition: THREE.Vector3, velocity: THREE.Vector3, leadSec: number, ground: GroundSampler, out: THREE.Vector3, outNormal: THREE.Vector3, walking = false, maxStepLegs = MAX_STEP_LENGTH): THREE.Vector3 {
     const bind = this.bind!;
     const leg = bind.dims.legLength;
     const otherSide = side === 'left' ? 'right' : 'left';
@@ -970,8 +1250,8 @@ export class VrBodySolver {
     // at a time with the legs stretched out level behind the body for seconds (B-041).
     const otherSlot = this.slotWorld(otherSide, rootPosition, this.bodyYawValue, this.stepOtherSlot);
     const otherStranded = Math.hypot(otherSlot.x - other.x, otherSlot.z - other.z) > MAX_STEP_LENGTH * leg;
-    if (reach > MAX_STEP_LENGTH * leg && !otherStranded) {
-      const keep = (MAX_STEP_LENGTH * leg) / reach;
+    if (reach > maxStepLegs * leg && !otherStranded) {
+      const keep = (maxStepLegs * leg) / reach;
       target.x = other.x + (target.x - other.x) * keep;
       target.z = other.z + (target.z - other.z) * keep;
     }
@@ -996,13 +1276,15 @@ export class VrBodySolver {
     outNormal.set(-forwardX * slope - rightX * lateral, 1, -forwardZ * slope - rightZ * lateral).normalize();
   }
 
-  private startStep(side: 'left' | 'right', rootPosition: THREE.Vector3, landLeadSec: number, duration: number, walking: boolean, ground: GroundSampler): void {
+  private startStep(side: 'left' | 'right', rootPosition: THREE.Vector3, landLeadSec: number, duration: number, walking: boolean, ground: GroundSampler, maxStepLegs = MAX_STEP_LENGTH): void {
     const leg = this.bind!.dims.legLength;
     const foot = this.feet[side];
     const lead = walking ? duration + landLeadSec : 0;
-    const target = this.stepTargetFor(side, rootPosition, this.gaitVelocity, lead, ground, this.stepTarget, this.stepNormal, walking);
+    const target = this.stepTargetFor(side, rootPosition, this.gaitVelocity, lead, ground, this.stepTarget, this.stepNormal, walking, maxStepLegs);
     const distance = Math.hypot(target.x - foot.planted.x, target.z - foot.planted.z);
     foot.swinging = true;
+    foot.recorded = false;
+    foot.recordedRoll = 0;
     foot.walking = walking;
     foot.landLeadSec = landLeadSec;
     foot.from.copy(foot.planted);
@@ -1066,6 +1348,14 @@ export class VrBodySolver {
       if (pass === passes - 1) break;
       const error = this.poseVecB.subVectors(headTarget, bind.head.bone.getWorldPosition(this.poseVecC));
       hips.add(error);
+    }
+    // A stick walk takes the recorded walk's hips bob: the avatar's head dips
+    // below the tracked head by up to the clip's bob (decision 3).
+    const bob = this.walk && this.bobWeight > 1e-3 && !this.airborne ? sampleWalkTrajectory(this.walk.bob, this.walkPhase) * this.bobWeight * this.hipsHeight() : 0;
+    if (bob < 0) {
+      hips.y = Math.max(hips.y + bob, groundY + 0.25 * leg);
+      this.placeHips(hips);
+      this.poseSpine(headTarget, headQuat, rootQuat, twist);
     }
     // Planted feet win over eye height: lower the pelvis until each planted
     // foot is within reach of its hip joint with the foot fully rolled.
@@ -1204,11 +1494,19 @@ export class VrBodySolver {
       }
       wanted = sign * high;
     }
+    // The recorded walk's pitch (heel strike, push-off) where the reach asks
+    // for none or for more of the same; a reach that needs the other pivot
+    // wins.
+    const reachWanted = wanted;
+    const recorded = this.faults.has('feet-float') ? 0 : clamp(foot.recordedRoll, -MAX_FOOT_ROLL_RAD, MAX_FOOT_ROLL_RAD);
+    if (recorded !== 0 && (reachWanted === 0 || Math.sign(recorded) === Math.sign(reachWanted))) {
+      wanted = Math.abs(recorded) > Math.abs(reachWanted) ? recorded : reachWanted;
+    }
     // Ease into and out of a roll; changing pivots passes through flat.
     const maxChange = FOOT_ROLL_RATE_RAD * this.lastDt;
     foot.roll += clamp(wanted - foot.roll, -maxChange, maxChange);
     rollAt(foot.roll);
-    foot.strain = foot.swinging ? 0 : ankle.distanceTo(hip) > maxReach * 1.001 ? 1 : Math.abs(wanted) / MAX_FOOT_ROLL_RAD;
+    foot.strain = foot.swinging ? 0 : ankle.distanceTo(hip) > maxReach * 1.001 ? 1 : Math.abs(reachWanted) / MAX_FOOT_ROLL_RAD;
     solveTwoBoneLeg(legBind, ankle, pole, rootQuat);
 
     // Foot: bind orientation turned to the foot's yaw, tilted to the ground,
@@ -1220,7 +1518,7 @@ export class VrBodySolver {
     if (toe) {
       toe.bone.quaternion.copy(toe.local);
       // Heel up: the toes bend at the ball and stay on the ground.
-      if (foot.roll > 0) {
+      if (foot.roll > 0 && !foot.swinging) {
         const toeQuat = this.legQuat.setFromAxisAngle(UP, foot.currentYaw - this.bodyYawValue).multiply(rootQuat).multiply(toe.rootQuaternion).premultiply(tilt);
         this.setWorldQuaternion(toe.bone, toeQuat);
       }

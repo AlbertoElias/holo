@@ -186,7 +186,7 @@ export type BodySample = {
   // True ground surface height and normal under each ankle and toe.
   ground: Partial<Record<'root' | 'leftAnkle' | 'rightAnkle' | 'leftToe' | 'rightToe', { y: number; normal: Vec3Tuple }>>;
   // Solver state, for diagnosis only; checks measure the bones instead.
-  solver: { aligned: boolean; translating: boolean; turning: boolean; bodyYaw: number; steps: number; swinging: { left: boolean; right: boolean } };
+  solver: { aligned: boolean; translating: boolean; turning: boolean; bodyYaw: number; steps: number; recordedSteps?: number; swinging: { left: boolean; right: boolean } };
   dims: { legLength: number; ankleHeight: number; toeHeight: number; toeForward: number; eyeHeight: number; hipHeight: number; stanceWidth: number } | null;
 };
 
