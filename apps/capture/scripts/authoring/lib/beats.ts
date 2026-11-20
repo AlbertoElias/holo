@@ -288,6 +288,19 @@ export const STORY_PARTS = ['setup', 'event', 'reaction'] as const;
 /** The setup's time on screen before the event may start, seconds. */
 export const EVENT_AFTER_S = 1.5;
 
+/**
+ * A story's event changes the world where a viewer sees it, after the setup has had its 1.5 s:
+ * a take, put or drop, or a world line. The `story` bar fails without one; the sheet still builds.
+ */
+export function storyEventProblem(sheet: BeatSheet): string | undefined {
+  const { holdings } = holdingsOf(sheet);
+  const changes = [
+    ...holdings.flatMap((h) => [...(h.take ? [h.from] : []), ...(h.put || h.drop ? [h.to] : [])]),
+    ...(sheet.world ?? []).flatMap((w) => { if (!('when' in w)) return []; try { const t = cueTime(sheet, w.when); return t === undefined ? [] : [t]; } catch { return []; } })
+  ];
+  return changes.some((t) => t >= EVENT_AFTER_S) ? undefined : `nothing changes in the world at ${EVENT_AFTER_S} s or later`;
+}
+
 /** Problems in a sheet's `story`; none when it has no story (make.ts asks for one). */
 export function storyProblems(story: unknown): string[] {
   if (story === undefined) return [];
@@ -673,6 +686,7 @@ export function validateSheet(sheet: BeatSheet): string[] {
     if (o.on !== undefined && (!objects.has(o.on) || o.on === id)) problems.push(`${where}: on ${o.on}: no other object`);
     if (held.has(id) && (o.at !== undefined || o.on !== undefined)) problems.push(`${where}: it is in a hand from the first frame, so it takes no at or on`);
     if (o.wear !== undefined) {
+      for (const k of Object.keys(o.wear)) if (!['performer', 'on', 'at', 'turn'].includes(k)) problems.push(`${where}: wear.${k}: unknown field (performer, on, at, turn)`);
       if (o.at !== undefined || o.on !== undefined || held.has(id)) problems.push(`${where}: a worn object takes no at, on or hold`);
       if (typeof o.wear.on !== 'string' || !(VRM_HUMANOID_BONES as readonly string[]).includes(o.wear.on)) problems.push(`${where}: wear.on must name a bone (head, hips, chest, upperChest, neck, leftHand, ...)`);
       if (o.wear.performer !== undefined && !sheet.performers.some((p) => p.id === o.wear!.performer)) problems.push(`${where}: wear.performer ${o.wear.performer}: no such performer`);
@@ -800,14 +814,6 @@ export function validateSheet(sheet: BeatSheet): string[] {
   }
   problems.push(...soundProblems(sheet));
   problems.push(...worldProblems(sheet, holdings));
-  if (sheet.story) {
-    // The event changes the world where a viewer sees it, after the setup has had its 1.5 s.
-    const changes = [
-      ...holdings.flatMap((h) => [...(h.take ? [h.from] : []), ...(h.put || h.drop ? [h.to] : [])]),
-      ...(sheet.world ?? []).flatMap((w) => { if (!('when' in w)) return []; try { const t = cueTime(sheet, w.when); return t === undefined ? [] : [t]; } catch { return []; } })
-    ];
-    if (!changes.some((t) => t >= EVENT_AFTER_S)) problems.push(`story: nothing changes in the world at ${EVENT_AFTER_S} s or later; the event needs a take, put or drop, or a world line, after the setup`);
-  }
   return problems;
 }
 
@@ -896,6 +902,9 @@ function worldProblems(sheet: BeatSheet, holdings: readonly Holding[]): string[]
       if (w.push !== undefined && (!Array.isArray(w.push) || w.push.length !== 3 || w.push.some((x) => !Number.isFinite(x)))) problems.push(`${where} push: [x, y, z] in m/s`);
       if (t !== undefined && holdings.some((h) => h.object === w.object && h.from <= t && t < h.to)) problems.push(`${where}: ${w.object} is in a hand then; a held object falls with a drop direction`);
       if (objects[w.object]!.wear) problems.push(`${where}: ${w.object} is worn; a worn object does not fall`);
+      const on = Object.entries(objects).find(([, o]) => o.on === w.object);
+      if (on) problems.push(`${where}: ${on[0]} stands on ${w.object} and would stay in the air; place it elsewhere`);
+      for (const k of Object.keys(w)) if (!['kind', 'object', 'when', 'push'].includes(k)) problems.push(`${where}: ${k}: unknown field (object, when, push)`);
     } else {
       const spec = objects[w.object];
       if (!spec) { problems.push(`${where}: no object ${w.object}`); continue; }

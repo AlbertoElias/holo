@@ -9,7 +9,8 @@
   "intent": "Someone notices me, smiles and waves hello.",
   // The story a viewer must get with no words: write it before any beat (the hologram-authoring
   // skill, "First, the story"). The main bar: a fresh reader is asked who and where, what happens,
-  // and how they react. Here the "event" is you arriving; a real piece has a change in the world.
+  // and how they react. Here the "event" is you arriving, so the story bar fails ("nothing changes in
+  // the world"): a real piece needs a take, put or drop, or a world line, at 1.5 s or later.
   "story": {
     "setup": { "says": "Someone stands on their own, idle.", "see": ["they look down and away, still"] },
     "event": { "says": "They notice you.", "see": ["their head and eyes come up to the viewer"] },

@@ -353,7 +353,7 @@ A sheet's `world` lists what changes in the set, one line each:
   floor or on the top of an object under it, and settles over 0.35 s onto
   the face its spin carries it to (a small push on a glass on a table tips
   it onto its side). A held object takes a `drop` direction instead: the
-  hand opens at the end of its beat and the object leaves with the hand's
+  hand opens at the direction's start (its beat's start plus `delay`) and the object leaves with the hand's
   speed. Both write the object's node track, as a held object does.
 
 A cue is seconds, a beat id (its `at`) or `<beat>.end`. A point is an

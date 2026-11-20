@@ -37,7 +37,7 @@ import { actingReport, diffTakes, summarize } from './acting-report.ts';
 import { bodyLine, build, loadSheet, OBJECT_LIMITS, resolveAvatar } from './direct.ts';
 import { BAR } from './lib/audition-bar.ts';
 import { FACE_CHANNELS } from '@holoim/avatar-face';
-import { DEFAULT_TIMING, FACE_MIXES, GESTURES, houseFinish, parseSheetText, resolveTiming, STATES, STORY_PARTS, validateSheet, type BeatSheet, type ObjectSpec, type Place, type Point } from './lib/beats.ts';
+import { DEFAULT_TIMING, FACE_MIXES, GESTURES, houseFinish, parseSheetText, resolveTiming, STATES, STORY_PARTS, storyEventProblem, validateSheet, type BeatSheet, type ObjectSpec, type Place, type Point } from './lib/beats.ts';
 import { solveTake } from './lib/direct.ts';
 import { parseGlb } from './lib/gltf-read.ts';
 import { HAND_SHAPES } from './lib/hands.ts';
@@ -286,15 +286,17 @@ const STORY_FIX = 'write the sheet\'s "story" first (hologram-authoring skill, "
  * The main bar (brief slice 8): a fresh reader, told nothing, gets who and where,
  * what happens, and how the person reacts. Fails at once for a sheet with no story.
  */
-async function storyRow(reviewDir: string, hasStory: boolean): Promise<Row> {
-  if (!hasStory) return { id: 'story', bar: STORY_BAR, value: 'the sheet has no story', pass: false, fix: STORY_FIX };
+async function storyRow(reviewDir: string, sheet: BeatSheet | undefined): Promise<Row> {
+  if (!sheet?.story) return { id: 'story', bar: STORY_BAR, value: 'the sheet has no story', pass: false, fix: STORY_FIX };
+  const event = storyEventProblem(sheet);
+  if (event) return { id: 'story', bar: STORY_BAR, value: event, pass: false, fix: 'the event needs a take, put or drop, or a world line, after the setup (hologram-authoring skill, "First, the story")' };
   const file = join(reviewDir, 'comparison.json');
   type Part = { says: string; seen: string | null; reads: boolean | null; revise: string | null };
   let c: { story?: Record<string, Part> | null };
   try { c = JSON.parse(await readFile(file, 'utf8')); } catch { return { id: 'story', bar: STORY_BAR, value: 'no review', pass: null, fix: 'run without --quick to make the review pack' }; }
   if (!c.story) return { id: 'story', bar: STORY_BAR, value: 'comparison.json has no story', pass: null, fix: `run make.ts again without --quick to write a fresh ${rel(file)}` };
   // The request part (when the sheet gives one) checks the story against what was asked, not only against itself.
-  const parts = [...STORY_PARTS, ...(c.story.request ? ['request' as const] : [])].map((k) => ({ k, p: c.story![k] }));
+  const parts = [...STORY_PARTS, ...(sheet.story.request ? ['request' as const] : [])].map((k) => ({ k, p: c.story![k] }));
   const unread = parts.filter(({ p }) => typeof p?.reads !== 'boolean');
   if (unread.length) return { id: 'story', bar: STORY_BAR, value: `${parts.length - unread.length} of ${parts.length} parts graded`, pass: null, fix: `have a fresh grader fill story.{${parts.map(({ k }) => k).join(',')}}.seen/reads/revise in ${rel(file)} from the reader's part 4, then run make.ts verdict ${rel(dirname(reviewDir))}` };
   const missed = parts.filter(({ p }) => p!.reads === false);
@@ -452,7 +454,7 @@ async function make(sheetFile: string, quick: boolean): Promise<boolean> {
       notes.push(`twelve stills: ${rel(frames)}-sheet.jpg (look at it before the full review)`);
     } else notes.push(`stills failed: ${(r.stderr || r.stdout).split('\n').slice(-3).join(' ')}`);
     rows.push({ id: 'faceBox', bar: `face ≥ ${BAR.faceBoxDevicePx} device px on the card`, value: 'not measured', pass: null, fix: 'run without --quick (the review measures it)' });
-    rows.push(await storyRow(join(dir, 'review'), sheet.story !== undefined), await readingRow(join(dir, 'review')));
+    rows.push(await storyRow(join(dir, 'review'), sheet), await readingRow(join(dir, 'review')));
   } else {
     console.log('  reviewing (real time, a few minutes)…');
     const { onScreen } = await review(take, { sheet: join(dir, 'take.beats.json'), out: join(dir, 'review') });
@@ -460,7 +462,7 @@ async function make(sheetFile: string, quick: boolean): Promise<boolean> {
     const reviewDir = join(dir, 'review');
     spawnSync('node', ['packages/tooling-testing/src/preview.mjs', join(reviewDir, 'reader')], { cwd: ROOT, encoding: 'utf8' });
     notes.push(`watch: ${rel(join(reviewDir, 'reader', 'review.mp4'))}; card stills: ${rel(join(reviewDir, 'reader'))}/sheet-card-NN.jpg (preview with node packages/tooling-testing/src/preview.mjs <file>)`);
-    rows.push(await storyRow(reviewDir, sheet.story !== undefined), await readingRow(reviewDir));
+    rows.push(await storyRow(reviewDir, sheet), await readingRow(reviewDir));
   }
 
   const verdict = await writeReport(dir, sheetFile, rows, notes);
@@ -472,8 +474,10 @@ async function make(sheetFile: string, quick: boolean): Promise<boolean> {
 
 async function verdict(dir: string): Promise<boolean> {
   const report = JSON.parse(await readFile(join(dir, 'report.json'), 'utf8')) as { sheet: string; rows: Row[]; notes: string[] };
-  const hasStory = await readFile(report.sheet, 'utf8').then((t) => parseSheetText(t, report.sheet).story !== undefined, () => false);
-  const rows = [...report.rows.filter((r) => r.id !== 'reading' && r.id !== 'story'), await storyRow(join(dir, 'review'), hasStory), await readingRow(join(dir, 'review'))];
+  // The sheet as it was built (its copy in the version), else the sheet file.
+  const built = await readFile(join(dir, 'sheet.jsonc'), 'utf8').then((t) => parseSheetText(t, join(dir, 'sheet.jsonc')), () => undefined)
+    ?? await readFile(report.sheet, 'utf8').then((t) => parseSheetText(t, report.sheet), () => undefined);
+  const rows = [...report.rows.filter((r) => r.id !== 'reading' && r.id !== 'story'), await storyRow(join(dir, 'review'), built), await readingRow(join(dir, 'review'))];
   const text = await writeReport(dir, report.sheet, rows, report.notes);
   console.log(`${formatRows(rows)}\n\n${text}`);
   return !verdictLine(rows).failed;

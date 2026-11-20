@@ -665,9 +665,10 @@ const FALL_SETTLE = 0.35;
 /** Starts a fall with a velocity; the spin tips it the way it travels, plus a little of its own. */
 function startFall(st: PropState, v: THREE.Vector3, tumble = false): void {
   const speed = Math.hypot(v.x, v.z);
+  // About up × travel: the top goes the way the object travels (a knocked glass falls away from the hand).
   const across = new THREE.Vector3(0, 1, 0).cross(new THREE.Vector3(v.x, 0, v.z));
   // A gentle drop (under 0.3 m/s across) falls without a spin; a fall with no push tumbles a little.
-  const w = speed >= 0.3 ? across.normalize().multiplyScalar(-Math.min(9, 3 + 6 * speed)) : tumble ? new THREE.Vector3(2.5, 0, 1.5) : new THREE.Vector3();
+  const w = speed >= 0.3 ? across.normalize().multiplyScalar(Math.min(9, 3 + 6 * speed)) : tumble ? new THREE.Vector3(2.5, 0, 1.5) : new THREE.Vector3();
   st.fall = { v: v.clone(), w, bounces: 0 };
 }
 
