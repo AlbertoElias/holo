@@ -178,7 +178,9 @@ function missScore(take: ReturnType<typeof solveTake>, m: Miss): { e: number; wo
 /** The knobs that move where the hand has to be for this miss. */
 function knobsFor(sheet: BeatSheet, m: Miss): { knobs: Knob[]; none?: string } {
   const b = sheet.beats.find((x) => x.id === m.beat)!;
-  const d = b.directions.find((x) => x.kind === m.kind && x.side === m.side) ?? b.directions.find((x) => x.kind === m.kind)!;
+  const kind = m.kind === 'grip' ? 'take' : m.kind;
+  const d = b.directions.find((x) => x.kind === kind && 'side' in x && x.side === m.side) ?? b.directions.find((x) => x.kind === kind);
+  if (!d) return { knobs: [], none: `beat ${m.beat} has no ${kind} direction to fit` };
   if (m.kind === 'aim') {
     const r = resolveTiming(b, d);
     const mark = reachMarkDuring(sheet, b.performer, m.side, r.start, r.end);
@@ -209,9 +211,30 @@ function knobsFor(sheet: BeatSheet, m: Miss): { knobs: Knob[]; none?: string } {
  * a second each), so the build can print the edit that lands it.
  */
 async function fitMiss(sheetFile: string, m: Miss): Promise<string> {
+  try { return await fitMissOrThrow(sheetFile, m); } catch (e) { return `(the fit could not run: ${(e as Error).message})`; }
+}
+
+/** For a take: the same sheet with the take's palm set each other way. */
+function palmChoices(sheet: BeatSheet, m: Miss): { s: BeatSheet; edit: string }[] {
+  if (m.kind !== 'grip') return [];
+  const out: { s: BeatSheet; edit: string }[] = [];
+  for (const palm of ['up', 'down', 'in', 'toward', undefined] as const) {
+    let changed = false;
+    const beats = sheet.beats.map((b) => b.id !== m.beat ? b : { ...b, directions: b.directions.map((d) => {
+      if (d.kind !== 'take' || d.side !== m.side || d.palm === palm) return d;
+      changed = true;
+      const { palm: _old, ...rest } = d;
+      return palm ? { ...rest, palm } : rest;
+    }) });
+    if (changed) out.push({ s: { ...sheet, beats }, edit: palm ? `the take's "palm": "${palm}"` : 'no "palm" on the take' });
+  }
+  return out;
+}
+
+async function fitMissOrThrow(sheetFile: string, m: Miss): Promise<string> {
   const { sheet, avatars, sources } = await loadSheet(sheetFile);
   const { knobs, none } = knobsFor(sheet, m);
-  if (none) return none;
+  if (none && !palmChoices(sheet, m).length) return none;
   const score = (s: BeatSheet) => {
     if (validateSheet(s).length) return { e: Infinity, words: 'invalid' };
     try { return missScore(solveTake(s, avatars, sources), m); } catch { return { e: Infinity, words: 'did not solve' }; }
@@ -224,10 +247,17 @@ async function fitMiss(sheetFile: string, m: Miss): Promise<string> {
     const s = k.set(sheet, v);
     tried.push({ s, ...score(s), edits: [`${k.label} ${k.get(sheet)} → ${r2(v)}`] });
   }
+  for (const c of palmChoices(sheet, m)) tried.push({ s: c.s, ...score(c.s), edits: [c.edit] });
   tried.sort((a, b) => a.e - b.e);
   let best = tried[0]!;
   if (best.e > 1) {
     const base = best;
+    const second = [...knobs.map((k) => ({ k })), ...palmChoices(base.s, m).map((c) => ({ c }))];
+    for (const c of second.filter((x): x is { c: { s: BeatSheet; edit: string } } => 'c' in x).map((x) => x.c)) {
+      if (base.edits[0]!.includes('palm')) break;
+      const t = score(c.s);
+      if (t.e < best.e) best = { s: c.s, ...t, edits: [...base.edits, c.edit] };
+    }
     for (const k of knobs) {
       if (base.edits[0]!.startsWith(`${k.label} `)) continue;
       for (const step of k.steps.filter((_, i) => i % 2 === 1)) {
@@ -238,7 +268,7 @@ async function fitMiss(sheetFile: string, m: Miss): Promise<string> {
       }
     }
   }
-  if (best.e >= start.e) return `no nudge within ${Math.max(...knobs.flatMap((k) => k.steps))} m helps (still ${start.words}): move the performer or the object so the hand meets it in front of the body, between waist and chest height`;
+  if (!tried.length || best.e >= start.e) return `no nudge within 20 cm helps (still ${start.words}): move the performer or the object so the hand meets it in front of the body, between waist and chest height`;
   return `${best.e <= 1 ? 'lands' : 'best found'} with ${best.edits.join(' and ')} (${best.words})`;
 }
 

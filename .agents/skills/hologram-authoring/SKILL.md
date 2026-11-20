@@ -12,7 +12,12 @@ builds the sheet into a take, checks every bar, records the review pack and
 says what to fix. You revise the sheet, not the take.
 
 Run everything from `apps/capture` on Node 24 (`eval "$(../../scripts/agent-node-env.sh)"`).
-`M` below stands for `node --conditions=development --import tsx scripts/authoring/make.ts`.
+`M` below is this shell function; define it once per shell (a plain string
+variable does not work in zsh):
+
+```bash
+M() { node --conditions=development --import tsx scripts/authoring/make.ts "$@"; }
+```
 
 ## The loop
 
@@ -33,7 +38,7 @@ Run everything from `apps/capture` on Node 24 (`eval "$(../../scripts/agent-node
    `vN/frames-sheet.jpg` (already a small contact sheet) to see whether the
    pose reads.
 4. **Review.** `M <sheet>` without `--quick` also records the review pack in
-   real time: about 40 s per second of take, so run it in the background
+   real time: about 6 to 10 minutes for an 8 s take, so run it in the background
    with its output in a log, and wait until the log has a line starting
    `DONE`, `BUILT` or `NOT YET` (or the command exits). Run on an unchanged
    sheet right after `--quick`, it finishes that version instead of making
@@ -133,6 +138,16 @@ production and needs the owner's word.
   "counter" }`. A performer can also start holding it (`"hold": { "right":
   "loaf" }`). When a take or put misses, `make.ts` tries moving the surface
   and its height and prints the edit that lands it.
+- **Pick up something low.** For a surface below the hips (a low table, the
+  ground), bend first and keep the bend through the take: give the bend beat
+  a `hold` that reaches past the take's end, and put the `bend` with
+  `"amount": 0` in a later beat. A take that starts after the bend ends
+  reaches from standing and misses. Give a small object a `grip` with an
+  `axis` that points from the hand along the object (for a stone in front of
+  the performer, about `[0.8, 0, 1]`), and try the take's `"palm"` (`in`,
+  `down`) when the angle misses. `make.ts` tries the palm and the surface
+  for you; it does not try the grip axis yet. A small object is only a few
+  pixels on the card, so show it at chest height for a second after the take.
 - **Change the world.** `world: [{ "kind": "change", "object": "plant",
   "when": 6, "over": 1.5, "from": { "scale": [1, 0.8, 1], "color": "#8e8644" } }]`
   grows or recolours an object; see the README's "World change".
