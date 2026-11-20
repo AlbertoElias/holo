@@ -93,7 +93,7 @@ jitters"), fixed in 1b:
     controller moves a little less than asked, and the wall momentum reset
     kept only that each frame, so it compounded into a 0.4 m/s crawl. The
     reset now runs only when the move touched something too steep to climb
-    (steeper than 40°). On a 40 s random roam the slow share went 0.48 →
+    (then steeper than 40°; cause 19 raised it to 60°). On a 40 s random roam the slow share went 0.48 →
     0.16. Brushing a steep facet beside the path (a 50° face, mostly
     sideways) still crawled at 0.04 m/s, because the reset kept only the
     progress made; a wall now takes only the momentum pushing into it, so a
@@ -118,6 +118,36 @@ jitters"), fixed in 1b:
     with the crouch half let go once moving (hips 0.13 m down). It now creeps
     at 0.8 m/s with the hips held 0.26–0.35 m down, and the full crouch drops
     the hips 0.16 of height (was 0.11), knees near a right angle.
+19. The body could not climb much of the green (owner report, 2026-11-19:
+    "at least climb all the green areas"). Anything steeper than 40° was a
+    wall, and the default scene's grass hills are steeper than that over a
+    third of their area. The climb limit is now 60° (96% of the grass by
+    area), and ground the body can climb never slides it down (slide from
+    62°). What stays a wall on the grass is near-vertical ledges 1.3–4.3 m
+    tall. The terrain is one collider, so the limit is the same on rock:
+    more of the mountain is walkable too. A 50–60° climb is slow (about
+    0.7 m/s at the 1.8 m/s walk), because the controller turns the walk
+    into height.
+20. The jump looked wrong ("jumping looks super weird"): the squat ended in
+    one frame at take-off (hips 0.21 m up, knees 88° → 12°), the legs folded
+    to 71° at the apex as if sitting in the air, and landing bent the knees
+    20° → 76° in two frames. The legs now straighten over the first 0.12 s
+    in the air, so the hips rise with them (0.91 → 0.95 → 1.06 → 1.21 m).
+    The launch frame, which can still read grounded, holds the squat. The
+    wind-up is 0.18 s to a 0.6 crouch (78° knees). The apex tuck is 0.3
+    (50° knees), eased in after the push-off. The landing absorbs over
+    0.12 s to 0.6 (knees 15° → 73° over four frames).
+21. The crouch-walk's arms clipped the body: a crouched stride swings the
+    thigh forward and up beside the hanging hand, and on the back-swing the
+    leaning torso carries the upper arm back toward horizontal. The
+    clearance knew only the hips' standing cross-section, and it opened the
+    arm about the body's forward axis. That axis barely moves a point at
+    shoulder height, and the clearance dropped to nothing at that height.
+    Each thigh is now a capsule about its hip-to-knee axis (skin radius
+    measured per avatar), and the torso is measured about the leaning spine
+    rather than the hips. Each point opens about the axis that moves it
+    outwards fastest, with the wrist's and elbow's axes blended by need so it
+    never jumps.
 
 ## Scope
 

@@ -7,7 +7,7 @@ import { type CaptureContext, captureContext } from './captureContext';
 const CROUCH_MOVE_SPEED_AT_FULL = 0.45;
 const CROUCH_MIN_EFFECT_THRESHOLD = 0.05;
 // A flat-screen jump squats this long (s) before take-off; a tracked body in XR jumps when the stick says.
-const JUMP_WINDUP_SEC = 0.14;
+const JUMP_WINDUP_SEC = 0.18;
 // Keyboard walking reaches full speed in about a quarter second: an instant start or stop reads as a pop on every joint.
 const KEYBOARD_ACCELERATION_MS2 = 12;
 // A desktop body walking sideways turns to face where it goes (it has only a forward walk); past this angle from the

@@ -24,6 +24,8 @@ export interface BodyWidths {
   hip: Section;
   /** Spine to chest, beside which the elbow passes. */
   torso: Section;
+  /** Thigh skin radius about the hip-to-knee axis: a crouch-walk swings the thigh up beside a hanging hand. */
+  thigh: number;
   /** Hand half-thickness about the forearm's axis. */
   hand: number;
   /** Forearm half-thickness about its axis. */
@@ -60,6 +62,10 @@ export class ArmClearance {
   private readonly elbow = new THREE.Vector3();
   private readonly wrist = new THREE.Vector3();
   private readonly axis = new THREE.Vector3();
+  private readonly wristAxis = new THREE.Vector3();
+  private readonly elbowAxis = new THREE.Vector3();
+  private readonly spine = new THREE.Vector3();
+  private readonly neck = new THREE.Vector3();
   private readonly turn = new THREE.Quaternion();
   private readonly world = new THREE.Quaternion();
   private readonly parent = new THREE.Quaternion();
@@ -95,6 +101,11 @@ export class ArmClearance {
     const hip = { half: [] as number[], front: [] as number[], back: [] as number[] };
     const torso = { half: [] as number[], front: [] as number[], back: [] as number[] };
     const handRadii: number[] = [];
+    const thighRadii: number[] = [];
+    const thighAxis = {
+      left: { hip: jointAt('leftUpperLeg'), knee: humanoid.bone('leftLowerLeg')?.getWorldPosition(new THREE.Vector3()) },
+      right: { hip: jointAt('rightUpperLeg'), knee: humanoid.bone('rightLowerLeg')?.getWorldPosition(new THREE.Vector3()) }
+    };
     const forearmRadii: number[] = [];
     const v = new THREE.Vector3();
     root.traverse((object) => {
@@ -118,6 +129,10 @@ export class ArmClearance {
         const depth = this.a.dot(this.forward);
         const height = this.a.dot(this.up);
         const section = HIP_BONES.includes(name) ? hip : TORSO_BONES.includes(name) ? torso : undefined;
+        if (name === 'leftUpperLeg' || name === 'rightUpperLeg') {
+          const { hip: top, knee: bottom } = thighAxis[name === 'leftUpperLeg' ? 'left' : 'right'];
+          if (bottom) thighRadii.push(distanceToSegment(v, top, bottom, this.b));
+        }
         if (section) {
           // The hips are measured beside the hips and upper thighs, where a hanging hand passes.
           if (section === hip && (height < -0.55 * legLength || height > 0.25 * legLength)) continue;
@@ -146,6 +161,7 @@ export class ArmClearance {
     this.widths = {
       hip: hipSection,
       torso: torsoSection,
+      thigh: (quantile(thighRadii, 0.9) ?? half) / half,
       hand: (quantile(handRadii, 0.5) ?? half * 0.25) / half,
       elbow: (quantile(forearmRadii, 0.9) ?? half * 0.4) / half
     };
@@ -180,21 +196,26 @@ export class ArmClearance {
       upper.getWorldPosition(this.shoulder);
       humanoid.bone(side.lower)!.getWorldPosition(this.elbow);
       humanoid.bone(side.hand)!.getWorldPosition(this.wrist);
-      const wristNeed = this.need(this.wrist, side.sign, widths.hip, widths.hand, half);
-      const elbowNeed = this.need(this.elbow, side.sign, widths.torso, widths.elbow, half);
-      // A turn about the body's forward axis moves a point sideways by its drop below the shoulder per radian.
-      const wristDrop = this.shoulder.y - this.wrist.y;
-      const elbowDrop = this.shoulder.y - this.elbow.y;
-      const angle = Math.min(
-        MAX_OPEN_RAD,
-        Math.max(wristDrop > half * 0.5 ? wristNeed / wristDrop : 0, elbowDrop > half * 0.5 ? elbowNeed / elbowDrop : 0)
+      const thigh = humanoid.bone(side.sign > 0 ? 'rightUpperLeg' : 'leftUpperLeg')!;
+      const knee = humanoid.bone(side.sign > 0 ? 'rightLowerLeg' : 'leftLowerLeg');
+      const wristNeed = Math.max(
+        this.need(this.wrist, side.sign, widths.hip, widths.hand, half, this.origin),
+        knee ? this.thighNeed(this.wrist, thigh, knee, side.sign, (widths.thigh + widths.hand + AIR) * half, half) : 0
       );
+      // The torso is measured about the spine, which a crouch leans forward of the hips.
+      const elbowNeed = this.need(this.elbow, side.sign, widths.torso, widths.elbow, half, this.spineAt(humanoid, this.elbow.y));
+      // Each point is turned outwards about the axis that moves it outwards fastest: perpendicular to the outward
+      // direction and to its own reach from the shoulder. It moves by that reach's share across the outward
+      // direction per radian, so an arm swung back or forward (a crouch-walk's swing) opens as readily as a hanging one.
+      this.b.copy(this.right).multiplyScalar(side.sign);
+      const wristAngle = this.angleFor(this.wrist, wristNeed, half, this.wristAxis);
+      const elbowAngle = this.angleFor(this.elbow, elbowNeed, half, this.elbowAxis);
+      const angle = Math.min(MAX_OPEN_RAD, Math.max(wristAngle, elbowAngle));
       this.lastOpenRad[side.sign > 0 ? 'right' : 'left'] = angle;
       if (angle <= 1e-4) return;
       undo.before.copy(upper.quaternion);
-      // Axis down × outward turns a hanging point outwards for a positive angle.
-      this.b.copy(this.right).multiplyScalar(side.sign);
-      this.axis.set(0, -1, 0).cross(this.b).normalize();
+      // Both points' axes, weighted by the turn each asks for, so the axis never jumps when the other point leads.
+      this.axis.copy(this.wristAxis).multiplyScalar(wristAngle).addScaledVector(this.elbowAxis, elbowAngle).normalize();
       this.turn.setFromAxisAngle(this.axis, angle);
       upper.getWorldQuaternion(this.world);
       this.world.premultiply(this.turn);
@@ -204,6 +225,56 @@ export class ArmClearance {
       undo.active = true;
       upper.updateWorldMatrix(false, true);
     });
+  }
+
+  /**
+   * The angle (rad) that moves `point` outwards (this.b) by `need`, and the axis to turn it about; 0 when the point
+   * lies on the shoulder's outward line, where no turn of the upper arm moves it outwards.
+   */
+  private angleFor(point: THREE.Vector3, need: number, half: number, axis: THREE.Vector3): number {
+    this.a.subVectors(point, this.shoulder);
+    axis.crossVectors(this.a, this.b);
+    const lever = axis.length();
+    if (lever < half * 0.3 || need <= 0) return 0;
+    axis.divideScalar(lever);
+    return need / lever;
+  }
+
+  /**
+   * Smooth outward shortfall of a point against its own side's thigh, a capsule about the hip-to-knee axis: full
+   * beside the thigh, tapering to nothing ahead of, behind, above or below it (past the hip or the knee).
+   */
+  private thighNeed(point: THREE.Vector3, hip: THREE.Bone, knee: THREE.Bone, sign: number, radius: number, half: number): number {
+    hip.getWorldPosition(this.spine);
+    knee.getWorldPosition(this.neck);
+    const length = this.spine.distanceTo(this.neck);
+    if (length < 1e-6) return 0;
+    this.axis.subVectors(this.neck, this.spine).divideScalar(length);
+    this.a.subVectors(point, this.spine);
+    const along = this.a.dot(this.axis);
+    // Off the ends the capsule rounds off over one radius.
+    const beyond = along < 0 ? -along : along > length ? along - length : 0;
+    this.a.addScaledVector(this.axis, -along);
+    this.b.copy(this.right).multiplyScalar(sign);
+    const lateral = this.a.dot(this.b);
+    const across = Math.sqrt(Math.max(0, this.a.lengthSq() - lateral * lateral));
+    const reach = radius * DEPTH_TAPER;
+    const fade = 1 - (across / reach) ** 2 - (beyond / reach) ** 2;
+    const clearance = fade > 0 ? radius * Math.sqrt(fade) : 0;
+    const deficit = clearance - lateral;
+    const soft = SOFTNESS * half;
+    return (deficit + Math.sqrt(deficit * deficit + soft * soft)) / 2;
+  }
+
+  /** The point on the spine (hips to neck) at the given height, falling back to the hips' midpoint. */
+  private spineAt(humanoid: HumanoidSkeleton, y: number): THREE.Vector3 {
+    const neck = humanoid.bone('neck') ?? humanoid.bone('upperChest') ?? humanoid.bone('chest');
+    if (!neck) return this.spine.copy(this.origin);
+    neck.getWorldPosition(this.neck);
+    const rise = this.neck.y - this.origin.y;
+    if (rise < 1e-4) return this.spine.copy(this.origin);
+    const t = THREE.MathUtils.clamp((y - this.origin.y) / rise, 0, 1);
+    return this.spine.lerpVectors(this.origin, this.neck, t);
   }
 
   /** Skin measured on the current avatar, for checks. */
@@ -231,8 +302,8 @@ export class ArmClearance {
    * Smooth outward shortfall of a limb point (of the given thickness) against a body section: the section's
    * half-width beside the body, tapering to nothing ahead of and behind it. ≈0 well clear, ≈the deficit inside.
    */
-  private need(point: THREE.Vector3, sign: number, section: Section, thickness: number, half: number): number {
-    this.a.subVectors(point, this.origin);
+  private need(point: THREE.Vector3, sign: number, section: Section, thickness: number, half: number, centre: THREE.Vector3): number {
+    this.a.subVectors(point, centre);
     const lateral = this.a.dot(this.right) * sign;
     const depth = this.a.dot(this.forward);
     const reach = ((depth >= 0 ? section.front : section.back) + thickness + AIR) * DEPTH_TAPER * half;
@@ -248,4 +319,11 @@ function quantile(values: number[], q: number): number | undefined {
   if (values.length === 0) return undefined;
   const sorted = values.slice().sort((a, b) => a - b);
   return sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))];
+}
+
+function distanceToSegment(point: THREE.Vector3, a: THREE.Vector3, b: THREE.Vector3, scratch: THREE.Vector3): number {
+  scratch.subVectors(b, a);
+  const lengthSq = scratch.lengthSq();
+  const t = lengthSq > 0 ? THREE.MathUtils.clamp(scratch.dot(point) - scratch.dot(a), 0, lengthSq) / lengthSq : 0;
+  return scratch.multiplyScalar(t).add(a).distanceTo(point);
 }
