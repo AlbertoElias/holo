@@ -34,7 +34,9 @@ M() { node --conditions=development --import tsx scripts/authoring/make.ts "$@";
    the sheet (about 20 s plus a minute for twelve stills). It prints the look
    each performer actually wears and one row per bar, and every failing row
    has a `fix:` line. Do what the fix says and run it again. For a missed
-   grip, put or aim, the fix is the exact edit that lands it. Look at
+   grip, put or aim, the fix is the edit that lands it, or the best one it
+   found ("best found with …"), or "no nudge within 20 cm helps"; then move
+   the mark or the reach by hand. Look at
    `vN/frames-sheet.jpg` (already a small contact sheet) to see whether the
    pose reads.
 4. **Review.** `M <sheet>` without `--quick` also records the review pack in
@@ -97,7 +99,7 @@ production and needs the owner's word.
 | `size.*` | each dressed avatar file is at most 1.8 MB (house avatars are about 1.1-1.5) |
 | `quickLook` | the take fits the iPhone Quick Look budget |
 | `faceBox.*` | the face is at least 40 device px brow to chin on the phone card |
-| `reading` | a fresh reader reads every beat |
+| `reading` | a fresh reader reads every beat (each beat needs an `intent`), and the piece as a whole |
 | `body.*`, `still.*`, `onCard.*` | notes, not bars: feet planted, something moving every second, objects wholly on the card |
 
 ## What works at card size
@@ -142,8 +144,8 @@ production and needs the owner's word.
   and its height and prints the edit that lands it.
 - **Pick up something low.** For a surface below the hips (a low table, the
   ground), bend first and keep the bend through the take: give the bend beat
-  a `hold` that reaches past the take's end, and put the `bend` with
-  `"amount": 0` in a later beat. A take that starts after the bend ends
+  a `hold` that reaches past the take's end. The bend ends on its own after
+  its `hold` and `settle`. A take that starts after the bend ends
   reaches from standing and misses. Give a small object a `grip` with an
   `axis` that points from the hand along the object (for a stone in front of
   the performer, about `[0.8, 0, 1]`), and try the take's `"palm"` (`in`,

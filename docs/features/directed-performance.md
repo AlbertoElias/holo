@@ -3555,8 +3555,30 @@ already writes `review/`, and now finishes that version.
 The code review of this slice found three more, now fixed: the reading bar passed with no
 beat intent or an ungraded piece (now it fails or waits); two reviews started together
 could take the same viewer ports (each now claims its pair with a lock directory in the
-system temp folder); and a sheet with no `beats` or `directions` crashed (now it prints
-FIX THE SHEET).
+system temp folder, created in one step and taken over when its process has ended); and
+a sheet with no `beats` or `directions` crashed (now it prints FIX THE SHEET).
+
+The independent verifier (a fresh Opus subagent, the brief and the diff only) confirmed
+the scope (no change to `apps/capture/src/`, the viewers, contracts or the house-base
+files) and that no bar threshold is looser. It found more, now fixed: a grade that is not
+`true` or `false` (`"yes"`) passed the reading bar (now it waits); a beat with no intent
+was left out of the reading bar (now it fails); `publish.ts` refused a `.jsonc` sheet; a
+malformed `comparison.json` crashed `verdict`; and three lines of the skill were wrong
+(a missed fit can print only the best edit found, a bend ends on its own after `hold` and
+`settle`, and the reading bar also needs the piece).
+
+Found by the verifier and left open (low):
+
+- Two overlapping bends add up past the 1.0 limit of one bend (two at 1.0 give 90°), and
+  the body check does not catch it.
+- A put or aim at literal coordinates gets a fix line that says nothing places it by
+  numbers; the fit only searches named marks and objects.
+- One out-of-reach direction anywhere in the take makes every fit say "best found", not
+  "lands".
+- Two sheets with the same file name outside `output/` share one version history.
+- `six-second-test.ts` names the sidecar wrongly for a `.jsonc` sheet.
+- The miss-and-fit path and the full review have no automated test; they were proven only
+  by the three runs above.
 
 Weaknesses that stay open:
 

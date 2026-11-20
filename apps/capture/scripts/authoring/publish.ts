@@ -30,6 +30,7 @@ import { MAX_HOLOGRAM_BYTES } from '@holoim/contracts';
 
 import { checkAccount, findCredential, insecureTarget, isLoopback, QUICK_LOOK_BUDGET, quickLookLoad, setupHint, uploadHologram, waitForPreview } from '../showcase/lib/upload.mjs';
 import { build, objectLines } from './direct.ts';
+import { parseSheetText } from './lib/beats.ts';
 import { findPerformers, parseGlb, readChannels } from './lib/gltf-read.ts';
 
 export const LOCAL_API = 'http://127.0.0.1:3001';
@@ -114,7 +115,7 @@ type SheetMeta = { title?: string | undefined; description?: string | undefined;
 
 async function readSheetMeta(file: string): Promise<SheetMeta> {
   try {
-    const raw = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>;
+    const raw = parseSheetText(await readFile(file, 'utf8'), file) as unknown as Record<string, unknown>;
     const text = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
     return { title: text(raw.title), description: text(raw.description), credit: text(raw.credit) };
   } catch { return {}; }
@@ -135,7 +136,7 @@ export async function publish(options: PublishOptions): Promise<PublishReport | 
   const input = resolve(options.input);
   let glbFile = input;
   let sheetMeta: SheetMeta;
-  if (input.endsWith('.json')) {
+  if (input.endsWith('.json') || input.endsWith('.jsonc')) {
     const built = await build(input);
     const missed = objectLines(built.take.objects).filter((l) => l.failed);
     if (missed.length) throw new Refusal(`${basename(input)} builds, but an object misses its mark; nothing was uploaded:\n  - ${missed.map((l) => l.text).join('\n  - ')}`);

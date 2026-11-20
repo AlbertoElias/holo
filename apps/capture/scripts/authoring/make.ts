@@ -284,12 +284,15 @@ async function readingRow(reviewDir: string): Promise<Row> {
   const file = join(reviewDir, 'comparison.json');
   let c: { beats: { beat: string; intent: string | null; seen: string | null; reads: boolean | null; revise: string | null }[]; piece?: { reads: boolean | null } };
   try { c = JSON.parse(await readFile(file, 'utf8')); } catch { return { id: 'reading', bar: 'a fresh reader reads every beat', value: 'no review', pass: null, fix: 'run without --quick to make the review pack' }; }
-  const beats = c.beats.filter((b) => b.intent);
-  if (!beats.length) return { id: 'reading', bar: 'a fresh reader reads every beat', value: 'no beat has an intent', pass: false, fix: 'give every beat an "intent" (what a reader should see) and run make.ts again' };
-  const unread = beats.filter((b) => b.reads === null);
+  if (!Array.isArray(c?.beats)) return { id: 'reading', bar: 'a fresh reader reads every beat', value: 'comparison.json has no beats list', pass: null, fix: `run make.ts again without --quick to write a fresh ${rel(file)}` };
+  const noIntent = c.beats.filter((b) => !b.intent);
+  if (!c.beats.length || noIntent.length) return { id: 'reading', bar: 'a fresh reader reads every beat', value: `${noIntent.length} of ${c.beats.length} beats have no intent`, pass: false, fix: `give ${noIntent.map((b) => b.beat).join(', ') || 'every beat'} an "intent" (what a reader should see) and run make.ts again` };
+  const beats = c.beats;
+  // Only a real true or false counts as graded; anything else (a string, a missing field) waits.
+  const unread = beats.filter((b) => typeof b.reads !== 'boolean');
   const missed = beats.filter((b) => b.reads === false);
-  if (unread.length || (c.piece && c.piece.reads === null)) {
-    return { id: 'reading', bar: 'a fresh reader reads every beat', value: `${beats.length - unread.length} of ${beats.length} graded${c.piece?.reads === null ? ', the piece not graded' : ''}`, pass: null,
+  if (unread.length || (c.piece && typeof c.piece.reads !== 'boolean')) {
+    return { id: 'reading', bar: 'a fresh reader reads every beat', value: `${beats.length - unread.length} of ${beats.length} graded${c.piece && typeof c.piece.reads !== 'boolean' ? ', the piece not graded' : ''}`, pass: null,
       fix: `give a fresh reader only ${rel(join(reviewDir, 'reader'))}/ (its README.md says what to answer), save the account as ${rel(join(reviewDir, 'reader.md'))}, have a fresh grader fill seen/reads/revise in ${rel(file)} from it, then run make.ts verdict ${rel(dirname(reviewDir))}` };
   }
   return { id: 'reading', bar: 'a fresh reader reads every beat', value: `${beats.length - missed.length} of ${beats.length} beats read${c.piece?.reads === false ? '; the piece as a whole did not' : ''}`,

@@ -10,7 +10,8 @@
  * apart is used (3351/3224, …), so two reviews can run side by side.
  */
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { linkSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -65,22 +66,29 @@ async function answers(url: string): Promise<boolean> {
 }
 
 /**
- * Claims a port pair for this process with a lock directory, so two reviews
- * started together do not both take a pair that nothing answers on yet. A lock
- * whose process has ended is taken over.
+ * Claims a port pair for this process with a lock file in the system temp
+ * folder, so two reviews started together do not both take a pair that nothing
+ * answers on yet. The file holds the owner's pid and appears in one step (a hard
+ * link of a written file), so it is never seen empty. A lock whose process has
+ * ended is taken over; the release is synchronous, so it also runs on Ctrl-C.
  */
 async function claimPorts(apiPort: number): Promise<(() => void) | undefined> {
   const lock = join(tmpdir(), `holoim-viewer-${apiPort}.lock`);
-  const release = () => { void rm(lock, { recursive: true, force: true }); };
-  try { await mkdir(lock); } catch {
-    const pid = Number(await readFile(join(lock, 'pid'), 'utf8').catch(() => ''));
-    if (!pid) return undefined; // another run is writing its lock now
-    try { process.kill(pid, 0); return undefined; } catch { /* that run has ended: take its lock */ }
-    await writeFile(join(lock, 'pid'), String(process.pid));
-    return release;
-  }
-  await writeFile(join(lock, 'pid'), String(process.pid));
-  return release;
+  const mine = `${lock}.${process.pid}`;
+  writeFileSync(mine, String(process.pid));
+  try {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        linkSync(mine, lock);
+        return () => { try { if (readFileSync(lock, 'utf8') === String(process.pid)) unlinkSync(lock); } catch { /* already gone */ } };
+      } catch {
+        const pid = Number(await readFile(lock, 'utf8').catch(() => '0'));
+        if (pid) { try { process.kill(pid, 0); return undefined; } catch { /* that run has ended */ } }
+        try { unlinkSync(lock); } catch { /* another run took it over first */ }
+      }
+    }
+    return undefined;
+  } finally { try { unlinkSync(mine); } catch { /* ignore */ } }
 }
 
 /** Starts the test API and the viewer test build; `close()` stops both, as does Ctrl-C. */
