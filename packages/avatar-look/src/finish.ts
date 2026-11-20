@@ -50,9 +50,10 @@ const FACE_PARTS = /^HouseBase_(eye_|lash|mouth|teeth)/;
  * Materials that stay opaque in the light finish: the brows and frames are
  * lines on a lit body, and the skin glows but is not see-through, because a
  * translucent face shows the teeth and the mouth's inside through the lips
- * and the face stops reading. Only the garments and hair are translucent.
+ * and the face stops reading; the lips are skin of another colour and stay
+ * opaque with it. Only the garments and hair are translucent.
  */
-const LIGHT_OPAQUE = /^HouseBase_(brow|frames|skin)$/;
+const LIGHT_OPAQUE = /^HouseBase_(brow|frames|skin|lips)$/;
 /** Meshes that get an ink outline, and of the body, the primitives that do. */
 const INKED_MESH = /^(HouseBase_(Body|Jumper|Trousers|Shoes)|Hair_)/;
 const INKED_BODY_PART = /^HouseBase_(skin|brow)$/;
