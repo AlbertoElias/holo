@@ -7,6 +7,20 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
+### B-076 — No-fingers avatar's desktop take diverges from the shipped avatar on `main`
+
+- **Area:** apps/capture (`scripts/ci-avatar-formats-playwright.ts`, desktop locomotion take)
+- **Severity:** P3 (the check fails; no person has seen a wrong pose)
+- **Observed:** 2026-11-20, on `main` (`55f421598851`) and on `bug/vr-arm-natural`, the same values
+- **Evidence:** `XR_AVATAR_ONLY=no-fingers` avatars check: the take's states are
+  walk>idle>fall>idle>jump>fall>idle against the shipped avatar's
+  walk>idle>fall>idle>fall>idle>jump>fall>idle, and leftHand is 4.0 / 7.1 / 1.6 / 4.0 cm off at
+  2200 / 2300 / 2500 / 2600 ms. Its object sub-check also fails, on the B-069 desktop and phone rows.
+- **Expected:** the no-fingers avatar plays the same take as the shipped avatar, inside the pose tolerance.
+- **Reproduction:** `cd apps/capture && XR_AVATAR_ONLY=no-fingers node --import tsx scripts/run-xr-checks.ts avatars`
+- **Cause (suspected):** the physics of the take diverges (one fall>idle is missing), so the hand
+  error follows from a different state, not from the arm solve.
+
 ### B-069 — Desktop and phone object checks fail on `main` (outside `verify:pr`)
 
 - **Area:** apps/capture (objects)
