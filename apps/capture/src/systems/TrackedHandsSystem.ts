@@ -25,7 +25,12 @@ export class TrackedHandsSystem extends createSystem() {
     const c = this.capture;
     // The mirror view follows the camera source; CameraSystem (earlier in the step) reads it next step.
     c.camera.mirrorView = c.tracking.isCameraDriven();
-    if (c.frame.arCameraAuthor || !c.motor.hasSpawnResolved()) return;
+    if (c.frame.arCameraAuthor) {
+      // The camera author poses no arms: they go back to their bind lengths.
+      c.hands.restArmLengths();
+      return;
+    }
+    if (!c.motor.hasSpawnResolved()) return;
     if (!c.frame.vrActive) {
       if (c.tracking.isCameraDriven()) {
         c.point.idle();

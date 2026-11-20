@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { clamp, isFiniteQuaternionLike } from '../shared/math';
 import type { ArmIkChain } from '../avatar/AvatarRig';
-import { clavicleAngles, elbowPole, type ClavicleAngles } from './armPoseModel';
+import { CLAVICLE_LIMIT_DEG, clavicleAngles, elbowPole, type ClavicleAngles } from './armPoseModel';
 
 export type ArmIkOptions = {
   // handWorldQuaternion, when given, is the exact world rotation for the hand
@@ -196,6 +196,12 @@ export class ArmIkSolver {
       const room = CLAVICLE_RATE_DEG_PER_SEC * Math.max(0, deltaSec);
       last.elevationDeg += clamp(want.elevationDeg - last.elevationDeg, -room, room);
       last.protractionDeg += clamp(want.protractionDeg - last.protractionDeg, -room, room);
+      // Each axis moves on its own, so the combined angle can pass the limit for a few frames.
+      const total = Math.hypot(last.elevationDeg, last.protractionDeg);
+      if (total > CLAVICLE_LIMIT_DEG) {
+        last.elevationDeg *= CLAVICLE_LIMIT_DEG / total;
+        last.protractionDeg *= CLAVICLE_LIMIT_DEG / total;
+      }
     } else {
       chain.clavicleAngles = { ...want };
     }

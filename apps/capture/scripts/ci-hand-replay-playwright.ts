@@ -186,18 +186,20 @@ function armFrame(frame: ReplaySample): ArmFrame {
 // Arm shape bars (docs/features/vr-arm-natural.md): elbows hang down and a
 // little out, no flips, a human clavicle range, no visible stretch, and the
 // wrist on the tracked wrist (up to about 1 cm short on a reach past the arm).
+// The Quest take is one segment, so its protraction bar is the segment bar (30°).
 const ARM_BARS: Array<{ metric: keyof ArmMetrics; min?: number; max: number }> = [
   { metric: 'swivelMedianDeg', min: 0, max: 70 },
   { metric: 'elbowFlipsPerMin', max: 0.5 },
   { metric: 'clavicleElevRangeDeg', max: 30 },
-  { metric: 'claviclePushRangeDeg', max: 45 },
+  { metric: 'claviclePushRangeDeg', max: 30 },
   { metric: 'armLengthSpreadPct', max: 2.5 },
   { metric: 'wristErrorP95Cm', max: 1 }
 ];
 function armMisses(arms: ArmMetrics): string[] {
   return ARM_BARS.flatMap(({ metric, min, max }) => {
     const value = arms[metric];
-    if (typeof value !== 'number') return [];
+    // A metric the samples could not measure (no bones or no targets) fails.
+    if (typeof value !== 'number') return [`arms ${metric}: not measured`];
     return (min !== undefined && value < min) || value > max ? [`arms ${metric}: ${value.toFixed(1)} (bar ${min ?? '-∞'}..${max})`] : [];
   });
 }
