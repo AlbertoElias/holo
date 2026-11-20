@@ -68,7 +68,11 @@ story against it.
      front of the body, not behind the arms or the hair. The card's
      backdrop is dark teal: a table, shelf or oven in dark teal, blue-grey
      or black disappears into it, so give every set piece a light or warm
-     colour (pale wood, cream, terracotta). Hold it still at
+     colour (pale wood, cream, terracotta). A set piece that tells who or
+     where (a basket, a tray, a sign) must be at least 0.3 m across to
+     read on the card. A smaller one is a few pixels, and a reader will
+     not see it. A hat sits on the head at `"at": [0, 0.17, -0.01]` (see
+     the wear example). At 0.1 it looks like a headband. Hold it still at
      chest height for 1 s or more. A `burst` of a few sparks on it can draw
      the eye before the person sees it.
    - **The event is visible and has a cause.** It happens to an object in

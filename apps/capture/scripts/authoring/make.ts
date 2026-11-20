@@ -280,6 +280,12 @@ const FACE_FIX = 'the bar reads the median face over the take, and a face that t
   + 'look at objects mostly with the eyes ("head": 0.3 or less), look at the viewer for more than half the take, '
   + 'keep forward leans short, and use one performer where the idea allows (two halve the face)';
 
+/** The seconds where the face is under the bar, so the fix names the beats to change. */
+function smallFace(p: { readonly travelPerSecond: readonly { readonly from: number; readonly faceDevicePx?: number | null }[] }): string {
+  const small = p.travelPerSecond.filter((s) => typeof s.faceDevicePx === 'number' && s.faceDevicePx < BAR.faceBoxDevicePx);
+  return small.length ? `the face is under ${BAR.faceBoxDevicePx} px at ${small.map((s) => `${s.from}-${s.from + 1} s (${s.faceDevicePx})`).join(', ')}; ` : '';
+}
+
 const STORY_BAR = 'a fresh reader gets the setup, the event and the reaction';
 const STORY_FIX = 'write the sheet\'s "story" first (hologram-authoring skill, "First, the story"), then beats that show it';
 
@@ -331,7 +337,7 @@ function faceRows(onScreen: OnScreen, ids: readonly string[]): Row[] {
   const rows: Row[] = [];
   for (const [i, perf] of onScreen.performers.entries()) {
     const p = { ...perf, name: onScreen.performers.length === ids.length ? ids[i]! : perf.name };
-    rows.push({ id: `faceBox.${p.name}`, bar: `face ≥ ${BAR.faceBoxDevicePx} device px brow to chin on the phone card`, value: `${p.faceDevicePx} px (${p.faceMmOnPhone} mm)`, pass: p.faceDevicePx >= BAR.faceBoxDevicePx, ...(p.faceDevicePx < BAR.faceBoxDevicePx ? { fix: FACE_FIX } : {}) });
+    rows.push({ id: `faceBox.${p.name}`, bar: `face ≥ ${BAR.faceBoxDevicePx} device px brow to chin on the phone card`, value: `${p.faceDevicePx} px (${p.faceMmOnPhone} mm)`, pass: p.faceDevicePx >= BAR.faceBoxDevicePx, ...(p.faceDevicePx < BAR.faceBoxDevicePx ? { fix: `${smallFace(p)}${FACE_FIX}` } : {}) });
     const still = p.travelPerSecond.filter((s) => s.still).map((s) => `${s.from}–${s.from + 1} s`);
     if (still.length) rows.push({ id: `still.${p.name}`, bar: 'something moves every second at card size', value: `frozen ${still.join(', ')}`, pass: false, advisory: true, fix: 'give that second a direction (a look, a breath expression, a small weight shift) or shorten the hold' });
   }

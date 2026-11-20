@@ -108,7 +108,8 @@ export interface OnScreen {
     /** Head top to feet, CSS px, median. */
     readonly bodyCssPx: number;
     /** Per second of the take: the largest distance the head or either hand moves on the card from where it was at the start of that second (CSS px). */
-    readonly travelPerSecond: { readonly from: number; readonly head: number; readonly hands: number; readonly still: boolean }[];
+    /** Per second: how far head and hands travel (CSS px), whether nothing moves, and the face's median height in device px (null when no frame has a face). */
+    readonly travelPerSecond: { readonly from: number; readonly head: number; readonly hands: number; readonly still: boolean; readonly faceDevicePx: number | null }[];
   }[];
 }
 
@@ -411,7 +412,8 @@ export async function review(take: string, options: ReviewOptions = {}): Promise
           const far = (k: string) => { const s = cards[fs[0]!]!.performers[p]!.points[k]; return s ? Math.max(...fs.map((i) => dist2(cards[i]!.performers[p]!.points[k]!, s))) : 0; };
           const head = round(far('head'));
           const hands = round(Math.max(far('leftHand'), far('rightHand')));
-          travel.push({ from, head, hands, still: head < STILL_PX && hands < STILL_PX });
+          const faceInSecond = fs.map((i) => cards[i]!.performers[p]!.face).filter((b): b is [number, number, number, number] => Boolean(b)).map((b) => b[3] - b[1]);
+          travel.push({ from, head, hands, still: head < STILL_PX && hands < STILL_PX, faceDevicePx: faceInSecond.length ? round(median(faceInSecond) * pr) : null });
         }
         const med = median(faces);
         return {
