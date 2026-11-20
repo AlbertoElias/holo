@@ -19,14 +19,16 @@ import {
 import type {} from '../src/runtime/automationHooks';
 import type { BodySample } from '../src/types/contracts';
 
-// The VR legs step where the body goes (B-078, B-079). Two walks run through the real WebXR path on a frozen
-// 30 Hz page clock: a room-scale head walk (the IWER headset moves at 1.2 m/s) and a full thumbstick walk. Each
-// walks forward, left, back, right, front-right and back-left, facing -Z, with a stop between.
+// The VR legs step where the body goes (B-078, B-079) and the body eases into a walk (B-077). Two walks run through
+// the real WebXR path on a frozen 30 Hz page clock: a room-scale head walk (the IWER headset moves at 1.2 m/s) and a
+// full thumbstick walk. Each walks forward, left, back, right, front-right and back-left, facing -Z, with a stop between.
 // Per direction the check requires:
 // - every step to land along the travel (the procedural steps sideways and backward, the recorded walk within 45°
 //   of facing only: docs/features/archive/vr-recorded-walk.md, decision 4);
 // - the pelvis to stay over the feet (hips against the ankles' midpoint);
-// - the torso to keep its standing posture (a stick walk once moved the root twice and leaned the spine back).
+// - the torso to keep its standing posture (a stick walk once moved the root twice and leaned the spine back);
+// - for the head walk, the hips' horizontal acceleration over the walk start to stay near the head's own.
+// The head moves on every XR frame, and each sample carries the time of the frame it was solved at.
 // WALK_DIRECTION_VIDEO=1 also films each walk from the side and the front (H.264 MP4 in the artifact directory).
 
 const FRAME_MS = 1000 / 30;
@@ -42,6 +44,10 @@ const MIN_STEPS = 2;
 const MAX_PELVIS_AHEAD_M = 0.3;
 const MAX_PELVIS_ASIDE_M = 0.2;
 const MAX_POSTURE_CHANGE_M = 0.02;
+// The head walk's start eases the body in: the hips' horizontal acceleration stays under this (m/s², B-077; the head
+// itself reaches 4).
+const MAX_START_ACCEL_MS2 = 10;
+const START_WINDOW_SAMPLES = 30;
 
 // Directions in the user's frame: x right, z back (the head faces -Z). `recorded`: the recorded walk plays.
 const DIRECTIONS = [
@@ -63,7 +69,15 @@ const WALKS = [
   { name: 'stick', speed: 0, bob: 0, phases: phasesFor(2.5) }
 ] as const;
 type Walk = (typeof WALKS)[number];
-type Sample = { phase: string; body: BodySample };
+type Sample = { phase: string; body: BodySample; t: number };
+
+declare global {
+  interface Window {
+    __walkHead?: () => void;
+    __lastFrameMs?: number;
+    __walkPhase?: string | undefined;
+  }
+}
 
 async function walk(spec: Walk, view: 'side' | 'front' | null): Promise<{ samples: Sample[]; errors: string[] }> {
   const browser = await launchXrBrowser(chromium);
@@ -102,41 +116,78 @@ async function walk(spec: Walk, view: 'side' | 'front' | null): Promise<{ sample
       }, view === 'side');
     }
     await freezePageClock(page);
+    // The frozen clock replaces requestAnimationFrame, so wrap its fake. Before the first animation-frame callback of
+    // each frame (IWER's device frame among them), move the head and note the frame's time: each body sample then
+    // carries the sim time it was solved at.
+    await page.evaluate(() => {
+      const raf = window.requestAnimationFrame.bind(window);
+      let last = -1;
+      window.requestAnimationFrame = (callback) => raf((time) => {
+        if (time !== last) {
+          last = time;
+          window.__walkHead?.();
+          window.__lastFrameMs = performance.now();
+        }
+        callback(time);
+      });
+    });
     await waitForXrRenderLoop(page);
     await page.evaluate((draw) => window.__setFrameStepping(true, draw), !!view);
     const tick = () => page.clock.runFor(FRAME_MS);
     // Settle on the floor before the walk.
     for (let i = 0; i < 90; i++) await tick();
     const start = await page.evaluate(() => { const p = window.IWER_DEVICE!.position; return [p.x, p.y, p.z] as [number, number, number]; });
-    const head = [...start];
     const frameDir = path.join(artifactDir, `${spec.name}-${view}-frames`);
     if (view) {
       await rm(frameDir, { recursive: true, force: true });
       await mkdir(frameDir, { recursive: true });
     }
+    if (spec.name === 'head') {
+      // The head path runs in the page, once per XR frame, from the page clock: one move per 33 ms sample would hold
+      // 2 or 3 frames, and a body that moves per frame would read the bursts as jerks.
+      await page.evaluate(({ phases, speed, bob, start }) => {
+        const ease = 0.3;
+        let at = performance.now();
+        const t0 = at;
+        let walked = 0;
+        const head = [...start];
+        window.__walkHead = () => {
+          const now = performance.now();
+          let t = (at - t0) / 1000;
+          const dt = (now - at) / 1000;
+          at = now;
+          let phase = null;
+          for (const p of phases) {
+            if (t < p.sec) { phase = p; break; }
+            t -= p.sec;
+          }
+          window.__walkPhase = phase?.label;
+          if (!phase?.dir) return;
+          // Ease in and out over 0.3 s, as a walker starts and stops; the head bobs about 2 cm twice a stride.
+          const ramp = Math.max(0, Math.min(1, (t + dt) / ease, (phase.sec - t) / ease));
+          const stepM = speed * ramp * dt;
+          head[0]! += phase.dir.x * stepM;
+          head[2]! += phase.dir.z * stepM;
+          walked += stepM;
+          const y = start[1]! - bob * ramp * 0.5 * (1 - Math.cos((walked / (speed / 1.9)) * Math.PI * 2));
+          window.IWER_DEVICE!.position.set(head[0]!, y, head[2]!);
+        };
+      }, { phases: spec.phases as unknown as Phase[], speed: spec.speed, bob: spec.bob, start });
+    }
     const samples: Sample[] = [];
     let frame = 0;
-    let walked = 0;
     for (const phase of spec.phases) {
       if (spec.name === 'stick') {
         await page.evaluate(({ x, y }) => { window.IWER_DEVICE!.controllers.left!.updateAxes('thumbstick', x, y); }, { x: phase.dir?.x ?? 0, y: phase.dir?.z ?? 0 });
       }
       const frames = Math.round((phase.sec * 1000) / FRAME_MS);
       for (let i = 0; i < frames; i++) {
-        if (spec.name === 'head' && phase.dir) {
-          // Ease in and out over 0.3 s, as a walker starts and stops; the head bobs about 2 cm twice a stride.
-          const ramp = Math.min(1, (i + 1) / 9, (frames - i) / 9);
-          const stepM = spec.speed * ramp * (FRAME_MS / 1000);
-          head[0]! += phase.dir.x * stepM;
-          head[2]! += phase.dir.z * stepM;
-          walked += stepM;
-          const bob = spec.bob * ramp * 0.5 * (1 - Math.cos((walked / (spec.speed / 1.9)) * Math.PI * 2));
-          await page.evaluate(([x, y, z]) => { window.IWER_DEVICE!.position.set(x, y, z); }, [head[0]!, start[1] - bob, head[2]!] as [number, number, number]);
-        }
         // A screenshot waits for a composited frame, and a frozen clock draws none: take it while this frame runs.
         if (view) await Promise.all([page.screenshot({ path: path.join(frameDir, `${String(frame).padStart(5, '0')}.png`), timeout: 180_000 }), tick()]);
         else await tick();
-        samples.push({ phase: phase.label, body: await page.evaluate(() => window.__sampleBody()) });
+        // The head walk's phase comes from the page's head path, which runs on the frames' own times.
+        const sample = await page.evaluate(() => ({ body: window.__sampleBody(), t: window.__lastFrameMs ?? 0, phase: window.__walkPhase }));
+        samples.push({ ...sample, phase: sample.phase ?? phase.label });
         frame++;
       }
     }
@@ -213,6 +264,18 @@ function measure(samples: Sample[]) {
       postureChange += Math.hypot(p[0] - idlePosture[0]!, p[1] - idlePosture[1]!);
     }
     const n = steady.length;
+    // The hips' horizontal world acceleration over the walk start, from the frame times the samples were solved at.
+    // The vertical bob is left out: it is the gait's, through the whole walk.
+    let startAccel = 0;
+    const start = samples.slice(samples.indexOf(phase[0]!) - 3, samples.indexOf(phase[0]!) + START_WINDOW_SAMPLES);
+    for (let k = 2; k < start.length; k++) {
+      const [a, b, c] = [start[k - 2]!, start[k - 1]!, start[k]!];
+      const t1 = (b.t - a.t) / 1000;
+      const t2 = (c.t - b.t) / 1000;
+      if (t1 <= 0 || t2 <= 0) continue;
+      const accel = [0, 2].map((i) => ((c.body.bones.hips![i]! - b.body.bones.hips![i]!) / t2 - (b.body.bones.hips![i]! - a.body.bones.hips![i]!) / t1) / ((t1 + t2) / 2));
+      startAccel = Math.max(startAccel, Math.hypot(accel[0]!, accel[1]!));
+    }
     const recorded = (phase.at(-1)!.body.solver.recordedSteps ?? 0) - (phase[0]!.body.solver.recordedSteps ?? 0);
     rows[dir.label] = {
       speedMS: travelLength / (((n - 1) * FRAME_MS) / 1000),
@@ -224,7 +287,8 @@ function measure(samples: Sample[]) {
       stepAlongMeanM: angles.length ? along / angles.length : 0,
       pelvisAheadM: ahead / n,
       pelvisAsideM: aside / n,
-      postureChangeM: postureChange / n
+      postureChangeM: postureChange / n,
+      startAccelMS2: startAccel
     };
   }
   return rows;
@@ -242,6 +306,8 @@ function judge(name: string, rows: ReturnType<typeof measure>): string[] {
     if (Math.abs(r.pelvisAheadM!) > MAX_PELVIS_AHEAD_M) failures.push(`${at}: pelvis ${(r.pelvisAheadM! * 100).toFixed(1)} cm ahead of the feet (at most ${MAX_PELVIS_AHEAD_M * 100} cm)`);
     if (Math.abs(r.pelvisAsideM!) > MAX_PELVIS_ASIDE_M) failures.push(`${at}: pelvis ${(r.pelvisAsideM! * 100).toFixed(1)} cm beside the feet (at most ${MAX_PELVIS_ASIDE_M * 100} cm)`);
     if (r.postureChangeM! > MAX_POSTURE_CHANGE_M) failures.push(`${at}: torso ${(r.postureChangeM! * 100).toFixed(1)} cm from its standing posture (at most ${MAX_POSTURE_CHANGE_M * 100} cm)`);
+    // The stick moves the view at full speed at once (no VR stick acceleration: a comfort choice), so only the head walk eases in.
+    if (name === 'head' && r.startAccelMS2! > MAX_START_ACCEL_MS2) failures.push(`${at}: hips ${r.startAccelMS2!.toFixed(1)} m/s² at the walk start (at most ${MAX_START_ACCEL_MS2})`);
     if (dir.recorded !== r.recordedSteps! > 0) failures.push(`${at}: ${r.recordedSteps} recorded steps (${dir.recorded ? 'the recorded walk should play' : 'procedural steps only'})`);
   }
   return failures;
@@ -257,7 +323,7 @@ for (const { spec, samples, errors } of results) {
   report[spec.name] = rows;
   await writeFile(path.join(artifactDir, `${spec.name}-samples.json`), JSON.stringify(samples));
   for (const [label, r] of Object.entries(rows)) {
-    console.log(`[walk-direction] ${spec.name} ${label.padEnd(8)} ${r.speedMS!.toFixed(2)} m/s, ${r.steps} steps (${r.recordedSteps} recorded), step angle mean ${r.stepAngleMeanDeg!.toFixed(1)}° max ${r.stepAngleMaxDeg!.toFixed(1)}°, pelvis ahead ${(r.pelvisAheadM! * 100).toFixed(1)} cm aside ${(r.pelvisAsideM! * 100).toFixed(1)} cm, posture ${(r.postureChangeM! * 100).toFixed(1)} cm`);
+    console.log(`[walk-direction] ${spec.name} ${label.padEnd(8)} ${r.speedMS!.toFixed(2)} m/s, ${r.steps} steps (${r.recordedSteps} recorded), step angle mean ${r.stepAngleMeanDeg!.toFixed(1)}° max ${r.stepAngleMaxDeg!.toFixed(1)}°, pelvis ahead ${(r.pelvisAheadM! * 100).toFixed(1)} cm aside ${(r.pelvisAsideM! * 100).toFixed(1)} cm, posture ${(r.postureChangeM! * 100).toFixed(1)} cm, start ${r.startAccelMS2!.toFixed(1)} m/s²`);
   }
   failures.push(...judge(spec.name, rows), ...errors.map((error) => `${spec.name}: console error ${error}`));
 }

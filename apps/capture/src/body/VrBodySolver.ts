@@ -156,6 +156,10 @@ const TARGET_SPEED_TIME_SEC = 0.08;
 const LEAN_DROP_TIME_SEC = 0.3;
 // The root may outrun the head by this much while catching up.
 const CATCH_UP_EXTRA_SPEED = 0.3;
+// The root's velocity changes by at most this much a second (m/s²), about a brisk walk start. Without it the root
+// held still while the head left, then took the full walking speed in one frame when the lean leash or the walk
+// caught it (hips 15-32 m/s², B-077).
+const ROOT_ACCEL = 8;
 // Stepping.
 const GAIT_ON_SPEED = 0.25;
 const GAIT_OFF_SPEED = 0.15;
@@ -364,6 +368,8 @@ export class VrBodySolver {
   private readonly targetVelocity = new THREE.Vector3();
   private readonly gaitVelocity = new THREE.Vector3();
   private readonly rootOvershootVelocity = new THREE.Vector3();
+  /** The root's last planned velocity (m/s), for ROOT_ACCEL. */
+  private readonly plannedVelocity = new THREE.Vector3();
   private readonly prevHead = new THREE.Vector3();
   private readonly feet: Record<'left' | 'right', FootState>;
 
@@ -563,6 +569,7 @@ export class VrBodySolver {
     this.rootVelocity.set(0, 0, 0);
     this.targetVelocity.set(0, 0, 0);
     this.rootOvershootVelocity.set(0, 0, 0);
+    this.plannedVelocity.set(0, 0, 0);
     const bindDims = this.bind!.dims;
     this.hipsToEyes = bindDims.eyeHeight - bindDims.hipHeight;
     this.standingHeadHeight = head.worldPosition.y - this.groundUnder(rootPosition, ground);
@@ -776,7 +783,14 @@ export class VrBodySolver {
       next.x = this.rootTarget.x - (clampedAlong * forwardX + clampedAcross * -forwardZ);
       next.z = this.rootTarget.z - (clampedAlong * forwardZ + clampedAcross * forwardX);
     }
-    return outDisplacement.subVectors(next, this.root).setY(0);
+    outDisplacement.subVectors(next, this.root).setY(0);
+    // Ease the root's velocity toward the plan; the head may run a little past the leash meanwhile.
+    const change = this.planB.copy(outDisplacement).multiplyScalar(1 / dt).sub(this.plannedVelocity);
+    const most = ROOT_ACCEL * dt;
+    if (change.length() > most) change.setLength(most);
+    this.plannedVelocity.add(change);
+    outDisplacement.copy(this.plannedVelocity).multiplyScalar(dt);
+    return outDisplacement;
   }
 
   // After physics: plants and steps the feet around the new root and poses the

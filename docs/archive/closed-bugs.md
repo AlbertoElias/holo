@@ -1544,3 +1544,26 @@ bug above.)
   plan. Side cadence and the travel-side first step as in B-078. The stick strafe moves at 65% of the forward speed
   (`STICK_STRAFE_SHARE`), so a sideways stride can keep pace (pending owner confirmation).
 - **Closed:** 2026-11-20.
+
+### B-077 — VR head walk start: the body jumps from rest to full speed in one frame (arms pop)
+
+- **Area:** apps/capture (`VrBodySolver.planRoot`)
+- **Severity:** P2 (the owner saw it as a pop at the end of the controller arm video)
+- **Observed:** 2026-11-20, on `main` (`55f421598851`) and on `bug/vr-arm-natural`
+- **Evidence:** `arms` check, controller run, walk segment: at the first recorded step the root went from 0 to about
+  1.1 m/s in one frame; hips 33.7 m/s², chest 20.8 m/s², so the elbows folded against the torso. That check moves the
+  head once per 33 ms sample (2 or 3 frames), which adds burst noise. With the head moved on every XR frame
+  (`test:xr:walk-direction`, head rows), the hips' horizontal peak in the first second of a walk is 14.6–31.6 m/s²
+  (forward 19.0, left 29.4, back 15.7, right 31.6, diagonals 17.4 and 14.6). The head itself reaches 4 m/s².
+- **Expected:** the body eases into the walk; no frame of the walk start above the walk's own acceleration.
+- **Reproduction:** `pnpm --filter @holoim/capture run test:xr:walk-direction`, head rows, `start` column.
+- **After:** 7.1–9.2 m/s² in every direction (forward 8.1, left 7.1, back 8.6, right 9.2, diagonals 8.2 and 7.1). Steps,
+  pelvis and posture do not change; the stops are the same (peak 2–3.7 m/s², the root ends at the same place).
+- **Cause:** before the walk is detected (smoothed head speed above 0.55 m/s), the root holds inside the lean leash.
+  Then the leash or the walk's full head step takes it to walking speed in one frame.
+- **Fix:** `planRoot` changes the root's planned velocity by at most 8 m/s² (`ROOT_ACCEL`); meanwhile the head may run
+  a little past the leash. `test:xr:walk-direction` now moves the head on every XR frame from the page clock and
+  fails a head walk start above 10 m/s².
+- **Open:** the stick walk start is not eased (29–45 m/s²): the stick moves the view at full speed at once, and
+  view acceleration in VR is a comfort risk. That is an owner decision.
+- **Closed:** 2026-11-20.

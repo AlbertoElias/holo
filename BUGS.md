@@ -7,6 +7,18 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
+### B-080 — VR head walk: the pelvis drops in one frame at each foot landing
+
+- **Area:** apps/capture (`VrBodySolver` pelvis height in the gait)
+- **Severity:** P3 (found by measurement, not yet seen by the owner)
+- **Observed:** 2026-11-20, on `bug/vr-legs-direction`
+- **Evidence:** `test:xr:walk-direction`, head rows, with the head moved on every XR frame. In the steady walk the hips'
+  vertical acceleration averages 1.8–4.1 m/s², but single frames at a foot landing reach 12.8 (forward), 20.7 (left),
+  16.8 (back), 20.2 (right), 18.8 and 18.6 m/s² (diagonals). The head bobs smoothly (2 cm).
+- **Expected:** the pelvis rises and falls smoothly with the stride, with no single-frame drop.
+- **Reproduction:** `pnpm --filter @holoim/capture run test:xr:walk-direction`, then the hips' vertical second
+  difference against the sample time `t` in `output/ci-walk-direction/head-samples.json`.
+
 ### B-073 — VR elbows point out or up, not down (fixed elbow hint)
 
 - **Area:** apps/capture (`ArmIkSolver`, `AvatarRig.createArmIkChain`)
