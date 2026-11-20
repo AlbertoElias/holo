@@ -284,7 +284,9 @@ its node and in `asset.copyright`, with its sha256 and origin in
 
 An object's frame has its origin at the bottom centre, +Y up and +Z its
 front. It stands `at` a point or `on` another object, turned by `facing`
-(degrees, or toward a point). Objects and marks are placed once, on the
+(degrees, or toward a point). With both, `on` gives the height (the
+support's top) and `at` the world x and z: `[x, y, z]` is world metres,
+not an offset on the support, so use a place `{ "of": … }` there. Objects and marks are placed once, on the
 first frame, in the order they depend on each other (a mark counts as the
 point it names); a circle, or a place measured from an object that is in a
 hand from the first frame, is refused. Its anchors are `top`, `center`, `bottom`,

@@ -65,7 +65,10 @@ story against it.
      each outfit's colours) and the surface it is on. Saturated orange, red,
      yellow or white read on `stormGraphite` and `oatmealSlate`; do not put
      orange or brown in front of `rustWalnut`. Put it on a clear surface in
-     front of the body, not behind the arms or the hair. Hold it still at
+     front of the body, not behind the arms or the hair. The card's
+     backdrop is dark teal: a table, shelf or oven in dark teal, blue-grey
+     or black disappears into it, so give every set piece a light or warm
+     colour (pale wood, cream, terracotta). Hold it still at
      chest height for 1 s or more. A `burst` of a few sparks on it can draw
      the eye before the person sees it.
    - **The event is visible and has a cause.** It happens to an object in
@@ -137,7 +140,15 @@ over the 40 px bar.
   1.45, "push": [0.5, 0.25, 0.35] }`. At `when` (seconds or a beat id) an
   object at rest gets the `push` (m/s, world axes) and falls under gravity.
   A small push on an object on a table tips it over; a larger one knocks it
-  off. Time `when` to the frame the hand reaches it.
+  off. Time `when` to the frame the hand reaches it. Aim that `reach` at a
+  fixed mark where the object stands, not at its anchor (`glass.top`): the
+  reach bar measures the anchor at the beat's end, after the object has
+  gone. Keep the fall on the table (tip it over there): a fall to the floor
+  stretches the card down to the floor and the face drops under 40 px.
+- **`at` with `on`** is a point in the world, not an offset on the
+  surface: `[x, 0, z]` is world metres. Use a place (`{ "of": "me",
+  "forward": 0.35, "right": 0.1 }`) to put an object on a table in front
+  of the performer.
 - **`wear`** (on an object, in place of `at` or `on`): `"hat": { "shape":
   "cylinder", "size": [0.2, 0.16, 0.2], "color": "#ffffff", "wear": { "on":
   "head", "at": [0, 0.17, -0.01] } }`. `on` is a bone (`head`, `chest`,
@@ -169,7 +180,7 @@ over the 40 px bar.
    `vN/frames-sheet.jpg` (already a small contact sheet) to see whether the
    pose reads.
 4. **Review.** `M <sheet>` without `--quick` also records the review pack in
-   real time: about 6 to 10 minutes for an 8 s take, so run it in the background
+   real time: about 6 to 12 minutes for an 8 s take, so run it in the background
    with its output in a log, and wait until the log has a line starting
    `DONE`, `BUILT` or `NOT YET` (or the command exits). Run on an unchanged
    sheet right after `--quick`, it finishes that version instead of making
@@ -246,7 +257,12 @@ production and needs the owner's word.
 - **The face is small.** The card frames the performers, every object and
   everything that moves, so each thing you add shrinks the face. One
   performer, objects within about 0.6 m and below the head, no steps. Two
-  performers roughly halve the face.
+  performers roughly halve the face. A table 0.6 m wide plus a reach to the
+  side can still drop the face under 40 px: keep a table about 0.4 m wide
+  and centred, and reach forward, not out to the side.
+  A table too high or too low for a take: change its height (its `size`).
+  A fix line that moves its `at` down does the same to its top, but sinks
+  the table into the floor.
 - **Big and slow reads, small and fast does not.** Hold an expression for 1 s
   or more at `strength` 0.7-0.9. `smile` and `sad` read best, `noticing` and
   `concerned` need the body too. Wave with `count` 3. Look at the viewer
@@ -261,11 +277,13 @@ production and needs the owner's word.
 ## Recipes
 
 - **Show or offer in both hands.** The object starts on a surface; the
-  right hand `take`s it. Then, in one beat, a right `reach` to a mark in
-  front of the chest (`{ "of": "<performer>", "forward": 0.32, "right": 0.02,
-  "height": 1.2 }`, `"palm": "up"`) and a left `reach` to a mark just under
-  and beside it (`"forward": 0.3, "right": -0.08, "height": 1.13`,
-  `"palm": "up"`). Both elbows bend and the object sits between the hands.
+  right hand `take`s it. Then, in one beat, a right `reach` in front of the
+  chest (`{ "kind": "reach", "side": "right", "at": { "of": "<performer>",
+  "forward": 0.32, "right": 0.02, "height": 1.2 }, "stopShort": 0,
+  "palm": "up" }`) and a left `reach` just under and beside it (`"at": {
+  "of": "<performer>", "forward": 0.3, "right": -0.08, "height": 1.13 }`,
+  `"stopShort": 0`, `"palm": "up"`). Both elbows bend and the object sits
+  between the hands.
   For an offer, add 0.1 m to both `forward` values and hold the beat 1 s or
   more while the performer looks at the viewer.
 - **Bend over something low.** `{ "kind": "bend", "amount": 0.8 }` bends from
