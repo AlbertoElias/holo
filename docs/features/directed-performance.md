@@ -1487,6 +1487,92 @@ without a fix, and nothing said when a piece was done.
 
 No bar changed. `apps/capture/src/`, the viewer and contracts did not change.
 
+### Slice 8: from a one-line idea to a story a viewer gets (2026-11-20)
+
+The owner's verdict on slice 7 (below, under slice 7's evidence) was that the pieces
+tell no story. In the owner's words: "this is more about interpreting the request for a
+hologram better". So this slice changes how an agent reads the idea first. It changes
+the tool only where a story needs something the tool cannot show.
+
+**1. A story step before any beat (skill only).** The hologram-authoring skill gets a
+section "First, the story". The agent does these steps before it writes a beat:
+
+1. Say the story in three parts. **Setup**: who the person is and where they are.
+   **Event**: what happens; it must be a change in the world that a viewer can see.
+   **Reaction**: how the person answers it; the reaction points at its cause.
+2. For each part, write what a viewer must see. The skill gives rules for this:
+   - The role shows through things and actions in the first 1.5 s.
+   - An object that matters has a past. It does not start in the hand.
+   - A small object is made big: size, contrast with the outfit and what is behind
+     it, a clear surface, and chest height for 1 s or more.
+   - The event has a visible cause.
+   - A gift moves toward the viewer and waits.
+3. Mark each item `shown` or `cannot` against a table of what the tool can show.
+4. When an item cannot be shown, change the story and write the change in
+   `story.changes`. Never drop a part silently. If no change keeps the meaning, stop
+   and report it.
+5. Write `story` into the sheet, then the beats in three groups: setup, event and
+   reaction.
+
+Dry runs with three fresh agents (Sonnet; skill only; steps 1 to 4, no build) gave a
+story for each idea and named the changes:
+
+| Idea | Setup | Event | Reaction | Changes the agent wrote |
+|---|---|---|---|---|
+| A baker proud of a loaf | an oven, a loaf shelf, a flour sack | the oven door swings open; she takes out a big loaf; steam | she smells it, holds it out, smiles | the hand cannot pull the door; no apron or hat |
+| A slip laughed off | a table with juice, a jug, a bowl of oranges | her reach knocks a glass; it tips; a puddle grows | she looks at the puddle, then at you; laughs; shrugs | no body slip and no fall, so a tipped glass is "the slip" |
+| A stone given as a gift | a stream strip and a heap of stones | she picks the big orange stone, rubs it bright, a ribbon appears | she holds it out to you and waits | no receiver (the viewer receives it); no sitting |
+
+The agents also named what the skill left unclear: where the object and world syntax
+is, how to "hold out" an object, size numbers, which colours contrast with each
+outfit, a laugh mix, and how much change is enough for an event. The skill answers each.
+
+**2. A story bar.** The blind reader's README gets a fourth part: "Who is this and
+where? What happens? How do they react?" The grader writes
+`story: { setup, event, reaction }` into `comparison.json`, each with `says`, `seen`,
+`reads` and `revise`. `make.ts` gets a `story` row: it passes when all three parts
+read. It is the main bar. The per-beat reading row becomes advisory. A sheet with no
+`story` gets a fix line that points to the skill step.
+
+**3. Tool gaps the story step found.** The dry runs and the slice 7 faults show four
+gaps. Prototypes for A and B are in the authoring tool only (`lib/beats.ts`,
+`lib/direct.ts`). They write object node tracks, as held objects do now, so the
+export/upload/render contract does not change. Demos (stills and card videos) are under
+the ignored `apps/capture/output/authoring/demos/`.
+
+- **A. Things happen: `drop` and `fall` (prototype, demo `mech`).** A `drop` direction
+  opens the hand; the object leaves with the hand's speed. A world `fall` line knocks an
+  object at rest at a cue, with an optional `push` (m/s). Both fall under gravity,
+  bounce up to two times, and land on the floor or on the top of another object. The
+  spin carries on for a short time, then the object rests on its nearest face. In the
+  demo a knock tips a glass onto its side on the table, and a dropped loaf lands on the
+  table. Without this, an event is an eased turn that the agent must aim by hand.
+- **B. Who they are: `wear` (prototype, demo `mech` and `hands`).** An object with
+  `wear: { on: <bone>, at, turn }` rides that bone: a hat on `head`, an apron on
+  `hips`. It is a box, sphere or cylinder, so it is stiff; an apron does not bend with
+  the legs. Real models from the project's Poly Pizza list (a loaf, an oven) are a
+  possible extra: `props.ts` reads only `polyhaven:` sources today.
+- **C. Hands like a person (today's tool, demo `hands`).** Two reaches show a loaf in
+  both hands at chest height with bent elbows: the right hand holds it, the left reach
+  goes just under it. This needs no tool change; the skill teaches it as the way to
+  show or offer an object, in place of one arm held straight out. A tool change (a
+  two-hand hold, and objects kept out of the face) comes later only if the skill is
+  not enough.
+- **D. A hand-driven change (not built).** The oven door opens as an eased change timed
+  to the reach. The hand does not pull it. A receiver for a gift (a second performer
+  who takes it) is also not built.
+
+**Open tension.** A set (an oven, a shelf, a table) widens what the card frames, so the
+face gets smaller. Slice 7 asked to keep objects within 0.6 m for the faceBox bar. The
+skill tells the agent to keep the set narrow and behind or beside the body.
+
+**The owner decides** (see "Open decisions for the user", item 14): which of A, B and C
+to keep, and whether D or real models come next.
+
+**Done when** fresh agents get only the skill and the same three ideas, remake the
+pieces, and a blind reader gets the setup, the event and the reaction in each. Then a
+proof video goes to the owner, `verify:pr` passes, and the work merges to `main`.
+
 ### Later, each against the audition
 
 A second family (a new base with its own design language); per-style
@@ -2063,6 +2149,18 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
     - **A longer stride for this avatar.** The motion work tried 1.1 and
       rejected it for its look.
     - **Leave the stock avatar as the default.**
+
+14. **Slice 8: which tool gaps to keep (asked 2026-11-20).** Demos are under
+    `apps/capture/output/authoring/demos/` (`mech`: a hat, an apron, a knocked glass
+    and a dropped loaf; `hands`: a two-hand show).
+    - **(A)** `drop` and `fall` under gravity. Recommended: the slip and every
+      "something happens" story need it.
+    - **(B)** `wear` on a bone (hat, apron). Recommended: it is the cheapest way to
+      show a role.
+    - **(C)** Two-hand show and offer, taught in the skill with today's reaches.
+      Recommended; no tool change.
+    - Not built: a door the hand pulls, a second performer who takes a gift, real
+      low-poly models (Poly Pizza). Each is a later slice if the owner wants it.
 
 ## Test plan and evidence
 

@@ -19,6 +19,130 @@ variable does not work in zsh):
 M() { node --conditions=development --import tsx scripts/authoring/make.ts "$@"; }
 ```
 
+## First, the story (before any beat)
+
+A request is one line ("a baker proud of a loaf"). A viewer gets no line: no
+title, no words, only a few seconds of a person and things on a small card.
+So before you write a beat, turn the line into a story that a viewer gets
+with no words. A piece that passes every other bar but tells no story is not
+done. These faults made earlier pieces fail:
+
+- Nothing showed who the person was or where. ("A baker" was a person
+  behind a brown box.)
+- The thing that mattered was already in the hand at the first frame, or it
+  was too small to see until it was lifted.
+- The event happened nowhere. (A "slip" was a look at an empty point.)
+
+Do these steps and write the result into the sheet's `story` (step 5).
+
+1. **Say the story in three parts.**
+   - **Setup:** who the person is and where they are.
+   - **Event:** what happens. Something in the world must change where the
+     viewer can see it: an object comes from a place, moves, falls, spills,
+     opens, grows or changes colour. A look, a thought or a feeling alone is
+     not an event.
+   - **Reaction:** how the person responds to the event. The reaction must
+     point at its cause: the person looks at the thing, holds it, shows it.
+   The request often names only one part ("proud" is a reaction). Write the
+   other two. Choose the simplest event that causes the reaction that the
+   request names.
+2. **For each part, write what a viewer must see.** Name things, places and
+   motions. Name a face only in the reaction, and then name its shape (a
+   wide smile, a frown), never a feeling. Use these rules:
+   - **The setup shows a role with things and actions, not with a face.** A
+     baker has an oven, a tray, loaves on a shelf, flour; a gardener has
+     pots and a can. Show the place in the first 1.5 s, before the event.
+   - **Every object that matters has a past.** It comes from a place that
+     the viewer sees (out of an oven, off a shelf, up from the ground), or
+     it is in view from the first frame and the person's eyes go to it
+     first. Do not start it in the hand.
+   - **A small thing must be made big.** Make the object that matters at
+     least 0.15 m across (a loaf 0.3 m, a stone 0.12 to 0.16 m, a glass
+     0.18 m tall). A little oversize is better than unseen. Give it a colour
+     that contrasts with what is behind it: the outfit's top (`M words` gives
+     each outfit's colours) and the surface it is on. Saturated orange, red,
+     yellow or white read on `stormGraphite` and `oatmealSlate`; do not put
+     orange or brown in front of `rustWalnut`. Put it on a clear surface in
+     front of the body, not behind the arms or the hair. Hold it still at
+     chest height for 1 s or more. A `burst` of a few sparks on it can draw
+     the eye before the person sees it.
+   - **The event is visible and has a cause.** It happens to an object in
+     view, at a place in view, and the person's attention goes to it. An
+     accident needs something to go wrong: a thing drops, tips, spills.
+     Enough of an event: one object moves by more than its own size or
+     changes its state (opens, tips over, appears, changes colour), and the
+     person looks at it within 0.5 s.
+   - **The reaction is big, slow and points at the cause.** The person looks
+     at the thing, then at the viewer. A gift moves toward the viewer and
+     waits there: the viewer is the receiver. Pride shows the thing to the
+     viewer and smiles. Show or offer an object in both hands, elbows bent,
+     in front of the chest (the recipe "Show or offer in both hands"); never
+     one arm held straight out. A laugh is face channels
+     (`mouthSmileLeft`/`Right` 0.9, `jawOpen` 0.35, `eyeSquintLeft`/`Right`
+     0.6, `cheekSquintLeft`/`Right` 0.5) with a small `nod` or a `shrug`.
+3. **Check each "must see" against what the tool can show.** Use the table
+   below. `M words` lists the names of directions, expressions and looks.
+   For objects and world lines, read `apps/capture/scripts/authoring/README.md`,
+   sections "Objects and a set" and "Change in the world", and the recipes
+   below. Mark each one `shown` (with the directions, objects or world lines
+   that show it) or `cannot`.
+4. **When a part cannot be shown, change the story.** Find another event,
+   role or place that gives the same meaning and that the tool can show.
+   Write each change and its reason in `story.changes`. Never drop a part
+   and say nothing. If no change keeps the meaning, stop and report the gap
+   to whoever started you.
+5. **Write the story into the sheet.** Then write the beats from it: the
+   setup beats first, then the event, then the reaction. Every beat serves
+   one part. Example:
+
+   ```jsonc
+   "story": {
+     "setup":    { "says": "A baker at work in her bakery.",
+                   "see": ["an oven with a warm glow behind her", "loaves on a shelf", "she opens the oven"] },
+     "event":    { "says": "She takes a fresh loaf out of the oven.",
+                   "see": ["the loaf comes out of the oven on a tray", "steam rises from it"] },
+     "reaction": { "says": "She is proud of it and shows it to you.",
+                   "see": ["she lifts it near her face and smells it", "she holds it out to you, smiling"] },
+     "changes":  ["No apron or hat exists, so the oven and the shelf show the role."]
+   }
+   ```
+
+### What the tool can show
+
+| Part | Can show | Cannot show yet |
+|---|---|---|
+| Who | one or two house avatars; build, skin, eyes, hair, glasses; three fixed outfits; stiff worn objects on a bone (`wear`: a hat, an apron, a badge) | cloth that bends; a uniform in place of the outfit |
+| Where | objects made of boxes, spheres and cylinders in any colour; `polyhaven:<id>` models (real-world size) | a room, walls or a floor of its own; anything wider than about 1.2 m without the face falling under 40 px |
+| Event | `take`, `put` and `drop` an object; a `fall` world line (knocked over or off, under gravity); `aim` and `pour` from a held tool; `change` an object (turn, scale, lift, colour, appear or disappear); `burst`, `drift` | a roll; a break into pieces; a hand that pulls a door (time a `change` to the reach instead); walking; sitting |
+| Reaction | look; named expressions and face channels; gestures (`nod`, `head-shake`, `shrug`, `wave`, `rub`, `hand-to-chest`); `bend`; reach; show or offer in both hands | a laugh as a named expression (use face channels); speech without a sound file; a second person who takes a gift |
+
+An object made of parts can turn about its own origin, the bottom centre of
+its frame. Put a door's parts to one side of the origin, and a `change` with
+`turn` swings it open about that edge.
+
+A set widens what the card frames, so the face gets smaller. Keep the set
+within about 1.2 m across, beside and in front of the body, and the face
+over the 40 px bar.
+
+### Things that happen, and things worn
+
+- **`drop`** (a direction, like `put`): `{ "kind": "drop", "side": "right",
+  "object": "loaf" }`. The hand opens; the object leaves with the hand's
+  speed, falls, bounces, and rests on the floor or on the object under it.
+  Lift it over a table first if it must land there.
+- **`fall`** (a world line): `{ "kind": "fall", "object": "glass", "when":
+  1.45, "push": [0.5, 0.25, 0.35] }`. At `when` (seconds or a beat id) an
+  object at rest gets the `push` (m/s, world axes) and falls under gravity.
+  A small push on an object on a table tips it over; a larger one knocks it
+  off. Time `when` to the frame the hand reaches it.
+- **`wear`** (on an object, in place of `at` or `on`): `"hat": { "shape":
+  "cylinder", "size": [0.2, 0.16, 0.2], "color": "#ffffff", "wear": { "on":
+  "head", "at": [0, 0.17, -0.01] } }`. `on` is a bone (`head`, `chest`,
+  `hips`, `leftHand`, ...); `at` is [right, up, forward] metres from it in the
+  performer's facing, to the object's bottom centre; `turn` is degrees. It
+  is stiff: an apron (`on: "hips"`, `at: [0, -0.35, 0.13]`) does not bend
+  with the legs, so keep it short or behind a counter.
+
 ## The loop
 
 1. **Start a piece.** `M new <name>` (lower-case, dashes) writes
@@ -26,10 +150,12 @@ M() { node --conditions=development --import tsx scripts/authoring/make.ts "$@";
    you, smiles, waves and nods. It builds as it is. Its comments list every
    choice. `M words` prints the same list from the code.
 2. **Write the idea into the sheet.** Set the `look` card (every field is
-   required; values only from the comments), then write beats, one per thing
-   the reader should see. Give the sheet an `intent` and every beat an
-   `intent` in plain words ("She waters the plant."): the reading bar is
-   checked against those. Comments and trailing commas are fine.
+   required; values only from the comments). Write the `story` (see "First,
+   the story"); the `story` bar fails until the sheet has one. Then write
+   beats, one per thing the reader should see. Give the sheet an `intent`
+   and every beat an `intent` in plain words ("She waters the plant."): the
+   advisory reading row is checked against those. Comments and trailing
+   commas are fine.
 3. **Build and check fast.** `M <sheet> --quick` builds `v1/`, `v2/`, … beside
    the sheet (about 20 s plus a minute for twelve stills). It prints the look
    each performer actually wears and one row per bar, and every failing row
@@ -75,8 +201,13 @@ M() { node --conditions=development --import tsx scripts/authoring/make.ts "$@";
    > intent without being told (a near synonym counts, a different meaning
    > does not); `revise`, when `reads` is false, is one concrete sentence on
    > what would make the intent plain at phone-card size. For `piece`: `seen`
-   > is the reader's overall line and `reads` whether it matches. Keep valid
-   > JSON, be strict, and open no other file.
+   > is the reader's overall line and `reads` whether it matches. For each of
+   > `story.setup`, `story.event` and `story.reaction`: `seen` is the reader's
+   > answer to that part of question 4; `reads` is true only if it matches
+   > `says` in meaning (who and where; the thing that changes; the reaction
+   > to it), and false for "I cannot tell"; `revise`, when false, is one
+   > concrete sentence on what a viewer must see, using `see` as a guide.
+   > Keep valid JSON, be strict, and open no other file.
 
    Do not grade it yourself: you know what it means, so you will see it. If you cannot start subagents (you are
    one), stop here and hand the two paths to whoever started you, saying
@@ -85,7 +216,8 @@ M() { node --conditions=development --import tsx scripts/authoring/make.ts "$@";
    `DONE` when every bar passes. Otherwise revise the sheet (step 3), and keep
    each version: the next build lists which seconds changed.
 
-Stop when `make.ts` says DONE. If a bar will not pass after three revisions,
+Stop when `make.ts` says DONE. When the `story` row fails, fix the story
+first (a part the reader missed needs more to see), not single beats. If a bar will not pass after three revisions,
 stop and report which bar and why, rather than weakening the piece's idea in
 secret. Never loosen a bar, and never publish: `publish.ts` targets
 production and needs the owner's word.
@@ -99,8 +231,8 @@ production and needs the owner's word.
 | `size.*` | each dressed avatar file is at most 1.8 MB (house avatars are about 1.1-1.5) |
 | `quickLook` | the take fits the iPhone Quick Look budget |
 | `faceBox.*` | the face is at least 40 device px brow to chin on the phone card |
-| `reading` | a fresh reader reads every beat (each beat needs an `intent`), and the piece as a whole |
-| `body.*`, `still.*`, `onCard.*` | notes, not bars: feet planted, something moving every second, objects wholly on the card |
+| `story` | the main bar: a fresh reader, told nothing, gets the setup (who and where), the event and the reaction. Fails at once when the sheet has no `story` |
+| `reading`, `body.*`, `still.*`, `onCard.*` | notes, not bars: every beat read (each beat needs an `intent`), feet planted, something moving every second, objects wholly on the card |
 
 ## What works at card size
 
@@ -121,6 +253,14 @@ production and needs the owner's word.
 
 ## Recipes
 
+- **Show or offer in both hands.** The object starts on a surface; the
+  right hand `take`s it. Then, in one beat, a right `reach` to a mark in
+  front of the chest (`{ "of": "<performer>", "forward": 0.32, "right": 0.02,
+  "height": 1.2 }`, `"palm": "up"`) and a left `reach` to a mark just under
+  and beside it (`"forward": 0.3, "right": -0.08, "height": 1.13`,
+  `"palm": "up"`). Both elbows bend and the object sits between the hands.
+  For an offer, add 0.1 m to both `forward` values and hold the beat 1 s or
+  more while the performer looks at the viewer.
 - **Bend over something low.** `{ "kind": "bend", "amount": 0.8 }` bends from
   the waist and pushes the hips back; reach and look are solved on the bent
   body. Use 0.5 for a lean, 1 for the deepest bend. Give it `attack` 0.8-1.0.

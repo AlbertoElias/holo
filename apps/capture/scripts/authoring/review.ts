@@ -50,7 +50,7 @@ import { chromium, type Page } from 'playwright';
 import { tokens } from '@holoim/design-tokens';
 
 import { actingReport, summarize } from './acting-report.ts';
-import { beatSpan, holdingsOf, parseSheetText, pointObjects, type BeatSheet, type Direction, type Point } from './lib/beats.ts';
+import { beatSpan, holdingsOf, parseSheetText, pointObjects, STORY_PARTS, type BeatSheet, type Direction, type Point } from './lib/beats.ts';
 import { parseGlb } from './lib/gltf-read.ts';
 import { REVIEW_PAGE, SHEET_PAGE } from './lib/review-page.ts';
 import { takeSoundtrack } from './lib/sound.ts';
@@ -440,11 +440,12 @@ export async function review(take: string, options: ReviewOptions = {}): Promise
     '- `sheet-close-<performer>-NN.jpg`: the close view at the same times.',
     ...(takeHasSound && !options.cardOnly ? ['- `sheet-face-<performer>-NN.jpg`: each performer\'s face at the same times; in the video, the rightmost view.'] : []),
     '',
-    'Answer in three parts:',
+    'Answer in four parts:',
     '',
     '1. **Overall:** in one or two sentences, what happens and what it is about.',
     '2. **Moment by moment:** a list of time spans (from the labels on the stills) and, for each, what the performer does and what you think it means. Say where you are unsure.',
     '3. **What you could not read:** anything too small, too fast, ambiguous or frozen, and at which framing.',
+    '4. **The story, in three short answers:** (a) Who is this person, and where are they? (b) What happens? Name the thing that changes. (c) How do they react to it? For each, say what you saw that tells you, or say "I cannot tell".',
     ''
   ].join('\n'));
 
@@ -457,6 +458,7 @@ export async function review(take: string, options: ReviewOptions = {}): Promise
       sheet: basename(sheetFile),
       reader: null,
       piece: { intent: sheetData.intent ?? null, seen: null, reads: null },
+      story: sheetData.story ? Object.fromEntries(STORY_PARTS.map((k) => [k, { says: sheetData.story![k].says, see: sheetData.story![k].see, seen: null, reads: null, revise: null }])) : null,
       beats: sheetData.beats.map((b) => {
         const s = beatSpan(b);
         return { beat: b.id, performer: b.performer, from: round(s.from, 100), to: round(s.to, 100), intent: b.intent ?? null, seen: null, reads: null, revise: null };

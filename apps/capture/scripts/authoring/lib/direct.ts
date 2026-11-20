@@ -14,7 +14,7 @@ import { LivenessFace } from '../../../src/face/LivenessFace.ts';
 import type { JointName, MotionFrame, Vec3 } from '../../lib/motion-quality.ts';
 import type { FaceGaze, FaceWeights } from '../../../src/face/faceTypes.ts';
 import { resetPose, type LoadedAvatar } from './avatar.ts';
-import { FACE_MIXES, GESTURES, STATE_FACES, envelope, gestureCycle, holdingsOf, pointObjects, resolveTiming, validateSheet, type BeatSheet, type Direction, type Holding, type ObjectSpec, type PerformerSpec, type Place, type Point, type Resolved, type Side } from './beats.ts';
+import { FACE_MIXES, GESTURES, cueTime, STATE_FACES, envelope, gestureCycle, holdingsOf, pointObjects, resolveTiming, validateSheet, type BeatSheet, type Direction, type Holding, type ObjectSpec, type PerformerSpec, type Place, type Point, type Resolved, type Side } from './beats.ts';
 import { FINGERS, HAND_SHAPES, blendPose, shapePose, type FingerName, type HandPose } from './hands.ts';
 import { armRestOffset, bodyUp, hangArm, moveBoneWorld, orientHand, plantFeet, restElbowHint, rotateBoneWorld, solveArm, toWorld, turnBody, TURN_SHARE } from './pose.ts';
 import { speakingAt, visemesAt, type LineLips } from './lips.ts';
@@ -303,6 +303,13 @@ export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, 
       tracks[c]!.reaches.push({ beat: r.beat.id, side: d.side, targetDistance: Math.round(palm.distanceTo(target) * 10000) / 10000, stopShort: d.stopShort, outOfReach: Math.round((cast[c]!.shortfall.get(r) ?? 0) * 10000) / 10000 });
     }
     settleReleased(t);
+    for (const w of sheet.world ?? []) {
+      if (w.kind !== 'fall') continue;
+      const when = cueTime(sheet, w.when)!;
+      const st = stage.props.get(w.object)!;
+      if (!st.fall && t >= when - 1e-6) startFall(st, new THREE.Vector3(...(w.push ?? [0, 0, 0])));
+    }
+    stepFalls(t, 1 / fps);
     for (const { c, r } of aimChecks.get(f) ?? []) {
       const d = r.direction as Extract<Direction, { kind: 'aim' }>;
       const st = heldIn(cast[c]!.spec.id, d.side, t);
@@ -363,6 +370,12 @@ interface PropState {
   readonly holdings: Holding[];
   /** After a put lets go: from where the hand left it to upright on its place. */
   release?: { t0: number; fromP: THREE.Vector3; fromQ: THREE.Quaternion; toP: THREE.Vector3; toQ: THREE.Quaternion };
+  /** Falling (dropped or knocked): velocity and spin, until it rests; then settling onto its side. */
+  fall?: { v: THREE.Vector3; w: THREE.Vector3; bounces: number; settle?: { t0: number; fromQ: THREE.Quaternion; toQ: THREE.Quaternion; surface: number; slide: THREE.Vector3 } };
+  /** Where a held object was on the frame before, to give a drop the hand's speed. */
+  last?: { t: number; p: THREE.Vector3 };
+  /** A worn object's fixed place in its bone's frame. */
+  worn?: THREE.Matrix4;
 }
 
 // The sheet being solved, set at the start of `solveTake`: its marks, objects,
@@ -493,7 +506,7 @@ function gripOf(performer: string, side: Side, t: number): { weight: number; pro
     for (const h of st.holdings) {
       if (h.performer !== performer || h.side !== side) continue;
       const closing = h.take ? smooth(clamp01((t - (h.from - GRIP_CLOSE)) / GRIP_CLOSE)) : 1;
-      const opening = h.put ? 1 - smooth(clamp01((t - h.to) / GRIP_OPEN)) : 1;
+      const opening = h.put || h.drop ? 1 - smooth(clamp01((t - h.to) / GRIP_OPEN)) : 1;
       const weight = Math.min(closing, opening);
       if (weight > 0 && (!best || weight > best.weight)) best = { weight, prop: st.prop };
     }
@@ -593,6 +606,13 @@ function moveHeld(cast: Cast[], c: Cast, t: number): void {
         run.offset = handAt.invert().multiply(new THREE.Matrix4().compose(st.prop.position, st.prop.quaternion, new THREE.Vector3(1, 1, 1)));
       }
       const pose = heldPose(c, h.side, st.prop, run.offset);
+      if (h.drop && t >= h.to - 1e-6) {
+        run.released = true;
+        const v = st.last && t > st.last.t ? pose.position.clone().sub(st.last.p).divideScalar(t - st.last.t) : new THREE.Vector3();
+        startFall(st, v);
+        continue;
+      }
+      st.last = { t, p: pose.position.clone() };
       st.prop.position.copy(pose.position);
       st.prop.quaternion.copy(pose.quaternion);
       if (h.put && t >= h.to - 1e-6) {
@@ -624,6 +644,105 @@ function seat(c: Cast, side: Side, prop: Prop): void {
   const fist = rig ? rig.fistPoint(grip.radius, new THREE.Vector3()) : c.a.arms[side].hand.getWorldPosition(new THREE.Vector3());
   prop.quaternion.copy(best!.q);
   prop.position.copy(fist).sub(grip.center.clone().applyQuaternion(best!.q));
+}
+
+const GRAVITY = 9.81;
+const FALL_SETTLE = 0.35;
+
+/** Starts a fall with a velocity; the spin tips it the way it travels, plus a little of its own. */
+function startFall(st: PropState, v: THREE.Vector3): void {
+  const across = new THREE.Vector3(0, 1, 0).cross(new THREE.Vector3(v.x, 0, v.z));
+  const w = across.lengthSq() > 1e-6 ? across.normalize().multiplyScalar(-Math.min(9, 3 + 6 * Math.hypot(v.x, v.z))) : new THREE.Vector3(2.5, 0, 1.5);
+  st.fall = { v: v.clone(), w, bounces: 0 };
+}
+
+/** The lowest point of an object at a turn, below its origin (metres, negative below). */
+function lowest(prop: Prop, q: THREE.Quaternion): number {
+  let min = Infinity;
+  const b = prop.bounds;
+  for (const x of [b.min.x, b.max.x]) for (const y of [b.min.y, b.max.y]) for (const z of [b.min.z, b.max.z]) min = Math.min(min, new THREE.Vector3(x, y, z).applyQuaternion(q).y);
+  return min;
+}
+
+/** The highest surface under a point that is not above `below`: another object's top, else the floor. */
+function surfaceUnder(self: PropState, p: THREE.Vector3, below: number): number {
+  let best = 0;
+  for (const st of stage.props.values()) {
+    if (st === self || st.fall || st.holdings.some((h) => h.from <= solving.t && solving.t < h.to)) continue;
+    const box = st.prop.bounds.clone().applyMatrix4(new THREE.Matrix4().compose(st.prop.position, st.prop.quaternion, new THREE.Vector3(1, 1, 1)));
+    if (p.x >= box.min.x && p.x <= box.max.x && p.z >= box.min.z && p.z <= box.max.z && box.max.y <= below + 0.02) best = Math.max(best, box.max.y);
+  }
+  return best;
+}
+
+/** Every falling object one frame on: gravity, a bounce or two, then it tips onto its nearest face and rests. */
+function stepFalls(t: number, dt: number): void {
+  for (const st of stage.props.values()) {
+    const f = st.fall;
+    if (!f) continue;
+    const prop = st.prop;
+    if (f.settle) {
+      const u = smooth(clamp01((t - f.settle.t0) / FALL_SETTLE));
+      prop.quaternion.slerpQuaternions(f.settle.fromQ, f.settle.toQ, u);
+      prop.position.addScaledVector(f.settle.slide, dt * (1 - u));
+      prop.position.y = f.settle.surface - lowest(prop, prop.quaternion);
+      continue;
+    }
+    const n = 4;
+    for (let k = 0; k < n; k += 1) {
+      const h = dt / n;
+      f.v.y -= GRAVITY * h;
+      prop.position.addScaledVector(f.v, h);
+      const spin = f.w.length() * h;
+      if (spin > 0) prop.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(f.w.clone().normalize(), spin));
+      const bottom = prop.position.y + lowest(prop, prop.quaternion);
+      const surface = surfaceUnder(st, prop.position, bottom - f.v.y * h + 0.001);
+      if (bottom > surface) continue;
+      prop.position.y += surface - bottom;
+      // Still going up (a knock tips it about its edge first): keep it on the surface, with a little friction.
+      if (f.v.y > 0) { f.v.x *= 0.97; f.v.z *= 0.97; continue; }
+      if (f.v.y < -0.8 && f.bounces < 2) {
+        f.v.set(f.v.x * 0.5, -f.v.y * 0.25, f.v.z * 0.5);
+        f.w.multiplyScalar(0.4);
+        f.bounces += 1;
+        continue;
+      }
+      // Rest on the face nearest to down once its spin has carried on a little (a knocked glass goes over).
+      const ahead = prop.quaternion.clone();
+      if (f.w.lengthSq() > 0) ahead.premultiply(new THREE.Quaternion().setFromAxisAngle(f.w.clone().normalize(), Math.min(Math.PI / 2, f.w.length() * 0.25)));
+      let toQ = prop.quaternion.clone();
+      let bestAngle = Infinity;
+      const down = new THREE.Vector3(0, -1, 0);
+      for (const a of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]] as const) {
+        const now = new THREE.Vector3(...a).applyQuaternion(ahead);
+        const angle = now.angleTo(down);
+        if (angle < bestAngle) { bestAngle = angle; toQ = new THREE.Quaternion().setFromUnitVectors(now, down).multiply(ahead); }
+      }
+      f.settle = { t0: t, fromQ: prop.quaternion.clone(), toQ, surface, slide: new THREE.Vector3(f.v.x, 0, f.v.z) };
+      break;
+    }
+  }
+}
+
+/** Worn objects ride their bone: placed on the first frame from the performer's facing, then fixed in the bone's frame. */
+function moveWorn(c: Cast): void {
+  for (const st of stage.props.values()) {
+    const wear = st.prop.spec.wear;
+    if (!wear || (wear.performer ?? stage.first) !== c.spec.id) continue;
+    const bone = c.a.bind.get(wear.on as VrmHumanoidBone)?.bone;
+    if (!bone) throw new Error(`${st.prop.id}: ${c.spec.id} has no bone ${wear.on}`);
+    bone.updateWorldMatrix(true, false);
+    const boneM = new THREE.Matrix4().compose(bone.getWorldPosition(new THREE.Vector3()), bone.getWorldQuaternion(new THREE.Quaternion()), new THREE.Vector3(1, 1, 1));
+    if (!st.worn) {
+      const facing = yawQuat(c.spec.facing);
+      const at = new THREE.Vector3(-(wear.at?.[0] ?? 0), wear.at?.[1] ?? 0, wear.at?.[2] ?? 0).applyQuaternion(facing);
+      const turn = new THREE.Quaternion().setFromEuler(new THREE.Euler(...(wear.turn ?? [0, 0, 0]).map((d) => d * DEG) as [number, number, number], 'XYZ'));
+      const want = new THREE.Matrix4().compose(new THREE.Vector3().setFromMatrixPosition(boneM).add(at), facing.clone().multiply(turn), new THREE.Vector3(1, 1, 1));
+      st.worn = boneM.clone().invert().multiply(want);
+    }
+    const m = boneM.multiply(st.worn);
+    m.decompose(st.prop.position, st.prop.quaternion, new THREE.Vector3());
+  }
 }
 
 /** An object let go settles upright on its place. */
@@ -1263,7 +1382,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
   }
 
   // A flat take stops here: bind fingers, a still face, eyes fixed in the head (held objects still follow the hands).
-  if (flat) { moveHeld(cast, c, t); return; }
+  if (flat) { moveHeld(cast, c, t); moveWorn(c); return; }
 
   // 8. Hands: relaxed, opened by a reach, shaped by hand directions (fingers arrive one after another).
   for (const s of SIDES) {
@@ -1334,6 +1453,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
   }
   a.frame.updateMatrixWorld(true);
   moveHeld(cast, c, t);
+  moveWorn(c);
 
   // 9. Face: expressions summed, life's face under them, then blinks (always, and on a big look shift), then gaze.
   const weights: FaceWeights = {};
