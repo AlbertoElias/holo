@@ -19,7 +19,7 @@ import {
 import type {} from '../src/runtime/automationHooks';
 import type { BodySample } from '../src/types/contracts';
 
-// The VR legs step where the body goes (B-076, B-077). Two walks run through the real WebXR path on a frozen
+// The VR legs step where the body goes (B-078, B-079). Two walks run through the real WebXR path on a frozen
 // 30 Hz page clock: a room-scale head walk (the IWER headset moves at 1.2 m/s) and a full thumbstick walk. Each
 // walks forward, left, back, right, front-right and back-left, facing -Z, with a stop between.
 // Per direction the check requires:

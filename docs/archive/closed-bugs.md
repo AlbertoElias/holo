@@ -1500,7 +1500,7 @@ bug above.)
 - **Fix:** `dressAvatar` disposes a removed primitive's accessor only when nothing else uses it. The look e2e checks that the posted hair and glasses keep an index list longer than their point list.
 - **Closed:** 2026-11-20.
 
-### B-076 — VR head walk: the legs seem to walk forward in every direction
+### B-078 — VR head walk: the legs seem to walk forward in every direction
 
 - **Area:** apps/capture (`VrBodySolver` gait)
 - **Severity:** P2
@@ -1523,7 +1523,7 @@ bug above.)
   owner confirms on a Quest; reopen with a recording if it still shows.
 - **Closed:** 2026-11-20.
 
-### B-077 — VR stick walk: the body and the legs are not vertically aligned
+### B-079 — VR stick walk: the body and the legs are not vertically aligned
 
 - **Area:** apps/capture (`VrBodySolver.planRoot`, `MovementSystem`)
 - **Severity:** P1
@@ -1539,8 +1539,8 @@ bug above.)
   12.5 cm (left) and 14 cm (right); diagonals 5–12 cm ahead and 5–10 cm aside.
 - **Cause:** the stick move was counted twice. `planRoot` read the head after the rig had carried it, so the root
   plan already held the stick move, and the motor then added the same move again. The root ran ahead of the eyes and
-  the torso leaned back to reach the head. Sideways, the feet also trailed (as in B-076).
+  the torso leaned back to reach the head. Sideways, the feet also trailed (as in B-078).
 - **Fix:** `MovementSystem` records the rig's move in `BodyTracking.carried`, and `planRoot` takes it out of the root
-  plan. Side cadence and the travel-side first step as in B-076. The stick strafe moves at 65% of the forward speed
+  plan. Side cadence and the travel-side first step as in B-078. The stick strafe moves at 65% of the forward speed
   (`STICK_STRAFE_SHARE`), so a sideways stride can keep pace (pending owner confirmation).
 - **Closed:** 2026-11-20.

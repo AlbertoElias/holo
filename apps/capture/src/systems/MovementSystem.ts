@@ -19,7 +19,7 @@ const TRAVEL_TURN_SEC = 0.1;
 const SETTLE_TURN_SEC = 0.25;
 // A VR stick strafe goes at this share of the walk speed, eased toward the forward and backward directions (which
 // keep full speed): feet that cannot pass each other sideways keep up to about 1.2 m/s, and a 1.8 m/s strafe left
-// them half a metre behind the pelvis (B-077; pending owner confirmation).
+// them half a metre behind the pelvis (B-079; pending owner confirmation).
 const STICK_STRAFE_SHARE = 0.65;
 
 /**

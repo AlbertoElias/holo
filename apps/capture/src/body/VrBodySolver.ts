@@ -960,7 +960,7 @@ export class VrBodySolver {
     if (!this.gaitActive && speed > GAIT_ON_SPEED) {
       this.gaitActive = true;
       this.gaitSteps = 0;
-      // A sideways walk starts with the foot on the side of travel; the other foot cannot pass it (B-077).
+      // A sideways walk starts with the foot on the side of travel; the other foot cannot pass it (B-079).
       const across = gaitVelocity.x * Math.cos(this.bodyYawValue) - gaitVelocity.z * Math.sin(this.bodyYawValue);
       if (Math.abs(across) > 0.7 * speed) this.nextGaitSide = across > 0 ? 'right' : 'left';
     } else if (this.gaitActive && speed < GAIT_OFF_SPEED) {
