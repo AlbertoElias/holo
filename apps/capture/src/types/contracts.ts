@@ -165,6 +165,9 @@ export type HandSample = {
   source: HandPoseSource;
   tracked: Partial<Record<TrackedHandJointName, [number, number, number]>>;
   avatar: Partial<Record<TrackedHandJointName, [number, number, number]>>;
+  // Hand roll against the forearm about the forearm's axis, from bind (degrees):
+  // the twist the wrist skin takes, for the arm checks' candy-wrapper reading.
+  wristTwistDeg?: number;
 };
 
 export type Vec3Tuple = [number, number, number];

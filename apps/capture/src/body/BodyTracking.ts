@@ -18,6 +18,8 @@ const BODY_SAMPLE_BONES: ReadonlyArray<readonly [string, readonly HumanoidBoneRe
   ['neck', ['neck']],
   ['chest', ['upperChest', 'chest']],
   ['hips', ['hips']],
+  ['leftClavicle', ['leftShoulder']],
+  ['rightClavicle', ['rightShoulder']],
   ['leftShoulder', ['leftUpperArm']],
   ['rightShoulder', ['rightUpperArm']],
   ['leftElbow', ['leftLowerArm']],

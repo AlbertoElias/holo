@@ -17,7 +17,15 @@ export type ArmIkOptions = {
   // lands on the tracked one. Only tracked hands pass it; controllers,
   // desktop and camera keep the reach their object and aim checks are tuned on.
   maxStretch?: number;
+  // Share of the hand's twist about the forearm (from bind) that the forearm
+  // bone rolls by, so the skin twists along the forearm instead of all at the
+  // wrist (candy-wrapper). The hand keeps its exact world rotation. 0 keeps the
+  // forearm on its minimal-rotation aim.
+  forearmTwistShare?: number;
 };
+
+// The forearm roll stops here, so a twist past anatomy does not wind the elbow.
+const MAX_FOREARM_ROLL = THREE.MathUtils.degToRad(90);
 
 export class ArmIkSolver {
   private readonly worldUp = new THREE.Vector3(0, 1, 0);
@@ -41,7 +49,7 @@ export class ArmIkSolver {
     targetPositionWorld: THREE.Vector3,
     targetQuaternionWorld: THREE.Quaternion,
     avatarRoot: THREE.Group,
-    { handWorldQuaternion, maxStretch = 0 }: ArmIkOptions = {}
+    { handWorldQuaternion, maxStretch = 0, forearmTwistShare = 0 }: ArmIkOptions = {}
   ): boolean {
     // Shoulder protraction: as the target nears full reach, swing the
     // clavicle toward it (as a real shoulder does). Without this the pinned
@@ -118,6 +126,7 @@ export class ArmIkSolver {
     if (handWorldQuaternion) this.tmpQuat.copy(handWorldQuaternion);
     else this.tmpQuat.copy(targetQuaternionWorld).multiply(chain.handGripRotationOffset);
     chain.hand.quaternion.copy(this.tmpInvQuat.copy(this.tmpQuatC).invert().multiply(this.tmpQuat));
+    if (forearmTwistShare > 0) this.rollForearm(chain, forearmTwistShare);
     if (!isFiniteQuaternionLike(chain.hand.quaternion)) {
       return false;
     }
@@ -141,6 +150,28 @@ export class ArmIkSolver {
     if (stretch > 1 && bone.parent) bone.position.copy(bone.parent.worldToLocal(this.tmpPlace.copy(worldPoint)));
     else bone.position.copy(bindPosition);
     bone.updateMatrixWorld(true);
+  }
+
+  // Swing-twist split of the hand's local rotation from bind about the forearm
+  // axis (the hand's bind offset); the forearm rolls by a share of the twist and
+  // the hand takes the rest, so the hand's world rotation does not change. The
+  // twist is unwrapped against the last frame, so it does not jump at 180°.
+  private rollForearm(chain: ArmIkChain, share: number): void {
+    const axis = this.tmpVecA.copy(chain.handBindPosition);
+    if (axis.lengthSq() < 1e-10) return;
+    axis.normalize();
+    const delta = this.tmpQuatB.copy(chain.hand.quaternion).multiply(this.tmpInvQuat.copy(chain.handBindQuaternion).invert());
+    const sign = delta.w < 0 ? -1 : 1;
+    let twist = 2 * Math.atan2(sign * (delta.x * axis.x + delta.y * axis.y + delta.z * axis.z), sign * delta.w);
+    const previous = chain.wristTwist ?? 0;
+    twist += 2 * Math.PI * Math.round((previous - twist) / (2 * Math.PI));
+    chain.wristTwist = twist;
+    const roll = clamp(twist * share, -MAX_FOREARM_ROLL, MAX_FOREARM_ROLL);
+    if (Math.abs(roll) < 1e-6) return;
+    const rollQuat = this.tmpQuatC.setFromAxisAngle(axis, roll);
+    chain.foreArm.quaternion.multiply(rollQuat);
+    chain.hand.quaternion.premultiply(rollQuat.invert());
+    chain.foreArm.updateMatrixWorld(true);
   }
 
   private aimBoneAtDirection(

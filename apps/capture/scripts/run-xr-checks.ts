@@ -41,6 +41,8 @@ const CHECKS = {
   height: 'scripts/ci-xr-height-playwright.ts',
   body: 'scripts/ci-body-replay-playwright.ts',
   pointing: 'scripts/ci-pointing-playwright.ts',
+  // Scripted arm reaches on hands and controllers, graded on the elbow, clavicle and wrist (arm IK).
+  arms: 'scripts/ci-arm-reach-playwright.ts',
   marks: 'scripts/ci-held-mark-playwright.ts',
   'ar-record': 'scripts/ci-ar-record-playwright.ts',
   object: 'scripts/ci-object-playwright.mjs',

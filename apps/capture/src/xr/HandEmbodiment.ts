@@ -12,6 +12,9 @@ import { palmFrameQuaternion } from './palmFrame';
 import type { XrTracking } from './XrTracking';
 
 const SIDES = ['left', 'right'] as const;
+// The forearm rolls by half the wrist twist (no rig has twist bones), so the
+// skin twists along the forearm and not all at the wrist.
+const FOREARM_TWIST_SHARE = 0.5;
 // Tracked hands may stretch an arm up to 8% past full reach (ArmIkSolver).
 // Controllers keep the unstretched arm: their grip and resize checks are tuned on it.
 const ARM_REACH_STRETCH = 0.08;
@@ -153,7 +156,13 @@ export class HandEmbodiment {
       const source = this.tracking.getHandPoseSource(side);
       if (source !== 'held') this.handReach[side] = source === 'xr-hand';
       const maxStretch = this.handReach[side] ? ARM_REACH_STRETCH : 0;
-      if (!this.ikSolver.solve(chain, trackingState.targetPosition, trackingState.targetQuaternion, this.avatar.avatarRoot, { handWorldQuaternion: handWorld, maxStretch })) {
+      // Nothing else poses the clavicle in VR, so it still holds the last
+      // solve's swing. Start from bind: the protraction reads the reach from
+      // the resting shoulder, not from last frame's swing (that feedback made
+      // the shoulder pop up to 70° in one frame on near-body reaches).
+      chain.shoulder.quaternion.copy(chain.shoulderBindQuaternion);
+      chain.shoulder.updateMatrixWorld(true);
+      if (!this.ikSolver.solve(chain, trackingState.targetPosition, trackingState.targetQuaternion, this.avatar.avatarRoot, { handWorldQuaternion: handWorld, maxStretch, forearmTwistShare: FOREARM_TWIST_SHARE })) {
         if (!this.ikWarningLogged) {
           console.warn('VR arm IK solve produced invalid output; skipping frame write.');
           this.ikWarningLogged = true;
@@ -186,9 +195,22 @@ export class HandEmbodiment {
           result.avatar[jointName] = [this.tmpVec.x, this.tmpVec.y, this.tmpVec.z];
         }
       }
+      const twist = this.wristTwistDeg(side);
+      if (twist !== undefined) result.wristTwistDeg = twist;
       return result;
     };
     return { left: sample('left'), right: sample('right') };
+  }
+
+  // Swing-twist split of the hand's rotation from bind, about the forearm-to-hand axis.
+  private wristTwistDeg(side: VrHandSide): number | undefined {
+    const chain = this.armChains[side];
+    if (!chain) return undefined;
+    const delta = this.tmpQuat.copy(chain.handBindQuaternion).invert().multiply(chain.hand.quaternion);
+    const axis = this.tmpVec.copy(chain.handBindPosition).normalize().applyQuaternion(this.handWorldScratch.copy(chain.handBindQuaternion).invert());
+    const along = delta.x * axis.x + delta.y * axis.y + delta.z * axis.z;
+    const sign = delta.w < 0 ? -1 : 1;
+    return THREE.MathUtils.radToDeg(2 * Math.atan2(along * sign, delta.w * sign));
   }
 
   /** Per-hand tracking and retarget diagnostics for the text state. */
