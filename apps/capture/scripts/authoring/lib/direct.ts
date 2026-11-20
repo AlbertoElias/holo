@@ -19,7 +19,7 @@ import { FACE_MIXES, GESTURES, STATE_FACES, envelope, gestureCycle, holdingsOf, 
 import { FINGERS, HAND_SHAPES, blendPose, shapePose, type FingerName, type HandPose } from './hands.ts';
 import { armRestOffset, bodyUp, hangArm, keepingTwist, rollHand, moveBoneWorld, orientHand, plantFeet, reachElbowHint, restElbowHint, rotateBoneWorld, solveArm, steadyTwist, easeTwist, toWorld, turnBody, TURN_SHARE } from './pose.ts';
 import { speakingAt, visemesAt, type LineLips } from './lips.ts';
-import { busy, faceAt, fidgetAt, GLANCE_BLINK_DEG, glanceAt, glanceChest, LIFE_FIDGET, LIFE_SIGH, LIFE_WEIGHT, lifeSchedule, MASK_PAD, MASKED_BY, postureAt, sighAt, weightAt, attendArmsAt, attendGate, attendNodAt, attendSchedule, ATTEND_ARMS, type AttendSchedule, type LifeSchedule } from './life.ts';
+import { busy, faceAt, fidgetAt, finishedBy, GLANCE_BLINK_DEG, glanceAt, glanceChest, LIFE_FIDGET, LIFE_SIGH, LIFE_WEIGHT, lifeSchedule, MASK_PAD, MASKED_BY, postureAt, sighAt, weightAt, attendArmsAt, attendGate, attendNodAt, attendSchedule, ATTEND_ARMS, type AttendSchedule, type LifeSchedule } from './life.ts';
 import { buildProp, propWorld, type LoadedSource, type Prop } from './props.ts';
 import { isPlace, measureBody, resolvePlace, type Body, type PlaceFrame } from './stage.ts';
 
@@ -81,6 +81,8 @@ const DROP_ARC = 0.15;
 const DROP_EASE = 6;
 /** A lift's weight over which the palm takes its wanted turn (smoothstep from, to); below it the forearm stays neutral. */
 const PALM_TURN = { from: 0.35, to: 1 } as const;
+/** On a drop the palm turns back while the hand is still high (from this share of the reach down), so the hand falls with the forearm, not palm first. */
+const PALM_DROP_FROM = 0.7;
 const liftState = new WeakMap<LoadedAvatar, Partial<Record<Side, { t: number; w: number; k: number }>>>();
 /** 1 while a hand rises, eased to `DROP_ARC` while it falls (frames in time order; a jump in time starts again). */
 function liftShare(a: LoadedAvatar, side: Side, t: number, dt: number, w: number): number {
@@ -266,7 +268,7 @@ export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, 
     });
     return {
       spec, a, live: new LivenessFace(spec.seed ?? 0x5eed + index * 7919), seed: spec.seed ?? index + 1,
-      events: lifeSchedule(spec.seed ?? index + 1, sheet.duration + 1),
+      events: finishedBy(lifeSchedule(spec.seed ?? index + 1, sheet.duration + 1), sheet.duration),
       attend: life && spec.attend !== false ? attendSchedule(spec.seed ?? index + 1, sheet.duration + 1) : undefined, dirs, touched: { left: [], right: [] },
       turnDeg: new Map(), stepWorld: new Map(), fixed: { next: 0, yaw: spec.facing }, ankles0,
       feetMid0: ankles0.left.clone().add(ankles0.right).multiplyScalar(0.5),
@@ -1411,7 +1413,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
       // The palm's own turn comes in the second part of the lift (see `PALM_TURN`): blending the palm's direction
       // instead aims a rising hand at the thigh it left, and turns the forearm over on the way.
       const toward = palm!.clone();
-      const turnK = THREE.MathUtils.smoothstep(clamp01(w), PALM_TURN.from, PALM_TURN.to);
+      const turnK = THREE.MathUtils.smoothstep(clamp01(w), lerp(PALM_DROP_FROM, PALM_TURN.from, lifting), PALM_TURN.to);
       const wrist = a.arms[s].hand.getWorldPosition(new THREE.Vector3()).add(point.clone().sub(restAt));
       // The elbow turns from hanging (back) to a reaching elbow (down and a little out) in the first part of the lift:
       // an elbow still pointing back while the hand is in front puts the forearm level, a handshake.

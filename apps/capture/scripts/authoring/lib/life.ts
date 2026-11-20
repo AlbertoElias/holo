@@ -287,6 +287,15 @@ function add(out: FaceWeights, shape: Readonly<Partial<Record<FaceChannel, numbe
 }
 
 /**
+ * The schedule for a take that ends at `end` seconds: a sigh whose breath (in and out) cannot
+ * finish by then is left out, so the take does not end, and its card loop does not seam, on a
+ * parted or rounded mouth.
+ */
+export function finishedBy(s: LifeSchedule, end: number): LifeSchedule {
+  return { ...s, sighs: s.sighs.filter((p) => p.at + SIGH_IN + SIGH_OUT <= end) };
+}
+
+/**
  * The face's life at t, as channel weights to add to the face: a sigh's mouth and brows, the
  * mouth's settle under a weight shift, and the brows' flash as a glance comes back, the flash
  * scaled by `glanceK` (how free the glance channel is).
