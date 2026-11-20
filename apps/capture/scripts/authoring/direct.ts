@@ -27,7 +27,7 @@ import { generateAvatarFixtures, SHIPPED_AVATAR } from '../lib/avatar-fixtures.t
 import { judgeMotion, measureMotion } from '../lib/motion-quality.ts';
 import { actingReport, diffTakes, summarize } from './acting-report.ts';
 import { loadAvatar, type LoadedAvatar } from './lib/avatar.ts';
-import { houseFinish, validateSheet, type BeatSheet } from './lib/beats.ts';
+import { houseFinish, parseSheetText, validateSheet, type BeatSheet } from './lib/beats.ts';
 import { defaultLook, dressedFile, HOUSE_BASE } from './lib/house-look.ts';
 import { solveTake, type ObjectReport, type SolvedTake } from './lib/direct.ts';
 import { describeAttend, describeLife } from './lib/life.ts';
@@ -55,7 +55,7 @@ export async function resolveAvatar(spec: string, sheetFile: string, look?: Look
 }
 
 export async function loadSheet(sheetFile: string, avatarOverride?: string): Promise<{ sheet: BeatSheet; avatars: Map<string, LoadedAvatar>; sources: Map<string, LoadedSource> }> {
-  const parsed = JSON.parse(await readFile(sheetFile, 'utf8')) as BeatSheet;
+  const parsed = parseSheetText(await readFile(sheetFile, 'utf8'), basename(sheetFile));
   // An override dresses every performer in it alone, so the take records what they wear.
   const sheet: BeatSheet = avatarOverride ? { ...parsed, performers: parsed.performers.map(({ look: _look, ...p }) => ({ ...p, avatar: avatarOverride })) } : parsed;
   const problems = validateSheet(sheet);
@@ -121,7 +121,7 @@ export async function build(sheetFile: string, out?: string, style?: BeatSheet['
     title: sheet.title,
     method: `beat sheet ${basename(sheetFile)} solved on ${sheet.performers.map((p) => `${p.id} (${p.avatar})`).join(', ')}; ${sheet.style ?? 'directed'}`
   }, world);
-  const file = out ?? join(OUTPUT, `${basename(sheetFile, '.json')}.glb`);
+  const file = out ?? join(OUTPUT, `${basename(sheetFile).replace(/\.jsonc?$/, '')}.glb`);
   await mkdir(dirname(file), { recursive: true });
   // Sound: every source padded to the clip and looping with it (brief, decision 0).
   const clip = take.times[take.times.length - 1] ?? sheet.duration;

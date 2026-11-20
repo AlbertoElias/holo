@@ -74,6 +74,8 @@ const STATE_POSE = {
   noticing: { pitch: -4, roll: 0, spine: -2.5, shoulders: 3, head: 0.7 },
   concerned: { pitch: 14, roll: 8, spine: 7, shoulders: 6, head: 0.5 }
 } as const;
+/** A bend at amount 1: degrees forward at the waist (spread up the spine), and the hips back and down (m) to keep the weight over the feet. */
+export const BEND = { deg: 45, hipsBack: 0.07, drop: 0.035 } as const;
 /** A shrug's face: brows up, the lower lip pushed up. */
 const SHRUG_FACE: Partial<Record<FaceChannel, number>> = { browInnerUp: 0.4, browOuterUpLeft: 0.45, browOuterUpRight: 0.45, mouthShrugLower: 0.5, mouthPressLeft: 0.2, mouthPressRight: 0.2 };
 const RUB_HAND = { low: { thumb: 0.5, index: 0.45, middle: 0.66 }, high: { thumb: 0.75, index: 0.62, middle: 0.5 }, ring: 0.7, little: 0.74, spread: 0.05 } as const;
@@ -816,6 +818,14 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
     pelvisRoll += dir[0]! * 4 * DEG * w;
     hipsLocal.y -= 0.008 * Math.abs(w);
   }
+  let bend = 0;
+  for (const r of c.dirs) {
+    const d = r.direction;
+    if (d.kind !== 'bend') continue;
+    bend += env(r, t, flat) * (d.amount ?? 0.7);
+  }
+  hipsLocal.z -= BEND.hipsBack * bend;
+  hipsLocal.y -= BEND.drop * bend;
   // A step carries the hips toward the lead foot and down a little while a foot is off the floor.
   for (const r of c.dirs) {
     if (r.direction.kind !== 'step') continue;
@@ -904,6 +914,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
         spine += STATE_POSE[d.name].spine * e;
       }
     }
+    spine += BEND.deg * bend;
     const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(bodyQ);
     if (shoulders !== 0) for (const s of SIDES) {
       const b = a.humanoid.bone(`${s}Shoulder`);

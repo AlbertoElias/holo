@@ -1,0 +1,105 @@
+// A starter beat sheet for one house-avatar performer. Copy it with
+//   make.ts new <name>
+// (from apps/capture), edit the copy, and run make.ts on it. Comments and
+// trailing commas are allowed. Every choice is listed beside the field it is
+// for; `make.ts words` prints the same lists from the code.
+{
+  "title": "Hello",
+  // What a viewer should come away with, in a viewer's words. A fresh reader is compared with it.
+  "intent": "Someone notices me, smiles and waves hello.",
+  // Seconds. 5 to 9 s reads on a feed card; longer costs review time and Quick Look budget.
+  "duration": 6,
+  "performers": [
+    {
+      "id": "me",
+      // house:clay | house:ink | house:light (the finish). Leave out "look" for the default look.
+      "avatar": "house:clay",
+      // Stage position [x, z] in metres. The card looks at the stage from in front (+z).
+      "at": [0, 0],
+      // Degrees about up: 0 faces the viewer, 90 faces +x (the viewer's right), -90 the viewer's left.
+      "facing": 0,
+      // Any whole number: picks this performer's small life events (glances, sighs, weight shifts).
+      "seed": 7,
+      "look": {
+        // slight | medium | broad
+        "build": "medium",
+        // porcelain | linen | goldenSand | honey | caramel | copper | umber | espresso
+        "skin": "caramel",
+        // darkBrown | amber | mossGreen | blue | coolGrey | hazel
+        "eyes": "darkBrown",
+        "hair": {
+          // sweptCrop | wavyBob | tightCoils | highBun | centrePart | shortTwists
+          "style": "wavyBob",
+          // black | espresso | chestnut | copper | wheat | plum | silver | ashBrown
+          "colour": "espresso"
+        },
+        // none | round | square (thin frames: they show in the close view, barely at card size)
+        "glasses": "none",
+        // Three fixed outfits, top / trousers: oatmealSlate (oatmeal / slate) | rustWalnut (rust / walnut)
+        // | stormGraphite (storm blue / graphite). There is no other colour: pick the nearest.
+        "clothing": "rustWalnut"
+      }
+    }
+  ],
+  // Named points a beat can use. A point is [x, y, z] in metres, a mark's name, "<performer>.<bone>"
+  // (me.head, me.leftHand, …), "<object>.<anchor>", or a place {"of": "me", "forward": 0.5, "right": 0.2,
+  // "height": 1.1} ("up" instead of "height" is relative; a length may be a measure: "0.5 step", "arm",
+  // or a landmark height: knee, hip, waist, elbow, chest, shoulder, hanging-hand, chin, eye, crown).
+  "marks": {
+    // Where the viewer is: look here to look out of the card.
+    "viewer": [0, 1.55, 2.5]
+  },
+  // Objects (optional) cost face size on the card, which frames everything: keep them within about
+  // 0.6 m of the performer and below the head. Recipes: the hologram-authoring skill; sheets/watering.json.
+  "beats": [
+    {
+      "id": "notice",
+      "performer": "me",
+      // Seconds from the start. Every beat needs an "intent": the reader's account is checked against it.
+      "at": 0.3,
+      "hold": 1.2,
+      "intent": "They notice me and look up.",
+      "directions": [
+        // Kinds: look, expression, gesture, state, reach, hand, weight, bend, turn, step, take, put, aim.
+        // Each takes optional timing in seconds: anticipation, attack, hold, settle.
+        { "kind": "state", "name": "noticing", "at": "viewer" },
+        { "kind": "look", "at": "viewer", "head": 0.8 }
+      ]
+    },
+    {
+      "id": "smile",
+      "performer": "me",
+      "at": 1.4,
+      "hold": 3,
+      "intent": "They are glad to see me.",
+      "directions": [
+        // Expressions: smile | small-smile | sad | hope | held | resolve | breath | eyes-down | noticing | concerned.
+        // At card size the mouth-led ones (smile, sad) read best; the rest need the close view.
+        { "kind": "expression", "shape": "smile", "strength": 0.8 },
+        { "kind": "look", "at": "viewer", "head": 0.8 }
+      ]
+    },
+    {
+      "id": "wave",
+      "performer": "me",
+      "at": 1.8,
+      "intent": "They wave hello.",
+      "directions": [
+        // Gestures: wave (side, count, at) | nod | head-shake | shrug | rub | hand-to-chest. States: noticing | concerned.
+        // Hand shapes ("kind": "hand", "side", "shape"): relaxed | open | reach | fist | point | grip | withheld.
+        { "kind": "gesture", "name": "wave", "side": "right", "count": 3 }
+      ]
+    },
+    {
+      "id": "settle",
+      "performer": "me",
+      "at": 4.4,
+      "hold": 1.2,
+      "intent": "They nod, still smiling.",
+      "directions": [
+        { "kind": "gesture", "name": "nod" },
+        { "kind": "expression", "shape": "small-smile", "strength": 0.8 },
+      ]
+    }
+  ]
+}

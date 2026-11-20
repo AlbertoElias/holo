@@ -5,9 +5,12 @@
  * card and waits until it has rendered. `viewer-check.ts` and `review.ts`
  * both read the take through this.
  *
- * Ports: VIEWER_CHECK_API_PORT (3341) and VIEWER_CHECK_WEB_PORT (3214).
+ * Ports: VIEWER_CHECK_API_PORT (3341) and VIEWER_CHECK_WEB_PORT (3214). When
+ * neither is set and another run holds the defaults, the next free pair 10
+ * apart is used (3351/3224, …), so two reviews can run side by side.
  */
 import { spawn, type ChildProcess } from 'node:child_process';
+import { linkSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
@@ -16,10 +19,12 @@ import { chromium, request, type Browser, type BrowserContext, type Locator, typ
 import { XR_CHROMIUM_ARGS, XR_CONTEXT_OPTIONS } from '@holoim/tooling-testing/xr-env';
 
 const ROOT = fileURLToPath(new URL('../../../../../', import.meta.url));
-export const API_PORT = Number(process.env.VIEWER_CHECK_API_PORT ?? 3341);
-export const WEB_PORT = Number(process.env.VIEWER_CHECK_WEB_PORT ?? 3214);
-const WEB = `https://localhost:${WEB_PORT}`;
-const API = `http://127.0.0.1:${API_PORT}`;
+const PORTS_SET = process.env.VIEWER_CHECK_API_PORT !== undefined || process.env.VIEWER_CHECK_WEB_PORT !== undefined;
+const API_PORT = Number(process.env.VIEWER_CHECK_API_PORT ?? 3341);
+const WEB_PORT = Number(process.env.VIEWER_CHECK_WEB_PORT ?? 3214);
+
+/** Set once `close()` has been called, so a server stopped on purpose is not reported as failing. */
+let stopping = false;
 
 function start(name: string, command: string, args: string[], env: Record<string, string>): ChildProcess {
   const child = spawn(command, args, { cwd: ROOT, env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
@@ -27,7 +32,7 @@ function start(name: string, command: string, args: string[], env: Record<string
   const keep = (b: Buffer) => { tail.push(b.toString()); if (tail.length > 40) tail.shift(); };
   child.stdout!.on('data', keep);
   child.stderr!.on('data', keep);
-  child.on('exit', (code) => { if (code) console.error(`${name} exited ${code}:\n${tail.join('').slice(-2000)}`); });
+  child.on('exit', (code) => { if (code && !stopping) console.error(`${name} exited ${code}:\n${tail.join('').slice(-2000)}`); });
   return child;
 }
 
@@ -60,17 +65,57 @@ async function answers(url: string): Promise<boolean> {
   try { await client.get(url, { timeout: 2000 }); return true; } catch { return false; } finally { await client.dispose(); }
 }
 
+/**
+ * Claims a port pair for this process with a lock file in the system temp
+ * folder, so two reviews started together do not both take a pair that nothing
+ * answers on yet. The file holds the owner's pid and appears in one step (a hard
+ * link of a written file), so it is never seen empty. A lock whose process has
+ * ended is taken over; the release is synchronous, so it also runs on Ctrl-C.
+ */
+async function claimPorts(apiPort: number): Promise<(() => void) | undefined> {
+  const lock = join(tmpdir(), `holoim-viewer-${apiPort}.lock`);
+  const mine = `${lock}.${process.pid}`;
+  writeFileSync(mine, String(process.pid));
+  try {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        linkSync(mine, lock);
+        return () => { try { if (readFileSync(lock, 'utf8') === String(process.pid)) unlinkSync(lock); } catch { /* already gone */ } };
+      } catch {
+        const pid = Number(await readFile(lock, 'utf8').catch(() => '0'));
+        if (pid) { try { process.kill(pid, 0); return undefined; } catch { /* that run has ended */ } }
+        try { unlinkSync(lock); } catch { /* another run took it over first */ }
+      }
+    }
+    return undefined;
+  } finally { try { unlinkSync(mine); } catch { /* ignore */ } }
+}
+
 /** Starts the test API and the viewer test build; `close()` stops both, as does Ctrl-C. */
 export async function startViewer(): Promise<ViewerServers> {
-  for (const [url, variable] of [[API, 'VIEWER_CHECK_API_PORT'], [WEB, 'VIEWER_CHECK_WEB_PORT']] as const) {
-    if (await answers(url)) throw new Error(`${url} is already in use (another review, or one stopped with Ctrl-C): stop it, or set ${variable}`);
+  let API = '';
+  let WEB = '';
+  let release: () => void = () => {};
+  for (let k = 0; ; k += 1) {
+    const api = `http://127.0.0.1:${API_PORT + 10 * k}`;
+    const web = `https://localhost:${WEB_PORT + 10 * k}`;
+    const claimed = await claimPorts(API_PORT + 10 * k);
+    const busy = !claimed ? `${api} (claimed by another review)` : (await answers(api)) ? api : (await answers(web)) ? web : undefined;
+    if (claimed && busy) claimed();
+    if (!busy && claimed) { API = api; WEB = web; release = claimed; break; }
+    if (PORTS_SET) throw new Error(`${busy} is already in use (another review, or one stopped with Ctrl-C): stop it, or set VIEWER_CHECK_API_PORT and VIEWER_CHECK_WEB_PORT to free ports`);
+    if (k === 20) throw new Error(`no free viewer ports from ${API_PORT}/${WEB_PORT} upward in steps of 10: set VIEWER_CHECK_API_PORT and VIEWER_CHECK_WEB_PORT to free ports`);
   }
-  const api = start('api', 'pnpm', ['--filter', '@holoim/api', 'exec', 'tsx', '../../scripts/test-api.ts'], { TEST_API_PORT: String(API_PORT), WEB_ORIGIN: WEB, USDZ_WORKER_ENABLED: 'false' });
-  const web = start('web', 'node', ['packages/tooling-testing/src/test-build.mjs', 'serve', 'web', '--', '--host', '0.0.0.0', '--port', String(WEB_PORT), '--strictPort'], { VITE_API_PROXY_TARGET: API, VITE_HMR_CLIENT_PORT: String(WEB_PORT) });
-  const onSignal = () => { stop(api); stop(web); process.exit(130); };
+  if (WEB !== `https://localhost:${WEB_PORT}`) console.log(`  viewer ports ${API_PORT}/${WEB_PORT} are in use; using ${new URL(API).port}/${new URL(WEB).port}`);
+  stopping = false;
+  const API_PORT_NOW = new URL(API).port;
+  const WEB_PORT_NOW = new URL(WEB).port;
+  const api = start('api', 'pnpm', ['--filter', '@holoim/api', 'exec', 'tsx', '../../scripts/test-api.ts'], { TEST_API_PORT: API_PORT_NOW, WEB_ORIGIN: WEB, USDZ_WORKER_ENABLED: 'false' });
+  const web = start('web', 'node', ['packages/tooling-testing/src/test-build.mjs', 'serve', 'web', '--', '--host', '0.0.0.0', '--port', WEB_PORT_NOW, '--strictPort'], { VITE_API_PROXY_TARGET: API, VITE_HMR_CLIENT_PORT: WEB_PORT_NOW });
+  const onSignal = () => { stop(api); stop(web); release(); process.exit(130); };
   process.once('SIGINT', onSignal);
   process.once('SIGTERM', onSignal);
-  const close = () => { process.off('SIGINT', onSignal); process.off('SIGTERM', onSignal); stop(api); stop(web); };
+  const close = () => { stopping = true; process.off('SIGINT', onSignal); process.off('SIGTERM', onSignal); stop(api); stop(web); release(); };
   try {
     await waitFor(`${API}/api/holograms?limit=1`, 120_000);
     await waitFor(WEB, 240_000);

@@ -50,7 +50,7 @@ import { chromium, type Page } from 'playwright';
 import { tokens } from '@holoim/design-tokens';
 
 import { actingReport, summarize } from './acting-report.ts';
-import { beatSpan, holdingsOf, pointObjects, type BeatSheet, type Direction, type Point } from './lib/beats.ts';
+import { beatSpan, holdingsOf, parseSheetText, pointObjects, type BeatSheet, type Direction, type Point } from './lib/beats.ts';
 import { parseGlb } from './lib/gltf-read.ts';
 import { REVIEW_PAGE, SHEET_PAGE } from './lib/review-page.ts';
 import { takeSoundtrack } from './lib/sound.ts';
@@ -234,7 +234,7 @@ export async function review(take: string, options: ReviewOptions = {}): Promise
   const started = performance.now();
   const sheetFile = options.sheet ?? `${take.replace(/\.glb$/, '')}.beats.json`;
   // A sheet beside the take is optional; one named with --sheet must load.
-  const sheetData = await readFile(sheetFile, 'utf8').then((s) => JSON.parse(s) as BeatSheet)
+  const sheetData = await readFile(sheetFile, 'utf8').then((s) => parseSheetText(s, sheetFile))
     .catch((error: unknown) => { if (options.sheet) throw new Error(`--sheet ${options.sheet}: ${String(error)}`); return undefined; });
   const out = resolve(options.out ?? join(OUTPUT, 'review', basename(take, '.glb')));
   const reader = join(out, 'reader');
