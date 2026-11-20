@@ -27,9 +27,6 @@ const CROUCH_TERRAIN_GUARD_CLEARANCE = 0.02;
 // A sink into the controller's skin smaller than this is the controller's own settling, not a fall through the floor.
 const FLOOR_SKIN_TOLERANCE = 0.004;
 const CROUCH_TERRAIN_GUARD_SAMPLE_RADIUS_RATIO = 0.04;
-// A spawn spot this many avatar heights above the median ground one search step around it is a pedestal.
-const PEDESTAL_RISE_HEIGHTS = 0.5;
-const PEDESTAL_SAMPLES = 8;
 const CROUCH_TERRAIN_GUARD_OFFSETS: readonly Readonly<[number, number]>[] = [
   [0, 0],
   [1, 0],
@@ -537,32 +534,13 @@ export class CharacterMotor {
         const x = centerX + Math.cos(angle) * radius;
         const z = centerZ + Math.sin(angle) * radius;
         const groundY = this.sampleStableGroundYAt(avatarRig, x, z);
-        if (groundY !== undefined && !this.isPedestal(avatarRig, x, z, groundY, radiusStep)) {
+        if (groundY !== undefined) {
           return new THREE.Vector3(x, groundY, z);
         }
       }
     }
 
     return undefined;
-  }
-
-  /**
-   * A spot that stands well above most of the ground one step around it is a
-   * pedestal (a statue, a post, a rock), not a place to record from: the take
-   * would show the performer on top of it. The default scene has a statue at
-   * its centre.
-   */
-  private isPedestal(avatarRig: AvatarRig, x: number, z: number, groundY: number, reach: number): boolean {
-    const around: number[] = [];
-    for (let i = 0; i < PEDESTAL_SAMPLES; i += 1) {
-      const angle = (i / PEDESTAL_SAMPLES) * Math.PI * 2;
-      const y = avatarRig.sampleTerrainYAt(x + Math.cos(angle) * reach, z + Math.sin(angle) * reach, this.raycaster);
-      if (y !== undefined) around.push(y);
-    }
-    if (around.length < PEDESTAL_SAMPLES / 2) return false;
-    around.sort((a, b) => a - b);
-    const median = around[Math.floor(around.length / 2)]!;
-    return groundY - median > avatarRig.avatarHeight * PEDESTAL_RISE_HEIGHTS;
   }
 
   private findNearbyRecoveryGroundPoints(avatarRig: AvatarRig, centerX: number, centerZ: number): THREE.Vector3[] {
