@@ -278,9 +278,9 @@ over the 40 px bar.
    the contact sheets, and asks for: one line on whether the premise makes
    sense; arm motion (smooth, natural, no snap or twist); clipping (a hand
    or an arm through a prop or the body); and the face (does the
-   expression look natural and fit the moment). Run
-   `scripts/gemini-review.sh <prompt file> <repo root>`. On exit 75, give
-   the same prompt to a Claude `design-reviewer` subagent. Fix each fault
+   expression look natural and fit the moment). Give the prompt to a
+   Claude `design-reviewer` subagent. Do not start Gemini (`agy`) from an
+   agent or a script. Fix each fault
    that the reviewer names, then build again. Put the reviewer's words in
    your report.
 
