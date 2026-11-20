@@ -818,7 +818,11 @@ the stop shape alone, since no text sits within arm's reach.
   Over the picture the row's chip hugs the controls showing, the same room
   at both ends, and Play stays at the middle of the card.
 - **Notices:** feed-wide notices (empty, offline, server error, uploading)
-  on the chip.
+  on the chip. Under 600 px wide they stand just under the top corners'
+  row, across the screen inside its side edges: the top centre between the
+  corners holds only a word or two there.
+- **One hologram's page:** its "All holograms" chip holds the top left
+  corner, and the title starts below it.
 - **Type:** the flat scale; the phone card title is 21.6 px.
 - **Glyphs:** drawn as SVG, never emoji or font symbols.
 - **Copy:** touch words on a touch device, never desktop keyboard help.
