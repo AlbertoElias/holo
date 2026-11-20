@@ -123,7 +123,6 @@ const STAGE_LIGHT_TOWARD_VIEWER = 0.35;
 const STAGE_LIGHT_DROP_METERS = 0.7;
 /** Follow looks at the cloche from a little right of front and above (3.4). */
 const FOLLOW_DIRECTION = new Vector3().copy(clocheFollowDirection());
-const scratchFloor = new Vector3();
 /** Inside end never comes closer than this share of the Follow distance. */
 const MAX_INSIDE_SHARE = 0.6;
 const RIM = tokens.edge.cloche.rim;
@@ -374,8 +373,6 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
   const clocheRef = useRef<ClocheShape | null>(null);
   // The dome fitted to the cast alone, only for a take with recorded objects: the performer's size without them (the far-object floor).
   const castClocheRef = useRef<ClocheShape | null>(null);
-  // The dome fitted to the performer and her reach alone, for a performer's take: her own size, so a wide recorded set cannot shrink her either.
-  const performerClocheRef = useRef<ClocheShape | null>(null);
   const clocheShift = useRef(new Vector3()).current;
   const fittedCentre = useRef<Vector3 | null>(null);
   const frameRectRef = useRef(frameRect);
@@ -446,12 +443,6 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
       const without = { withoutObjects: true };
       const castPoints = [...drawnPoints(clonedScene, bubble, undefined, without), ...motionPoints(clonedScene, animations, { anchor, bubble, ...without })];
       castClocheRef.current = fitCloche(castPoints, { floorY: isCameraTake(clonedScene) ? clonedScene.getWorldPosition(new Vector3()).y : undefined });
-    }
-    performerClocheRef.current = null;
-    const performer = isCameraTake(clonedScene) ? undefined : clonedScene.getObjectByName("RecordedAvatar");
-    if (performer) {
-      const performerPoints = [...drawnPoints(performer, bubble), ...motionPoints(clonedScene, animations, { anchor, bubble, only: performer })];
-      performerClocheRef.current = fitCloche(performerPoints);
     }
     setCloche(shape);
     // A scanned place replaces the recorded set: the dome was fitted with the set in, so it is the same dome, and the set is hidden after.
@@ -881,15 +872,6 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
         // A far recorded object must not shrink her below the floor: the camera stops pulling back (the far-object rule, 3.4).
         const castShape = castClocheRef.current;
         if (castShape) framing = clocheFramingFloor(framing, { cast: clocheFraming(castShape, view), plainFull: clocheFraming(shape, view) });
-        // Nor may the recorded set: the floor holds against her own size, the dome fitted to her and her reach alone (3.4).
-        // Each floor sets its own distance, so the one that keeps her nearer wins.
-        const performerShape = performerClocheRef.current;
-        if (performerShape) {
-          const alone = clocheFraming(performerShape, view);
-          const floored = clocheFramingFloor(framing, { cast: alone, plainFull: clocheFraming(shape, view) });
-          const herDepth = (candidate: ClocheFraming) => candidate.distance - FOLLOW_DIRECTION.dot(scratchFloor.set(alone.target.x - candidate.target.x, alone.target.y - candidate.target.y, alone.target.z - candidate.target.z));
-          if (herDepth(floored) < herDepth(framing)) framing = floored;
-        }
         framingRef.current = { key, framing };
       }
       const { target: middle, distance } = framingRef.current.framing;
