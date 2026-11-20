@@ -7,6 +7,32 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
+### B-076 — VR head walk: the legs seem to walk forward in every direction
+
+- **Area:** apps/capture (`VrBodySolver` gait)
+- **Severity:** P2
+- **Observed:** 2026-11-20 (owner, on a Quest: "When using headset movement, the legs are always moving forward,
+  even when lateral or backwards.")
+- **Evidence:** the IWER head walk at 1.14 m/s (ignored audit `output/motion-audit/direction.ts`, tag `before-dir`).
+  The recorded (forward) walk plays only forward and front-right, as decision 4 = B asks; every step lands within
+  8° of the travel. Sideways the feet trail the pelvis: hips 51 cm (left) and 45 cm (right) ahead of the feet's
+  midpoint, against 11 cm forward. The legs reach back under a body that slides sideways.
+- **Expected:** the feet step in the travel direction and stay under the pelvis in every direction.
+- **Reproduction:** `pnpm --filter @holoim/capture run test:xr:walk-direction`, head rows left and right.
+
+### B-077 — VR stick walk: the body and the legs are not vertically aligned
+
+- **Area:** apps/capture (`VrBodySolver.planRoot`, `MovementSystem`)
+- **Severity:** P1
+- **Observed:** 2026-11-20 (owner, on a Quest: "With stick, the body and the legs don't seem to be vertically
+  aligned.")
+- **Evidence:** full stick (1.83 m/s), audit tag `before-dir`. Forward: torso leans back 10.5° (neck 6 cm behind its
+  standing place), pelvis 13 cm ahead of the feet. The root ran 8 cm ahead of the tracked eyes in the travel
+  direction (backward too). Sideways the pelvis is 50–52 cm ahead of the feet; diagonals 41–45 cm ahead and 34–35 cm
+  aside. Desktop at the same speed: 12.5 cm, no lean.
+- **Expected:** the torso keeps its standing posture and the pelvis stays over the feet.
+- **Reproduction:** `pnpm --filter @holoim/capture run test:xr:walk-direction`, stick rows.
+
 ### B-073 — VR elbows point out or up, not down (fixed elbow hint)
 
 - **Area:** apps/capture (`ArmIkSolver`, `AvatarRig.createArmIkChain`)
