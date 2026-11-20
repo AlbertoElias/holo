@@ -65,23 +65,6 @@ export const WALK_SPEED_HEIGHTS_PER_SEC = 1.8;
 // stay planted at it, where the motor's top speed would be a jog (the owner's call for the keyboard on
 // 2026-11-13, and for the VR stick on 2026-11-20: at 3.24 m/s the VR body solver's feet dragged 0.85 m behind).
 export const WALK_HEIGHTS_PER_SEC = 1.0;
-// The stock avatar's leg (thigh plus shin) as a share of its height. The walk's speed was set on that avatar.
-export const WALK_REFERENCE_LEG_SHARE = 0.5072;
-// An avatar's walk speed follows its leg, within these limits (shares of the speed by height).
-const WALK_LEG_FACTOR_MIN = 0.8;
-const WALK_LEG_FACTOR_MAX = 1.1;
-
-/**
- * The walk's speed in avatar heights per second. It follows the leg, not the height: a shorter leg takes a shorter
- * stride, so at one height per second it steps faster than a walk (the house base read 150 steps a minute, the
- * stock avatar 128). The stock avatar's proportions give `WALK_HEIGHTS_PER_SEC` (the owner's call, 2026-11-20).
- * Without a measured leg the speed is by height.
- */
-export function walkHeightsPerSec(avatarHeight: number, legLength: number | undefined): number {
-  if (!legLength || !(avatarHeight > 0)) return WALK_HEIGHTS_PER_SEC;
-  const factor = legLength / avatarHeight / WALK_REFERENCE_LEG_SHARE;
-  return WALK_HEIGHTS_PER_SEC * Math.min(WALK_LEG_FACTOR_MAX, Math.max(WALK_LEG_FACTOR_MIN, factor));
-}
 
 export class CharacterMotor {
   private rapierWorld: import('@dimforge/rapier3d-compat').World | undefined;

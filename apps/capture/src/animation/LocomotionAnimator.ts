@@ -125,9 +125,6 @@ function parseTrackName(trackName: string): { nodeName: string; property: 'posit
 export class LocomotionAnimator {
   private mixer: THREE.AnimationMixer | null = null;
   private lowerBodyNames: ReadonlySet<string> | undefined;
-  /** Hip, knee and ankle of one leg, for `legLengthWorld`. */
-  private legBones: THREE.Object3D[] | undefined;
-  private readonly legPoints = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
   private armNames: ReadonlySet<string> | undefined;
   private rootMotionNames: ReadonlySet<string> | undefined;
   private readonly actionsByProfile: Record<LocomotionProfile, Partial<Record<LocomotionState, THREE.AnimationAction>>> = {
@@ -207,10 +204,7 @@ export class LocomotionAnimator {
     this.lowerBodyNames = undefined;
     this.armNames = undefined;
     this.rootMotionNames = undefined;
-    this.legBones = undefined;
     if (humanoid) {
-      const leg = (['leftUpperLeg', 'leftLowerLeg', 'leftFoot'] as const).map((b) => humanoid.bone(b));
-      if (leg.every((b) => b !== undefined)) this.legBones = leg as THREE.Object3D[];
       this.lowerBodyNames = LocomotionAnimator.boneKeys(humanoid, LOWER_BODY_BONES);
       this.armNames = LocomotionAnimator.boneKeys(humanoid, VRM_HUMANOID_BONES.filter((b) => /Shoulder|Arm|Hand|Thumb|Index|Middle|Ring|Little/.test(b)));
       this.rootMotionNames = new Set([...LocomotionAnimator.boneKeys(humanoid, ['hips']), 'armature', 'root']);
@@ -329,13 +323,6 @@ export class LocomotionAnimator {
     const duration = walk?.getClip().duration ?? 0;
     const phase = walk && duration > 0 ? (((walk.time / duration) % 1) + 1) % 1 : 0;
     return { gait: this.gait, walking, phase, stride: WALK_STRIDE_SCALE * this.strideShare };
-  }
-
-  /** The leg's length (thigh plus shin) in world metres; the walk's speed follows it (`walkHeightsPerSec`). */
-  legLengthWorld(): number | undefined {
-    if (!this.legBones) return undefined;
-    const [hip, knee, ankle] = this.legBones.map((b, i) => b.getWorldPosition(this.legPoints[i]!));
-    return hip!.distanceTo(knee!) + knee!.distanceTo(ankle!);
   }
 
   /** The planted foot's speed at time scale 1, in world metres per second (the avatar's scale applied). */
