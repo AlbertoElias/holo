@@ -191,11 +191,12 @@ const only = process.env.DESKTOP_MOTION_ONLY;
 const fixtures = (await generateAvatarFixtures(path.join(artifactDir, 'fixtures'))).filter((f) => SKELETONS.includes(f.name));
 // walkClip: what the binding report must say walks the avatar, so a fixture that failed to load
 // (and left the shipped avatar, which walks on its own clip) cannot pass for it.
+const defaultIsStock = (DEFAULT_AVATAR_URL as string) === STOCK_AVATAR_URL;
 const avatars: Array<{ name: string; url: string | null; walkClip: string; terrain?: boolean }> = [
   // The default avatar (the house base) has no clips of its own; the stock avatar, which the fixtures are made from, has.
-  { name: 'shipped', url: null, walkClip: DEFAULT_AVATAR_URL === STOCK_AVATAR_URL ? 'own' : 'retargeted' },
-  { name: 'shipped-terrain', url: null, walkClip: DEFAULT_AVATAR_URL === STOCK_AVATAR_URL ? 'own' : 'retargeted', terrain: true },
-  ...(DEFAULT_AVATAR_URL === STOCK_AVATAR_URL ? [] : [{ name: 'stock', url: STOCK_AVATAR_URL, walkClip: 'own' }]),
+  { name: 'shipped', url: null, walkClip: defaultIsStock ? 'own' : 'retargeted' },
+  { name: 'shipped-terrain', url: null, walkClip: defaultIsStock ? 'own' : 'retargeted', terrain: true },
+  ...(defaultIsStock ? [] : [{ name: 'stock', url: STOCK_AVATAR_URL, walkClip: 'own' }]),
   ...fixtures.map((f) => ({ name: f.name, url: `/${path.relative(process.cwd(), f.file).split(path.sep).join('/')}`, walkClip: f.expect.ownClips ? 'own' : 'retargeted' }))
 ].filter((a) => !only || a.name.includes(only));
 const lost = SKELETONS.filter((name) => !fixtures.some((f) => f.name === name));
