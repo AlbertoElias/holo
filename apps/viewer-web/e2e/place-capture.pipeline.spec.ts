@@ -458,17 +458,24 @@ function exportSummary(glb: Buffer): unknown {
 const storedPlace = (page: Page) => page.evaluate(() => (window as unknown as { __HOLOIM_STORED_PLACE__?: StoredPlaceReport }).__HOLOIM_STORED_PLACE__ ?? null);
 const outsideNow = (page: Page) => page.evaluate(() => (window as unknown as { __HOLOIM_STORED_PLACE_OUTSIDE__: () => { outside: number; shown: number } }).__HOLOIM_STORED_PLACE_OUTSIDE__());
 
+type SeekProbe = { actions: Record<string, { time: number } | null>; mixer: { update: (delta: number) => void }; renderer: { info: { render: { frame: number } } } };
+
+/** Seeks the card's take, then waits for two frames drawn after it, so every probe the frame writes reads the new time. */
 async function seek(page: Page, modelPath: string, seconds: number): Promise<void> {
-  await page.evaluate(([target, time]) => {
-    const probes = (window as unknown as { __portalProbes: Record<string, { actions: Record<string, { time: number } | null>; mixer: { update: (delta: number) => void } }> }).__portalProbes;
+  const from = await page.evaluate(([target, time]) => {
+    const probes = (window as unknown as { __portalProbes: Record<string, SeekProbe> }).__portalProbes;
     const probe = Object.entries(probes).find(([url]) => url.endsWith(target as string))![1];
     for (const action of Object.values(probe.actions)) if (action) action.time = time as number;
     probe.mixer.update(0);
+    return probe.renderer.info.render.frame;
   }, [modelPath, seconds] as const);
-  await page.waitForTimeout(300);
+  await page.waitForFunction(([target, from]) => {
+    const probes = (window as unknown as { __portalProbes: Record<string, SeekProbe> }).__portalProbes;
+    return Object.entries(probes).find(([url]) => url.endsWith(target as string))![1].renderer.info.render.frame >= (from as number) + 2;
+  }, [modelPath, from] as const);
 }
 
-type Ink = { referent: string; ink: { from: Vec3; to: Vec3 } | null };
+type Ink = { index: number; referent: string; ink: { from: Vec3; to: Vec3 } | null };
 const inks = (page: Page, modelPath: string) => page.evaluate((target) => {
   const probes = (window as unknown as { __portalProbes: Record<string, { pointing: { links: Ink[] } }> }).__portalProbes;
   return JSON.parse(JSON.stringify(Object.entries(probes).find(([url]) => url.endsWith(target))![1].pointing.links)) as Ink[];
@@ -695,7 +702,9 @@ test.describe("slice 2a: a take recorded inside a scanned place on the desktop",
     await shot(page, uploaded.id, "room-end");
 
     // The pointing links play back where the rays landed.
-    const marks = json.extensions?.HOLOIM_meaning?.marks.filter((mark) => mark.kind === "link" && mark.anchor.to.node === placeIndex) ?? [];
+    // The viewer numbers its links in the record's order of link marks.
+    const linkMarks = json.extensions?.HOLOIM_meaning?.marks.filter((mark) => mark.kind === "link") ?? [];
+    const marks = linkMarks.filter((mark) => mark.anchor.to.node === placeIndex);
     expect(marks.length, "a link to the place for each hold").toBe(2);
     const landings = [take.holds.faint.landing, take.holds.opaque.landing];
     for (const [index, mark] of marks.entries()) {
@@ -703,8 +712,10 @@ test.describe("slice 2a: a take recorded inside a scanned place on the desktop",
       const hit = new Vector3(...landings[index]!);
       expect(stored.distanceTo(hit), `link ${index}: the stored end is the hit`).toBeLessThan(LINK_TOLERANCE);
       await seek(page, uploaded.url, (mark.span.start + mark.span.end) / 2);
-      // The previous link's line fades out after the seek; read this one's once it draws alone.
-      await expect.poll(async () => (await inks(page, uploaded.url)).filter((link) => link.ink).length, { timeout: 15_000 }).toBe(1);
+      // The previous link's line fades out after the seek; read this one's once it draws alone. Match it by its index:
+      // a frame drawn before the seek still holds the previous link alone, and its end is 1.39 m from this hit (B-071).
+      const viewerIndex = linkMarks.indexOf(mark);
+      await expect.poll(async () => (await inks(page, uploaded.url)).filter((link) => link.ink).map((link) => link.index), { timeout: 15_000, message: `only link ${index} draws` }).toEqual([viewerIndex]);
       const drawn = (await inks(page, uploaded.url)).find((link) => link.ink)!;
       const played = new Vector3(...drawn.ink!.to);
       const expected = hit.clone().applyMatrix4(modelWorld);

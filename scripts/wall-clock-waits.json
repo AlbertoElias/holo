@@ -21,7 +21,7 @@
   "apps/viewer-web/e2e/cloche-rim.spec.ts": 4,
   "apps/viewer-web/e2e/hologram-feed.spec.ts": 3,
   "apps/viewer-web/e2e/object.pipeline.spec.ts": 5,
-  "apps/viewer-web/e2e/place-capture.pipeline.spec.ts": 3,
+  "apps/viewer-web/e2e/place-capture.pipeline.spec.ts": 2,
   "apps/viewer-web/e2e/place.spec.ts": 2,
   "apps/viewer-web/e2e/pointing.pipeline.spec.ts": 1,
   "apps/viewer-web/e2e/portal-helpers.ts": 1,

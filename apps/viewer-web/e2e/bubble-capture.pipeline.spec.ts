@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 
-import { freezePageClock, waitForIwerSession } from "@holoim/tooling-testing/xr-env";
+import { freezePageClock, resumePageClock, waitForIwerSession } from "@holoim/tooling-testing/xr-env";
 
 import { resolve } from "node:path";
 import type { Probe } from "./ar-bubble-types";
@@ -131,7 +131,12 @@ test("real capture bubble exports, uploads and draws in feed and immersive AR", 
     expect(rimState.maxLift, "a flat take does not lift").toBeLessThanOrEqual(0.05);
   }
   await pauseTake(page, false);
+  // The playing take keeps a busy runner's page so slow that a click's checks (visible, stable, not covered) outlast
+  // the 4 s the reach controls stay out after a cursor move, and the press then always meets them folded (B-072).
+  // The fold timer runs on the page clock: hold it while the press is made, then let the take play on.
+  await freezePageClock(page);
   await pressViewInAr(page, card);
+  await resumePageClock(page);
   // The IWSDK shell, the default: it enters at once, or offers its entry button.
   const xrView = page.locator(".xr-view-container");
   await expect(xrView).toHaveAttribute("data-xr-state", /ready|immersive/, { timeout: 20_000 });
