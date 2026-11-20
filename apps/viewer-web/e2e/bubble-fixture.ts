@@ -167,16 +167,18 @@ export function chartTakeGltf(chartAt: readonly [number, number]): Buffer {
 /**
  * The chart take's performer on a flat recorded set `width` metres square
  * (no recorded object): a wide set widens the dome as a scanned or default
- * scene does on a phone take.
+ * scene does on a phone take. With `walk`, she walks that many metres to her
+ * side and back over the take's two seconds.
  */
-export function setTakeGltf(width: number): Buffer {
+export function setTakeGltf(width: number, { walk = 0 }: { walk?: number } = {}): Buffer {
   return unlitGlb((attribute, primitive) => {
     const meshes = [
       { primitives: [primitive(new BoxGeometry(0.5, 1.8, 0.3).translate(0, 0.9, 0), 0)] },
       { primitives: [primitive(new BoxGeometry(width, 0.1, width).translate(0, -0.05, 0), 1)] }
     ];
     const input = attribute(new Float32Array([0, 1, 2]), 1);
-    const output = attribute(new Float32Array([-0.05, 0, 0, 0.05, 0, 0, -0.05, 0, 0]), 3);
+    const reach = walk > 0 ? walk / 2 : 0.05;
+    const output = attribute(new Float32Array([-reach, 0, 0, reach, 0, 0, -reach, 0, 0]), 3);
     return {
       scenes: [{ nodes: [0, 1] }],
       nodes: [{ name: "RecordedAvatar", mesh: 0 }, { name: "RecordedSet", mesh: 1 }],

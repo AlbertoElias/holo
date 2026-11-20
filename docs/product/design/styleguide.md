@@ -391,11 +391,17 @@ enter.
   space between the title and the controls) at 78% of its size, from 18°
   right of front and 16° above. Return frames it again. The performer comes
   first: a recorded object far from her, or a recorded set wider than her
-  reach (a phone take's scene), widens the dome and would shrink her. The
-  camera stops pulling back when she would fall below 75% of her own size, as
-  a dome fitted to her and her reach alone frames her
-  (`edge.cloche.performerFloor`), and centres between her and the dome, so the
-  far object or the set's edge may sit partly or wholly off the card.
+  reach (a phone take's scene), widens the dome and would shrink her. Her own
+  size is her body and her reach over the take framed alone, with no dome
+  around them, at 78% of the viewing box. The camera stops pulling back when
+  she would fall below 75% of that (`edge.cloche.performerFloor`), and centres
+  between her and the dome, so the far object, the set's edge and the dome's
+  own shoulders may sit partly or wholly off the card. Revised 2026-11-20,
+  after a lone performer on a phone take stood under a fifth of the screen:
+  she now stands a third of a phone's height or more, her head and feet on
+  the card for the whole take; a performer who walks far is smaller, by as
+  much as her walk is wider than her. A take with no performer (a camera
+  take) frames the whole dome.
 - **Never exported.** The GLB never holds the cloche; every renderer fits it
   from the same rules (`fitCloche`, `@holoim/xr-ui-core`).
 

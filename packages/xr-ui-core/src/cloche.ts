@@ -137,6 +137,33 @@ export function clocheFraming(shape: ClocheShape, { fovY, aspect, direction = cl
     y: shape.base.y + shape.radii.y / 2,
     z: shape.base.z
   };
+  return framePoints(points, target, { fovY, aspect, direction, frameShare });
+}
+
+/**
+ * The Follow view of the points themselves, with no dome around them: the
+ * camera on `direction` from the middle of their box, just far enough that
+ * every point is inside the viewing box at `frameShare` of its size. The
+ * performer's own size on the card (the performer floor, 3.4) is her body
+ * and her reach over the take framed so. Null with no points.
+ */
+export function pointsFraming(points: readonly Vector3Like[], { fovY, aspect, direction = clocheFollowDirection(), frameShare = cloche.frameShare }: { fovY: number; aspect: number; direction?: Vector3Like; frameShare?: number }): ClocheFraming | null {
+  if (points.length === 0) return null;
+  const min = { x: Infinity, y: Infinity, z: Infinity };
+  const max = { x: -Infinity, y: -Infinity, z: -Infinity };
+  for (const point of points) {
+    min.x = Math.min(min.x, point.x);
+    min.y = Math.min(min.y, point.y);
+    min.z = Math.min(min.z, point.z);
+    max.x = Math.max(max.x, point.x);
+    max.y = Math.max(max.y, point.y);
+    max.z = Math.max(max.z, point.z);
+  }
+  const target = { x: (min.x + max.x) / 2, y: (min.y + max.y) / 2, z: (min.z + max.z) / 2 };
+  return framePoints(points, target, { fovY, aspect, direction, frameShare });
+}
+
+function framePoints(points: readonly Vector3Like[], target: Vector3Like, { fovY, aspect, direction, frameShare }: { fovY: number; aspect: number; direction: Vector3Like; frameShare: number }): ClocheFraming {
   const forward = normalize(direction);
   // right = up × forward, up' = forward × right (a camera that never rolls).
   const right = normalize({ x: forward.z, y: 0, z: -forward.x });

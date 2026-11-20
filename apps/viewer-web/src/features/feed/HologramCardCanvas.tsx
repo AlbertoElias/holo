@@ -18,7 +18,7 @@ import {
 import type { AnimationAction, Group, Mesh, Object3D, PointLight, SkinnedMesh } from "three";
 import { tokens } from "@holoim/design-tokens";
 import type { ObjectCredit } from "@holoim/objects";
-import { clocheFollowDirection, clocheFraming, clocheFramingFloor, clocheInside, fitCloche, stageLight, type ClocheFraming, type ClocheShape, type SootInput, type ViewTarget } from "@holoim/xr-ui-core";
+import { clocheFollowDirection, clocheFraming, clocheFramingFloor, clocheInside, fitCloche, pointsFraming, stageLight, type ClocheFraming, type ClocheShape, type SootInput, type ViewTarget } from "@holoim/xr-ui-core";
 import { Cloche } from "@holoim/xr-ui-r3f";
 import { ClocheRimTexture } from "@holoim/xr-ui-three";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
@@ -375,7 +375,7 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
   // The dome fitted to the cast alone, only for a take with recorded objects: the performer's size without them (the far-object floor).
   const castClocheRef = useRef<ClocheShape | null>(null);
   // The dome fitted to the performer and her reach alone, for a performer's take: her own size, so a wide recorded set cannot shrink her either.
-  const performerClocheRef = useRef<ClocheShape | null>(null);
+  const performerPointsRef = useRef<Vector3[] | null>(null);
   const clocheShift = useRef(new Vector3()).current;
   const fittedCentre = useRef<Vector3 | null>(null);
   const frameRectRef = useRef(frameRect);
@@ -447,11 +447,11 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
       const castPoints = [...drawnPoints(clonedScene, bubble, undefined, without), ...motionPoints(clonedScene, animations, { anchor, bubble, ...without })];
       castClocheRef.current = fitCloche(castPoints, { floorY: isCameraTake(clonedScene) ? clonedScene.getWorldPosition(new Vector3()).y : undefined });
     }
-    performerClocheRef.current = null;
+    performerPointsRef.current = null;
     const performer = isCameraTake(clonedScene) ? undefined : clonedScene.getObjectByName("RecordedAvatar");
     if (performer) {
       const performerPoints = [...drawnPoints(performer, bubble), ...motionPoints(clonedScene, animations, { anchor, bubble, only: performer })];
-      performerClocheRef.current = fitCloche(performerPoints);
+      performerPointsRef.current = performerPoints;
     }
     setCloche(shape);
     // A scanned place replaces the recorded set: the dome was fitted with the set in, so it is the same dome, and the set is hidden after.
@@ -881,11 +881,11 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
         // A far recorded object must not shrink her below the floor: the camera stops pulling back (the far-object rule, 3.4).
         const castShape = castClocheRef.current;
         if (castShape) framing = clocheFramingFloor(framing, { cast: clocheFraming(castShape, view), plainFull: clocheFraming(shape, view) });
-        // Nor may the recorded set: the floor holds against her own size, the dome fitted to her and her reach alone (3.4).
+        // Nor may the recorded set: the floor holds against her own size, her body and her reach over the take framed
+        // with no dome around them (3.4), so her head and feet stay on the card for the whole take.
         // Each floor sets its own distance, so the one that keeps her nearer wins.
-        const performerShape = performerClocheRef.current;
-        if (performerShape) {
-          const alone = clocheFraming(performerShape, view);
+        const alone = performerPointsRef.current ? pointsFraming(performerPointsRef.current, view) : null;
+        if (alone) {
           const floored = clocheFramingFloor(framing, { cast: alone, plainFull: clocheFraming(shape, view) });
           const herDepth = (candidate: ClocheFraming) => candidate.distance - FOLLOW_DIRECTION.dot(scratchFloor.set(alone.target.x - candidate.target.x, alone.target.y - candidate.target.y, alone.target.z - candidate.target.z));
           if (herDepth(floored) < herDepth(framing)) framing = floored;
