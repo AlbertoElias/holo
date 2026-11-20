@@ -1,5 +1,6 @@
 import { createSystem } from '@iwsdk/core';
 import * as THREE from 'three';
+import type { JumpPhase } from '../animation/JumpArms';
 import { KEYBOARD_WALK_HEIGHTS_PER_SEC, WALK_SPEED_HEIGHTS_PER_SEC } from '../physics/CharacterMotor';
 import { type CaptureContext, captureContext } from './captureContext';
 
@@ -24,6 +25,8 @@ export class BodyPoseSystem extends createSystem() {
   /** The wind-up's last bend and the seconds since: the launch frame can still read grounded, so it holds the squat. */
   private windupBend = 0;
   private sinceWindup = Infinity;
+  /** This frame's jump timing, for the arms' recorded swing. */
+  private readonly phase: JumpPhase = { windup: 0, airborne: false, velocityY: 0, launchSpeed: 0 };
 
   init(): void {
     this.capture = captureContext(this.world);
@@ -59,6 +62,7 @@ export class BodyPoseSystem extends createSystem() {
     }
     if (frame.bodyTracking) {
       body.posed = true;
+      c.jumpArms.reset();
       body.solver.solve(body.head, avatar.avatarRoot.position, deltaSec, body.groundSampler, c.config.embodyOffset, character.grounded);
     } else if (!body.active) {
       // A reach plants the feet where they stood when it began, from the first bend to the end of the stand-up.
@@ -79,7 +83,12 @@ export class BodyPoseSystem extends createSystem() {
       if (!frame.vrActive) {
         // An arm the point or the carry holds is theirs to aim (they run after this, from the pose they found).
         const pointing = c.point.ownedSide();
-        c.armClearance.apply(avatar.humanoid, { left: pointing === 'left', right: pointing === 'right' || c.objects.carry.getWeight() > 0 });
+        const owned = { left: pointing === 'left', right: pointing === 'right' || c.objects.carry.getWeight() > 0 };
+        this.phase.velocityY = character.velocityY;
+        this.phase.launchSpeed = c.motor.jumpLaunchSpeed;
+        c.armClearance.restore(avatar.humanoid);
+        c.jumpArms.update(avatar.humanoid, deltaSec, this.phase, owned);
+        c.armClearance.apply(avatar.humanoid, owned);
       }
     }
   }
@@ -109,15 +118,24 @@ export class BodyPoseSystem extends createSystem() {
       this.sinceTakeoff = 0;
       this.takeoffBend = this.lastBend;
     } else this.sinceTakeoff += Math.max(0, deltaSec);
+    const phase = this.phase;
+    phase.windup = 0;
+    // A jump's throw starts with the feet leaving the ground; a step off a ledge (or a bump on a slope that lifts the
+    // feet for a frame or two) only once the fall has lasted, so walking over terrain does not flick the arms.
+    phase.airborne = !grounded && (this.sinceWindup + this.sinceTakeoff < JUMP_THROW_SEC || this.sinceTakeoff >= FALL_ARMS_SEC);
     if (this.capture.frame.vrActive) return 0;
     const windup = motor.jumpWindup;
     if (windup > 0) {
       this.sinceWindup = 0;
       this.windupBend = JUMP_WINDUP_DEPTH * THREE.MathUtils.smoothstep(windup, 0, 1);
+      phase.windup = windup;
       return this.windupBend;
     }
     this.sinceWindup += Math.max(0, deltaSec);
-    if (grounded && this.sinceWindup < LAUNCH_GRACE_SEC) return this.windupBend;
+    if (grounded && this.sinceWindup < LAUNCH_GRACE_SEC) {
+      phase.windup = 1;
+      return this.windupBend;
+    }
     if (!grounded) {
       if (this.sinceTakeoff < PUSH_OFF_SEC) return this.takeoffBend * (1 - THREE.MathUtils.smoothstep(this.sinceTakeoff, 0, PUSH_OFF_SEC));
       const rise = THREE.MathUtils.smoothstep(this.sinceTakeoff, PUSH_OFF_SEC, PUSH_OFF_SEC + TUCK_IN_SEC);
@@ -139,6 +157,10 @@ const PUSH_OFF_SEC = 0.12;
 const TUCK_IN_SEC = 0.15;
 const LAUNCH_GRACE_SEC = 0.1;
 const JUMP_TUCK_DEPTH = 0.3;
+// The arms' throw belongs to a jump whose wind-up ended within this long of the take-off; any other fall raises
+// them only after FALL_ARMS_SEC in the air.
+const JUMP_THROW_SEC = 0.5;
+const FALL_ARMS_SEC = 0.25;
 // A landing at LANDING_FULL_SPEED (m/s, a jump's own touch-down) dips to LANDING_DEPTH; slower ones less, down to
 // LANDING_MIN_PEAK of it, and a step down slower than LANDING_MIN_SPEED not at all.
 const LANDING_FULL_SPEED = 3.4;

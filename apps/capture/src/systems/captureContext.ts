@@ -2,6 +2,7 @@ import type * as THREE from 'three';
 import type { World } from '@iwsdk/core';
 import type { LocomotionAnimator } from '../animation/LocomotionAnimator';
 import type { ArmClearance } from '../animation/ArmClearance';
+import type { JumpArms } from '../animation/JumpArms';
 import type { TerrainLegSolver } from '../animation/TerrainLegSolver';
 import type { AvatarRig } from '../avatar/AvatarRig';
 import type { BodyTracking } from '../body/BodyTracking';
@@ -73,6 +74,8 @@ export interface CaptureContext {
   terrainLegs: TerrainLegSolver;
   /** Opens the desktop arms just enough to clear the hips and torso. */
   armClearance: ArmClearance;
+  /** The desktop arms through a jump, from the recorded Leap (the jump clips move only the legs). */
+  jumpArms: JumpArms;
   ar: ArSpectator;
   ui: UIStateStore;
   vrChrome: VrChrome;
