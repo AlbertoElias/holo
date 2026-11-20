@@ -31,7 +31,7 @@ import { copyFile, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/pro
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { BUILDS, CLOTHING, EYES, FINISHES, GLASSES, HAIR_COLOUR, HAIR_STYLES, parseLook, SKIN } from '@holoim/avatar-look';
+import { BUILDS, CLOTHING, EYES, FINISHES, GLASSES, HAIR_COLOUR, HAIR_STYLES, SKIN } from '@holoim/avatar-look';
 
 import { actingReport, diffTakes, summarize } from './acting-report.ts';
 import { bodyLine, build, loadSheet, OBJECT_LIMITS, resolveAvatar } from './direct.ts';
@@ -285,10 +285,11 @@ async function readingRow(reviewDir: string): Promise<Row> {
   let c: { beats: { beat: string; intent: string | null; seen: string | null; reads: boolean | null; revise: string | null }[]; piece?: { reads: boolean | null } };
   try { c = JSON.parse(await readFile(file, 'utf8')); } catch { return { id: 'reading', bar: 'a fresh reader reads every beat', value: 'no review', pass: null, fix: 'run without --quick to make the review pack' }; }
   const beats = c.beats.filter((b) => b.intent);
+  if (!beats.length) return { id: 'reading', bar: 'a fresh reader reads every beat', value: 'no beat has an intent', pass: false, fix: 'give every beat an "intent" (what a reader should see) and run make.ts again' };
   const unread = beats.filter((b) => b.reads === null);
   const missed = beats.filter((b) => b.reads === false);
-  if (unread.length) {
-    return { id: 'reading', bar: 'a fresh reader reads every beat', value: `${beats.length - unread.length} of ${beats.length} graded`, pass: null,
+  if (unread.length || (c.piece && c.piece.reads === null)) {
+    return { id: 'reading', bar: 'a fresh reader reads every beat', value: `${beats.length - unread.length} of ${beats.length} graded${c.piece?.reads === null ? ', the piece not graded' : ''}`, pass: null,
       fix: `give a fresh reader only ${rel(join(reviewDir, 'reader'))}/ (its README.md says what to answer), save the account as ${rel(join(reviewDir, 'reader.md'))}, have a fresh grader fill seen/reads/revise in ${rel(file)} from it, then run make.ts verdict ${rel(dirname(reviewDir))}` };
   }
   return { id: 'reading', bar: 'a fresh reader reads every beat', value: `${beats.length - missed.length} of ${beats.length} beats read${c.piece?.reads === false ? '; the piece as a whole did not' : ''}`,
@@ -336,10 +337,11 @@ async function make(sheetFile: string, quick: boolean): Promise<boolean> {
   // 1. The sheet: read it and check it before anything is solved.
   let sheet: BeatSheet;
   try { sheet = parseSheetText(await readFile(sheetFile, 'utf8'), rel(sheetFile)); } catch (e) { console.error(`FIX THE SHEET: ${(e as Error).message}`); return false; }
-  const problems = validateSheet(sheet);
+  // A missing array (no "beats", a beat without "directions") is a sheet problem, not a crash.
+  let problems: string[];
+  try { problems = validateSheet(sheet); } catch (e) { console.error(`FIX THE SHEET (${rel(sheetFile)}): ${(e as Error).message}; compare it with make.ts new <name>, which writes every field`); return false; }
   for (const p of sheet.performers ?? []) {
-    if (houseFinish(p.avatar) && p.look) { try { parseLook(p.look, `performer ${p.id} look`); } catch (e) { problems.push(`${(e as Error).message} (make.ts words lists every value)`); } }
-    else if (houseFinish(p.avatar)) notes.push(`performer ${p.id} has no look: it wears the house default; add a "look" card to customise it (make.ts words)`);
+    if (houseFinish(p.avatar) && !p.look) notes.push(`performer ${p.id} has no look: it wears the house default; add a "look" card to customise it (make.ts words)`);
   }
   for (const b of sheet.beats ?? []) if (!b.intent) notes.push(`beat ${b.id} has no intent: the reader cannot be checked against it`);
   if (problems.length) {
@@ -348,7 +350,7 @@ async function make(sheetFile: string, quick: boolean): Promise<boolean> {
   }
   let { dir, previous } = await versionDir(sheetFile);
   // A full run after a --quick one of the same sheet finishes that version rather than making an identical next one.
-  if (!quick && previous && !(await stat(join(previous, 'review')).then(() => true, () => false))) {
+  if (!quick && previous && !(await stat(join(previous, 'review', 'reader', 'review.mp4')).then(() => true, () => false))) {
     const before = await readFile(join(previous, basename(sheetFile)), 'utf8').catch(() => null);
     if (before === (await readFile(sheetFile, 'utf8'))) {
       dir = previous;

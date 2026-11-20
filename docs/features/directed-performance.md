@@ -3513,6 +3513,73 @@ title. A proof video (card on the feed after the command) was sent to the
 owner. The Quick Look preview wait was not exercised (the check API has the
 converter off); it is `upload.mjs`'s unchanged code.
 
+### Slice 7 evidence (2026-11-20): three fresh agents, one skill each
+
+Three fresh subagents got only `.agents/skills/hologram-authoring/SKILL.md`, a one-line
+idea and a look each. Each had at most three revisions after its first full review.
+The readers and graders were fresh `sonnet` subagents run by the lead, because a
+subagent cannot start its own. No bar changed. All three pieces wear the house base that
+was on `main` on 2026-11-20, which is the old face the owner rejected as uncanny; the
+face-match work (`feature/house-face-match`) had not landed. Nothing was published. The
+pieces stay as local files under `apps/capture/output/authoring/pieces/` for the owner to
+choose from.
+
+| Piece | Look | First sheet | Versions | Revisions | Final | Face box | Objects | Size | Quick Look | Beats read | Piece reads |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `baker` (pride in a loaf) | slight, porcelain, highBun copper, house:light | built; the put missed until v8 | 13 | 3 | v13 | 48.1 px | put 6.4 mm, 0.4° | 1.08 MB | pass | 5 of 6 | no ("showing and sniffing a loaf"; pride not named) |
+| `shrug-it-off` (a slip laughed off) | broad, espresso, shortTwists silver, house:ink | built, every bar passed | 7 | 3 | v7 | 44.4 px | none | 1.46 MB | pass | 2 of 4 (shrug, laugh) | yes ("awkward to easy and cheerful") |
+| `the-stone` (a stone given as a gift) | medium, goldenSand, centrePart chestnut, house:clay | built; the grip missed until v16 | 23 | 3 | v20 | 40.3 px | grip 0.2 mm, 2.5° | 1.16 MB | pass | 4 of 5 (offer missed) | no |
+
+So no piece is DONE: every final passes the face, object, size and Quick Look bars, and
+every final fails the blind reading on at least one beat. Notes per run:
+
+- `the-stone` v21 moved the stone further forward to make the offer plain; the face fell
+  to 38.4 px. v23 (revision 3) fell to 38.9 px. So v20 stays its best version. *Decided by
+  the agent in the owner's absence, for review:* v20, not the last version, is the
+  stone's final.
+- `shrug-it-off` read 1 of 4 beats at v2 and v3 and 2 of 4 at v5 and v7. The laugh read
+  only once it was acted with face channels (`jawOpen` with a smile), not with the named
+  expressions. `body.me` notes a joint-limit share (advisory, not a bar).
+- `baker` read 3 to 5 of its beats over four reviews; the grader at v13 counted `proud` as
+  read but the piece as not read, because the reader never named pride.
+- The same sheet can read differently between two readers (shrug v5 and v7 have the same
+  beats read; baker moved between 3 and 5 with small changes).
+
+Frictions found by the runs and fixed in this slice: the grip fit crashed on a `grip`
+kind and now prints the best edit it finds; a wrong field on a direction (`hand`, `to`)
+crashed the build and is now named with the fields that direction takes; `words` lists
+the face channels; the reader prompt extracts PNG frames, since `preview.mjs` folder mode
+reads PNG only; a full run after `--quick` made a new identical version, because `--quick`
+already writes `review/`, and now finishes that version.
+
+The code review of this slice found three more, now fixed: the reading bar passed with no
+beat intent or an ungraded piece (now it fails or waits); two reviews started together
+could take the same viewer ports (each now claims its pair with a lock directory in the
+system temp folder); and a sheet with no `beats` or `directions` crashed (now it prints
+FIX THE SHEET).
+
+Weaknesses that stay open:
+
+- A notice or look beat from a start that already faces the viewer shows almost no change
+  on the card.
+- No named laugh: only face channels give one.
+- A held object keeps the grip pose, and a push toward the camera barely shows on the card.
+- Objects far in front widen the dome and shrink the face under 40 px; the face margin is
+  thin (stone 38.4 to 40.3 px).
+- make.ts fits a grip by the object's place and the palm, not the grip axis; a full review
+  takes 7 to 12 minutes of real time.
+- Outside this slice's files: copper hair on porcelain skin reads as bald at card size, and
+  the scalp shows through the top of the hair when the performer bends.
+- In stone v21 the stone passed into the chin.
+- `preview.mjs` writes its previews beside the image, so a reader leaves files in the
+  reader folder.
+- Graders are not always consistent, and an authoring agent sometimes rewrites a beat's
+  intent to make it more literal instead of changing the motion.
+
+Proof video (ignored, not committed): `output/agent-path-proof/agent-path-proof.mp4`. It
+shows the stone's run from the idea through six versions with their bar rows, then the
+three finals on the phone card.
+
 ### Slice 4a evidence (2026-11-18)
 
 Commands from `apps/capture` (each writes its report under the ignored

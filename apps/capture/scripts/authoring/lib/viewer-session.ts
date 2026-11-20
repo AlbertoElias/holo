@@ -10,7 +10,7 @@
  * apart is used (3351/3224, …), so two reviews can run side by side.
  */
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -64,15 +64,37 @@ async function answers(url: string): Promise<boolean> {
   try { await client.get(url, { timeout: 2000 }); return true; } catch { return false; } finally { await client.dispose(); }
 }
 
+/**
+ * Claims a port pair for this process with a lock directory, so two reviews
+ * started together do not both take a pair that nothing answers on yet. A lock
+ * whose process has ended is taken over.
+ */
+async function claimPorts(apiPort: number): Promise<(() => void) | undefined> {
+  const lock = join(tmpdir(), `holoim-viewer-${apiPort}.lock`);
+  const release = () => { void rm(lock, { recursive: true, force: true }); };
+  try { await mkdir(lock); } catch {
+    const pid = Number(await readFile(join(lock, 'pid'), 'utf8').catch(() => ''));
+    if (!pid) return undefined; // another run is writing its lock now
+    try { process.kill(pid, 0); return undefined; } catch { /* that run has ended: take its lock */ }
+    await writeFile(join(lock, 'pid'), String(process.pid));
+    return release;
+  }
+  await writeFile(join(lock, 'pid'), String(process.pid));
+  return release;
+}
+
 /** Starts the test API and the viewer test build; `close()` stops both, as does Ctrl-C. */
 export async function startViewer(): Promise<ViewerServers> {
   let API = '';
   let WEB = '';
+  let release: () => void = () => {};
   for (let k = 0; ; k += 1) {
     const api = `http://127.0.0.1:${API_PORT + 10 * k}`;
     const web = `https://localhost:${WEB_PORT + 10 * k}`;
-    const busy = (await answers(api)) ? api : (await answers(web)) ? web : undefined;
-    if (!busy) { API = api; WEB = web; break; }
+    const claimed = await claimPorts(API_PORT + 10 * k);
+    const busy = !claimed ? `${api} (claimed by another review)` : (await answers(api)) ? api : (await answers(web)) ? web : undefined;
+    if (claimed && busy) claimed();
+    if (!busy && claimed) { API = api; WEB = web; release = claimed; break; }
     if (PORTS_SET) throw new Error(`${busy} is already in use (another review, or one stopped with Ctrl-C): stop it, or set VIEWER_CHECK_API_PORT and VIEWER_CHECK_WEB_PORT to free ports`);
     if (k === 20) throw new Error(`no free viewer ports from ${API_PORT}/${WEB_PORT} upward in steps of 10: set VIEWER_CHECK_API_PORT and VIEWER_CHECK_WEB_PORT to free ports`);
   }
@@ -82,10 +104,10 @@ export async function startViewer(): Promise<ViewerServers> {
   const WEB_PORT_NOW = new URL(WEB).port;
   const api = start('api', 'pnpm', ['--filter', '@holoim/api', 'exec', 'tsx', '../../scripts/test-api.ts'], { TEST_API_PORT: API_PORT_NOW, WEB_ORIGIN: WEB, USDZ_WORKER_ENABLED: 'false' });
   const web = start('web', 'node', ['packages/tooling-testing/src/test-build.mjs', 'serve', 'web', '--', '--host', '0.0.0.0', '--port', WEB_PORT_NOW, '--strictPort'], { VITE_API_PROXY_TARGET: API, VITE_HMR_CLIENT_PORT: WEB_PORT_NOW });
-  const onSignal = () => { stop(api); stop(web); process.exit(130); };
+  const onSignal = () => { stop(api); stop(web); release(); process.exit(130); };
   process.once('SIGINT', onSignal);
   process.once('SIGTERM', onSignal);
-  const close = () => { stopping = true; process.off('SIGINT', onSignal); process.off('SIGTERM', onSignal); stop(api); stop(web); };
+  const close = () => { stopping = true; process.off('SIGINT', onSignal); process.off('SIGTERM', onSignal); stop(api); stop(web); release(); };
   try {
     await waitFor(`${API}/api/holograms?limit=1`, 120_000);
     await waitFor(WEB, 240_000);
