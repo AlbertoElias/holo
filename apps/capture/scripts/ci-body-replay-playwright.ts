@@ -205,9 +205,13 @@ async function replay(fileName: string, { faults = [], video = false, screenshot
   const motion = measureMotion(motionFrames);
   const withoutInput = !motionFrames.some((f) => f.input?.leftWrist || f.input?.rightWrist);
   const motionMisses = judgeMotion(motion, motionSource, { withoutInput }).filter((verdict) => !verdict.pass);
+  // A walk steps on the avatar's recorded walk (docs/features/archive/vr-recorded-walk.md),
+  // not only on the procedural steps.
+  const recordedSteps = frames.at(-1)?.body.solver.recordedSteps ?? 0;
+  const walkMisses = /walk/.test(label) && !faults.length && recordedSteps === 0 ? ['recordedSteps: 0 (the walk did not step on the recorded walk)'] : [];
   const report: BodyReport = {
     ...analysis,
-    failures: [...analysis.failures, ...motionMisses.map((v) => `motion ${v.metric}: ${v.value === null ? 'not measured' : +v.value.toFixed(3)} (target ${v.target.max !== undefined ? `≤ ${v.target.max}` : `≥ ${v.target.min}`})`)],
+    failures: [...analysis.failures, ...walkMisses, ...motionMisses.map((v) => `motion ${v.metric}: ${v.value === null ? 'not measured' : +v.value.toFixed(3)} (target ${v.target.max !== undefined ? `≤ ${v.target.max}` : `≥ ${v.target.min}`})`)],
     motion,
     label,
     frames: frames.length,
