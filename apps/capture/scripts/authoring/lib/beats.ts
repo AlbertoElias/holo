@@ -96,6 +96,8 @@ export type Direction = Timing & (
   | { readonly kind: 'reach'; readonly side: Side; readonly at: Point; /** Metres the palm stops short of `at`. */ readonly stopShort: number; readonly palm?: 'up' | 'down' | 'in' | 'toward' }
   | { readonly kind: 'hand'; readonly side: Side | 'both'; readonly shape: HandShapeName; readonly strength?: number }
   | { readonly kind: 'weight'; readonly toward: 'left' | 'right' | 'forward' | 'back'; /** 0..1, default 1 (about 6 cm). */ readonly amount?: number }
+  /** Bend forward from the waist, hips back and knees soft, as over a plant or a low table; the arms and the look are solved on the bent body. */
+  | { readonly kind: 'bend'; /** 0..1 of the deepest bend (`BEND` in `direct.ts`: 45° at the waist), default 0.7. */ readonly amount?: number }
   | { readonly kind: 'turn'; readonly degrees?: number; readonly toward?: Point; /** `upper` twists and comes back; `whole` turns the performer and stays. */ readonly body?: 'upper' | 'whole' }
   | { readonly kind: 'step'; readonly foot: Side; /** Metres in the performer's frame: [left, forward]. */ readonly by: readonly [number, number]; /** Bring the other foot alongside. */ readonly follow?: boolean }
   | { readonly kind: 'take'; readonly side: Side; readonly object: string; readonly palm?: 'up' | 'down' | 'in' | 'toward' }
@@ -111,6 +113,24 @@ export type Direction = Timing & (
   | { readonly kind: 'state'; readonly name: StateName; readonly strength?: number; /** What the state is about: the head turns to it. */ readonly at?: Point }
 );
 export type DirectionKind = Direction['kind'];
+
+/** Fields each direction kind takes (the type above, at run time), so a sheet with a wrong field name fails with the name. */
+const TIMING_FIELDS: readonly string[] = ['anticipation', 'attack', 'hold', 'settle', 'delay'];
+const DIRECTION_FIELDS = {
+  look: { required: ['at'], optional: ['head'] },
+  expression: { required: ['shape'], optional: ['strength'] },
+  reach: { required: ['side', 'at', 'stopShort'], optional: ['palm'] },
+  hand: { required: ['side', 'shape'], optional: ['strength'] },
+  weight: { required: ['toward'], optional: ['amount'] },
+  bend: { required: [], optional: ['amount'] },
+  turn: { required: [], optional: ['degrees', 'toward', 'body'] },
+  step: { required: ['foot', 'by'], optional: ['follow'] },
+  take: { required: ['side', 'object'], optional: ['palm'] },
+  put: { required: ['side', 'object'], optional: ['at', 'on'] },
+  aim: { required: ['side', 'at'], optional: [] },
+  gesture: { required: ['name'], optional: ['side', 'count', 'strength', 'at'] },
+  state: { required: ['name'], optional: ['strength', 'at'] },
+} as const satisfies Record<Direction['kind'], { required: readonly string[]; optional: readonly string[] }>;
 
 export interface Beat {
   readonly id: string;
@@ -251,12 +271,53 @@ export const EXPRESSIONS = {
 } as const satisfies Record<string, Partial<Record<FaceChannel, number>>>;
 export type ExpressionName = keyof typeof EXPRESSIONS;
 
+/**
+ * Reads a beat sheet's text: JSON, with `//` and `/* *\/` comments and
+ * trailing commas allowed (the starter sheet lists every choice in comments
+ * beside the field it is for). A syntax error names the line and column.
+ */
+export function parseSheetText(text: string, file = 'sheet'): BeatSheet {
+  let out = '';
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i]!;
+    if (ch === '"') {
+      let j = i + 1;
+      while (j < text.length && text[j] !== '"') j += text[j] === '\\' ? 2 : 1;
+      out += text.slice(i, j + 1);
+      i = j;
+    } else if (ch === '/' && text[i + 1] === '/') {
+      while (i < text.length && text[i] !== '\n') i += 1;
+      out += '\n';
+    } else if (ch === '/' && text[i + 1] === '*') {
+      const end = text.indexOf('*/', i + 2);
+      const skipped = text.slice(i, end === -1 ? text.length : end + 2);
+      out += skipped.replace(/[^\n]/g, ' ');
+      i += skipped.length - 1;
+    } else out += ch;
+  }
+  // A trailing comma (only space before the closing bracket); strings are matched first and kept as they are.
+  out = out.replace(/("(?:[^"\\]|\\.)*")|,(\s*[\]}])/g, (_m, str: string | undefined, close: string | undefined) => str ?? close!);
+  try {
+    return JSON.parse(out) as BeatSheet;
+  } catch (e) {
+    const at = /position (\d+)/.exec(String((e as Error).message));
+    if (!at) throw new Error(`${file}: not valid JSON: ${(e as Error).message}`);
+    const pos = Number(at[1]);
+    const before = out.slice(0, pos).split('\n');
+    const line = before.length;
+    const col = before[before.length - 1]!.length + 1;
+    const shown = text.split('\n')[line - 1] ?? '';
+    throw new Error(`${file}:${line}:${col}: not valid JSON (${(e as Error).message.replace(/ in JSON at position \d+.*$/, '')}):\n    ${shown.trim()}\n  check for a missing comma or quote at the end of this line or the one before it`);
+  }
+}
+
 export const DEFAULT_TIMING: Readonly<Record<DirectionKind, Required<Omit<Timing, 'delay' | 'hold'>>>> = {
   look: { anticipation: 0.08, attack: 0.35, settle: 0.5 },
   expression: { anticipation: 0, attack: 0.35, settle: 0.6 },
   reach: { anticipation: 0.25, attack: 0.75, settle: 0.8 },
   hand: { anticipation: 0, attack: 0.3, settle: 0.5 },
   weight: { anticipation: 0.2, attack: 0.6, settle: 0.7 },
+  bend: { anticipation: 0.2, attack: 0.8, settle: 0.8 },
   turn: { anticipation: 0.2, attack: 0.8, settle: 0.5 },
   step: { anticipation: 0.15, attack: 0.6, settle: 0.3 },
   take: { anticipation: 0.2, attack: 0.8, settle: 0.8 },
@@ -597,6 +658,12 @@ export function validateSheet(sheet: BeatSheet): string[] {
     for (const d of b.directions) {
       const where = `beat ${b.id} ${d.kind}`;
       if (!Object.hasOwn(DEFAULT_TIMING, d.kind)) { problems.push(`${where}: no direction kind ${d.kind} (${Object.keys(DEFAULT_TIMING).join(', ')})`); continue; }
+      const fields: { readonly required: readonly string[]; readonly optional: readonly string[] } = DIRECTION_FIELDS[d.kind];
+      const loose = d as unknown as Record<string, unknown>;
+      for (const k of Object.keys(loose)) {
+        if (k !== 'kind' && !TIMING_FIELDS.includes(k) && !fields.required.includes(k) && !fields.optional.includes(k)) problems.push(`${where}: no field ${k} (it takes ${[...fields.required, ...fields.optional].join(', ')})`);
+      }
+      for (const k of fields.required) if (loose[k] === undefined) problems.push(`${where}: needs ${k}`);
       const side = d.kind === 'step' ? d.foot : 'side' in d ? d.side : undefined;
       if (side !== undefined && side !== 'left' && side !== 'right' && !(d.kind === 'hand' && side === 'both')) problems.push(`${where}: side ${side} is left or right${d.kind === 'hand' ? ' or both' : ''}`);
       if (d.kind === 'expression' && typeof d.shape === 'object') {
@@ -614,6 +681,7 @@ export function validateSheet(sheet: BeatSheet): string[] {
       }
       if (d.kind === 'state' && !Object.hasOwn(STATES, d.name)) problems.push(`${where}: no state ${String(d.name)} (${Object.keys(STATES).join(', ')})`);
       if ((d.kind === 'gesture' || d.kind === 'state') && d.strength !== undefined && !(d.strength >= 0)) problems.push(`${where}: strength is 0 or more`);
+      if (d.kind === 'bend' && d.amount !== undefined && !(d.amount >= 0 && d.amount <= 1)) problems.push(`${where}: amount is 0 to 1 (1 is the deepest bend)`);
       if (d.kind === 'reach' && !(d.stopShort >= 0)) problems.push(`${where}: stopShort must be ≥ 0`);
       if (d.kind === 'turn' && d.degrees === undefined && d.toward === undefined) problems.push(`${where}: needs degrees or toward`);
       if ((d.kind === 'take' || d.kind === 'put') && !objects.has(d.object)) problems.push(`${where}: no object ${d.object}`);

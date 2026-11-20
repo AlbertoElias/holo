@@ -29,7 +29,7 @@ import { chromium, type Page } from 'playwright';
 
 import { resolveAvatar } from './direct.ts';
 import { loadAvatar } from './lib/avatar.ts';
-import { beatSpan, resolveTiming, type BeatSheet } from './lib/beats.ts';
+import { beatSpan, parseSheetText, resolveTiming } from './lib/beats.ts';
 import { faceGeometry, type FaceRegions } from './lib/face-geometry.ts';
 import { REVIEW_PAGE, SHEET_PAGE } from './lib/review-page.ts';
 import { openTake, startViewer, type ViewerServers } from './lib/viewer-session.ts';
@@ -81,7 +81,7 @@ async function main(): Promise<void> {
   const take = args[0];
   if (!take) { console.error('usage: face-legibility.ts <take.glb> [--sheet take.beats.json] [--out dir] [--tiles]'); process.exit(2); }
   const sheetFile = sheetArg ?? take.replace(/\.glb$/, '.beats.json');
-  const sheet = JSON.parse(await readFile(sheetFile, 'utf8')) as BeatSheet;
+  const sheet = parseSheetText(await readFile(sheetFile, 'utf8'), sheetFile);
   const performer = sheet.performers[0];
   if (!performer) throw new Error(`${sheetFile}: no performer`);
   const { regions } = faceGeometry(await loadAvatar(await resolveAvatar(performer.avatar, sheetFile, performer.look)));

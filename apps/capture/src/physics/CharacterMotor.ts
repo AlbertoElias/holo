@@ -59,11 +59,12 @@ interface CharacterMotorUpdateOptions {
   jumpWindupSec?: number;
 }
 
-/** Full movement speed, in avatar heights per second (VR stick; the keyboard walks slower, see MovementSystem). */
+/** The motor's top speed, in avatar heights per second; every input walks slower, see MovementSystem. */
 export const WALK_SPEED_HEIGHTS_PER_SEC = 1.8;
-// The keyboard walk is a brisk walk, one avatar height per second (1.8 m/s at 1.8 m): the shipped walk's
-// feet stay planted at it, where the full movement speed would be a jog (the owner's call, 2026-11-13).
-export const KEYBOARD_WALK_HEIGHTS_PER_SEC = 1.0;
+// The walk is a brisk walk, one avatar height per second (1.8 m/s at 1.8 m), on every input: the walk's feet
+// stay planted at it, where the motor's top speed would be a jog (the owner's call for the keyboard on
+// 2026-11-13, and for the VR stick on 2026-11-20: at 3.24 m/s the VR body solver's feet dragged 0.85 m behind).
+export const WALK_HEIGHTS_PER_SEC = 1.0;
 
 export class CharacterMotor {
   private rapierWorld: import('@dimforge/rapier3d-compat').World | undefined;
