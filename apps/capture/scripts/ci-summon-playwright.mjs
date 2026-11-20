@@ -5,6 +5,7 @@ import { chromium } from 'playwright';
 import { launchXrBrowser } from '@holoim/tooling-testing/xr-env';
 import { writeContactSheet } from '@holoim/tooling-testing/preview';
 
+import { runIwerLookTake } from './lib/look-take.mjs';
 import { VOICE_BROWSER_ARGS, runDesktopVoiceOrdersTake, runDesktopVoiceTake, runIwerFindTake, runIwerVoiceTake } from './lib/find-take.mjs';
 import { runDesktopFindTake, runDesktopSummonTake, runIwerHandsSummonTake, runIwerSummonTake } from './lib/summon-take.mjs';
 import { runIwerHandsPutBackTake, runIwerPutBackTake } from './lib/put-back-xr-take.mjs';
@@ -41,6 +42,8 @@ try {
     ['desktop', () => runDesktopSummonTake({ browser, baseUrl, captureRoot: process.cwd(), artifactDir, consoleErrors })],
     ['find', () => runDesktopFindTake({ browser, baseUrl, captureRoot: process.cwd(), artifactDir, consoleErrors })],
     ['headset-find', () => runIwerFindTake({ browser, baseUrl, captureRoot: process.cwd(), artifactDir, consoleErrors })],
+    // The house avatar's look in a headset (docs/features/your-look.md, slice 2).
+    ['headset-look', () => runIwerLookTake({ browser, baseUrl, artifactDir, consoleErrors })],
     ['headset-voice', async () => runIwerVoiceTake({ browser: await withMic(), baseUrl, captureRoot: process.cwd(), artifactDir, consoleErrors })],
     ['desktop-voice', async () => runDesktopVoiceTake({ browser: await withMic(), baseUrl, captureRoot: process.cwd(), artifactDir, consoleErrors })],
     // Voice's answer orders (B-062): a refused recognition with no recorder.

@@ -25,6 +25,9 @@ import { SpatialTick } from './SpatialTick';
 import { SystemKeyboard } from './systemKeyboard';
 import { XrTraySignifiers, type XrTraySignifiersProbe } from './XrTraySignifiers';
 import { VrFindPanel, type FindTargetId, type VrFindPanelProbe } from './VrFindPanel';
+import { VrLookPanel, type LookTargetId, type VrLookPanelProbe } from './VrLookPanel';
+import { VrMirror, type VrMirrorProbe } from './VrMirror';
+import type { HouseLook } from '../avatar/houseLook';
 import type { UIStateStore } from './UIStateStore';
 
 interface VrChromeDeps {
@@ -50,11 +53,19 @@ interface VrChromeDeps {
   getAvatarRoot: () => THREE.Object3D | null;
   /** When the open Ink trace began (simulation seconds), or null (PRD-023 v1). */
   getOpenTrace: () => { startSec: number; onSide?: VrHandSide } | null;
+  /** A pick on the headset look panel: the house avatar wears it (docs/features/your-look.md, slice 2). */
+  setLook: (next: HouseLook) => void;
+  /** Runs the mirror's draw with the first-person head shown; returns how many head meshes showed. */
+  withHeadShown: (draw: () => void) => number;
+  /** True when a first-person head mesh is visible to the eye now. */
+  headVisibleToEye: () => boolean;
 }
 
 /** VR and passthrough AR carry the same chrome; passthrough only raises the chip's opacity. */
 export type ChromeMode = 'vr' | 'ar';
 
+/** The mirror stands this far left of straight ahead and the look panel as far right, on the 1.5 m arc. */
+const LOOK_YAW_RAD = 0.36;
 /** After a commit the finger is still pulling back from chrome, not pointing. */
 const POKE_RELEASE_SEC = 0.5;
 /** Controller pulses: a light one on hover, a firmer one on commit. */
@@ -67,7 +78,7 @@ const SHADE_SEGMENTS = 32;
 
 type RowId = 'refit' | 'hand';
 /** What a check can aim at: the dock's glyphs, a settings row, or a Find panel target (`find:category:chairs`). */
-export type ChromeTarget = 'record' | 'find' | RowId | `find:${FindTargetId}`;
+export type ChromeTarget = 'record' | 'find' | 'look' | RowId | `find:${FindTargetId}` | `look:${LookTargetId}`;
 
 /** What the placement, label-distance and handedness reports read (`__sampleChrome`). */
 export interface VrChromeSnapshot {
@@ -79,6 +90,8 @@ export interface VrChromeSnapshot {
   panel: { visible: boolean; position: number[]; distanceFromHeadM: number; rows: Array<{ id: RowId; text: string; visible: boolean; enabled: boolean; distanceFromHeadM: number; hitHeightM: number }> } | null;
   /** The Find panel (PRD-060 slice 2) and the dock's Find glyph. */
   find: (VrFindPanelProbe & { mode: ChromeMode; dockGlyph: boolean; distanceFromHeadM: number }) | null;
+  /** The headset look step (docs/features/your-look.md, slice 2): its panel, its mirror, the dock's Look glyph, and whether the head shows to the eye. */
+  look: { panel: (VrLookPanelProbe & { distanceFromHeadM: number }) | null; mirror: (VrMirrorProbe & { distanceFromHeadM: number }) | null; dockGlyph: boolean; open: boolean; headVisibleToEye: boolean } | null;
   /** The tray's rings and the summon glyph on the reachable slot: one entry per slot (docs/features/archive/tray-everywhere.md). */
   tray: XrTraySignifiersProbe | null;
   rays: Array<{ side: Hand; visible: boolean; hit: string | null; origin: number[] }>;
@@ -139,6 +152,10 @@ export class VrChrome {
   private find: VrFindPanel | null = null;
   private findOpen = false;
   private placeFind = false;
+  private look: VrLookPanel | null = null;
+  private mirror: VrMirror | null = null;
+  private lookOpen = false;
+  private placeLook = false;
   /** The select holding Speak: its release, tracking loss or blur ends the hold. */
   private speakHold: { hand: Hand; source: XRInputSource; session: XRSession; end: () => void } | null = null;
   /** The tray's item count when a pick was made, so the panel can say it landed. */
@@ -180,8 +197,10 @@ export class VrChrome {
     if (mode !== this.mode) this.dockKey = '';
     this.mode = mode;
     this.find?.setChipOpacity(this.chipOpacity());
+    this.look?.setChipOpacity(this.chipOpacity());
     this.placePanel = true;
     this.closeFind();
+    this.closeLook();
     this.presentedFrames = 0;
     this.build();
     this.status?.reset();
@@ -199,10 +218,11 @@ export class VrChrome {
     this.dock?.setVisible(false);
     this.traySignifiers?.hide();
     this.closeFind();
+    this.closeLook();
   }
 
   private sdkRoots(): THREE.Object3D[] {
-    return [this.status, this.panel, this.dock, this.find].flatMap((part) => (part ? [part.entity.object3D!] : []));
+    return [this.status, this.panel, this.dock, this.find, this.look].flatMap((part) => (part ? [part.entity.object3D!] : []));
   }
 
   /** The status line, the world panel and the rays, once: the wrist is rebuilt per handedness and input. */
@@ -261,6 +281,42 @@ export class VrChrome {
     return this.find;
   }
 
+  /** The look panel and its mirror, built on first open. */
+  private buildLook(): VrLookPanel {
+    if (this.look) return this.look;
+    this.look = new VrLookPanel(this.deps.world, {
+      chipOpacity: this.chipOpacity(),
+      onChange: (next) => this.deps.setLook(next),
+      onClose: () => this.closeLook(),
+      canCommit: (pointerId) => !this.ownedElsewhere(pointerId),
+      onCommit: (pointerId) => this.committed(pointerId, 'ray'),
+      onHover: (pointerId, hovered) => hovered && this.pulsePointer(pointerId, PULSE_HOVER)
+    });
+    this.mirror = new VrMirror({ getAvatarRoot: this.deps.getAvatarRoot, withHeadShown: this.deps.withHeadShown });
+    this.root.add(this.mirror.group);
+    markChromeTree(this.root);
+    return this.look;
+  }
+
+  /** Look on the dock: the mirror and the look panel open on the arc; Find and the settings panel step aside (one world panel at a time). */
+  private openLook(): void {
+    if (this.lookOpen) {
+      this.closeLook();
+      return;
+    }
+    if (!this.deps.store.getState().houseLook) return;
+    this.closeFind();
+    this.buildLook();
+    this.lookOpen = true;
+    this.placeLook = true;
+  }
+
+  private closeLook(): void {
+    this.lookOpen = false;
+    this.look?.setVisible(false);
+    this.mirror?.setVisible(false);
+  }
+
   private chipOpacity(): number {
     return this.mode === 'ar' ? CHIP_OPACITY.arQuestPassthrough : CHIP_OPACITY.vr;
   }
@@ -311,6 +367,7 @@ export class VrChrome {
       this.closeFind();
       return;
     }
+    this.closeLook();
     this.buildFind();
     this.findOpen = true;
     this.placeFind = true;
@@ -345,6 +402,7 @@ export class VrChrome {
     });
     this.updatePanel(camera, state, recording);
     this.updateFind(camera, state);
+    this.updateLook(camera, state);
     // Rings and the summon glyph at the open tray's miniatures.
     this.traySignifiers?.update(camera, this.shown, true, state.tray, this.root);
     this.updatePoke(state.handedness);
@@ -363,6 +421,7 @@ export class VrChrome {
     if (status?.visible && status.text) labels.push({ name: 'status-line', text: status.text, distanceFromHeadM: new THREE.Vector3(...status.worldPosition).distanceTo(head) });
     for (const row of this.panel?.readableRows() ?? []) labels.push({ name: `panel-row-${row.id}`, text: row.text, distanceFromHeadM: world(row.object).distanceTo(head) });
     for (const label of this.find?.readableLabels() ?? []) labels.push({ name: `find-${label.id}`, text: label.text, distanceFromHeadM: world(label.object).distanceTo(head) });
+    for (const label of this.look?.readableLabels() ?? []) labels.push({ name: `look-${label.id}`, text: label.text, distanceFromHeadM: world(label.object).distanceTo(head) });
     const panel = this.panel?.probe();
     const recordHit = this.dock?.hitTarget('record');
     const dock = this.dock?.probe();
@@ -411,6 +470,15 @@ export class VrChrome {
         : this.dock
           ? { visible: false, worldPosition: [], query: '', status: '', keyboard: 'none', results: [], targets: [], mode: this.mode, dockGlyph: Boolean(this.dock.probe().buttons.find?.shown && this.dock.probe().visible), distanceFromHeadM: 0 }
           : null,
+      look: this.dock
+        ? {
+            panel: this.look ? { ...this.look.probe(), distanceFromHeadM: world(this.look.entity.object3D!).distanceTo(head) } : null,
+            mirror: this.mirror ? { ...this.mirror.probe(), distanceFromHeadM: world(this.mirror.group).distanceTo(head) } : null,
+            dockGlyph: Boolean(this.dock.probe().buttons.look?.shown && this.dock.probe().visible),
+            open: this.lookOpen,
+            headVisibleToEye: this.deps.headVisibleToEye()
+          }
+        : null,
       tray: this.traySignifiers?.probe() ?? null,
       rays: (this.rays?.probe() ?? []).map((ray) => ({ side: ray.hand, visible: ray.visible, hit: ray.visible ? this.rayHit(ray.hand) : null, origin: ray.origin })),
       poke: this.pokeSnapshot(state.handedness),
@@ -439,7 +507,14 @@ export class VrChrome {
 
   /** The world-space point at the centre of a panel row or the wrist glyph, for checks that aim at it. */
   targetPosition(target: ChromeTarget): number[] | null {
-    const object = target === 'record' || target === 'find' ? this.dock?.hitTarget(target) : target === 'refit' || target === 'hand' ? this.panel?.hitTarget(target) : this.find?.hitTarget(target.slice('find:'.length) as FindTargetId);
+    const object =
+      target === 'record' || target === 'find' || target === 'look'
+        ? this.dock?.hitTarget(target)
+        : target === 'refit' || target === 'hand'
+          ? this.panel?.hitTarget(target)
+          : target.startsWith('look:')
+            ? this.look?.hitTarget(target.slice('look:'.length) as LookTargetId)
+            : this.find?.hitTarget(target.slice('find:'.length) as FindTargetId);
     return object ? object.getWorldPosition(new THREE.Vector3()).toArray() : null;
   }
 
@@ -458,10 +533,11 @@ export class VrChrome {
       this.dock?.dispose();
       const record: DockAction = { id: 'record', glyph: 'record', label: 'Record', onSelect: () => this.deps.toggleRecording() };
       const find: DockAction = { id: 'find', glyph: 'find', label: 'Find an object', onSelect: () => this.openFind() };
-      this.dock = new HandDock(this.deps.world, { kind: 'hand', space: this.wristAnchor, ownPointerIds: handPointerIds(this.deps.world, carrier), palm: [0, -1, 0] }, [record, find], {
+      const look: DockAction = { id: 'look', glyph: 'look', label: 'Your look', onSelect: () => this.openLook() };
+      this.dock = new HandDock(this.deps.world, { kind: 'hand', space: this.wristAnchor, ownPointerIds: handPointerIds(this.deps.world, carrier), palm: [0, -1, 0] }, [record, find, look], {
         input,
         drawOverBody: true,
-        canCommit: (action, pointerId) => (action.id === 'find' ? this.canFind(pointerId) : this.canRecord(pointerId)),
+        canCommit: (action, pointerId) => (action.id === 'record' ? this.canRecord(pointerId) : this.canFind(pointerId)),
         onCommit: (_action, pointerId, kind) => this.committed(pointerId, kind),
         onHover: (_action, pointerId, hovered) => hovered && this.pulsePointer(pointerId, PULSE_HOVER)
       });
@@ -471,8 +547,15 @@ export class VrChrome {
     this.dock!.setVisible(this.wristTracked && chromeVisible('record', recording));
     // Find stays on the wrist during a take (tray-everywhere): the author searches mid-sentence.
     this.dock!.setActionVisible('find', true);
+    // Look shows only for the house avatar, and only between takes (docs/features/your-look.md, slice 2).
+    this.dock!.setActionVisible('look', this.lookAvailable());
     this.dock!.setRecording(recording);
     this.dock!.update();
+  }
+
+  private lookAvailable(): boolean {
+    const state = this.deps.store.getState();
+    return state.houseLook !== null && state.recordingState === 'idle';
   }
 
   /** Record runs unless a take is exporting, the select is something else's, or a hand-tracked ray points (hands poke). */
@@ -539,7 +622,7 @@ export class VrChrome {
       panel.place(camera);
       this.placePanel = false;
     }
-    panel.setVisible(!this.placePanel && !this.findOpen && chromeVisible('settings', recording));
+    panel.setVisible(!this.placePanel && !this.findOpen && !this.lookOpen && chromeVisible('settings', recording));
     panel.setRow('refit', {
       text: state.heightFit.pending ? 'Hold still…' : state.heightFit.enabled ? 'Refit height' : 'Refit after the take',
       enabled: state.heightFit.enabled && !state.heightFit.pending
@@ -575,6 +658,24 @@ export class VrChrome {
     });
   }
 
+  private updateLook(camera: THREE.Camera, state: UiViewModel): void {
+    // A take starting (a Halo S included) or the avatar no longer the house's closes Look.
+    if (this.lookOpen && !this.lookAvailable()) this.closeLook();
+    if (!this.look || !this.mirror) return;
+    const posed = this.presentedFrames > 1 || !this.deps.renderer.xr.isPresenting;
+    if (this.lookOpen && this.placeLook && posed) {
+      this.mirror.place(camera, LOOK_YAW_RAD);
+      this.look.place(camera, -LOOK_YAW_RAD);
+      this.placeLook = false;
+    }
+    const shown = this.lookOpen && !this.placeLook;
+    this.look.setVisible(shown);
+    this.mirror.setVisible(shown);
+    if (!this.lookOpen) return;
+    this.mirror.update(this.deps.scene);
+    this.look.update(camera, state.houseLook);
+  }
+
   // --- Poke feedback: the fingertip shade before contact ---
 
   private updatePoke(handedness: Handedness): void {
@@ -585,7 +686,7 @@ export class VrChrome {
     if (!this.dock || this.dockInput() !== 'poke' || !this.dock.probe().visible || !tracking.getTrackedHandJointPosition(presser, 'index-finger-tip', tmpA)) return;
     const { drawnSizeM, hitSizeM } = this.dock.sizes;
     const buttons = this.dock.probe().buttons;
-    for (const id of ['record', 'find']) {
+    for (const id of ['record', 'find', 'look']) {
       const hit = this.dock.hitTarget(id);
       if (!hit || !buttons[id]?.shown) continue;
       const face = faceFrame(hit);
@@ -625,9 +726,12 @@ export class VrChrome {
     const id = multiPointer(this.deps.world, hand).ray.pointer.id;
     if (this.dock?.isHoveredBy('record', id)) return 'record';
     if (this.dock?.isHoveredBy('find', id)) return 'find';
+    if (this.dock?.isHoveredBy('look', id)) return 'look';
     for (const row of ['refit', 'hand'] as const) if (this.panel?.isHoveredBy(row, id)) return `row:${row}`;
     const found = this.find?.isShown() ? this.find.hoveredBy(id) : null;
-    return found ? `find:${found}` : null;
+    if (found) return `find:${found}`;
+    const looked = this.look?.isShown() ? this.look.hoveredBy(id) : null;
+    return looked ? `look:${looked}` : null;
   }
 
   private ownedElsewhere(pointerId: number): boolean {

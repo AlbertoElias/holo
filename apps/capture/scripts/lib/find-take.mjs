@@ -4,7 +4,7 @@ import path from 'node:path';
 import { tokens } from '@holoim/design-tokens';
 
 import { loadTake, objectNodes, readGlb } from './object-glb.mjs';
-import { clickButton, openCapture, proofPace, readState, saveDownload, setupPage } from './object-take.mjs';
+import { PROOF_VIDEO_DIR, clickButton, openCapture, proofPace, readState, saveDownload, setupPage } from './object-take.mjs';
 import { PIXEL_PNG, STEP_MS, enterIwer, reach, shooter, stepper, summonedItems } from './summon-take.mjs';
 
 // Find an object by asking in a headset (PRD-060 slice 2), in IWER, through
@@ -24,8 +24,8 @@ import { PIXEL_PNG, STEP_MS, enterIwer, reach, shooter, stepper, summonedItems }
 //   - desktop-voice-orders: a refused recognition where nothing can record (an
 //     insecure origin) leaves the Speak button at Speak (B-062).
 
-const REST = { left: [-0.3, 0.9, -0.1], right: [0.3, 0.9, -0.1] };
-const AIM_FROM = [0.15, 1.35, -0.15];
+export const REST = { left: [-0.3, 0.9, -0.1], right: [0.3, 0.9, -0.1] };
+export const AIM_FROM = [0.15, 1.35, -0.15];
 
 function fixtureResults(credit, bytes, { title = credit.title, id = 'test_bracket' } = {}) {
   return { id, source: credit.source, title, author: credit.author, licence: credit.licence, sourceUrl: credit.sourceUrl, thumbnailUrl: PIXEL_PNG, glbPath: `/api/objects/polyhaven/${id}.glb`, dimensionsM: [0.85, 0.77, 1.07], bytes };
@@ -48,7 +48,7 @@ async function routeRegistry(page, fixture, credit) {
 }
 
 /** Puts a controller at `from` (world) and turns its −Z toward a world point (as ci-capture-ui's `aim`). */
-async function aim(page, side, from, target) {
+export async function aim(page, side, from, target) {
   await page.evaluate(({ side, from, target }) => {
     const device = window.IWER_DEVICE;
     const head = window.__sampleChrome().vr.head;
@@ -68,7 +68,7 @@ async function aim(page, side, from, target) {
 }
 
 /** What the headset sees (not the spectator), with the page's DOM chrome hidden. */
-function headsetShooter(page, step, artifactDir, label) {
+export function headsetShooter(page, step, artifactDir, label) {
   return async (name) => {
     await page.evaluate(() => {
       window.__setFrameStepping(true, true);
@@ -77,19 +77,20 @@ function headsetShooter(page, step, artifactDir, label) {
     await step(2);
     const file = path.join(artifactDir, `${label}-${name}.png`);
     await page.screenshot({ path: file });
-    await page.evaluate(() => {
-      window.__setFrameStepping(true, false);
+    // A proof video keeps drawing between shots.
+    await page.evaluate((draw) => {
+      window.__setFrameStepping(true, draw);
       for (const element of document.querySelectorAll('#ui-root, #VRButton, #ARButton, [data-webxr_runtime] > div')) element.style.visibility = '';
-    });
+    }, Boolean(PROOF_VIDEO_DIR));
     return file;
   };
 }
 
-const chrome = (page) => page.evaluate(() => window.__sampleChrome().vr);
+export const chrome = (page) => page.evaluate(() => window.__sampleChrome().vr);
 const search = (page) => page.evaluate(() => window.__sampleObjectSearch());
 
 /** Waits (stepping frames) until `predicate(chrome, search, state)` holds. */
-async function until(page, step, predicate, label, fail, maxSteps = 600) {
+export async function until(page, step, predicate, label, fail, maxSteps = 600) {
   for (let i = 0; i < maxSteps; i += 6) {
     const [vr, found] = await Promise.all([chrome(page), search(page)]);
     if (predicate(vr, found)) return true;
@@ -101,7 +102,7 @@ async function until(page, step, predicate, label, fail, maxSteps = 600) {
 }
 
 /** Aims the right controller's ray at a chrome target and pulls the trigger; returns what the ray rested on. */
-async function selectTarget(page, step, target, { hold = 0 } = {}) {
+export async function selectTarget(page, step, target, { hold = 0 } = {}) {
   // UIKit lays the panel out again when its content changes (tiles, keyboard), so re-aim until the ray rests on the target.
   let hit = null;
   for (let attempt = 0; attempt < 4; attempt += 1) {
@@ -170,6 +171,8 @@ export async function runIwerFindTake({ browser, baseUrl, captureRoot, artifactD
     };
     if (Math.abs(panel.distanceFromHeadM - tokens.placement.worldPanelDefaultM) > 0.05) fail(`the Find panel opened ${panel.distanceFromHeadM} m away`);
     if (panel.settingsVisible) fail('the settings panel stayed open beside Find');
+    // Look is the house avatar's alone (docs/features/your-look.md, slice 2); this take wears the default avatar.
+    if (opened.look?.dockGlyph) fail('the wrist shows Look for an avatar that is not the house avatar');
     if (panel.nearestLabelM < tokens.type.headsetLabelMinDistanceM) fail(`text shows ${panel.nearestLabelM} m from the head`);
     // A ray's minimum, 56 apx at 1.5 m (6.1).
     const rayMinM = tokens.hit.ray * tokens.size.radiansPerApx * tokens.placement.worldPanelDefaultM;

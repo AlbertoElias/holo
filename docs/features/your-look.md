@@ -243,6 +243,95 @@ disposed it with the kind it removed. Dressing now keeps any accessor that
 another mesh still uses, and the look e2e checks the posted hair and
 glasses for their index lists.
 
+## Slice 2: the look step in a headset (design, 2026-11-20)
+
+The scope says "a look panel beside the mirror", but VR capture has no
+mirror: the author is inside the avatar, and the head meshes are hidden in
+first person (`AvatarRig.setFirstPersonVisualState`). Without a mirror the
+author sees only hands, arms and the top. So the slice adds one.
+
+**What the author does.** The wrist dock gets a third glyph, Look, beside
+Record and Find. It shows only while the house avatar is loaded and no take
+runs. Selecting it opens two things 1.5 m ahead, in the styleguide's world
+panel place (1.2, 9.1): a standing mirror on the left, and the look panel on
+the right. Each one turns to face the head. A pick on the panel changes the
+avatar at once, and the author sees it in the mirror with their own head
+and hands moving it. Close on the panel, Record, or Find closes both. One
+world panel at a time: Look closes Find and the settings panel.
+
+**The mirror.** A planar reflector (three's `Reflector`), 0.7 m × 1.9 m,
+standing on the floor, with the chip's radius at its corners and a plain
+deep-sea back: no rim and no gold (2.3, 10). The mirror and the panel stand
+on one arc 1.5 m from the head, the mirror to the left and the panel to the
+right, each turned to face the head, so neither covers the other. The
+mirror renders only while Look is open, and its pass draws only the avatar
+and the lights (a layer of its own): no world, no chrome, no wrist dock.
+Against no world (passthrough) its ground is deep sea. Its overlay colour
+is linear 0.5, the identity of its blend, so skin and clothes keep their
+colour (three's default grey darkens them). Its target is 512 × 1024 with
+no multisampling. The avatar's first-person hidden meshes (the head) show
+for the mirror's own render and hide again before the eye's render.
+
+**The panel.** The phone sheet's pictures (`lookPictures.ts`), in IWSDK UI
+as the Find panel is built (`VrFindPanel.ts`), on three tabs: Body
+(finish, build, clothes), Face (skin, eyes, glasses) and Hair (hair, hair
+colour). Each row is the row's word, then its pictures at 64 apx × 2.5
+(about 9 cm at 1.5 m; the phone's 72 px, smaller so that the widest row
+of eight fits in 0.87 m), each with the value's word under it. The chosen
+picture holds the gold ring and dot, and its word is full text colour; the
+others are muted. The chosen tab has the gold rule under its word. Rays
+only, as Find at 1.5 m; every hit area is at least 56 apx. The panel is
+about 0.9 m × 0.6 m at most, so it needs no scroll.
+
+**The glyph.** A provisional Look glyph (a head and shoulders, lines on the
+16 × 16 viewBox) in `packages/xr-ui-core/src/provisionalGlyphs.ts`, as
+Find's lens was, until the styleguide's glyph table carries it. The wrist
+carries no words (7.3), so the glyph is needed.
+
+**What does not change.** `setLook` is the phone's call, so the take, the
+export and the saved look behave as on the phone. Record already waits
+while a dressing runs. The mirror hangs under the chrome root and the
+panel is one of the chrome's IWSDK roots, so recording, export and
+pointing skip them.
+
+**Decided by the agent with the owner away (2026-11-20), for review:**
+
+- D10. A mirror is added in VR, because the brief's mirror does not exist
+  there. Other options: no mirror (the author sees only hands and torso), or
+  a small turning copy of the avatar on the panel (cheaper, but it is not
+  "you"). Undo: remove the mirror; the panel stands alone.
+- D11. Three tabs of rows (Body, Face, Hair), not all eight rows on one
+  panel: eight rows at 1.5 m would be 0.87 m × 1.2 m or more, past a
+  comfortable look up and down (design review, Neon, 2026-11-20). Other
+  options: all rows with smaller pictures, or one tab per row (one more
+  step per change). Undo: one panel of all rows.
+- D12. The Look glyph is provisional, as Find's was.
+
+**Failure cases for slice 2:**
+
+| Failure case | Prevention or evidence |
+|---|---|
+| The mirror is recorded or exported | It hangs under the chrome root; the XR check reads the posted GLB's nodes |
+| The head shows to the eye, or not in the mirror | The hidden meshes show only inside the mirror's render; the check reads the mirror's head-shown render count, and the head's visibility after the frame, after a live change too |
+| The mirror costs frame time when closed | It renders only while Look is open; the probe counts mirror renders after Close |
+| The mirror darkens the look | Overlay colour linear 0.5; the check saves a headset frame with the reflection |
+| A take starts with Look open (Record, or Halo's S) | Look closes when the recording state leaves idle, whatever started it; the glyph hides during a take |
+| Look shows for an avatar that is not the house base | The glyph shows only when the house look is set; `headset-find` (the default avatar) checks it is absent |
+| A pick lands while the dressing of the last one runs | `setLook` numbers each change and Record waits (phone slice) |
+| The panel or the mirror is under a ray, or pokes miss the Look glyph | The panel is one of the chrome's IWSDK roots; the rays and the poke shade know Look |
+| The panel's words are within 1 m | It opens at 1.5 m; the chrome label report checks every label |
+| Multiview on a Quest (IWSDK turns it on) | three calls the mirror once for both eyes there, from the centre camera, so the reflection is flat; not checked in IWER (no multiview). A Quest check is open |
+
+**Check.** A new `headset-look` scenario in the IWER harness, through the
+real input paths: a controller ray on the dock's Look glyph opens the
+mirror and panel at 1.5 m, apart, with every hit at least 56 apx; a ray on
+the Hair tab, a hair picture, the Face tab and a glasses picture changes
+the live look (`__sampleHouseLook`); the mirror rendered with the head
+shown, and the head stays hidden to the eye after the change; Record
+closes Look; the exported take carries the chosen hair and glasses nodes
+and the card in its extras, and no mirror or panel node; after Close the
+mirror renders no more. A headset frame of the open mirror is saved.
+
 ## Test plan and evidence
 
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
@@ -256,6 +345,10 @@ glasses for their index lists.
 | Open-mouth smile (B-073) | Clearance check of the built base over base.json `face.mouthMixes` (scratch script, Blender) | 910 sample points in 284 mixes: no lips, teeth or mouth point behind the skin (before: up to 3.68 mm) |
 | Glasses drawn (B-074) | The same e2e reads the posted GLB | The posted hair and glasses keep an index list longer than their point list |
 | The whole flow | Proof video, real time, phone viewport | Sent to the owner; not committed |
+| Headset look (slice 2) | `SUMMON_ONLY=headset-look pnpm --filter @holoim/capture run test:xr:summon` (`apps/capture/scripts/lib/look-take.mjs`), IWER controllers on the house base | 2026-11-20: pass. Mirror and panel at 1.5 m, 0.21 rad apart; panel 0.87 × 0.64 m; nearest text 1.5 m; smallest hit at the ray minimum. Hair tab → High bun, Face tab → Round: the live avatar wears each. Mirror: 12 passes, the head shown in each; the head hidden to the eye. Close: no mirror pass after it, settings back. Record closes Look and takes it off the wrist. The take exports `Hair_highBun`, `Glasses_round`, the card, and no mirror or panel node. Shots: `apps/capture/output/ci-summon/headset-look-*.png` |
+| Look only for the house base | `SUMMON_ONLY=headset-find …` (the default avatar) | 2026-11-20: pass; no Look glyph on the wrist |
+| Mirror under multiview | Not testable in IWER (no multiview); a Quest check | Not verified: under multiview the reflection may render once for both eyes (flat) |
+| The headset flow | Proof video, real time, IWER headset view | Sent to the owner; not committed |
 
 ### Baseline
 

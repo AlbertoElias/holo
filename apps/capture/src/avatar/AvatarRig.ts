@@ -795,6 +795,31 @@ export class AvatarRig {
     });
   }
 
+  /**
+   * Runs `draw` with the first-person hidden meshes (the head) shown, then
+   * hides them again: the headset mirror's own render sees the head, the eye's
+   * does not (docs/features/your-look.md, slice 2). Returns how many head
+   * meshes showed in that draw.
+   */
+  withFirstPersonHeadShown(draw: () => void): number {
+    if (this.firstPersonVisualMode === 'off') {
+      draw();
+      return this.firstPersonHiddenMeshes.length;
+    }
+    this.setFirstPersonHeadVisible(true);
+    try {
+      draw();
+    } finally {
+      this.setFirstPersonHeadVisible(false);
+    }
+    return this.firstPersonHiddenMeshes.length;
+  }
+
+  /** True when any first-person head mesh is visible to the eye now (for the headset look check). */
+  firstPersonHeadVisibleToEye(): boolean {
+    return this.firstPersonHiddenMeshes.some((mesh) => mesh.visible);
+  }
+
   private setFirstPersonHeadVisible(visible: boolean): void {
     for (const mesh of this.firstPersonHiddenMeshes) {
       mesh.visible = visible;

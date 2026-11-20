@@ -14,15 +14,7 @@ import { PHONE_EDGES, glyphMetrics, type HitInput, type ViewTarget } from '@holo
 
 import type { HouseLook } from '../avatar/houseLook';
 import type { HouseLookUi } from '../types/contracts';
-import { lookPicture, type LookRow } from './lookPictures';
-
-/** "sweptCrop" → "Swept crop". */
-export function traitWords(value: string): string {
-  const words = value.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
-  return words.charAt(0).toUpperCase() + words.slice(1);
-}
-
-const clothingWords = (value: string): string => traitWords(value).replace(/ /, ' and ');
+import { clothingWords, lookPicture, traitWords, type LookRow } from './lookPictures';
 
 const options = <T extends string>(values: readonly T[], words: (value: string) => string = traitWords) =>
   values.map((value) => ({ value, label: words(value) }));

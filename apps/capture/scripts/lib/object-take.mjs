@@ -71,8 +71,8 @@ export const proofVideoOptions = (viewport) => (PROOF_VIDEO_DIR ? { recordVideo:
 /** In a proof video run, waits `ms` of real time; otherwise returns at once. */
 export const proofPace = (page, ms) => (PROOF_VIDEO_DIR ? page.waitForTimeout(ms) : undefined);
 
-export async function setupPage(browser, { iwer, consoleErrors, label }) {
-  const context = await createXrContext(browser, { viewport: VIEWPORT, acceptDownloads: true, ...proofVideoOptions(VIEWPORT) });
+export async function setupPage(browser, { iwer, consoleErrors, label, viewport = VIEWPORT }) {
+  const context = await createXrContext(browser, { viewport, acceptDownloads: true, ...proofVideoOptions(viewport) });
   const page = await context.newPage();
   wireXrConsoleErrors(page, consoleErrors, { label });
   await page.route('**/__holoim/input-recordings*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{"path":"object-take-input.json"}' }));
