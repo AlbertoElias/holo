@@ -38,7 +38,12 @@ Copy the request word for word into `story.request`: the review checks the
 story against it.
 
 1. **Say the story in three parts.**
-   - **Setup:** who the person is and where they are.
+   - **Setup:** who the person is and where they are. Claim only what the
+     card shows. A job does not read from a worn or small prop (an apron,
+     a hat and a tray all went unseen in fresh-maker rounds). Write a
+     person and a place ("a woman at her counter with two drinks"), or
+     name a job only when the person does that job's work with a big,
+     plain object in view.
    - **Event:** what happens. Something in the world must change where the
      viewer can see it: an object comes from a place, moves, falls, spills,
      opens, grows or changes colour. A look, a thought or a feeling alone is
