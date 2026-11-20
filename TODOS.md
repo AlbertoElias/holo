@@ -34,6 +34,17 @@ it from the item below instead of duplicating its status here.
 
 ## Next
 
+- [ ] VR arms, the gaps left by <!-- T-18dd51 -->
+  [`docs/features/archive/vr-arm-natural.md`](docs/features/archive/vr-arm-natural.md):
+  the chest does not lean toward a far target (`VrBodySolver`), so a reach
+  past the arm still leaves the wrist up to 12 cm short on controllers and
+  about 1 cm short on the Quest hand take; a wrist behind the back lies
+  outside the recorded arms, and hands put the elbow up there (swivel −169°)
+  while controllers do not; the overall arms-check gates also apply to a
+  partial `ARM_REACH_ONLY` run, and the hand-replay swivel bar (0°–70°) may
+  not suit a future take of mostly overhead reaches. The owner checks the elbows at rest, on
+  reaches and on a full controller reach on a Quest 3.
+
 - [ ] Recorded VR walk, the gaps left by <!-- T-3be7a9 -->
   [`docs/features/archive/vr-recorded-walk.md`](docs/features/archive/vr-recorded-walk.md)
   (see its Deviations): the stick-walk stance share (0.55 against the desktop

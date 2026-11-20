@@ -7,47 +7,38 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
-### B-073 — VR elbows point out or up, not down (fixed elbow hint)
+### B-077 — VR stick/head walk start: the body jumps from rest to full speed in one frame (arms pop)
 
-- **Area:** apps/capture (`ArmIkSolver`, `AvatarRig.createArmIkChain`)
-- **Severity:** P2
-- **Observed:** 2026-11-20
-- **Evidence:** `test:xr:arms` and the Quest 3 hand take (`docs/features/realistic-avatar-motion.md`,
-  cause 24). The bend plane comes from a fixed avatar-space hint that points almost straight
-  sideways (`elbowHintLocal`). Elbow swivel about the shoulder–wrist line (0° down, 90° out):
-  Quest take median 92° (elbows straight out the whole take); scripted rest and walk 140° (forward
-  and up, 93–100% of frames above 120°); low side reach −175° (elbow up).
-- **Expected:** a relaxed arm's elbow hangs down and back; a reach bends it down and out.
-- **Reproduction:** `cd apps/capture && node --import tsx scripts/run-xr-checks.ts arms`, rows
-  rest, side-low and walk, column swivelMed.
-- **Decision needed (owner):** a better constant hint, or an elbow from the pose or from
-  recorded motion (the owner prefers recorded motion to hand-tuned springs).
+- **Area:** apps/capture (`VrBodySolver` root translation at the first recorded step)
+- **Severity:** P2 (the owner saw it as a pop at the end of the controller arm video)
+- **Observed:** 2026-11-20, on `main` (`55f421598851`) and on `bug/vr-arm-natural`
+- **Evidence:** `arms` check, controller run, walk segment (`output/arm-after2/controller-samples.json`).
+  The tracked head moves 4.4 cm ahead while the avatar root holds still; at the first recorded step
+  (27.17 s) the root goes from 0 to about 1.1 m/s in one frame (3.7 cm per frame). World acceleration
+  at that frame: hips 33.7 m/s², chest 20.8 m/s², wrist 1.7 m/s² (the hand stays on the controller), so
+  the elbow folds against the torso (22 m/s² relative to the chest). Before the arm change: shoulders
+  26.7 m/s² at the same frame.
+- **Expected:** the body eases into the walk; no frame of the walk start above the walk's own
+  acceleration (about 7 m/s² on the hips here).
+- **Reproduction:** `cd apps/capture && ARM_REACH_INPUTS=controller node --import tsx scripts/run-xr-checks.ts arms`,
+  then the hips' world acceleration in the walk segment of `controller-samples.json`.
+- **Decision (pending owner confirmation):** fixed by the walk owner, not in the arm change: the arm
+  brief kept `VrBodySolver` out of scope. It is the walk-start transition gap of
+  `docs/features/archive/vr-recorded-walk.md` in `TODOS.md`.
 
-### B-074 — VR shoulders swing past a human range
+### B-076 — No-fingers avatar's desktop take diverges from the shipped avatar on `main`
 
-- **Area:** apps/capture (`ArmIkSolver` protraction)
-- **Severity:** P2
-- **Observed:** 2026-11-20
-- **Evidence:** cause 24. The clavicle aims at the target near full reach. Clavicle swing range:
-  Quest take 77°, scripted hands 103°, across and chest reaches 68° (a human clavicle moves
-  about 25–30°). The steep band (`smoothstep` 0.75–1.0 of the reach) still steps the clavicle
-  up to 21°/frame on the across reach and 22° on the Quest take.
-- **Expected:** the shoulder shrugs and protracts in a human range, without steps.
-- **Reproduction:** as B-073, columns clavPush and clavStep.
-- **Decision needed (owner):** cap the clavicle (a wrist then misses long reaches, the
-  height-fitted arm is short) or fit the avatar's arm length to the user's.
-
-### B-075 — Controllers miss long reaches by 15 cm
-
-- **Area:** apps/capture (`HandEmbodiment`, `ArmIkSolver` reach stretch)
-- **Severity:** P3
-- **Observed:** 2026-11-20
-- **Evidence:** cause 24: forward-far and overhead rows, controller wrist error 14.8 cm (hands
-  3.6 cm). The 8% reach stretch is for tracked hands only; on controllers it broke the IWER
-  resize take and desktop-reach-interruptions (gap 4).
-- **Expected:** the avatar's hand stays on the controller on a full reach.
-- **Reproduction:** as B-073 with `ARM_REACH_INPUTS=controller`.
-- **Decision needed (owner):** together with B-074 (arm-length fit would close both).
+- **Area:** apps/capture (`scripts/ci-avatar-formats-playwright.ts`, desktop locomotion take)
+- **Severity:** P3 (the check fails; no person has seen a wrong pose)
+- **Observed:** 2026-11-20, on `main` (`55f421598851`) and on `bug/vr-arm-natural`, the same values
+- **Evidence:** `XR_AVATAR_ONLY=no-fingers` avatars check: the take's states are
+  walk>idle>fall>idle>jump>fall>idle against the shipped avatar's
+  walk>idle>fall>idle>fall>idle>jump>fall>idle, and leftHand is 4.0 / 7.1 / 1.6 / 4.0 cm off at
+  2200 / 2300 / 2500 / 2600 ms. Its object sub-check also fails, on the B-069 desktop and phone rows.
+- **Expected:** the no-fingers avatar plays the same take as the shipped avatar, inside the pose tolerance.
+- **Reproduction:** `cd apps/capture && XR_AVATAR_ONLY=no-fingers node --import tsx scripts/run-xr-checks.ts avatars`
+- **Cause (suspected):** the physics of the take diverges (one fall>idle is missing), so the hand
+  error follows from a different state, not from the arm solve.
 
 ### B-069 — Desktop and phone object checks fail on `main` (outside `verify:pr`)
 

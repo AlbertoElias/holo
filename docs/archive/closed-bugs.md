@@ -1499,3 +1499,49 @@ bug above.)
 - **Cause:** the wardrobe's two glasses kinds share one index accessor (same tube topology). `dressAvatar` disposed every accessor of the kind it removed, the shared index list too, so the kept kind lost its faces and drew its points three at a time as slivers.
 - **Fix:** `dressAvatar` disposes a removed primitive's accessor only when nothing else uses it. The look e2e checks that the posted hair and glasses keep an index list longer than their point list.
 - **Closed:** 2026-11-20.
+
+> **Two bugs use the same numbers.** B-073 and B-074 above are the look bugs (smile, glasses).
+> B-073, B-074 and B-075 below are the VR arm bugs. The arm bugs were filed first, in `BUGS.md`.
+
+### B-073 — VR elbows point out or up, not down (fixed elbow hint)
+
+- **Area:** apps/capture (`ArmIkSolver`, `AvatarRig.createArmIkChain`)
+- **Severity:** P2
+- **Observed:** 2026-11-20
+- **Evidence:** `test:xr:arms` and the Quest 3 hand take (`docs/features/realistic-avatar-motion.md`,
+  cause 24). The bend plane comes from a fixed avatar-space hint that points almost straight
+  sideways (`elbowHintLocal`). Elbow swivel about the shoulder–wrist line (0° down, 90° out):
+  Quest take median 92° (elbows straight out the whole take); scripted rest and walk 140° (forward
+  and up, 93–100% of frames above 120°); low side reach −175° (elbow up).
+- **Expected:** a relaxed arm's elbow hangs down and back; a reach bends it down and out.
+- **Reproduction:** `cd apps/capture && node --import tsx scripts/run-xr-checks.ts arms`, rows
+  rest, side-low and walk, column swivelMed.
+- **Fix:** the elbow pole comes from a ridge fit to recorded CMU arms (13 features: the normalised wrist position, its squares and the palm's across direction, plus a small fixed prior), not a fixed hint. Swivel median rest / stand / walk 141° / 131° / 138° → 40° / 34° / 39° (hands), 140° / 132° / 133° → 34° / 33° / 34° (controllers); side-low −175° → 60°; flips 1.0 → 0 per minute; Quest take 92.7° → 37.6°. Brief: [`docs/features/archive/vr-arm-natural.md`](../features/archive/vr-arm-natural.md).
+- **Closed:** 2026-11-20.
+
+### B-074 — VR shoulders swing past a human range
+
+- **Area:** apps/capture (`ArmIkSolver` protraction)
+- **Severity:** P2
+- **Observed:** 2026-11-20
+- **Evidence:** cause 24. The clavicle aims at the target near full reach. Clavicle swing range:
+  Quest take 77°, scripted hands 103°, across and chest reaches 68° (a human clavicle moves
+  about 25–30°). The steep band (`smoothstep` 0.75–1.0 of the reach) still steps the clavicle
+  up to 21°/frame on the across reach and 22° on the Quest take.
+- **Expected:** the shoulder shrugs and protracts in a human range, without steps.
+- **Reproduction:** as B-073, columns clavPush and clavStep.
+- **Fix:** the clavicle protraction comes from the recorded arms, the elevation follows the shoulder rhythm, and a full reach pushes the shoulder toward the target; all inside a soft 30° limit and a 150°/s rate limit. Elevation range 86° → 23° (hands), 127° → 23° (controllers); protraction range 103° → 37° (worst segment 83° → 27°); largest step 21° → 7.1°; Quest take protraction 76.7° → 26.7°.
+- **Closed:** 2026-11-20.
+
+### B-075 — Controllers miss long reaches by 15 cm
+
+- **Area:** apps/capture (`HandEmbodiment`, `ArmIkSolver` reach stretch)
+- **Severity:** P3
+- **Observed:** 2026-11-20
+- **Evidence:** cause 24: forward-far and overhead rows, controller wrist error 14.8 cm (hands
+  3.6 cm). The 8% reach stretch is for tracked hands only; on controllers it broke the IWER
+  resize take and desktop-reach-interruptions (gap 4).
+- **Expected:** the avatar's hand stays on the controller on a full reach.
+- **Reproduction:** as B-073 with `ARM_REACH_INPUTS=controller`.
+- **Fix:** the full-reach shoulder push, a fitted arm length (0.406 × shoulder height, at most ×1.08) and a 1.8% reserve, with no reach stretch. Controller wrist p95 forward-far / overhead 14.8 / 14.5 → 12.3 / 12.0 cm; those targets lie at 1.10× and 1.2× of a full reach, past a human arm. Forward 0.3 → 0.0 cm. Arm length spread 8% → 1.8%.
+- **Closed:** 2026-11-20.

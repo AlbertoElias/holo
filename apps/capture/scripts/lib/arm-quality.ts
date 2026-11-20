@@ -144,6 +144,9 @@ export type ArmMetrics = {
   wristSnapMaxCm: number | null;
   // Largest avatar wrist move in one frame (cm), whatever the input did.
   wristStepMaxCm: number | null;
+  // Arm length (shoulder → elbow → wrist joint, over the hip spacing) change
+  // within the frames, worst side, in percent of its shortest: a visible stretch.
+  armLengthSpreadPct: number | null;
 };
 
 export function measureArms(frames: ArmFrame[], section: TorsoSection | null, sides: readonly ArmSide[] = ['left', 'right']): ArmMetrics {
@@ -163,7 +166,26 @@ export function measureArms(frames: ArmFrame[], section: TorsoSection | null, si
   let torsoCount = 0;
   const elev: number[] = [];
   const push: number[] = [];
+  let lengthSpread: number | null = null;
   for (const side of sides) {
+    let shortest = Infinity;
+    let longest = 0;
+    for (const frame of frames) {
+      const S = frame.bones[`${side}Shoulder`];
+      const E = frame.bones[`${side}Elbow`];
+      const W = frame.bones[`${side}Wrist`];
+      if (!S || !E || !W) continue;
+      // Over the hip joints' spacing (a rigid pelvis), so a height fit that
+      // rescales the avatar is not a stretch.
+      const hipL = frame.bones.leftHip;
+      const hipR = frame.bones.rightHip;
+      const scaleRef = hipL && hipR ? len(sub(hipL, hipR)) : 1;
+      if (scaleRef < 1e-4) continue;
+      const armLength = (len(sub(E, S)) + len(sub(W, E))) / scaleRef;
+      shortest = Math.min(shortest, armLength);
+      longest = Math.max(longest, armLength);
+    }
+    if (longest > 0) lengthSpread = Math.max(lengthSpread ?? 0, (longest / shortest - 1) * 100);
     let prev: ArmPoseFrame | null = null;
     let prevFrame: ArmFrame | null = null;
     for (const frame of frames) {
@@ -229,7 +251,8 @@ export function measureArms(frames: ArmFrame[], section: TorsoSection | null, si
     twistP95Deg: percentile(twists, 95),
     twistMaxDeg: twists.length ? Math.max(...twists) : null,
     wristSnapMaxCm: snaps.length ? Math.max(...snaps) : null,
-    wristStepMaxCm: wristSteps.length ? Math.max(...wristSteps) : null
+    wristStepMaxCm: wristSteps.length ? Math.max(...wristSteps) : null,
+    armLengthSpreadPct: lengthSpread
   };
 }
 
