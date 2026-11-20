@@ -1564,7 +1564,8 @@ bug above.)
 - **Cause:** before the walk is detected (smoothed head speed above 0.55 m/s), the root holds inside the lean leash.
   Then the leash or the walk's full head step takes it to walking speed in one frame.
 - **Fix:** `planRoot` changes the root's planned velocity by at most 8 m/s² (`ROOT_ACCEL`); meanwhile the head may run
-  a little past the leash. `test:xr:walk-direction` now moves the head on every XR frame from the page clock and
+  a little past the leash. A planned step over 0.3 m in one frame (`ROOT_JUMP_METERS`) is a re-origin, such as a
+  respawn, and passes at once. `test:xr:walk-direction` now moves the head on every XR frame from the page clock and
   fails a head walk start above 10 m/s².
 - **Open:** the stick walk start is not eased (29–45 m/s²): the stick moves the view at full speed at once, and
   view acceleration in VR is a comfort risk. That is an owner decision.

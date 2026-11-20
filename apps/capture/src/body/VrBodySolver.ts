@@ -160,6 +160,9 @@ const CATCH_UP_EXTRA_SPEED = 0.3;
 // held still while the head left, then took the full walking speed in one frame when the lean leash or the walk
 // caught it (hips 15-32 m/s², B-077).
 const ROOT_ACCEL = 8;
+// A planned step longer than this in one frame is a re-origin (a respawn or teleport leaves the head far from the
+// root), not a walk: it passes at once, as a jump.
+const ROOT_JUMP_METERS = 0.3;
 // Stepping.
 const GAIT_ON_SPEED = 0.25;
 const GAIT_OFF_SPEED = 0.15;
@@ -784,6 +787,7 @@ export class VrBodySolver {
       next.z = this.rootTarget.z - (clampedAlong * forwardZ + clampedAcross * forwardX);
     }
     outDisplacement.subVectors(next, this.root).setY(0);
+    if (outDisplacement.length() > ROOT_JUMP_METERS) return outDisplacement;
     // Ease the root's velocity toward the plan; the head may run a little past the leash meanwhile.
     const change = this.planB.copy(outDisplacement).multiplyScalar(1 / dt).sub(this.plannedVelocity);
     const most = ROOT_ACCEL * dt;
