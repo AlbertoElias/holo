@@ -349,6 +349,24 @@
       "jawForward": 0.004,
       "jawOpen": 0.038
     },
+    "mouthMixes": {
+      "$comment": "Mixes whose summed offsets put the mouth behind the skin (B-073). Each mix is a list of parts (shapes moved together); every part takes each of `weights`. The build pushes each shape's mouth forward, column by column, so every sampled mix keeps the mouth `margin` (m) in front of the skin, at the mouth's points and at `faceSamples` (u, v) inside each of its faces, over `passes` rounds of projections (build.py).",
+      "margin": 0.0004,
+      "weights": [0.25, 0.5, 0.75, 1],
+      "faceSamples": [[0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75], [0.5, 0.5]],
+      "passes": 200,
+      "mixes": [
+        [["mouthSmileLeft", "mouthSmileRight"], ["jawOpen"]],
+        [["mouthSmileLeft"], ["jawOpen"]],
+        [["mouthSmileRight"], ["jawOpen"]],
+        [["mouthSmileLeft", "mouthSmileRight"], ["jawOpen"], ["mouthLowerDownLeft", "mouthLowerDownRight"]],
+        [["mouthSmileLeft", "mouthSmileRight"], ["jawOpen"], ["mouthUpperUpLeft", "mouthUpperUpRight"]],
+        [["mouthSmileLeft", "mouthSmileRight"], ["jawOpen"], ["mouthDimpleLeft", "mouthDimpleRight"]],
+        [["mouthStretchLeft", "mouthStretchRight"], ["jawOpen"]],
+        [["mouthFunnel"], ["jawOpen"]],
+        [["mouthPucker"], ["jawOpen"]]
+      ]
+    },
     "socket": {
       "$comment": "The skin within `rim` (m) of each opening goes back to `behind` eye radii from the eye's centre, easing out over `slope` (m). Past a corner the distance counts `past` times, so the socket ends within the lids' reach.",
       "rim": 0.002,

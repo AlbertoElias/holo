@@ -39,6 +39,7 @@ type PostedGltf = {
   animations?: Array<{ channels: Array<{ sampler: number; target: { path: string } }>; samplers: Array<{ output: number }> }>;
   accessors?: Array<{ bufferView?: number; byteOffset?: number; componentType: number; count: number; type: string }>;
   bufferViews?: Array<{ byteOffset?: number; byteLength: number; byteStride?: number }>;
+  meshes?: Array<{ primitives: Array<{ indices?: number; attributes: Record<string, number> }> }>;
 };
 
 /** The float values of one accessor, read from the GLB's binary chunk (tightly packed, as the exporter writes them). */
@@ -102,6 +103,7 @@ async function press(target: Locator): Promise<void> {
 async function choose(page: Page, row: string, option: string): Promise<void> {
   const choice = lookPanel(page).getByRole("radiogroup", { name: row }).getByRole("radio", { name: option, exact: true });
   await choice.scrollIntoViewIfNeeded();
+  await expect.poll(() => choice.locator("img").evaluate((img) => (img as HTMLImageElement).naturalWidth), { message: `${row}: ${option} shows its picture` }).toBeGreaterThan(0);
   await press(choice);
   await expect(choice).toHaveAttribute("aria-checked", "true");
   await expect(lookPanel(page)).toHaveAttribute("data-look-status", "ready", { timeout: 30_000 });
@@ -158,6 +160,13 @@ async function checkPostedGlb(page: Page, url: string, want: HouseLook): Promise
   // No leftover meshes: a second body, or an old hair under a new name, would repeat a mesh node's name.
   const meshNames = (gltf.nodes ?? []).filter((node) => node.mesh !== undefined).map((node) => node.name ?? "");
   expect(meshNames.filter((name, i) => meshNames.indexOf(name) !== i), "each mesh node once").toEqual([]);
+  // The hair and glasses keep their faces: without its index list a tube draws as specks (B-074).
+  for (const node of (gltf.nodes ?? []).filter((n) => /^(Hair|Glasses)_/.test(n.name ?? "") && n.mesh !== undefined)) {
+    for (const prim of gltf.meshes![node.mesh!]!.primitives) {
+      expect(prim.indices, `${node.name} has its index list`).toBeDefined();
+      expect(gltf.accessors![prim.indices!]!.count, `${node.name} draws more points than it has`).toBeGreaterThan(gltf.accessors![prim.attributes.POSITION!]!.count);
+    }
+  }
 
   const records = [...(gltf.nodes ?? []).map((node) => node.extras), ...(gltf.scenes ?? []).map((scene) => scene.extras)]
     .map((extras) => extras?.holoimAvatar)
@@ -259,6 +268,13 @@ async function runJourney(browser: Browser, baseURL: string | undefined, journey
     await expect(page.getByTestId("dock-look")).toHaveAttribute("aria-expanded", "true");
     const start = await sampleLook(page);
     expect(start.look, "the house base has a look").not.toBeNull();
+    // Each choice is a picture of the avatar wearing it, and every one is served (`choose` checks that a tapped one shows).
+    const pictures = await lookPanel(page).locator("[data-look-option] img").evaluateAll((imgs) => imgs.map((img) => (img as HTMLImageElement).src));
+    expect(pictures.length, "one picture per choice").toBe(await lookPanel(page).locator("[data-look-option]").count());
+    for (const src of new Set(pictures)) {
+      const res = await page.request.get(src);
+      expect(res.ok() && res.headers()["content-type"]?.startsWith("image/jpeg"), `picture ${src}`).toBe(true);
+    }
     await mkdir(outDir, { recursive: true });
     await page.screenshot({ path: path.join(outDir, `${journey.name}-panel.png`) });
 

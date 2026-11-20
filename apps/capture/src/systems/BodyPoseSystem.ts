@@ -63,6 +63,7 @@ export class BodyPoseSystem extends createSystem() {
     if (frame.bodyTracking) {
       body.posed = true;
       c.jumpArms.reset();
+      body.solver.setWalkTrajectory(c.animator.getWalkTrajectory());
       body.solver.solve(body.head, avatar.avatarRoot.position, deltaSec, body.groundSampler, c.config.embodyOffset, character.grounded);
     } else if (!body.active) {
       // A reach plants the feet where they stood when it began, from the first bend to the end of the stand-up.

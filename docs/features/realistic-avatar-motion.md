@@ -197,6 +197,29 @@ jitters"), fixed in 1b:
     The VR hands were already good (wrist p95 0.2 cm, jitter 1.1 mm).
     First person matches third person (no scissoring on the strafe).
 
+24. VR arm IK audit (2026-11-20, hand tracking, controllers and Quest
+    passthrough; `scripts/ci-arm-reach-playwright.ts`, check `arms`, graded
+    by `scripts/lib/arm-quality.ts`). The check scripts 19 reach segments on
+    IWER for each input: rest, forward, overhead, side, across the body,
+    chest, behind the back, a ±90° wrist roll, a lost and a regained hand,
+    the hands ↔ controllers switch, crouch and walk. It also grades the
+    recorded Quest 3 hand take. Two clear defects are fixed:
+    - The shoulder popped up to 72° in one frame. Nothing poses the clavicle
+      in VR, so the solver measured the reach from last frame's swung
+      shoulder, and fed that back through its protraction curve. The VR
+      solve now starts each frame from the bind clavicle. Largest clavicle
+      step: across reach 71 → 21°, chest 54.5 → 14.6°; the Quest take
+      26 → 22° (the rest is the curve's steep band itself).
+    - Candy-wrapper wrist: the forearm bone never rolled, so all the twist
+      went into the hand bone (Quest take p95 144°, max 164°). The forearm
+      now rolls by half the twist (unwrapped, at most 90°), and the hand
+      keeps its exact world rotation. Wrist twist p95: Quest take
+      144 → 74°, scripted hands 109 → 57°, controllers 92 → 51°.
+    The wrist accuracy does not change (Quest take p95 0.19 → 0.20 cm,
+    scripted hands 0.4 → 0.3 cm). Passthrough gives the same numbers as VR
+    (the same solve). Open, for the owner: the elbow direction (B-073), the
+    clavicle range (B-074) and the controller reach (B-075).
+
 ## Scope
 
 **Included (this slice):**
@@ -323,6 +346,7 @@ dependency for what a 150-line vertical-only grid does).
 | All sources still pass | `test:xr:avatars`, `test:xr:body`, `test:xr:hands`, `test:xr:ar-record`, `pnpm run verify:pr` | All pass (2026-11-18). In `verify:pr`, two pipeline specs timed out under load on shared ports and passed when rerun alone. The desktop and phone object checks outside `verify:pr` fail on `main` as well (B-069) |
 | Every input path (cause 23) | `output/motion-audit/audit.ts` (ignored; drives each path on a frozen clock and grades it with `scripts/lib/motion-quality.ts`) | Before → after, 2026-11-20. Desktop first/third and touch: penetration 2.87 → 0 cm, standing take-off 455 → 99 m/s², walking take-off 463 → 121, pops p99 65 → 62. Mock VR: walk start 459 → 124, take-off 204 → 100, pops p99 84 → 73. VR stick and headset AR: skate 2.77 → 1.08 cm, penetration 2.16 → 0.09 cm, pops p99 65.5 → 59.0, take-off 174 → 136, largest stop spike 170 → 130 |
 | VR checks still pass | `node --import tsx scripts/run-xr-checks.ts desktop-motion body hands locomotion loco-states mock-vr terrain held-states ar-record` | All pass (2026-11-20) |
+| VR arms, every input (cause 24) | `pnpm --filter @holoim/capture run test:xr:arms` (`ARM_REACH_SESSION=ar` for passthrough, `ARM_REACH_VIDEO=1` for video) | `output/ci-arm-reach/{hand,controller}-report.json`, per segment. Before → after 2026-11-20 in cause 24 |
 | Looks right | proof video (ignored `output/`, not linked) | A 14 s desktop keyboard walk over the default terrain: arms hang and swing opposite the legs, knees bend through the stride, and the feet stay on the slopes |
 
 ## Physical-device limits

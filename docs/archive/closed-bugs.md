@@ -1475,3 +1475,27 @@ bug above.)
   clock (`freezePageClock`) while it presses View in your room, then lets the take play on (`resumePageClock`). With
   the frames stopped, the click's checks finish at once, and the press is still a real cursor press.
 - **Closed:** 2026-11-20.
+
+### B-073 — The house avatar's open-mouth smile shows skin inside the mouth
+
+- **Area:** apps/capture (house base, `scripts/authoring/house-base/build.py` face shapes)
+- **Severity:** P2 (seen by the owner on every laugh)
+- **Observed:** 2026-11-20, by the owner, on a phone take: a smile with the jaw open shows two skin patches inside the mouth, at both sides; a laugh also shows a skin blob in the middle.
+- **Evidence:** a clearance check of the built base over the sampled mixes in base.json `face.mouthMixes` (smile + jawOpen and eight more): before, the skin covered mouth faces by up to 3.68 mm; after, by 0 at 910 sample points in 284 mixes. Front renders of smile + jawOpen and of a laugh, before and after (brief "Picture picker and the open-mouth fix").
+- **Expected:** any mix of the mouth shapes shows lips, teeth and the dark mouth, never the face's skin.
+- **Reproduction:** apply mouthSmileLeft and mouthSmileRight 0.6 with jawOpen 0.5 to `public/gltf/models/house-base.glb` and look at the mouth from the front.
+- **Cause:** each face shape puts the mouth back on the skin by itself, but a glTF mix only adds the shapes' offsets. On the curve of the face the sum lies behind the skin, and the face's own skin round MPFB's lip slit lies close behind the mouth's faces everywhere, so it shows between the mouth's points.
+- **Fix:** the build samples each mix over a weight grid, at the mouth's points and at points inside each of its faces, and pushes each shape's mouth forward one column at a time, so every sampled mix keeps the mouth 0.4 mm in front of the skin. Largest push 3.0 mm (jawOpen); the report lists them under `mouthMixes`.
+- **Closed:** 2026-11-20.
+
+### B-074 — Dressed house avatars show no glasses (specks instead of frames)
+
+- **Area:** packages/avatar-look (`dressAvatar` in `src/dress.ts`), so the phone's live avatar, posted takes and authored takes
+- **Severity:** P2 (a look choice that does nothing visible)
+- **Observed:** 2026-11-20, while making the look sheet's pictures: the Round and Square pictures show the same face as None; a side view shows a dotted line where a temple should be.
+- **Evidence:** the wardrobe's `Glasses_round` and `Glasses_square` have 522 points and a 3,096-entry index list each; a dressed model's kept glasses had the 522 points and no index list. After the fix both keep the index list, and the pictures show the frames.
+- **Expected:** a dressed avatar wears the chosen glasses, drawn as frames.
+- **Reproduction:** dress any look with Round or Square glasses (`dressedFile` in `scripts/authoring/lib/house-look.ts`) and read the glasses primitive's `indices`.
+- **Cause:** the wardrobe's two glasses kinds share one index accessor (same tube topology). `dressAvatar` disposed every accessor of the kind it removed, the shared index list too, so the kept kind lost its faces and drew its points three at a time as slivers.
+- **Fix:** `dressAvatar` disposes a removed primitive's accessor only when nothing else uses it. The look e2e checks that the posted hair and glasses keep an index list longer than their point list.
+- **Closed:** 2026-11-20.

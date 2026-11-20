@@ -35,6 +35,9 @@ export interface ArmIkChain {
   foreBindPosition: THREE.Vector3;
   handBindPosition: THREE.Vector3;
   stretch: number;
+  // Hand twist about the forearm (radians) at the last solve that rolled the
+  // forearm; ArmIkSolver unwraps the next twist against it.
+  wristTwist?: number;
 }
 
 export interface HandFingerRetargetEntry {

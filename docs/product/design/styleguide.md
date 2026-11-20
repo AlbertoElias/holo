@@ -824,11 +824,11 @@ the stop shape alone, since no text sits within arm's reach.
 - **Copy:** touch words on a touch device, never desktop keyboard help.
 - **Capture look sheet:** on the chip above the dock, in the slot of the
   Find sheet and the Post panel, and never open with them or the tray; at
-  most 46% of the screen high, scrolling inside. Styles are word choices
-  (ring and gold dot); colours are discs of the colour inside the same
-  ring, and the chosen disc holds the gold dot on a small deep-sea lens.
-  The row's title names the chosen colour in words, so the state is never
-  colour alone. While the sheet is open, the view faces the avatar and
+  most 46% of the screen high, scrolling inside. Each row is a strip of
+  72 px pictures that scrolls sideways, one picture of the avatar per
+  value with the value's word under it. The chosen picture holds a gold
+  ring and the gold dot on a small deep-sea lens, and its word is full
+  text colour (the others muted), so the state is never colour alone. While the sheet is open, the view faces the avatar and
   shifts up by half the sheet's height, so the face shows above it.
   Desktop uses the same sheet.
 

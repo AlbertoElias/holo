@@ -105,6 +105,28 @@ function checkInstructionFilters() {
   }
 }
 
+// Each TODOS.md item ends its first line with an id marker, `<!-- T-xxxxxx -->`
+// (docs/FEATURE_WORKFLOW.md). Tools that read the queue key an item on it, so an
+// item keeps its id when its text changes. An item is a top-level checkbox line.
+function checkTodoIds() {
+  const file = path.join(rootDir, "TODOS.md");
+  if (!existsSync(file)) return;
+  const seen = new Map();
+  readFileSync(file, "utf8").split("\n").forEach((line, index) => {
+    if (!/^- \[( |x|X)\]\s/.test(line)) return;
+    const id = /<!-- (T-[0-9a-f]{6}) -->\s*$/.exec(line)?.[1];
+    if (!id) {
+      reporter.fail(`TODOS.md:${index + 1} has no id marker; end the line with <!-- T-xxxxxx --> (6 random lowercase hex characters).`);
+      return;
+    }
+    if (seen.has(id)) {
+      reporter.fail(`TODOS.md:${index + 1} reuses the id ${id} of line ${seen.get(id)}; give it 6 new random lowercase hex characters.`);
+      return;
+    }
+    seen.set(id, index + 1);
+  });
+}
+
 // Fixed wall-clock sleeps in test code are the commonest root of the CI flakes
 // (BUGS.md history, B-026 to B-052): a check waits a set number of real
 // milliseconds for something the page does on its own clock, and a starved
@@ -209,6 +231,7 @@ async function main() {
   checkPackageManagerAlignment();
   checkAgentConfigParity();
   checkInstructionFilters();
+  checkTodoIds();
   checkPrePushHook();
   checkWallClockWaits();
   await checkPorts();

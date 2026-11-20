@@ -1,7 +1,7 @@
 # Feature brief: Your look, on a phone (slice 2e, phone part)
 
 **Lead:** Claude (Opus)  
-**Status:** Phone slice verified (emulation); slice 2, the headset, is next  
+**Status:** Phone slice verified (emulation), with the picture picker; slice 2, the headset, is next  
 **Layer:** event (who performs the take). See
 `docs/product/concepts/what-a-hologram-is.md`.
 
@@ -184,12 +184,64 @@ changes. The changes are folded in below.
    words, so the state is never colour alone (agent choice, for the owner).
    Keyboard focus keeps its own gold ring. The dock control is the word
    "Look" until a glyph is drawn. Touch targets are 44 apx.
+   Superseded on 2026-11-20 by the picture picker (next section).
 
 Alternatives: reload the page per change (drops the grant, 4 to 6 s per
 tap); hide unused meshes (the export forces them visible); match meshes by
 name (breaks between finishes); colour three.js materials directly (a second
 dressing path that drifts from the AI flow and Quick Look). Dressing in a
 Worker is a later option if the ink outline stalls the face on a phone.
+
+## Picture picker and the open-mouth fix (2026-11-20)
+
+Source: the owner, 2026-11-20, on a screenshot of the house avatar smiling
+with the mouth open: "theres a bug in this facial expression. and lets make
+this more into an avatar picker with images so its easier to use and
+imagine what each option is like. each element can be a row of options with
+images".
+
+**The picker.** Each row of the look sheet (finish, build, skin, hair, hair
+colour, eyes, glasses, clothes) is a strip of pictures that scrolls
+sideways, one picture per value, with the value's word under it. A picture
+shows the house avatar in its default look (`defaultLook` in base.json,
+clay finish) with only that row changed. Each row has its own framing:
+upper body for finish and clothes, head to knees for build, the head for
+skin, hair, hair colour and glasses, and the eyes for eye colour. The chosen
+picture holds the gold ring and the gold dot on a small deep-sea lens, and
+its word turns to full text colour; the strip scrolls the chosen picture
+into view when the sheet opens. Each picture is a radio named by its word,
+so assistive technology and the look e2e read the same names as before.
+
+- **Pictures are made, not drawn live.** `scripts/authoring/house-look-pictures.ts`
+  renders them with the viewer's own renderer and lights (one still take
+  per row, a close view per value) into `apps/capture/public/look-pictures/`
+  (216 px square JPEG, three device pixels per CSS pixel of the 72 px
+  picture). They load lazily, so the sheet costs nothing until it opens.
+  Re-run the script after a change to the house base, the dressing or the
+  finishes.
+- **Agent choice, for the owner:** the pictures show the default look, not
+  the creator's current look. Live pictures (each value on the current
+  look) need a render per value on the phone, about 40 dressings each time
+  the sheet opens.
+
+**The open-mouth fix (B-073).** A smile with the jaw open showed the skin
+inside the mouth at both sides (and a blob in the middle at a laugh). Each
+face shape puts the mouth back on the skin by itself, but a glTF mix only
+adds the shapes' offsets: on the face's curve the sum lies behind the skin,
+and the face's own skin round MPFB's lip slit lies close behind the mouth
+everywhere. `build.py` now samples the mixes in base.json `face.mouthMixes`
+over a weight grid, at the mouth's points and at points inside each of its
+faces, and pushes each shape's mouth forward, one column at a time, just
+enough that every sampled mix keeps the mouth 0.4 mm in front of the skin.
+A column moves as one piece, so no tooth edge comes in front of the lips.
+The largest push is 3.0 mm (jawOpen at full weight); the side profile of a
+smile or an open jaw alone does not change to the eye.
+
+**The glasses fix (B-074).** The pictures showed that no dressed avatar
+wore its glasses: the two glasses kinds share one index list, and dressing
+disposed it with the kind it removed. Dressing now keeps any accessor that
+another mesh still uses, and the look e2e checks the posted hair and
+glasses for their index lists.
 
 ## Test plan and evidence
 
@@ -200,6 +252,9 @@ Worker is a later option if the ink outline stalls the face on a phone.
 | Height unchanged by hair | The same e2e loads four hairstyles and reads the fitted height (the eye is a bone, so it moves only with the fit; on a phone no eye height is fitted) | 1.7109 m for sweptCrop, highBun, tightCoils and wavyBob (spread 0). Load 0.41 s without a saved look, 0.56 s with one (bar: +1.5 s). A bad `?look` and `?finish` give two warnings and load the default |
 | Memory, face after a change | The same e2e: twelve changes, then `renderer.info.memory` and the jaw on the live meshes | Memory at load g67/t8; ink g73/t10; back in clay g67/t8, the same on each lap. Live jaw 0.6 on every jaw mesh. Fit after a build change: 2.76 mm broad, 2.60 mm slight (bar 3 mm). A change takes 61 to 144 ms in emulation |
 | Quick Look | Phone posts have Quick Look off (`quickLookEnabled` false, so `/usdz` answers 404), so the e2e saves each posted GLB to `output/test-results/your-look/takes/` and `apps/viewer-api/tools/glb_to_usdz.py` and `inspect_usdz.py` run on each by hand (`check_usdz_tools.sh` needs a source with two textured materials, and the house base has none) | All three takes convert, and `inspect_usdz.py` reports no failures: ink 4.53 MB, light 4.33 MB, clay 4.11 MB |
+| Picture picker | The same e2e: each row's choices are pictures; every picture is served as a JPEG, and a tapped choice shows its picture | 2026-11-20, IWER and SwiftShader: 5 of 5 pass in 6.2 min. 40 pictures, 352 KB in all (`apps/capture/public/look-pictures/`, made by `scripts/authoring/house-look-pictures.ts`) |
+| Open-mouth smile (B-073) | Clearance check of the built base over base.json `face.mouthMixes` (scratch script, Blender) | 910 sample points in 284 mixes: no lips, teeth or mouth point behind the skin (before: up to 3.68 mm) |
+| Glasses drawn (B-074) | The same e2e reads the posted GLB | The posted hair and glasses keep an index list longer than their point list |
 | The whole flow | Proof video, real time, phone viewport | Sent to the owner; not committed |
 
 ### Baseline

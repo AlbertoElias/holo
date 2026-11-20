@@ -31,6 +31,40 @@ export interface WalkGait {
   /** Mean backward speed of a planted foot at time scale 1, in the avatar's own (unscaled) units per second. */
   readonly stanceSpeed: number;
 }
+/**
+ * The walk clip's step shape per phase, measured by forward kinematics with its feet (the VR body solver lays its
+ * walking steps on it). Lengths are in rest hips heights (hips above the rest sole), so they hold at any avatar scale
+ * and the solver multiplies them by its own. Each array holds WALK_TRAJECTORY_SAMPLES values over one clip cycle.
+ */
+export interface WalkTrajectory {
+  readonly gait: WalkGait;
+  /** Seconds per cycle at time scale 1. */
+  readonly duration: number;
+  /** Mean backward speed of a planted foot relative to the ground-projected root, in hips heights per second. */
+  readonly stanceSpeed: number;
+  readonly legs: Readonly<Record<GaitLeg, {
+    /** In the swing (lift to land): share of the step's ground travel done, 0 at lift, 1 at landing. */
+    readonly progress: Float32Array;
+    /** Sole height above that foot's planted sole. */
+    readonly clearance: Float32Array;
+    /** Foot pitch from rest (radians): positive lifts the heel, negative the toes. */
+    readonly roll: Float32Array;
+  }>>;
+  /** Hips height below its highest point over the cycle (zero or less). */
+  readonly bob: Float32Array;
+}
+
+export const WALK_TRAJECTORY_SAMPLES = 96;
+
+/** Linear interpolation of a per-phase trajectory array, circular in phase (0..1). */
+export function sampleWalkTrajectory(values: Float32Array, phase: number): number {
+  const n = values.length;
+  const at = ((((phase % 1) + 1) % 1) * n);
+  const i = Math.floor(at) % n;
+  const f = at - Math.floor(at);
+  return values[i]! + (values[(i + 1) % n]! - values[i]!) * f;
+}
+
 /** What the leg solver needs from the walk this frame. */
 export interface GaitState {
   readonly gait: WalkGait;
@@ -88,7 +122,7 @@ const HELD_BACK_SEC = 0.25;
 const HELD_BACK_SHARE = 0.6;
 /** The shortest stride, as a share of the full one, laid down at the cadence floor. */
 const WALK_STRIDE_SHARE_MIN = 0.2;
-const GAIT_SAMPLES = 96;
+const GAIT_SAMPLES = WALK_TRAJECTORY_SAMPLES;
 const HIPS_BOB_SIGMA_SEC = 0.04;
 const WALK_LOOP_QUAT_MATCH_DOT = 0.99995;
 /** A walk starts at this speed and ends below WALK_STATE_SPEED_THRESHOLD: a walk pushed against a rock creeps
@@ -145,6 +179,7 @@ export class LocomotionAnimator {
   private clipSources: Record<LocomotionState, LocomotionClipSource> = { idle: 'none', walk: 'none', jump: 'none', fall: 'none' };
   private root: THREE.Object3D | undefined;
   private gait: WalkGait | undefined;
+  private walkTrajectory: WalkTrajectory | undefined;
   /** The one-shot Leap (a recorded jump) bound to this avatar, whose arms the desktop jump follows (JumpArms). */
   private leap: THREE.AnimationClip | undefined;
 
@@ -230,12 +265,15 @@ export class LocomotionAnimator {
     this.root = root;
     const walkClip = this.resolveClip(desktopClips, 'walk');
     this.gait = undefined;
+    this.walkTrajectory = undefined;
     if (humanoid && walkClip && CLIP_MATCHERS.walk.test(walkClip.name)) {
       // A walk without its hips' rise and fall (root motion stripped, or retargeted as rotations) keeps the
       // hips at standing height, where a straight leg cannot reach a planted foot: put the bob back from the feet.
       const bobbed = LocomotionAnimator.withHipsBob(root, walkClip, humanoid);
       if (bobbed) desktopClips.splice(desktopClips.indexOf(walkClip), 1, bobbed);
-      this.gait = LocomotionAnimator.measureGait(root, bobbed ?? walkClip, humanoid)?.gait;
+      const measured = LocomotionAnimator.measureGait(root, bobbed ?? walkClip, humanoid);
+      this.gait = measured?.gait;
+      this.walkTrajectory = measured?.trajectory;
     }
     this.bindProfileActions('desktop-full', desktopClips);
     this.bindProfileActions('vr-lower-body', vrClips);
@@ -314,6 +352,11 @@ export class LocomotionAnimator {
     return this.gait;
   }
 
+  /** The walk clip's measured step shape, for any profile (the VR body solver's steps); undefined without a measured gait. */
+  getWalkTrajectory(): WalkTrajectory | undefined {
+    return this.walkTrajectory;
+  }
+
   /** The walk's footfall phase this frame, for the leg solver's planted feet; undefined without a measured gait. */
   getGaitState(): GaitState | undefined {
     // The gait is measured on the desktop clip; the VR clips keep their own speed-scaled cadence (gap 3).
@@ -374,7 +417,7 @@ export class LocomotionAnimator {
    * kinematics: when each foot is planted (lowest, moving backwards) and how
    * fast it moves then. The pose is restored afterwards.
    */
-  private static measureGait(root: THREE.Object3D, clip: THREE.AnimationClip, humanoid: HumanoidSkeleton): { gait: WalkGait | undefined; soles: number[]; restSole: number } | undefined {
+  private static measureGait(root: THREE.Object3D, clip: THREE.AnimationClip, humanoid: HumanoidSkeleton): { gait: WalkGait | undefined; soles: number[]; restSole: number; trajectory?: WalkTrajectory | undefined } | undefined {
     const feet = { left: humanoid.bone('leftFoot'), right: humanoid.bone('rightFoot') };
     const toes = { left: humanoid.bone('leftToes'), right: humanoid.bone('rightToes') };
     const hips = humanoid.bone('hips');
@@ -390,11 +433,21 @@ export class LocomotionAnimator {
       if (toes[side]) restForward.add(toes[side]!.getWorldPosition(new THREE.Vector3()).sub(feet[side]!.getWorldPosition(new THREE.Vector3())));
     }
     if (restForward.x ** 2 + restForward.z ** 2 < 1e-10) return undefined;
+    const pitchOf = (side: GaitLeg) => {
+      const toe = toes[side];
+      if (!toe) return 0;
+      const d = toe.getWorldPosition(new THREE.Vector3()).sub(feet[side]!.getWorldPosition(new THREE.Vector3()));
+      return Math.atan2(d.y, Math.hypot(d.x, d.z));
+    };
+    const restPitch = { left: pitchOf('left'), right: pitchOf('right') };
+    const restHips = hips.getWorldPosition(new THREE.Vector3()).y - rootY - restSole;
+    const rootAt = root.getWorldPosition(new THREE.Vector3());
     const mixer = new THREE.AnimationMixer(root);
     const action = mixer.clipAction(clip);
     action.play();
     const local = new THREE.Vector3();
-    const track: Record<GaitLeg, Array<{ x: number; z: number; sole: number }>> = { left: [], right: [] };
+    const track: Record<GaitLeg, Array<{ x: number; z: number; sole: number; rx: number; rz: number; pitch: number }>> = { left: [], right: [] };
+    const hipsYs: number[] = [];
     let hipsHeight = 0;
     try {
       for (let i = 0; i < GAIT_SAMPLES; i++) {
@@ -404,10 +457,14 @@ export class LocomotionAnimator {
         // World space relative to the hips: the rig's own axes need not be the avatar's.
         const hip = hips.getWorldPosition(local);
         hipsHeight += (hip.y - root.getWorldPosition(new THREE.Vector3()).y) / GAIT_SAMPLES;
+        hipsYs.push(hip.y - rootY);
         for (const side of ['left', 'right'] as const) {
           const ankle = feet[side]!.getWorldPosition(new THREE.Vector3());
           const toe = toes[side] ? toes[side]!.getWorldPosition(new THREE.Vector3()) : ankle;
-          track[side].push({ x: ankle.x - hip.x, z: ankle.z - hip.z, sole: Math.min(ankle.y, toe.y) - rootY });
+          track[side].push({
+            x: ankle.x - hip.x, z: ankle.z - hip.z, sole: Math.min(ankle.y, toe.y) - rootY,
+            rx: ankle.x - rootAt.x, rz: ankle.z - rootAt.z, pitch: restPitch[side] - pitchOf(side)
+          });
         }
       }
     } finally {
@@ -460,7 +517,75 @@ export class LocomotionAnimator {
     const stanceSpeed = speeds.reduce((sum, v) => sum + v, 0) / Math.max(1, speeds.length);
     // Kept in the root's own units, so a later rescale of the avatar still reads true.
     const scale = Math.abs(root.getWorldScale(new THREE.Vector3()).z) || 1;
-    return result(stanceSpeed > 1e-4 ? { stance, stanceSpeed: stanceSpeed / scale } : undefined);
+    if (!(stanceSpeed > 1e-4)) return result(undefined);
+    const gait: WalkGait = { stance, stanceSpeed: stanceSpeed / scale };
+    const trajectory = restHips > 1e-4 ? LocomotionAnimator.buildTrajectory(gait, clip.duration, track, hipsYs, axis, sign, restHips) : undefined;
+    return { ...result(gait), trajectory };
+  }
+
+  /**
+   * The step shape relative to the ground-projected root (not the swaying hips), in rest hips heights. A swing's
+   * progress is the foot's ground travel as the body would carry it at the clip's stance speed: its offset along the
+   * stride plus the travel since lift-off, normalised from lift-off to landing.
+   */
+  private static buildTrajectory(
+    gait: WalkGait, duration: number,
+    track: Record<GaitLeg, Array<{ sole: number; rx: number; rz: number; pitch: number }>>,
+    hipsYs: number[], axis: { x: number; z: number }, sign: number, restHips: number
+  ): WalkTrajectory | undefined {
+    const n = hipsYs.length;
+    const dt = duration / n;
+    const legs = {} as Record<GaitLeg, { progress: Float32Array; clearance: Float32Array; roll: Float32Array }>;
+    const forwardOf = (side: GaitLeg) => track[side].map((p) => (p.rx * axis.x + p.rz * axis.z) * sign);
+    // Stance speed from the root: a planted foot slides back past it at this speed in the in-place clip.
+    let speedSum = 0;
+    let speedCount = 0;
+    for (const side of ['left', 'right'] as const) {
+      const forward = forwardOf(side);
+      for (let i = 0; i < n; i++) {
+        if (!inStance(gait, side, i / n)) continue;
+        speedSum += -(forward[(i + 1) % n]! - forward[(i - 1 + n) % n]!) / (2 * dt);
+        speedCount++;
+      }
+    }
+    const stanceSpeed = speedSum / Math.max(1, speedCount);
+    if (!(stanceSpeed > 1e-4)) return undefined;
+    for (const side of ['left', 'right'] as const) {
+      const samples = track[side];
+      const forward = forwardOf(side);
+      const { land, lift } = gait.stance[side];
+      const swingLength = (land - lift + 1) % 1 || 1;
+      const planted = Math.min(...samples.map((p) => p.sole));
+      const progress = new Float32Array(n);
+      const liftIndex = Math.round(lift * n) % n;
+      const swingSamples = Math.max(1, Math.round(swingLength * n));
+      const worldAt = (k: number) => forward[(liftIndex + k) % n]! + stanceSpeed * k * dt;
+      const span = worldAt(swingSamples) - worldAt(0);
+      // Stance samples: 1 in the first half (just landed), 0 in the second (about to lift), so interpolation at either
+      // end of the swing reads its own end.
+      for (let i = 0; i < n; i++) {
+        const since = (((i / n) - land + 1) % 1);
+        progress[i] = since < (1 - swingLength) / 2 ? 1 : 0;
+      }
+      let best = 0;
+      for (let k = 0; k <= swingSamples; k++) {
+        const p = Math.abs(span) > 1e-6 ? (worldAt(k) - worldAt(0)) / span : k / swingSamples;
+        best = Math.min(1, Math.max(best, p));
+        progress[(liftIndex + k) % n] = k === swingSamples ? 1 : best;
+      }
+      legs[side] = {
+        progress,
+        clearance: Float32Array.from(samples, (p) => Math.max(0, p.sole - planted) / restHips),
+        roll: Float32Array.from(samples, (p) => p.pitch)
+      };
+    }
+    const top = Math.max(...hipsYs);
+    return {
+      gait, duration,
+      stanceSpeed: stanceSpeed / restHips,
+      legs,
+      bob: Float32Array.from(hipsYs, (y) => (y - top) / restHips)
+    };
   }
 
   private resolveState(grounded: boolean, velocityY: number, horizontalSpeed: number): LocomotionState {
