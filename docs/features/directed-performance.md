@@ -3722,6 +3722,36 @@ Proof video (ignored, not committed): `output/agent-path-proof/agent-path-proof.
 shows the stone's run from the idea through six versions with their bar rows, then the
 three finals on the phone card, rebuilt on the new house face.
 
+#### Owner's verdict (2026-11-20): no piece is good enough; storytelling is missing
+
+The owner watched the proof video. In the owner's words: "none are good enough. the arm
+movements are weird, the shrug is the best overall, but theres no context. there's no
+clarity that it's a baker and the loaf is theirs. the loaf just appears. there's no slip.
+and the stone just appears too. there's storytelling missing here".
+
+So the bars measure the wrong thing for a story. A piece can pass every bar and still not
+tell one. What the sheets and the tool show:
+
+- **The loaf appears.** The baker sheet starts with `hold: { right: "loaf" }`, so the
+  loaf is in her hand at frame 0. Nothing shows where it came from (an oven, a tray, the
+  counter) or that she made it.
+- **The stone appears.** It sits on the table from the start, but it is a small grey
+  shape on a brown box behind the performer's body and hair, so it shows only when it is
+  lifted. Nothing draws the eye to it first.
+- **There is no slip.** In the shrug sheet the "slip" is a mark: an empty point in space
+  that the performer looks at. Nothing happens there. The tool has no way to make an
+  event happen: an object cannot fall, tip, break or be dropped (the directions are
+  look, reach, take, put, bend, gesture, expression, state, move, step and turn).
+- **No one is a baker.** The look has three outfits and no garments or role props (no
+  apron, no hat, no oven, no tray). Objects are boxes, spheres and cylinders.
+- **The arms look weird.** Reaches and holds are solved per beat to a point; they do not
+  move like a person handling a thing.
+- **The skill asks for beats, not a story.** It does not ask the agent to set up who the
+  person is, where they are and what happens before the reaction.
+
+This verdict replaces the reading bar as the question for the next slice: does a viewer
+who knows nothing get the setup, the event and the reaction? See `TODOS.md`.
+
 ### Slice 4a evidence (2026-11-18)
 
 Commands from `apps/capture` (each writes its report under the ignored
