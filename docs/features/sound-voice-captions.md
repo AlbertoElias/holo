@@ -4,7 +4,7 @@
 directed-performance lead (2026-11-18)
 **Status:** Slice 1a built in the authoring tool (2026-11-18,
 `feature/sound-1a`); slice 3 (captions) on `main` 2026-11-19
-(`feature/sound-captions`; six choices made by the agent in the owner's absence, for review); slices 1b, 4 to 6 not started. Written and built while the
+(`feature/sound-captions`; six choices made by the agent in the owner's absence, approved by the owner on 2026-11-20); slices 1b, 4 to 6 not started. Written and built while the
 owner was away on 2026-11-18. On 2026-11-19 the owner heard the slice 1a clip
 and accepted all eight recommended decisions ("Owner decisions" at the end),
 and with them the agent's slice 1a choices (the local Kokoro voice and the
@@ -411,7 +411,9 @@ before any code. Folded into the plan:
 ### Slice 3: choices the eight decisions left open
 
 Decided by the agent in the owner's absence on 2026-11-19, for the owner to
-review (the lead's picks; each is one constant or option, so reversible):
+review (the lead's picks; each is one constant or option, so reversible).
+**Approved by the owner on 2026-11-20:** "captions ok". That covers all six
+below (the lead put them to the owner as 1B, 2A, 3B, 4A, 5A and 6A).
 
 1. **WebXR:** captions show by the head only on a hologram that is not heard
    (in the gallery, every placed hologram but the focused one); the heard one
