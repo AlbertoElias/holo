@@ -55,9 +55,11 @@ M() { node --conditions=development --import tsx scripts/authoring/make.ts "$@";
    > in that folder. To look at an image, never open the full file: run
    > `node packages/tooling-testing/src/preview.mjs <file>` from the repo root
    > and look at the small JPEG it prints. Watch the video too, since motion
-   > such as a wave shows only there: extract frames at 10 fps with ffmpeg into
-   > a folder in your scratch directory and preview that folder (a contact
-   > sheet), one stretch of a second or two at a time. Write your answer to
+   > such as a wave shows only there: extract PNG frames at 10 fps
+   > (`ffmpeg -ss <s> -t 2 -i <video> -vf fps=10 <dir>/f%03d.png`) into an
+   > empty folder in your scratch directory and preview that folder (a
+   > contact sheet), one stretch of two seconds at a time, through the whole
+   > video. Write your answer to
    > `<version dir>/review/reader.md`.
 
    Then spawn a second fresh subagent (the grader, `model: "sonnet"`):
