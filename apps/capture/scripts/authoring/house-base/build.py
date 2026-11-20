@@ -17,9 +17,12 @@ Steps: an MPFB human with the parameter file's macro and shape targets,
 baked; the proportions (a larger head, hands) applied to the mesh and to the
 kept face units, weighted by the rig's own weights so the rig is then fitted
 to the scaled mesh and no bone is scaled; the stylised face: the front of the
-face smoothed (nose, lips and sockets taken out), then big eyes, lids with a
-lash line, brows, a nose and a mouth built on it, with every face shape the
-audition and the mixes use authored for this face; the rig, renamed to the
+face smoothed (lips and sockets taken out, the body's own nose kept), then,
+drawn to the clay expression sheet: big eyes with a white, an iris with a
+dark ring, a pupil and a glint; lids that leave the eye's shell for the skin,
+with a lash line that wings out; brows that taper; and a mouth with lips, a
+dark inside and teeth, with every face shape the audition and the mixes use
+authored for this face; the rig, renamed to the
 stock avatar's bone names, with eye and head-top bones added; materials
 painted on the body by bone; helper geometry removed; the traits that are geometry (`dress.py`):
 loose garments in place of the painted clothes, every hair style and both glasses frames, each its
@@ -264,9 +267,22 @@ def sample(A, x, z):
 w_skull = weight_of("Head")
 fade = 1 - smoothstep(core["fade"], 1.0, rho)
 D_filled = np.where(np.isnan(D), smooth, D)
+# The nose stays: found as the place on the midline, between the eyes and the mouth, that stands furthest out
+# of the smoothed face, and kept (`keep` of it) in an ellipse about `centre` above its tip.
+no = F["nose"]
+jc = int(round((cx - xs[0]) / g))
+z_tip = float(zs[int(np.argmax(np.where((zs < ze) & (zs > zm), np.nan_to_num(smooth - D)[:, jc], -1.0)))])
+
+
+def nose_keep(x, z):
+    dz = z - (z_tip + no["centre"])
+    r = math.hypot((x - cx) / no["halfWidth"], dz / (no["above"] if dz > 0 else no["below"]))
+    return no["keep"] * (1 - float(smoothstep(no["fade"], 1.0, r)))
+
+
 for v in np.where(is_body & (w_skull > 0.5) & (base[:, 1] < sm["frontOf"]))[0]:
     x, y, z = base[v]
-    w = sample(np.nan_to_num(fade), x, z)
+    w = sample(np.nan_to_num(fade), x, z) * (1 - nose_keep(x, z))
     if w <= 0:
         continue
     # A vertex on the front surface goes onto the smoothed one; one behind it (inside the lips, a socket) stays
@@ -280,11 +296,12 @@ moved = {c: np.zeros((N, 3)) for c in SHAPES}
 for c in SKIN:
     moved[c] = skin_moved[c] * (keep_jaw[:, None] if c.startswith("jaw") else 1.0)
 skin = BVHTree.FromPolygons([tuple(v) for v in base], body_polys)
-def on_skin(x, z, lift=0.0):
+def on_skin(x, z, lift=0.0, whole=False):
     """The skin in front at (x, z), less lift. A ray through a gap left in the face (the mouth's slit, a nostril)
-    finds the back of the head, so there the smoothed depth is taken instead."""
-    hit = skin.ray_cast(Vector((x, -1.0, z)), Vector((0, 1, 0)))[0]
-    y = sample(np.nan_to_num(smooth), x, z)
+    finds the back of the head, so there the smoothed depth is taken instead. `whole`: the skin as it was
+    before the eye sockets were let into it."""
+    hit = (skin0 if whole else skin).ray_cast(Vector((x, -1.0, z)), Vector((0, 1, 0)))[0]
+    y = sample(np.nan_to_num(smooth0 if whole else smooth), x, z)
     if hit is None and y == 0.0:
         raise SystemExit(f"no skin in front at x={x:.3f} z={z:.3f}")
     if hit is None or (y != 0.0 and hit[1] > y + sm["tolerance"]):
@@ -320,61 +337,170 @@ def grid_faces(cols, rows, first=0):
 
 front = lambda p: np.array((0.0, -1.0, 0.0))
 
-# The eyes: big spheres a little behind the smoothed surface, so most of each shows.
+# The eyes: large spheres set back in the face, so the lids' opening shows the front of each, the whites either
+# side of the iris. The lids' frame is turned outward by `yaw` about the vertical, as the face curves away.
 ey = F["eyes"]
 R = ey["radius"]
-eyes = {}
+UP = np.array((0.0, 0.0, 1.0))
+ld = F["lids"]
+UC, UMAX = ld["corner"], ld["extent"]
+eyes, frames = {}, {}
 for side in SIDES:
     x = cx + SIGN[side] * ey["x"]
     surf = on_skin(x, ze)
     eyes[side] = np.array((x, surf[1] + ey["depth"] * R, ze))
+    yw = math.radians(ld["yaw"])
+    frames[side] = (np.array((SIGN[side] * math.cos(yw), math.sin(yw), 0.0)), np.array((SIGN[side] * math.sin(yw), -math.cos(yw), 0.0)))
 
-# The lids: shells about each eye, the upper one ending in a dark lash band. A point is at (u, a): u across
-# the eye (-1 inner .. 1 outer), a its angle up from straight ahead about the eye's horizontal axis. A lid
-# shape moves the lid's edge to a new angle and spreads the rest of the lid over the angles behind it.
-ld = F["lids"]
+# The lids: shells about each eye with an almond opening between them. A point is at (u, a): u across the eye
+# (-1 inner .. 1 outer, the corners at -corner and corner), a its angle up from straight ahead about the eye's
+# horizontal axis. The corners lie on a line from `inner` to `outer` degrees; each lid's edge leaves it by its
+# opening times an almond profile, so a lid shape is a new opening (the upper lid closes onto the lower one's
+# edge), the rest of the lid spread over the angles behind it. The upper lid's first row is the dark lash
+# line, thin at the inner corner and running on past the outer one as a wing.
 
 
 def lid_point(E, r, side, u, a):
     a = math.radians(a)
     c = math.sqrt(max(0.0, 1 - u * u))
-    return E + r * np.array((SIGN[side] * u, -c * math.cos(a), c * math.sin(a)))
+    out, fwd = frames[side]
+    return E + r * (u * out + c * math.cos(a) * fwd + c * math.sin(a) * UP)
 
 
-def lid_angles(back, rows, new_edge):
-    t = np.linspace(0, 1, rows)
-    return new_edge + t * (back - new_edge)
+def canthus(u):
+    t = min(1.0, max(0.0, (u / UC + 1) / 2))
+    return ld["inner"] + t * (ld["outer"] - ld["inner"]) + ld["wingRise"] * max(0.0, (u - UC) / ld["wing"])
+
+
+def lid_edge(which, u, opening):
+    """The edge's angle at u for an opening (degrees at the middle; below 0 the lid has crossed the corners'
+    line and follows the other lid's profile, so a closed eye's edges meet)."""
+    other = "lower" if which == "upper" else "upper"
+    power = ld[which if opening >= 0 else other]["power"]
+    return canthus(u) + (1 if which == "upper" else -1) * opening * max(0.0, 1 - (u / UC) ** 2) ** power
+
+
+def lash(u):
+    if u > UC:
+        return max(0.0, 1 - (u - UC) / ld["wing"])
+    if u < -UC:
+        return ld["lashInner"] * max(0.0, 1 - (-UC - u) / ld["tail"])
+    return max(ld["lashInner"], float(smoothstep(0.0, ld["lashFull"], (u + UC) / (2 * UC))))
+
+
+def lid_rows(which, u, opening):
+    L = ld[which]
+    e = lid_edge(which, u, opening)
+    l = e + (1 if which == "upper" else -1) * L["lash"] * lash(u)
+    return [e, *(l + (L["back"] - l) * t for t in np.linspace(0, 1, L["rows"] - 1))]
+
+
+# The sockets: the skin about each opening goes back behind the eye's front (to `behind` eye radii from its
+# centre) within `rim` of the opening, easing out over `slope`, so the eye sits in the face and the skin never
+# shows through it; the smoothed depth the parts ride goes with it.
+so = F["socket"]
+
+
+def outside(E, side, x, z):
+    """How far (m, about) the place (x, z) is outside the lids' opening on the eye's front; 0 inside."""
+    dx, dz = x - E[0], z - E[2]
+    q2 = dx * dx + dz * dz
+    if q2 >= R * R:
+        return 1.0
+    out, fwd = frames[side]
+    p = np.array((dx, -math.sqrt(R * R - q2), dz))
+    u = float(p @ out) / R
+    a = math.degrees(math.atan2(dz, float(p @ fwd)))
+    over = max(a - lid_edge("upper", u, ld["upper"]["open"]), lid_edge("lower", u, ld["lower"]["open"]) - a, 0.0)
+    return R * (so["past"] * max(abs(u) - UC, 0.0) + math.sqrt(max(0.0, 1 - u * u)) * math.radians(over))
+
+
+def socket(x, y, z):
+    for side, E in eyes.items():
+        if abs(x - E[0]) >= R or abs(z - E[2]) >= R:
+            continue
+        w = 1 - float(smoothstep(so["rim"], so["rim"] + so["slope"], outside(E, side, x, z)))
+        if w > 0:
+            rho = so["behind"] * R
+            y += w * max(0.0, E[1] - math.sqrt(max(rho * rho - (x - E[0]) ** 2 - (z - E[2]) ** 2, 0.0)) - y)
+    return y
+
+
+skin0, smooth0 = skin, np.nan_to_num(smooth).copy()
+for v in np.where(is_body & (w_skull > 0.5) & (base[:, 1] < sm["frontOf"]))[0]:
+    base[v, 1] = socket(*base[v])
+smooth = np.nan_to_num(smooth)
+for i, z in enumerate(zs):
+    for j, x in enumerate(xs):
+        if smooth[i, j] != 0.0 and any(abs(x - E[0]) < R and abs(z - E[2]) < R for E in eyes.values()):
+            smooth[i, j] = socket(x, smooth[i, j], z)
+skin = BVHTree.FromPolygons([tuple(v) for v in base], body_polys)
+
+
+def on_face(x, z, lift=0.0):
+    """The skin or the upper lid's shell in front at (x, z), filleted as the lid is, less lift."""
+    p = on_skin(x, z, whole=True)
+    k = ld["fillet"]
+    for E in eyes.values():
+        r = ld["upper"]["radius"] * R
+        q2 = (x - E[0]) ** 2 + (z - E[2]) ** 2
+        if q2 < r * r:
+            shell = E[1] - math.sqrt(r * r - q2)
+            p[1] = min(p[1], shell) - k * math.log1p(math.exp(-abs(shell - p[1]) / k))
+    p[1] -= lift
+    return p
+
+
+def lid_surface(E, r, side, u, a, e):
+    """The lid at (u, a): on its shell about the eye, or on the skin (as it was before the sockets) where that
+    is in front, the two meeting in a fillet (a smooth minimum over `fillet`), so the lid is one surface from
+    the eye out onto the face and the socket lies hidden behind it."""
+    p = lid_point(E, r, side, u, a)
+    y = on_skin(p[0], p[2], ld["lift"], whole=True)[1]
+    k = ld["fillet"]
+    shell = p[1]
+    p[1] = min(shell, y) - k * math.log1p(math.exp(-abs(shell - y) / k))
+    # Away from its edge (from `hold` to `settle` degrees) the lid leaves its shell for the skin behind it, as
+    # far as the eye allows (`over` eye radii), so the eye is not a ball standing out of the face.
+    if y > p[1]:
+        p[1] += float(smoothstep(ld["hold"], ld["settle"], abs(a - e))) * (y - p[1])
+        q2 = (p[0] - E[0]) ** 2 + (p[2] - E[2]) ** 2
+        rho = ld["over"] * R
+        if q2 < rho * rho:
+            p[1] = min(p[1], E[1] - math.sqrt(rho * rho - q2))
+    return p
+
+
+def lid_grid(E, r, side, which, opening):
+    return np.array([lid_surface(E, r, side, u, a, rows_[0]) for u in us for rows_ in [lid_rows(which, u, opening)] for a in rows_])
 
 
 for side, E in eyes.items():
+    us = np.linspace(-UMAX, UMAX, ld["columns"])
     for which in ("upper", "lower"):
         L = ld[which]
         r = L["radius"] * R
-        us = np.linspace(-1, 1, ld["columns"])
         rows = L["rows"]
-        angles = lid_angles(L["back"], rows, L["edge"])
-        verts = [lid_point(E, r, side, u, a) for u in us for a in angles]
+        verts = lid_grid(E, r, side, which, L["open"])
         faces = grid_faces(len(us), rows)
-        lash = [which == "upper" and abs(angles[j] - angles[0]) < L.get("lash", 0) for i in range(len(us) - 1) for j in range(rows - 1)]
-        mats = ["lash" if x else "skin" for x in lash]
+        mats = ["lash" if j == 0 else "skin" for i in range(len(us) - 1) for j in range(rows - 1)]
         offs = {}
-        for shape, edges in ld["shapes"].items():
-            new = edges[0 if which == "upper" else 1]
+        for shape, openings in ld["shapes"].items():
+            new = openings[0 if which == "upper" else 1]
             if new is None:
                 continue
-            moved_angles = lid_angles(L["back"], rows, new)
-            target = np.array([lid_point(E, r, side, u, a) for u in us for a in moved_angles])
+            target = lid_grid(E, r, side, which, new)
             # A shape moves each vertex in a straight line, which cuts inside the eye halfway through a long
             # sweep, so the lid would hide behind the eye at a partial weight: the target goes out along its
             # radius until the halfway point clears the eye by `clear`.
-            v0 = np.array(verts) - E
+            v0 = verts - E
             for k, t1 in enumerate(target - E):
                 a2, b = np.dot(v0[k], v0[k]), np.dot(v0[k], t1) / np.linalg.norm(t1)
                 need = (2 * ld["clear"] * R) ** 2
                 if np.dot(v0[k] + t1, v0[k] + t1) < need:
                     q = (-b + math.sqrt(b * b - (a2 - need))) if b * b - (a2 - need) >= 0 else np.linalg.norm(t1)
                     target[k] = E + t1 / np.linalg.norm(t1) * max(q, np.linalg.norm(t1))
-            offs[shape + side] = target - np.array(verts)
+            offs[shape + side] = target - verts
         add_part(verts, faces, mats, offs, lambda p, E=E: p - E)
 
 # The brows: a thick ribbon riding the skin above each eye, in eye radii from the eye centre: x from the inner
@@ -389,14 +515,14 @@ for side, E in eyes.items():
     for i in range(n + 1):
         t = i / n
         u = -bro["inner"] + t * (bro["inner"] + bro["outer"])
-        low = bro["low"] + bro["rise"] * t + bro["arch"] * (1 - (2 * t - 1) ** 2)
-        thick = bro["thick"] * (1 - bro["taper"] * t * t)
+        low = bro["low"] + bro["rise"] * t + bro["arch"] * math.sin(math.pi * t ** bro["peak"])
+        thick = bro["thick"] * (1 - bro["taper"] * t ** bro["taperPower"]) * (bro["blunt"] + (1 - bro["blunt"]) * min(1.0, t / bro["round"]) ** 0.5)
         for j in range(rows):
             plan.append((t, E[0] + sg * u * R, E[2] + (low + thick * j / (rows - 1)) * R))
-    verts = np.array([on_skin(x, z, bro["lift"]) for _, x, z in plan])
+    verts = np.array([on_face(x, z, bro["lift"]) for _, x, z in plan])
 
     def shaped(fn):
-        return np.array([on_skin(x + dx, z + dz, bro["lift"]) for (t, x, z), (dx, dz) in zip(plan, (fn(t) for t, _, _ in plan))]) - verts
+        return np.array([on_face(x + dx, z + dz, bro["lift"]) for (t, x, z), (dx, dz) in zip(plan, (fn(t) for t, _, _ in plan))]) - verts
 
     offs = {
         f"browDown{side}": shaped(lambda t: (-sg * bs["downIn"] * (1 - t), -(bs["downOuter"] + (bs["downInner"] - bs["downOuter"]) * (1 - t)))),
@@ -405,51 +531,56 @@ for side, E in eyes.items():
     }
     add_part(verts, grid_faces(n + 1, rows), ["brow"] * (n * (rows - 1)), offs, front)
 
-# The nose: a small round nose on the smoothed face, half out of it.
-no = F["nose"]
-zn = ze + no["at"] * (zm - ze)
-surf = on_skin(cx, zn)
-rad = np.array(no["radii"])
-nc = surf + np.array((0.0, (1 - 2 * no["out"]) * rad[1], 0.0))
-bm_ = bmesh.new()
-bmesh.ops.create_uvsphere(bm_, u_segments=12, v_segments=8, radius=1.0)
-unit = np.array([v.co[:] for v in bm_.verts])
-sphere_f = [[v.index for v in f.verts] for f in bm_.faces]
-bm_.free()
-nose_v = nc + unit * rad
-sneer = {f"noseSneer{side}": np.outer(np.clip(0.5 + SIGN[side] * (nose_v[:, 0] - cx) / (2 * rad[0]), 0, 1), (0, 0, no["sneer"])) for side in SIDES}
-add_part(nose_v, sphere_f, ["skin"] * len(sphere_f), sneer, lambda p: p - nc)
-
-# The mouth: a dark shape on the skin between an upper and a lower edge, a teeth row between them that shows
-# only when a shape opens it (a smile). Each shape moves the edges in the face's plane; the points then go back
-# onto the skin. s runs from the human's right corner (-1) to its left (1).
+# The mouth: lips on the skin, an upper and a lower one standing a little out of it, and between them a dark
+# line that a shape opens into the mouth's inside, with a teeth row that shows only then (a smile). Each shape
+# moves the line's edges in the face's plane and each lip goes with its edge; the points then go back onto the
+# skin. s runs from the human's right corner (-1) to its left (1).
 mo = F["mouth"]
 ms = F["mouthShapes"]
+lp = mo["lips"]
 cols = mo["columns"]
 S_ = np.linspace(-1, 1, cols)
-thick = mo["thick"] * np.sqrt(np.clip(1 - S_ ** 2, 0, 1)) + mo["corner"] * mo["thick"]
-ROWS = ("upper", "teeth", "lower")
-plan = {"upper": thick / 2, "teeth": thick / 2, "lower": -thick / 2}
+mid = np.clip(1 - S_ ** 2, 0, 1)  # 1 at the middle, 0 at the corners
+thick = mo["thick"] * np.sqrt(mid) + mo["corner"] * mo["thick"]
+line = -mo["droop"] * S_ ** 2
+up_h = lp["upper"] * mid ** lp["upperPower"] * (1 - lp["bow"] * np.exp(-(S_ / lp["bowWidth"]) ** 2))
+lo_h = lp["lower"] * mid ** lp["lowerPower"]
+# The inside (the teeth and the dark) has its own rows, apart from the lips', so its shading is not the lips';
+# its `roof` row, hidden under the upper lip, keeps the teeth facing forward while they are closed to nothing.
+ROWS = ("lipTop", "lipUp", "lipIn", "roof", "upper", "teeth", "lower", "lipUnder", "lipLow", "lipBottom")
+BETWEEN = ("lips", "lips", None, "teeth", "teeth", "mouth", None, "lips", "lips")
+FOLLOW = {"lipTop": "upper", "lipUp": "upper", "lipIn": "upper", "roof": "upper", "lipUnder": "lower", "lipLow": "lower", "lipBottom": "lower"}
+plan = {
+    "lipTop": line + thick / 2 + up_h, "lipUp": line + thick / 2 + lp["peak"] * up_h, "lipIn": line + thick / 2, "roof": line + thick / 2 + lp["roof"] * up_h,
+    "upper": line + thick / 2, "teeth": line + thick / 2, "lower": line - thick / 2, "lipUnder": line - thick / 2, "lipLow": line - thick / 2 - lp["peak"] * lo_h, "lipBottom": line - thick / 2 - lo_h,
+}
+swell = np.sqrt(mid)
+LIFT = {
+    "lipTop": lp["edge"] + 0 * swell, "lipUp": lp["edge"] + (lp["upperOut"] - lp["edge"]) * swell, "lipIn": mo["lift"] + 0 * swell, "roof": mo["lift"] + 0 * swell, "upper": mo["lift"] + 0 * swell, "teeth": mo["lift"] + 0 * swell,
+    "lower": mo["lift"] + 0 * swell, "lipUnder": mo["lift"] + 0 * swell, "lipLow": lp["edge"] + (lp["lowerOut"] - lp["edge"]) * swell, "lipBottom": lp["edge"] + 0 * swell,
+}
 
 
 def mouth_at(d):
-    """d: row -> (dx, dz, dy) arrays over the columns; the points, back on the skin."""
+    """d: row -> (dx, dz, dy) arrays over the columns, for the line's rows; the points, back on the skin."""
     pts = []
     for i, s_ in enumerate(S_):
         for row in ROWS:
-            dx, dz, dy = (d.get(row, (0, 0, 0))[k][i] if np.ndim(d.get(row, (0, 0, 0))[k]) else d.get(row, (0, 0, 0))[k] for k in range(3))
-            p = on_skin(cx + s_ * mo["halfWidth"] + dx, zm + plan[row][i] + dz, mo["lift"])
+            m = d.get(FOLLOW.get(row, row), (0, 0, 0))
+            dx, dz, dy = (m[k][i] if np.ndim(m[k]) else m[k] for k in range(3))
+            tuck = d.get("tuck", {}).get(row, 0.0)
+            tuck = float(tuck[i]) if np.ndim(tuck) else tuck  # the share of this lip row's height it rolls in toward the line
+            p = on_skin(cx + s_ * mo["halfWidth"] + dx, zm + plan[row][i] + dz - tuck * (plan[row][i] - plan[FOLLOW.get(row, row)][i]), LIFT[row][i] + tuck * (mo["lift"] - LIFT[row][i]))
             pts.append(p + np.array((0.0, dy, 0.0)))
     return np.array(pts)
 
 
 mouth_v = mouth_at({})
 Z = np.zeros(cols)
-mid = np.clip(1 - S_ ** 2, 0, 1)  # 1 at the middle, 0 at the corners
 
 
 def every(dx=Z, dz=Z, dy=Z):
-    return {row: (dx, dz, dy) for row in ROWS}
+    return {row: (dx, dz, dy) for row in ("upper", "teeth", "lower")}
 
 
 mouth_shapes = {}
@@ -457,11 +588,13 @@ for side in SIDES:
     sg = SIGN[side]
     on = np.clip(sg * S_, 0, 1)  # this side's half, 0 at the middle, 1 at its corner
     sm_, fr, st, pr_, lo, up, di = (ms[k] for k in ("smile", "frown", "stretch", "press", "lowerDown", "upperUp", "dimple"))
-    open_ = 0.5 * sm_["open"] * mid
+    open_ = 0.5 * sm_["open"] * mid ** sm_["round"]  # below 1 the opening keeps its height toward the corners
+    rise = sm_["up"] * on ** 2 + 0.5 * sm_["midUp"] * mid
+    fore = -sm_["lift"] * 4 * on * (1 - on)  # forward, most halfway out: the open mouth spans the cheek's curve there
     mouth_shapes[f"mouthSmile{side}"] = {
-        "upper": (sg * sm_["out"] * on ** 2, sm_["up"] * on ** 2, Z),
-        "teeth": (sg * sm_["out"] * on ** 2, sm_["up"] * on ** 2 - sm_["teeth"] * open_, Z),
-        "lower": (sg * sm_["out"] * on ** 2, sm_["up"] * on ** 2 - open_, Z),
+        "upper": (sg * sm_["out"] * on, rise, fore),
+        "teeth": (sg * sm_["out"] * on, rise - sm_["teeth"] * open_, fore),
+        "lower": (sg * sm_["out"] * on, rise - open_, fore),
     }
     mouth_shapes[f"mouthFrown{side}"] = every(sg * fr["out"] * on ** 2, -fr["down"] * on ** 2)
     mouth_shapes[f"mouthStretch{side}"] = every(sg * st["out"] * on, -st["down"] * on)
@@ -471,12 +604,19 @@ for side in SIDES:
     mouth_shapes[f"mouthUpperUp{side}"] = {"upper": (Z, up * bump, Z), "teeth": (Z, up * bump, Z)}
     mouth_shapes[f"mouthDimple{side}"] = every(sg * di * on, 0.3 * di * on)
 fu, pu, ro, sh = ms["funnel"], ms["pucker"], ms["roll"], ms["shrug"]
-mouth_shapes["jawOpen"] = {"lower": (Z, -ms["jawOpen"] * mid ** 0.7, Z)}
+mouth_shapes["jawOpen"] = {"lower": (Z, -ms["jawOpen"] * mid, Z)}
 mouth_shapes["mouthClose"] = {"lower": (Z, thick, Z)}
 mouth_shapes["mouthFunnel"] = {"upper": (-fu["in"] * S_, fu["up"] * mid, Z), "teeth": (-fu["in"] * S_, fu["up"] * mid, Z), "lower": (-fu["in"] * S_, -fu["down"] * mid, Z)}
 mouth_shapes["mouthPucker"] = every(-pu["in"] * S_, Z, -pu["forward"] * mid)
 mouth_shapes["mouthRollLower"] = {"upper": (-ro["in"] * S_, -ro["down"] * np.abs(S_), Z), "teeth": (-ro["in"] * S_, -ro["down"] * np.abs(S_), Z), "lower": (-ro["in"] * S_, ro["thin"] - ro["down"] * np.abs(S_), Z)}
 mouth_shapes["mouthRollUpper"] = {"upper": (-ro["in"] * S_, -ro["thin"] - ro["down"] * np.abs(S_), Z), "teeth": (-ro["in"] * S_, -ro["thin"] - ro["down"] * np.abs(S_), Z), "lower": (-ro["in"] * S_, -ro["down"] * np.abs(S_), Z)}
+# Rolled or pressed lips tuck in: their outer rows come toward the line, so the lip's colour thins to a line.
+UPPER_LIP, LOWER_LIP = ("lipTop", "lipUp", "roof"), ("lipLow", "lipBottom")
+mouth_shapes["mouthRollUpper"]["tuck"] = {r: ro["tuck"] for r in UPPER_LIP}
+mouth_shapes["mouthRollLower"]["tuck"] = {r: ro["tuck"] for r in LOWER_LIP}
+for side in SIDES:
+    on_ = np.clip(SIGN[side] * S_ * 4 + 0.5, 0, 1)  # this side's half, eased across the middle
+    mouth_shapes[f"mouthPress{side}"]["tuck"] = {r: pr_["tuck"] * on_ for r in UPPER_LIP + LOWER_LIP}
 mouth_shapes["mouthShrugLower"] = {"lower": (Z, sh * np.ones(cols), Z)}
 mouth_shapes["mouthShrugUpper"] = {"upper": (Z, sh * np.ones(cols), Z), "teeth": (Z, sh * np.ones(cols), Z)}
 mouth_shapes["mouthLeft"] = every(ms["side"] * np.ones(cols))
@@ -486,12 +626,36 @@ mouth_shapes["jawRight"] = every(-ms["jawSide"] * np.ones(cols))
 mouth_shapes["jawForward"] = every(dy=-ms["jawForward"] * np.ones(cols))
 mouth_offs = {c: mouth_at(d) - mouth_v for c, d in mouth_shapes.items()}
 mouth_faces, mouth_mats = [], []
+n_rows = len(ROWS)
 for i in range(cols - 1):
-    for j, mat in ((0, "teeth"), (1, "mouth")):
-        a, b = i * 3 + j, (i + 1) * 3 + j
+    for j, mat in enumerate(BETWEEN):
+        if mat is None:
+            continue
+        a, b = i * n_rows + j, (i + 1) * n_rows + j
         mouth_faces.append([a, a + 1, b + 1, b])  # facing -Y: the teeth quads are flat at neutral, so set here
         mouth_mats.append(mat)
 add_part(mouth_v, mouth_faces, mouth_mats, mouth_offs, front)
+
+# MPFB's own mouth is a slit left in the skin, covered by the lips at rest. A closed smile lifts the lips off
+# it, so a patch of skin sits just behind the surface there and the slit shows skin, not the dark behind it.
+pt = mo["patch"]
+pxs, pzs = np.linspace(-pt["wide"], pt["wide"], pt["columns"]), np.linspace(-pt["tall"], pt["tall"], pt["rows"])
+add_part([on_skin(cx + x * mo["halfWidth"], zm + z, -pt["behind"]) for x in pxs for z in pzs], grid_faces(len(pxs), len(pzs)), ["skin"] * ((len(pxs) - 1) * (len(pzs) - 1)), {}, front)
+
+# The lines between the teeth: a sliver of the mouth's dark at each tooth's edge, from the upper edge down to
+# the teeth row, so it has no height until a shape shows the teeth (wound as the mouth's own quads, since
+# add_part cannot turn a face with no area). Each goes with the rows it lies on.
+tg = mo["toothGaps"]
+r_up, r_te = ROWS.index("upper"), ROWS.index("teeth")
+for c in tg["columns"]:
+    ids, w = [], []
+    for nb in (c - 1, c + 1):
+        for r_ in (r_up, r_te):
+            ids.append((c * n_rows + r_, nb * n_rows + r_))
+            w.append(tg["width"])
+    mix = lambda A: np.array([A[i] * (1 - f) + A[j] * f for (i, j), f in zip(ids, w)])
+    gv = mix(mouth_v) + np.array((0.0, -tg["lift"], 0.0))
+    add_part(gv, [[0, 1, 3, 2]], ["mouth"], {ch: mix(o) for ch, o in mouth_offs.items()}, front)
 
 # --- The rig: MPFB's mixamo rig fitted to the proportioned mesh, named as the stock avatar -----------------
 human.data.vertices.foreach_set("co", base.astype(np.float32).ravel())
@@ -560,7 +724,7 @@ def material(name, rgb):
 
 
 col = P["colours"]
-slots = ["skin", "top", "trousers", "shoes", "brow", "mouth", "teeth", "lash"]
+slots = ["skin", "top", "trousers", "shoes", "brow", "mouth", "teeth", "lash", "lips"]
 human.data.materials.clear()
 for n in slots:
     human.data.materials.append(material(f"HouseBase_{n}", col[n]))
@@ -660,27 +824,73 @@ for style, S in H["styles"].items():
     wear.append(dress.skinned(f"Hair_{style}", hv, hf, hw, [hair_mat], rig, human))
     hair_report[style] = {"vertices": len(hv), "lowestZ": round(float(hv[:, 2].min()), 4)}
 glasses_report = {}
+# The frames keep their own unit and sit from a point `anchor` units behind the skin before each eye, whatever
+# the eyes' size and depth.
+GU = P["glasses"]["unit"]
+glasses_at = {side: np.array((E[0], E[1] - ey["depth"] * R + P["glasses"]["anchor"] * GU, E[2])) for side, E in eyes.items()}
 for kind in P["glasses"]["kinds"]:
-    gv, gf, gwts = dress.glasses(kind, P["glasses"], eyes, R, bvh, C, cx)
+    gv, gf, gwts = dress.glasses(kind, P["glasses"], glasses_at, GU, bvh, C, cx)
     wear.append(dress.skinned(f"Glasses_{kind}", gv, gf, gwts, [frames_mat], rig, human))
     glasses_report[kind] = {"vertices": len(gv), "rimTopAboveEye": round(float(gv[:, 2].max() - ze), 4)}
 
-# --- Eyeballs, each carried by its eye bone ----------------------------------------------
+# --- Eyeballs, each carried by its eye bone: rings about the forward pole for the pupil, the iris, its dark
+# rim and the white, and a small glint standing just off the surface, up and to the human's left on both -----
+def eyeball():
+    rings = [ey["pupil"] / 2, ey["pupil"], (ey["pupil"] + ey["iris"] - ey["limbus"]) / 2, ey["iris"] - ey["limbus"], ey["iris"], ey["iris"] + 0.14]
+    rings += list(np.linspace(rings[-1], math.pi, 9)[1:-1])
+    seg = 28
+    V = [(0.0, -1.0, 0.0)]
+    for th in rings:
+        V += [(math.sin(th) * math.cos(2 * math.pi * j / seg), -math.cos(th), math.sin(th) * math.sin(2 * math.pi * j / seg)) for j in range(seg)]
+    V.append((0.0, 1.0, 0.0))
+    band = lambda th: 2 if th < ey["pupil"] else 1 if th < ey["iris"] - ey["limbus"] else 3 if th < ey["iris"] else 0
+    Fs, Ms = [], []
+    for j in range(seg):
+        Fs.append([0, 1 + j, 1 + (j + 1) % seg])
+        Ms.append(2)
+        last = 1 + (len(rings) - 1) * seg
+        Fs.append([len(V) - 1, last + j, last + (j + 1) % seg])
+        Ms.append(0)
+    for k in range(len(rings) - 1):
+        a, b = 1 + k * seg, 1 + (k + 1) * seg
+        for j in range(seg):
+            Fs.append([a + j, a + (j + 1) % seg, b + (j + 1) % seg, b + j])
+            Ms.append(band((rings[k] + rings[k + 1]) / 2))
+    gl = ey["glint"]
+    d = np.array((gl["x"], -1.0, gl["z"]))
+    d /= np.linalg.norm(d)
+    t1 = np.cross(d, UP)
+    t1 /= np.linalg.norm(t1)
+    t2 = np.cross(d, t1)
+    first = len(V)
+    V.append(tuple(d * gl["off"]))
+    V += [tuple(d * gl["off"] + gl["size"] * (math.cos(2 * math.pi * j / 12) * t1 + math.sin(2 * math.pi * j / 12) * t2)) for j in range(12)]
+    for j in range(12):
+        Fs.append([first, first + 1 + j, first + 1 + (j + 1) % 12])
+        Ms.append(4)
+    V = np.array(V) * R
+    for i, f in enumerate(Fs):
+        p = V[f]
+        if np.dot(np.cross(p[1] - p[0], p[2] - p[0]), p.mean(axis=0)) < 0:
+            Fs[i] = f[::-1]
+    return V, Fs, Ms
+
+
+EYE_PARTS = ("sclera", "iris", "pupil", "limbus", "glint")
 for side, E in eyes.items():
-    bpy.ops.mesh.primitive_uv_sphere_add(segments=32, ring_count=20, radius=R, location=E)
-    eye = bpy.context.active_object
-    eye.rotation_euler = (math.pi / 2, 0, 0)  # the pole faces -Y, the way the human looks
-    bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)
-    eye.name = eye.data.name = f"Eye{side}"
-    for n in ("sclera", "iris", "pupil"):
-        eye.data.materials.append(material(f"HouseBase_eye_{n}", col[n]) if f"HouseBase_eye_{n}" not in bpy.data.materials else bpy.data.materials[f"HouseBase_eye_{n}"])
-    for poly in eye.data.polygons:
-        d = poly.center.normalized()
-        ang = math.acos(max(-1.0, min(1.0, -d.y)))
-        poly.material_index = 2 if ang < ey["pupil"] else 1 if ang < ey["iris"] else 0
+    V, Fs, Ms = eyeball()
+    me = bpy.data.meshes.new(f"Eye{side}")
+    me.from_pydata([tuple(v) for v in V], [], Fs)
+    eye = bpy.data.objects.new(f"Eye{side}", me)
+    eye.location = E
+    bpy.context.scene.collection.objects.link(eye)
+    for n in EYE_PARTS:
+        me.materials.append(bpy.data.materials.get(f"HouseBase_eye_{n}") or material(f"HouseBase_eye_{n}", col[n]))
+    for poly, m in zip(me.polygons, Ms):
+        poly.material_index = m
         poly.use_smooth = True
     gr = eye.vertex_groups.new(name=f"{side}Eye")
-    gr.add(list(range(len(eye.data.vertices))), 1.0, "REPLACE")
+    gr.add(list(range(len(me.vertices))), 1.0, "REPLACE")
     eye.parent = rig
     mod = eye.modifiers.new("Armature", "ARMATURE")
     mod.object = rig
