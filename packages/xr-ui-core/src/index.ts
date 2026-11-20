@@ -126,7 +126,7 @@ export interface HologramControlActions {
   resetScale(): void;
 }
 
-export type DockGlyph = "exit" | "record" | "recenter" | "find" | "tray" | "putBack";
+export type DockGlyph = "exit" | "record" | "recenter" | "find" | "look" | "tray" | "putBack";
 
 /** A glyph in the hand dock (headset) or bottom dock (phone). Glyphs only within reach. */
 export interface DockAction {
