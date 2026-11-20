@@ -108,6 +108,31 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   - Find what the rim stands on at bin 12 with the spawn fix: geometry that the test's ground list (grass and mountain) leaves out, or an export fault.
   - A spawn spot off the statue with flat ground at the rim, and with the mountain more than 6 m away, is also acceptable.
 
+### B-083 — The performer floor on the card makes the AR route miss its 20 s load on a slow runner
+
+- **Area:** apps/viewer-web (`HologramCardCanvas` fit, `motionPoints`)
+- **Severity:** P1 (`main` red on runs 44815715770 and 44826449489)
+- **Observed:** 2026-11-20, hosted pipeline shard 1
+- **Evidence:**
+  - `bubble-capture.pipeline.spec.ts:142`: `.xr-view-container` does not mount within 20 s after "View in your room"; the page shows "Loading hologram…" later.
+  - CI emulator, bubble-capture ×3: 0af7fc10cc under `CI_EMULATE_LOAD=2` passes 3/3; caf7cad fails at :142; caf7cad without 85ee704b62ba passes 3/3; caf7cad at plain load passes 3/3.
+  - 85ee704b62ba adds a third `drawnPoints` + `motionPoints` pass over the whole take for each card, in `fitClocheNow`, which runs again when the bubble or the place gate changes.
+- **Expected:** the performer floor costs no more than one fit pass, and the AR route mounts in time on a loaded runner.
+- **Reproduction:** `CI_EMULATE_LOAD=2 scripts/ci-emulate.sh bash -c "cd apps/viewer-web && RUN_E2E_PIPELINE=1 XR_TEST_MODE=iwer npx playwright test e2e/bubble-capture.pipeline.spec.ts --workers=1 --repeat-each=3"` on caf7cad.
+- **Next:** 85ee704b62ba is reverted on `main`. Bring the floor back with the performer's points taken from the same sampling pass, and pass the reproduction above before the merge.
+
+### B-084 — The feed take does not start in bubble-capture after the VR arm change
+
+- **Area:** apps/capture (arm IK, 12b0a45c2d1a) or apps/viewer-web feed playback
+- **Severity:** P2
+- **Observed:** 2026-11-20, CI emulator
+- **Evidence:**
+  - `bubble-capture.pipeline.spec.ts:98`: "feed sphere follows recorded motion (clip time 0 → 0 s, running false)".
+  - 12b0a45 without 85ee704b62ba: 1 of 3 at plain load, and with :126 ("the rim's largest change in a frame") in 3 of 3 under `CI_EMULATE_LOAD=2`.
+  - 0af7fc10cc and caf7cad without 85ee704b62ba never failed at :98 or :126 (6 runs).
+- **Expected:** the take plays in the feed on every run.
+- **Reproduction:** the B-083 command on `main` after the revert, at plain load and at load 2.
+
 ## Entry template
 
 ```md
