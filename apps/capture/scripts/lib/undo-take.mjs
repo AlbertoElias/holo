@@ -27,6 +27,8 @@ import { advance, setupFlatPage } from './tray-anytime-take.mjs';
 const TRAY = [OBJECT_URL, '/fixtures/objects/diagram.png', '/fixtures/objects/credited-bracket.glb'];
 const NAMES = ['bracket.glb', 'diagram.png', 'Test Bracket'];
 const FRAME_SEC = STEP_MS / 1000;
+// How far behind a floor prop the author stands to pick it up: past the under-the-feet zone, inside a short arm's reach.
+const STEP_BACK_M = 0.3;
 const round = (value, digits = 3) => Number(value.toFixed(digits));
 
 const events = (state) => state.objects.items.filter((item) => item.layer === 'event');
@@ -229,8 +231,14 @@ export async function runDesktopUndoTake({ browser, baseUrl, artifactDir, consol
     const p0 = byId(state, id).position;
 
     // Place: step back so it lies ahead, grab, walk with it, throw, settle. W returns the pre-grab pose.
+    // The step is a distance, not a time: avatars walk at different speeds, and a prop under the feet is out of reach.
     await page.keyboard.down('KeyS');
-    await adv(0.2);
+    for (let i = 0; i < 20; i += 1) {
+      await adv(0.05);
+      state = await read();
+      const prop = byId(state, id).position;
+      if (Math.hypot(prop[0] - state.avatar.x, prop[2] - state.avatar.z) >= STEP_BACK_M) break;
+    }
     await page.keyboard.up('KeyS');
     await adv(0.5);
     state = await k.grab(id);

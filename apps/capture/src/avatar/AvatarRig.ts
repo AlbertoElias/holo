@@ -285,7 +285,7 @@ export class AvatarRig {
     // Facing first: bounds, height and eye metrics below assume +Y up and +Z forward.
     this.humanoid = HumanoidSkeleton.bind(avatar, humanoidSource);
     this.humanoid.normalizeFacing(avatar);
-    this.centerModelXz(avatar);
+    this.centerAvatarXz(avatar);
 
     this.applyAvatarScaleAndMetrics(config);
     this.applySceneScaleAgainstAvatar(config);
@@ -663,9 +663,17 @@ export class AvatarRig {
     model.position.sub(new THREE.Vector3(this.tmpCenter.x, this.tmpBox.min.y, this.tmpCenter.z));
   }
 
-  private centerModelXz(model: THREE.Object3D): void {
-    this.tmpBox.setFromObject(model);
-    this.tmpBox.getCenter(this.tmpCenter);
+  /**
+   * Stands the avatar on its root: the hips over the root, so the body is where the motor, the reach and the
+   * camera take it to be. The mesh box is the fallback only: a bind pose that holds the hands forward (the
+   * house base) moves the box's centre 8 cm ahead of the body.
+   */
+  private centerAvatarXz(model: THREE.Object3D): void {
+    model.updateWorldMatrix(true, true);
+    if (!this.getBoneWorldPosition('hips', this.tmpCenter)) {
+      this.tmpBox.setFromObject(model);
+      this.tmpBox.getCenter(this.tmpCenter);
+    }
     model.position.sub(new THREE.Vector3(this.tmpCenter.x, 0, this.tmpCenter.z));
   }
 
