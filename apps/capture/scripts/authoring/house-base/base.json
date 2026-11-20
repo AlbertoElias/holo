@@ -127,7 +127,9 @@
       "jawForward": 1.0,
       "jawLeft": 1.0,
       "jawRight": 1.0,
-      "cheekPuff": 1.0
+      "cheekPuff": 1.0,
+      "noseSneerLeft": 1.0,
+      "noseSneerRight": 1.0
     },
     "jawMask": {
       "$comment": "The jaw units fade out from `from` below the mouth up to `to` below it, so they move the chin and leave the mouth to the mouth's own shapes.",
@@ -154,98 +156,156 @@
       "tolerance": 0.003
     },
     "eyes": {
-      "$comment": "Each eye's centre `x` from the midline at eye height, its radius, its centre `depth` eye radii behind the smoothed skin; the iris and pupil as angles (radians) from the forward pole.",
-      "x": 0.05,
-      "radius": 0.027,
-      "depth": 0.55,
-      "iris": 0.74,
-      "pupil": 0.34
+      "$comment": "Each eye's centre `x` from the midline at eye height, its radius, its centre `depth` eye radii behind the smoothed skin; the pupil and iris as angles (radians) from the forward pole, the iris's outer `limbus` of it a darker rim; the glint a disc of `size` eye radii, `off` eye radii from the centre, toward (x, -1, z).",
+      "x": 0.049,
+      "radius": 0.034,
+      "depth": 0.9,
+      "iris": 0.47,
+      "pupil": 0.2,
+      "limbus": 0.07,
+      "glint": {
+        "x": 0.2,
+        "z": 0.2,
+        "size": 0.085,
+        "off": 1.012
+      }
     },
     "lids": {
-      "$comment": "Shells about each eye (radius in eye radii), `columns` across, from the edge angle (up from straight ahead) to the back angle in `rows`; the upper lid's rows within `lash` degrees of its edge are the dark lash line. shapes: the edge angles [upper, lower] each shape moves to (null: that lid stays). A shape's targets go out along their radius as far as needed for every vertex's straight path to stay `clear` eye radii from the centre.",
-      "columns": 13,
+      "$comment": "Shells about each eye (radius in eye radii), `columns` across from -extent to extent, the opening's corners at -corner (inner) and corner (outer) on a line from `inner` to `outer` degrees, the frame turned `yaw` degrees outward; each lid's edge `open` degrees from that line at the middle, falling to the corners as (1 - (u/corner)^2)^power, the lid's `rows` spread from the edge to `back`; where the skin is in front of the shell the lid lies on it (`lift` m in front), the two meeting in a fillet of `fillet` (m). The upper lid's first row is the dark lash line, `lash` degrees thick, `lashInner` of that at the inner corner and full from `lashFull` of the way across, running past the outer corner as a wing that rises wingRise degrees. shapes: the openings [upper, lower] each shape moves to (null: that lid stays; below 0: across the corners' line onto the other lid's edge). A shape's targets go out along their radius as far as needed for every vertex's straight path to stay `clear` eye radii from the centre. Each lid's first row is its dark line (`lash` degrees deep), the lower lid's a thin one. From `hold` to `settle` degrees behind its edge a lid leaves the shell for the skin behind it, never nearer the eye's centre than `over` eye radii. The upper lash runs `wing` (in u) past the outer corner, rising wingRise degrees. Past the inner corner the lash lines end within `tail`.",
+      "columns": 25,
+      "corner": 0.7,
+      "extent": 0.985,
+      "yaw": 10,
+      "inner": -4,
+      "outer": 3,
+      "wingRise": 10,
+      "lashInner": 0.25,
+      "lashFull": 0.5,
       "upper": {
-        "radius": 1.08,
-        "edge": 8,
-        "back": 160,
+        "radius": 1.15,
+        "open": 33,
+        "power": 0.62,
+        "back": 80,
         "rows": 8,
-        "lash": 20
+        "lash": 13
       },
       "lower": {
-        "radius": 1.05,
-        "edge": -50,
-        "back": -160,
-        "rows": 6
+        "radius": 1.065,
+        "open": 24,
+        "power": 0.8,
+        "back": -80,
+        "rows": 7,
+        "lash": 3.5
       },
       "shapes": {
         "eyeBlink": [
-          -60,
-          -40
+          -24,
+          24
         ],
         "eyeSquint": [
-          -5,
-          -20
+          13,
+          5
         ],
         "eyeWide": [
-          80,
-          -68
+          58,
+          31
         ],
         "cheekSquint": [
-          null,
-          -32
+          36,
+          -24
         ]
       },
-      "clear": 1.03
+      "clear": 1.01,
+      "lift": 0.001,
+      "fillet": 0.003,
+      "hold": 6,
+      "settle": 32,
+      "over": 1.035,
+      "wing": 0.17,
+      "tail": 0.06
     },
     "brows": {
-      "$comment": "In eye radii from the eye centre: x from the inner to the outer end, the lower edge at the inner end, its rise toward the outer end, the arch, the thickness (tapering toward the outer end); lift (m) in front of the skin; segments along and rows across.",
-      "inner": 0.9,
-      "outer": 1.2,
-      "low": 1.6,
-      "rise": 0.05,
-      "arch": 0.25,
-      "thick": 0.8,
-      "taper": 0.4,
-      "lift": 0.0025,
-      "segments": 14,
+      "$comment": "In eye radii from the eye centre: x from the inner to the outer end, the lower edge at the inner end, its rise toward the outer end, the arch (highest where t^peak is a half), the thickness, tapering toward the outer end as 1 - taper·t^taperPower and rounded at the inner end (`blunt` of it there, full from `round` of the way along); lift (m) in front of the face; segments along and rows across.",
+      "inner": 0.94,
+      "outer": 1.06,
+      "low": 1.07,
+      "rise": -0.22,
+      "arch": 0.2,
+      "peak": 0.8,
+      "thick": 0.66,
+      "taper": 0.9,
+      "taperPower": 2.2,
+      "blunt": 0.8,
+      "round": 0.1,
+      "lift": 0.003,
+      "segments": 16,
       "rows": 3
     },
     "browShapes": {
       "$comment": "Moves (m) in the face's plane, then back onto the skin: browDown lowers the inner end by downInner and the outer by downOuter and draws it in by downIn; browInnerUp raises the inner end and draws it out; browOuterUp raises the outer end.",
-      "downInner": 0.026,
-      "downOuter": 0.0,
-      "downIn": 0.009,
+      "downInner": 0.03,
+      "downOuter": -0.008,
+      "downIn": 0.011,
       "innerUp": 0.024,
       "innerOut": 0.002,
       "outerUp": 0.024
     },
     "nose": {
-      "$comment": "An ellipsoid (radii, m) `at` of the way from the eyes down to the mouth, `out` of it in front of the skin; noseSneer lifts it.",
-      "at": 0.5,
-      "radii": [
-        0.011,
-        0.009,
-        0.01
-      ],
-      "out": 0.6,
-      "sneer": 0.003
+      "$comment": "The MPFB nose, kept through the smoothing (`keep` of it) in an ellipse about `centre` (m) above its tip, halfWidth across, `above` and `below` that centre, fading out from `fade` of it.",
+      "keep": 1.0,
+      "centre": 0.012,
+      "halfWidth": 0.03,
+      "above": 0.04,
+      "below": 0.026,
+      "fade": 0.55
     },
     "mouth": {
-      "$comment": "A dark shape on the skin, `columns` across, halfWidth across, thick at the middle (the corners keep `corner` of it), lift in front of the skin, `raise` above the mouth corners the faceunits find.",
-      "columns": 17,
-      "halfWidth": 0.034,
-      "thick": 0.007,
-      "corner": 0.25,
-      "lift": 0.003,
-      "raise": 0.0
+      "$comment": "`columns` across, halfWidth across, `raise` above the mouth corners the faceunits find, the corners `droop` below the middle. The dark line: thick at the middle (the corners keep `corner` of it), lift in front of the skin. lips: the upper and lower lips' heights at the middle, falling to the corners as (1 - s^2)^power, the upper one notched at the middle by `bow` over bowWidth; each lip's ridge `peak` of the way from the line to its outer edge and upperOut / lowerOut in front of the skin, its outer edge `edge` in front. roof: how far up under the upper lip (a share of its height) the inside's hidden top row lies.",
+      "columns": 21,
+      "toothGaps": {
+        "$comment": "The columns at the teeth's edges, each line's half width as a share of a column, and its lift (m) in front of the teeth.",
+        "columns": [6, 8, 10, 12, 14],
+        "width": 0.05,
+        "lift": 0.0004
+      },
+      "halfWidth": 0.0285,
+      "thick": 0.0016,
+      "corner": 0.3,
+      "lift": 0.001,
+      "raise": -0.006,
+      "droop": -0.0005,
+      "lips": {
+        "upper": 0.0055,
+        "upperPower": 0.55,
+        "bow": 0.22,
+        "bowWidth": 0.16,
+        "lower": 0.0085,
+        "lowerPower": 0.7,
+        "peak": 0.5,
+        "upperOut": 0.0028,
+        "lowerOut": 0.0038,
+        "edge": 0.0006,
+        "roof": 0.4
+      },
+      "patch": {
+        "$comment": "Skin just behind the surface at the mouth, seen only through the slit MPFB leaves there: half-width in mouth half-widths, half-height and depth behind the skin (m), columns and rows.",
+        "wide": 1.5,
+        "tall": 0.02,
+        "behind": 0.001,
+        "columns": 15,
+        "rows": 7
+      }
     },
     "mouthShapes": {
-      "$comment": "Moves (m) of the mouth's edges in the face's plane unless named. smile: the corners up and out, the middle open, the teeth row dropping `teeth` (a fraction) of the way; frown: the corners down and out; stretch: the corners out and a little down; press: the corners out, the lips thinner, the corners down; lowerDown / upperUp: the lower lip down, the upper up; dimple: the corners back into the cheek; funnel: the corners in, the lips apart up and down; pucker: the corners in and the mouth forward (depth); roll: corners in, the rolled lip thinner and down; shrug: the lower lip up; side: mouthLeft/Right across; jawSide, jawForward (depth) and jawOpen: the mouth following the jaw units.",
+      "$comment": "Moves (m) of the mouth's edges in the face's plane unless named. smile: the corners up and out, the upper edge's middle up by midUp, the middle open, the teeth row dropping `teeth` (a fraction) of the way, the opening keeping its height toward the corners as `round` falls below 1, the mouth `lift` forward (depth) halfway out so the cheek's curve stays behind it; frown: the corners down and out; stretch: the corners out and a little down; press: the corners out, the lips thinner, the corners down; lowerDown / upperUp: the lower lip down, the upper up; dimple: the corners back into the cheek; funnel: the corners in, the lips apart up and down; pucker: the corners in and the mouth forward (depth); roll: corners in, the rolled lip thinner and down; shrug: the lower lip up; side: mouthLeft/Right across; jawSide, jawForward (depth) and jawOpen: the mouth following the jaw units.",
       "smile": {
-        "up": 0.022,
-        "out": 0.01,
-        "open": 0.02,
-        "teeth": 0.45
+        "up": 0.038,
+        "out": 0.03,
+        "midUp": 0.012,
+        "open": 0.0,
+        "teeth": 0.8,
+        "round": 0.35,
+        "lift": 0.0
       },
       "frown": {
         "down": 0.022,
@@ -256,32 +316,41 @@
         "down": 0.002
       },
       "press": {
-        "out": 0.006,
-        "thin": 0.0015,
-        "down": 0.006
+        "out": 0.016,
+        "thin": -0.002,
+        "down": 0.002,
+        "tuck": 0.4
       },
       "lowerDown": 0.006,
       "upperUp": 0.006,
       "dimple": 0.004,
       "funnel": {
-        "in": 0.015,
-        "up": 0.007,
-        "down": 0.008
+        "in": 0.022,
+        "up": 0.01,
+        "down": 0.018
       },
       "pucker": {
         "in": 0.012,
         "forward": 0.006
       },
       "roll": {
-        "in": 0.0055,
-        "down": 0.002,
-        "thin": 0.0015
+        "in": 0.0045,
+        "down": 0.0,
+        "thin": -0.0008,
+        "tuck": 0.7
       },
       "shrug": 0.003,
       "side": 0.006,
       "jawSide": 0.006,
       "jawForward": 0.004,
-      "jawOpen": 0.02
+      "jawOpen": 0.038
+    },
+    "socket": {
+      "$comment": "The skin within `rim` (m) of each opening goes back to `behind` eye radii from the eye's centre, easing out over `slope` (m). Past a corner the distance counts `past` times, so the socket ends within the lids' reach.",
+      "rim": 0.002,
+      "slope": 0.006,
+      "behind": 0.93,
+      "past": 3
     }
   },
   "colours": {
@@ -349,6 +418,21 @@
       0.025,
       0.016,
       0.013
+    ],
+    "lips": [
+      0.434,
+      0.098,
+      0.03
+    ],
+    "limbus": [
+      0.061,
+      0.019,
+      0.003
+    ],
+    "glint": [
+      1.0,
+      1.0,
+      1.0
     ]
   },
   "roughness": 0.65,
@@ -413,6 +497,21 @@
       67,
       48,
       38
+    ],
+    "lips": [
+      176,
+      88,
+      48
+    ],
+    "limbus": [
+      70,
+      38,
+      10
+    ],
+    "glint": [
+      255,
+      255,
+      255
     ]
   },
   "builds": {
@@ -836,10 +935,10 @@
     }
   },
   "glasses": {
-    "$comment": "Frames (no lenses) in eye radii from each eye centre: `forward` in front, `out` sideways, `drop` down; rims as superellipses width x height with an exponent (2 round, higher squarer), tops below the brows' lower edge; a tube of radius `tube` (m); the bridge from each rim's point bridgeAt (share of the rim round from the outer side) over the nose; temples from templeAt, out past the head's side (ears included) by templeClear (m), back to earBack (m) behind the head's centre, hooking down. Colour sRGB. Decided by the agent in the owner's absence on 2026-11-18, for review.",
+    "$comment": "Frames (no lenses) in units of `unit` (m) from a point `anchor` units behind the skin before each eye: `forward` in front, `out` sideways, `drop` down; rims as superellipses width x height with an exponent (2 round, higher squarer), tops below the brows' lower edge; a tube of radius `tube` (m); the bridge from each rim's point bridgeAt (share of the rim round from the outer side) over the nose; temples from templeAt, out past the head's side (ears included) by templeClear (m), back to earBack (m) behind the head's centre, hooking down. Colour sRGB. Decided by the agent in the owner's absence on 2026-11-18, for review.",
     "forward": 1.55,
     "out": 0.04,
-    "drop": 0.08,
+    "drop": -0.1,
     "tube": 0.0028,
     "tubeSides": 6,
     "rimPoints": 28,
@@ -853,13 +952,13 @@
     "hook": 0.012,
     "kinds": {
       "round": {
-        "width": 1.2,
-        "height": 1.15,
+        "width": 1.15,
+        "height": 0.85,
         "exponent": 2
       },
       "square": {
-        "width": 1.3,
-        "height": 1.0,
+        "width": 1.25,
+        "height": 0.78,
         "exponent": 5
       }
     },
@@ -867,7 +966,9 @@
       44,
       34,
       30
-    ]
+    ],
+    "unit": 0.027,
+    "anchor": 0.55
   },
   "defaultLook": {
     "$comment": "The look public/gltf/models/house-base.glb is dressed in (a card, see packages/avatar-look). Decided by the agent in the owner's absence on 2026-11-18, for review.",
