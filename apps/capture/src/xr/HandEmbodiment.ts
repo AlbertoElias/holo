@@ -15,6 +15,10 @@ const SIDES = ['left', 'right'] as const;
 // Tracked hands may stretch an arm up to 8% past full reach (ArmIkSolver).
 // Controllers keep the unstretched arm: their grip and resize checks are tuned on it.
 const ARM_REACH_STRETCH = 0.08;
+// The stretch was set on the stock avatar, whose arm (upper arm plus forearm) is this share of its eye height.
+// An avatar with a shorter arm at the same eye height stretches further, to the same reach in metres: the
+// house base's arm is 0.276 of its eye height, and at 8% its wrist stopped 2 to 7 cm short of a long reach.
+const REFERENCE_ARM_PER_EYE_HEIGHT = 0.3222;
 
 // Avatar bones that sit on the same anatomical joint as each WebXR hand joint;
 // tips are the distal bones' end sites, when the rig has them.
@@ -119,6 +123,14 @@ export class HandEmbodiment {
     }
   }
 
+  /** How far past full reach a tracked hand may stretch this arm (a share of its length). */
+  private reachStretch(chain: ArmIkChain): number {
+    const arm = chain.upperLength + chain.lowerLength;
+    const eyeHeight = this.avatar.avatarEyeLocalY - this.avatar.avatarMinLocalY;
+    if (!(arm > 0) || !(eyeHeight > 0)) return ARM_REACH_STRETCH;
+    return Math.max(ARM_REACH_STRETCH, ((1 + ARM_REACH_STRETCH) * REFERENCE_ARM_PER_EYE_HEIGHT * eyeHeight) / arm - 1);
+  }
+
   /** Arm lengths are cached in world units; refitting the avatar rescales them. */
   rescale(ratio: number): void {
     for (const side of SIDES) {
@@ -152,7 +164,7 @@ export class HandEmbodiment {
       // A held pose keeps the reach of the source it holds, so a lost hand's arm does not snap.
       const source = this.tracking.getHandPoseSource(side);
       if (source !== 'held') this.handReach[side] = source === 'xr-hand';
-      const maxStretch = this.handReach[side] ? ARM_REACH_STRETCH : 0;
+      const maxStretch = this.handReach[side] ? this.reachStretch(chain) : 0;
       if (!this.ikSolver.solve(chain, trackingState.targetPosition, trackingState.targetQuaternion, this.avatar.avatarRoot, { handWorldQuaternion: handWorld, maxStretch })) {
         if (!this.ikWarningLogged) {
           console.warn('VR arm IK solve produced invalid output; skipping frame write.');

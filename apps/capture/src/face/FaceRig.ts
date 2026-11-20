@@ -96,13 +96,15 @@ export class FaceRig {
       if (!bone?.parent) continue;
       const eyeBind = rootInverse.clone().multiply(bone.getWorldQuaternion(new THREE.Quaternion()));
       const parentBind = rootInverse.clone().multiply(bone.parent.getWorldQuaternion(new THREE.Quaternion()));
-      const eyeMesh = findFirst(avatar, EYE_MESH_NAMES[side], (o) => (o as THREE.Mesh).isMesh === true) as THREE.Mesh | undefined;
+      // An eye with more than one material loads as a group of meshes under the eye's name.
+      const eyeNode = findFirst(avatar, EYE_MESH_NAMES[side], (o) => (o as THREE.Bone).isBone !== true && meshesOf(o).length > 0);
+      const eyeMeshes = eyeNode ? meshesOf(eyeNode) : [];
       this.eyes[side] = {
         bone,
         parentBind,
         parentBindInverse: parentBind.clone().invert(),
         eyeBind,
-        pivotOffsetMm: eyeMesh ? pivotOffset(bone, eyeMesh) : null
+        pivotOffsetMm: eyeMeshes.length ? pivotOffset(bone, eyeMeshes) : null
       };
     }
     const head = bones.head ?? findFirst(avatar, HEAD_BONE_NAMES, (o) => (o as THREE.Bone).isBone === true);
@@ -291,21 +293,24 @@ function findFirst(root: THREE.Object3D, names: readonly string[], accept: (o: T
 // fit of the outer surface (the mesh also has vertices near its centre).
 // Near 0 when the bone sits at the eyeball centre, so rotating it never
 // shifts the eye in its socket.
-function pivotOffset(bone: THREE.Object3D, mesh: THREE.Mesh): number | null {
-  const position = mesh.geometry.getAttribute('position');
-  if (!position) return null;
+function pivotOffset(bone: THREE.Object3D, meshes: readonly THREE.Mesh[]): number | null {
   const pivot = bone.getWorldPosition(new THREE.Vector3());
   const points: THREE.Vector3[] = [];
   let max = 0;
-  for (let i = 0; i < position.count; i += 1) {
-    // Where the vertex renders: through the skin when the eye is skinned, since
-    // a rig's rest pose need not match the pose its inverse binds encode.
-    const p = new THREE.Vector3().fromBufferAttribute(position, i);
-    if ((mesh as THREE.SkinnedMesh).isSkinnedMesh) (mesh as THREE.SkinnedMesh).applyBoneTransform(i, p);
-    p.applyMatrix4(mesh.matrixWorld).sub(pivot);
-    points.push(p);
-    max = Math.max(max, p.length());
+  for (const mesh of meshes) {
+    const position = mesh.geometry.getAttribute('position');
+    if (!position) continue;
+    for (let i = 0; i < position.count; i += 1) {
+      // Where the vertex renders: through the skin when the eye is skinned, since
+      // a rig's rest pose need not match the pose its inverse binds encode.
+      const p = new THREE.Vector3().fromBufferAttribute(position, i);
+      if ((mesh as THREE.SkinnedMesh).isSkinnedMesh) (mesh as THREE.SkinnedMesh).applyBoneTransform(i, p);
+      p.applyMatrix4(mesh.matrixWorld).sub(pivot);
+      points.push(p);
+      max = Math.max(max, p.length());
+    }
   }
+  if (!points.length) return null;
   // |p|^2 = 2 c.p + k, solved through its 4x4 normal equations.
   const sum = new Array<number>(16).fill(0);
   const rhs = new THREE.Vector4(0, 0, 0, 0);
@@ -322,6 +327,12 @@ function pivotOffset(bone: THREE.Object3D, mesh: THREE.Mesh): number | null {
   if (Math.abs(a.determinant()) < 1e-18) return null;
   const centre = rhs.applyMatrix4(a.invert());
   return Math.round(Math.hypot(centre.x, centre.y, centre.z) * 1e4) / 10;
+}
+
+/** The object itself when it is a mesh, or the meshes directly under it (one per material of a multi-material mesh). */
+function meshesOf(object: THREE.Object3D): THREE.Mesh[] {
+  if ((object as THREE.Mesh).isMesh) return [object as THREE.Mesh];
+  return object.children.filter((child): child is THREE.Mesh => (child as THREE.Mesh).isMesh === true);
 }
 
 function channelsOf(formula: TargetFormula): Set<FaceChannel> {

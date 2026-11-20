@@ -178,7 +178,7 @@ function spineChain(spine: BindBone, chest: BindBone | undefined, upperChest: Bi
   return chain;
 }
 const NECK_HEAD_SHARE = 0.4;
-const PELVIS_PASSES = 3;
+const PELVIS_PASSES = 5;
 const SPINE_LEAN_PASSES = 3;
 const MAX_PELVIS_REACH_DROP = 0.05;
 const PELVIS_REACH_DROP_TIME_SEC = 0.06;
@@ -852,11 +852,13 @@ export class VrBodySolver {
       let mostBehind = -Infinity;
       // Urgent only for a foot left behind, never one planted ahead. With both left behind the further one goes
       // first: taking the last one checked, the right foot took every step and the left stayed planted (B-041).
+      // A strained foot counts only when it is behind too: a short leg lands strained ahead of the hip, and
+      // stepping it again left the other foot behind until its leg locked straight.
       for (const candidate of ['left', 'right'] as const) {
         const slot = this.slotWorld(candidate, rootPosition, this.bodyYawValue, this.stepSlot);
         const planted = this.feet[candidate].planted;
         const behind = ((slot.x - planted.x) * gaitVelocity.x + (slot.z - planted.z) * gaitVelocity.z) / Math.max(speed, 1e-6);
-        if ((behind > URGENT_STEP_DISTANCE * leg || this.feet[candidate].strain >= 1) && behind > mostBehind) {
+        if ((behind > URGENT_STEP_DISTANCE * leg || (behind > 0 && this.feet[candidate].strain >= 1)) && behind > mostBehind) {
           side = candidate;
           urgent = true;
           mostBehind = behind;
