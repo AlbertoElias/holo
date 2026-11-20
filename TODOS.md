@@ -8,13 +8,13 @@ it from the item below instead of duplicating its status here.
 
 ## Now
 
-- [x] Finish the CI determinism criteria left open by
+- [x] Finish the CI determinism criteria left open by <!-- T-bd0b8f -->
   [`docs/features/archive/ci-under-5m.md`](docs/features/archive/ci-under-5m.md):
   5 identical `scripts/ci-emulate.sh` runs of the VR, AR and pipeline checks
   (5/5 passes with identical counts, 2026-10-29), and `rayClick` (B-037)
   no longer rides the clock (`clickThresholdMs` lifted).
 
-- [x] Record real Quest hand input for `test:xr:hands` and recalibrate the
+- [x] Record real Quest hand input for `test:xr:hands` and recalibrate the <!-- T-75f355 -->
   fidelity thresholds against it. Delivered 2026-10-18:
   `apps/capture/fixtures/input-recordings/headset-open-fist-pinch-point-wave-reach.json`
   passes with the wrist-position ceiling recalibrated 2 cm → 4 cm (the tracked
@@ -22,19 +22,19 @@ it from the item below instead of duplicating its status here.
   gap 4 of `docs/features/archive/natural-avatar-motion.md`) after adding shoulder
   protraction to the arm IK. Owned by
   [`docs/features/archive/hand-tracking-fidelity.md`](docs/features/archive/hand-tracking-fidelity.md).
-- [ ] On a physical headset, check only what IWER cannot emulate: real-tracking
+- [ ] On a physical headset, check only what IWER cannot emulate: real-tracking <!-- T-c32617 -->
   pinch stability (noise, self-occlusion, joint dropouts), Quest browser session
   events (permission prompt, system menu, headset removal or sleep,
   controller↔hand switching), and frame rate, latency, and comfort. IWER
   already covers pinch/release logic, VR enter/exit flows, and retargeting math
   (B-002, B-005 in [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md)).
-- [x] Make the XR locomotion command report a reliable final completion status and
+- [x] Make the XR locomotion command report a reliable final completion status and <!-- T-d4565f -->
   clean up all child processes locally. Delivered in
   [`docs/features/archive/reliability-foundation.md`](docs/features/archive/reliability-foundation.md).
 
 ## Next
 
-- [ ] Recorded VR walk, the gaps left by
+- [ ] Recorded VR walk, the gaps left by <!-- T-3be7a9 -->
   [`docs/features/archive/vr-recorded-walk.md`](docs/features/archive/vr-recorded-walk.md)
   (see its Deviations): the stick-walk stance share (0.55 against the desktop
   0.46; the toe pivots too long at push-off), the walk-start, back → stop and
@@ -44,7 +44,7 @@ it from the item below instead of duplicating its status here.
   long enough to measure. The owner also checks a room-scale walk and a stick
   walk on a Quest.
 
-- [ ] Realistic avatar motion, slice 2 (follow-up to
+- [ ] Realistic avatar motion, slice 2 (follow-up to <!-- T-fca791 -->
   [`docs/features/realistic-avatar-motion.md`](docs/features/realistic-avatar-motion.md)):
   directional (back, strafe) and crouch mocap clips with phase-synced blending,
   foot pitch/roll to the slope sampled under heel and toe, pelvis drop to the
@@ -55,7 +55,7 @@ it from the item below instead of duplicating its status here.
   desktop reach, carry, set-down and prop placement retuned). Slice 1 replaced
   only Idle and Walk.
 
-- [x] "The way down", version 2 (agent-authored, 2026-11-12): the same
+- [x] "The way down", version 2 (agent-authored, 2026-11-12): the same <!-- T-305363 -->
   introspection, made to go inside and hit harder. Version 1 (scene
   `introspection`, live as `cmwcte5x20005oeiqsmobz8mf`) reads as a diorama
   seen from outside, with even pacing and a traveller as large in every layer.
@@ -71,7 +71,7 @@ it from the item below instead of duplicating its status here.
   Delivered: scene `introspection2` (five passes, draft 12), merged to `main`
   on 2026-11-12; uploaded to production as the agent account after the deploy,
   and again on 2026-11-13 with its Quick Look preview (`cmwee44na0001oeiqq93qtiim`, B-057).
-- [x] "The way down", deep zoom (the user's direction on 2026-11-13): you
+- [x] "The way down", deep zoom (the user's direction on 2026-11-13): you <!-- T-029879 -->
   cannot zoom into version 2's inner layers yourself. Its descent is the 60 s
   animation scaling the world about the man's chest (morph targets, a
   `HologramZoom` node), and the feed's wheel and pinch only move the camera
@@ -94,7 +94,7 @@ it from the item below instead of duplicating its status here.
   Delivered in [`docs/features/archive/deep-zoom.md`](docs/features/archive/deep-zoom.md),
   merged to `main` on 2026-11-13; the rebuilt piece is live in production as
   hologram `cmwfb17j50001oeirk4r3kjm4` (`usdzStatus` `ready`).
-- [x] Tests should not have to sign in (the user's direction on 2026-11-12).
+- [x] Tests should not have to sign in (the user's direction on 2026-11-12). <!-- T-078a8e -->
   Delivered 2026-11-12: the e2e API runs with `TEST_OPEN_UPLOADS` (off by
   default and in production; `scripts/test-api.ts` turns it on), which accepts
   an upload without an account, credited to the submitted name with no owner.
@@ -105,7 +105,7 @@ it from the item below instead of duplicating its status here.
   would be a product change). `sign-in-email.spec.ts` runs the API with
   `TEST_OPEN_UPLOADS=false` and still proves an anonymous upload gets 401.
 
-- [ ] Record a take inside a scanned place (split capture slice 2, the
+- [ ] Record a take inside a scanned place (split capture slice 2, the <!-- T-e5f2df -->
   user's direction on 2026-11-10): capture loads a scan (SPZ or PLY) as the
   take's set, and the place is stored with the hologram through export →
   upload → render (a contract change: `KHR_gaussian_splatting` in the GLB or a
@@ -116,14 +116,14 @@ it from the item below instead of duplicating its status here.
   size and frame rate on a phone. Slice 1, the viewer's render end, is in
   [`docs/features/archive/splat-place.md`](docs/features/archive/splat-place.md). Owned by
   [`docs/features/splat-capture.md`](docs/features/splat-capture.md).
-- [x] Record a performer in Quest passthrough AR (2026-11-17, gap 5 of
+- [x] Record a performer in Quest passthrough AR (2026-11-17, gap 5 of <!-- T-bbdd25 -->
   [`docs/features/archive/natural-avatar-motion.md`](docs/features/archive/natural-avatar-motion.md),
   the user's call): a non-handheld AR session now embodies the performer
   exactly as VR does (same body solver, chrome and Record, the set at the
   real floor's origin) and records avatar takes; only a handheld phone is a
   camera author. Split capture's slice 2d, the place in passthrough, is
   unblocked (Q1 of [`docs/features/splat-capture.md`](docs/features/splat-capture.md)).
-- [x] Only one `verify:pr` runs at a time across worktrees (user, 2026-11-10;
+- [x] Only one `verify:pr` runs at a time across worktrees (user, 2026-11-10; <!-- T-0afa62 -->
   delivered 2026-11-12 on `infra/ci-reliability`). `scripts/verify-lock.ts`
   holds a loopback listener on port 39417 (the kernel frees it however the
   holder dies, so no stale lock to detect); `verify:pr` and
@@ -133,44 +133,44 @@ it from the item below instead of duplicating its status here.
   5 s and the waiter passed. Moved ports plus `VERIFY_PR_NO_LOCK=1` stay the
   escape hatch.
 
-- [ ] Find an object by asking (PRD-060, built overnight 2026-10-27 on the
+- [ ] Find an object by asking (PRD-060, built overnight 2026-10-27 on the <!-- T-7a10d3 -->
   user's request; its provisional decisions await their approval): search
   Poly Haven from capture's tray and carry the credit into the take. Owned by
   [`docs/features/object-search.md`](docs/features/object-search.md). Next
   slices: voice input, Poly Pizza (needs its API key), the headset overlay.
-- [x] Hand traces (PRD-023, approved 2026-10-28): paused headset takes show
+- [x] Hand traces (PRD-023, approved 2026-10-28): paused headset takes show <!-- T-9f68a9 -->
   each hand's path from the last 3 s in the feed portal. Delivered
   2026-10-29 in
   [`docs/features/archive/hand-traces.md`](docs/features/archive/hand-traces.md);
   its device checks are in the brief's "Physical-device limits". Slice 2
   (detected demonstration spans) waits on the PRD's recipient trial.
-- [x] Author-marked hand traces (PRD-023 v1, approved 2026-11-09): in headset
+- [x] Author-marked hand traces (PRD-023 v1, approved 2026-11-09): in headset <!-- T-f691da -->
   capture the Halo's Ink toggles a trace, stored as a `recorded` `trace` mark
   (`HOLOIM_meaning` v2) that replays with its original timing; v0's viewer
   Traces control and paused 3 s window are removed. Owned by
   [`docs/features/archive/authored-traces.md`](docs/features/archive/authored-traces.md);
   replace the two v0 test takes on the live feed afterwards.
-- [ ] Self-resolving pointing (PRD-022, approved 2026-10-22): highlight what
+- [ ] Self-resolving pointing (PRD-022, approved 2026-10-22): highlight what <!-- T-47e35a -->
   the author points at in the feed portal, from headset hands and a desktop
   point action. Owned by
   [`docs/features/self-resolving-pointing.md`](docs/features/self-resolving-pointing.md).
-- [ ] Portal view on flat screens: freeze, orbit, zoom continuum, Follow/Free,
+- [ ] Portal view on flat screens: freeze, orbit, zoom continuum, Follow/Free, <!-- T-1b4ec8 -->
   three interaction variants, and a recipient trial. Approved in
   [PRD-002](docs/product/prds/PRD-002-portal-view.md); in flight in
   [`docs/features/portal-view.md`](docs/features/portal-view.md).
-- [x] Add realistic walking, crouching, and jumping animations in both XR and
+- [x] Add realistic walking, crouching, and jumping animations in both XR and <!-- T-c92f1d -->
   desktop 2D, with natural transitions and movement that adapts to walls,
   inclines, and other environment geometry. Delivered in
   [avatar-locomotion.md](docs/features/archive/avatar-locomotion.md).
-- [x] Add VR thumbstick locomotion and snap turn to capture. Today VR moves the
+- [x] Add VR thumbstick locomotion and snap turn to capture. Today VR moves the <!-- T-28a8d7 -->
   avatar only through physical room-scale motion and keyboard/mock input. Move
   the world-locked camera rig with the stick (smooth move relative to head
   yaw, optional snap/smooth turn about the user's head), keep the body solver
   stepping from the resulting root motion, and add a replay check from
   recorded controller input. Builds on
   [`docs/features/archive/room-scale-body-motion.md`](docs/features/archive/room-scale-body-motion.md).
-- [x] Clean up expired direct-upload intents and their `incoming/*.glb` objects so abandoned uploads do not leak storage. In flight in [`docs/features/archive/upload-intent-cleanup.md`](docs/features/archive/upload-intent-cleanup.md).
-- [ ] Direct, preview and revise a performance, on avatars built to express
+- [x] Clean up expired direct-upload intents and their `incoming/*.glb` objects so abandoned uploads do not leak storage. In flight in [`docs/features/archive/upload-intent-cleanup.md`](docs/features/archive/upload-intent-cleanup.md). <!-- T-391531 -->
+- [ ] Direct, preview and revise a performance, on avatars built to express <!-- T-d84d33 -->
   (the user's direction and approval on 2026-11-13, after the agent-authored
   poem "The part I didn't say" played but did not act). An agent directs a
   take as a beat sheet, on the same bones and face channels a phone or
@@ -221,7 +221,7 @@ it from the item below instead of duplicating its status here.
   row (motion owner).
   Owned by
   [`docs/features/directed-performance.md`](docs/features/directed-performance.md).
-- [ ] Make all avatar movement look completely natural, in XR and 2D
+- [ ] Make all avatar movement look completely natural, in XR and 2D <!-- T-fa6d82 -->
   ([`docs/features/archive/natural-avatar-motion.md`](docs/features/archive/natural-avatar-motion.md),
   Complete 2026-11-18, meets its metrics on every source and skeleton, so what is left here is the
   look beyond those numbers: the wishlist below). The
@@ -247,24 +247,24 @@ it from the item below instead of duplicating its status here.
     human motion (headset recordings plus reference mocap), such as joint
     angle distributions, arm–leg phase, center-of-mass path, and smoothness,
     and include side-by-side videos with a reference capture.
-- [x] Adapt the XR avatar to the person's height, keeping its base grounded and
+- [x] Adapt the XR avatar to the person's height, keeping its base grounded and <!-- T-68302a -->
   neutral head/hands aligned with tracked input. Delivered in
   [`docs/features/archive/xr-height-adaptation.md`](docs/features/archive/xr-height-adaptation.md).
 
-- [x] Production persistence: media is on R2 and the current SQLite database
+- [x] Production persistence: media is on R2 and the current SQLite database <!-- T-dbb402 -->
   is accepted for the long pre-production period; authentication and Postgres
   are not planned work. Decided by the user 2026-10-26.
-- [x] Move the generated development SQLite databases out of version control. Local
+- [x] Move the generated development SQLite databases out of version control. Local <!-- T-1ce2fa -->
   setup now runs committed Prisma migrations; route tests own temporary database and
   upload fixtures; generated database files are ignored.
-- [x] Add isolated API route tests for upload/static serving, pagination, deletion,
+- [x] Add isolated API route tests for upload/static serving, pagination, deletion, <!-- T-7b70ce -->
   and USDZ-conversion failure handling.
-- [ ] Expand contract-focused tests for `xr-ui-core` and capture orchestration
+- [ ] Expand contract-focused tests for `xr-ui-core` and capture orchestration <!-- T-79a69b -->
   only — the durable public behavior and state-transition contracts that survive
   a UI/interaction redesign. Run them in the appropriate `verify:agent` or
   `verify:pr` tier. Tests for `ui-dom`, `xr-ui-r3f`, and `xr-ui-three` are
   deferred to the redesign item below, which owns their new contracts.
-- [x] Redesign all UI (2D and 3D) and interaction systems (2D and XR) in a
+- [x] Redesign all UI (2D and 3D) and interaction systems (2D and XR) in a <!-- T-5a7209 -->
   dedicated session with its own feature brief. That brief owns: the new
   contract tests for `ui-dom`, `xr-ui-r3f`, and `xr-ui-three` (currently
   `--passWithNoTests`), written against the redesigned contracts rather than
@@ -278,12 +278,12 @@ it from the item below instead of duplicating its status here.
   Brief: [`docs/features/ui-redesign.md`](docs/features/ui-redesign.md).
   Shipped 2026-10-26; its Android and Quest device checks are Unverified
   (the brief's "Physical-device limits").
-- [ ] Add a VR viewing mode to `apps/viewer-web`: holograms on their stages
+- [ ] Add a VR viewing mode to `apps/viewer-web`: holograms on their stages <!-- T-a4f65a -->
   in the blue-hour room, lit by their own gold light (styleguide 9.1), using
   the redesign's components. Split out of the UI redesign brief on
   2026-10-24 as a separate feature; it needs its own brief.
 
-- [x] Support the standard avatar formats, not one hardcoded skeleton. Slice 1
+- [x] Support the standard avatar formats, not one hardcoded skeleton. Slice 1 <!-- T-1f728c -->
   delivered 2026-10-27 in
   [`docs/features/archive/avatar-formats.md`](docs/features/archive/avatar-formats.md);
   locomotion retargeting is the next item. Before it, the
@@ -303,12 +303,12 @@ it from the item below instead of duplicating its status here.
     not assume the shipped rig's rest pose.
   - Prove it end to end: one fixture avatar per standard through the replay
     harness, checking hand fidelity and export → upload → render.
-- [x] Retarget the locomotion clips (Idle, Walk, Jump, Fall) onto avatars that
+- [x] Retarget the locomotion clips (Idle, Walk, Jump, Fall) onto avatars that <!-- T-0b6e5b -->
   lack their own, with the per-bone T-pose correction that needs: slice 2 of
   [`docs/features/archive/avatar-formats.md`](docs/features/archive/avatar-formats.md).
   Delivered 2026-11-10 in
   [`docs/features/archive/locomotion-retarget.md`](docs/features/archive/locomotion-retarget.md).
-- [x] Face and expressions on avatars, as the foundation for phone-driven
+- [x] Face and expressions on avatars, as the foundation for phone-driven <!-- T-37d544 -->
   avatars. Delivered 2026-10-24 in
   [`docs/features/archive/avatar-face.md`](docs/features/archive/avatar-face.md); device validation is listed in `HANDOFF.md`. Define one canonical expression set and map
   it to VRM expressions, Apple ARKit's 52 blendshapes, Meta's face blendshapes
@@ -316,13 +316,13 @@ it from the item below instead of duplicating its status here.
   its avatar format work with the item above, and its product question with
   [PRD-008](docs/product/prds/PRD-008-hybrid-embodiment.md) and
   [PRD-046](docs/product/prds/PRD-046-lifelike-presence.md).
-- [ ] Capture yourself with a phone while your body controls an avatar: the phone
+- [ ] Capture yourself with a phone while your body controls an avatar: the phone <!-- T-eb76cd -->
   camera tracks the face and expression (ARKit blendshapes on iPhone, an
   equivalent on Android) and drives the avatar's face, while headset or body
   tracking drives the rest. Needs a PRD first
   ([IDEA-078](docs/product/IDEAS.md)); depends on the two items above.
 
-- [x] Replay the implicit state machines `/find-implicit-state-machines`
+- [x] Replay the implicit state machines `/find-implicit-state-machines` <!-- T-da2f66 -->
   found but did not yet model (2026-11-12). Each is a hypothesis from a
   read of the code, not a verified defect: model it, replay the bug path
   against the real code, and record a defect in [`BUGS.md`](BUGS.md) only
@@ -409,21 +409,21 @@ Ambition review (2026-11-16). The owner is the only user, so these favour a
 capture "wow" over measurement. Each item is its own project in its own
 session, not a child of the review.
 
-- [ ] Set latency targets for the moments that make a hologram feel instant
+- [ ] Set latency targets for the moments that make a hologram feel instant <!-- T-6d8aa4 -->
   and hold them with lean, measured checks: a shared hologram playable on a
   throttled 4G phone within 1 s of opening the link; take ends → share link
   ready; GLB → USDZ ready for Quick Look. Measure today's numbers first
   (the API cold start is already down from about 17 s to 4 s), then pick
   targets with the owner, then close the biggest gap. One check per
   target, no broad performance suite.
-- [ ] Study how professionals capture each purpose a hologram can serve
+- [ ] Study how professionals capture each purpose a hologram can serve <!-- T-b15cdc -->
   (holograms are a general communication channel: a message, a memory, a
   performance, a demonstration, a place) and borrow their methods. Examples:
   how mocap stages, documentary crews, sports broadcasters, theatre and
   volumetric studios frame, light, block and direct a take. Output: a short
   concept doc in `docs/product/concepts/` that turns each borrowed method into
   a ranked list of capture changes, the first of which is shipped.
-- [ ] Agent-authored holograms that tell a story (the owner's verdict on
+- [ ] Agent-authored holograms that tell a story (the owner's verdict on <!-- T-56b978 -->
   2026-11-20, after slice 7 of `docs/features/directed-performance.md`: "none
   are good enough… theres no context… the loaf just appears. there's no slip…
   there's storytelling missing here"). Every slice 7 piece passed the build
@@ -433,7 +433,7 @@ session, not a child of the review.
   that handle things like a person; and a skill that asks the agent for a
   story before beats. Judge it with a blind viewer on setup, event and
   reaction. Gaps and causes: the owner's verdict under "Slice 7 evidence".
-- [ ] Agent-authored showcase holograms through the real pipeline: use the
+- [ ] Agent-authored showcase holograms through the real pipeline: use the <!-- T-32ce24 -->
   Blender MCP to author a few short, deliberately "wow" holograms aimed at
   different purposes, and send each through capture export → upload → render
   (feed, AR, Quick Look) as the agent account. Each one is a stress test of the
@@ -442,7 +442,7 @@ session, not a child of the review.
 
 ## Later
 
-- [ ] Capture drops scene triangles the hologram never shows: geometry
+- [ ] Capture drops scene triangles the hologram never shows: geometry <!-- T-258218 -->
   hidden below the ground's top surface and outside the bubble, at export.
   Parked (user, 2026-10-29): on `scene.glb` it saves at most ~13% of the
   set's triangles and under 0.3% of the file, and the buried pass would
@@ -450,12 +450,12 @@ session, not a child of the review.
   large enough to matter. Measurements, review and code (branch
   `feature/export-trim-hidden`) in
   [`docs/features/archive/export-trim-hidden.md`](docs/features/archive/export-trim-hidden.md).
-- [x] Dismiss a placed object and remove a tray item (raised building the
+- [x] Dismiss a placed object and remove a tray item (raised building the <!-- T-47328c -->
   tray everywhere, 2026-10-28). Nothing clears between takes now, so a
   carried object stays in every later take and the tray only grows to its
   five slots; the author needs a way to take one out of the scene or the
   tray. See [`docs/features/archive/tray-everywhere.md`](docs/features/archive/tray-everywhere.md); brief [`docs/features/archive/tray-remove.md`](docs/features/archive/tray-remove.md).
-- [x] Typecheck the viewer's e2e specs. `@holoim/web`'s `typecheck` covers
+- [x] Typecheck the viewer's e2e specs. `@holoim/web`'s `typecheck` covers <!-- T-5b91d1 -->
   `tsconfig.app.json` (src, functions, configs) only, so a spec's missing
   import shows only when Playwright runs it (found in the slice 0 review,
   2026-10-26, on `feature/xr-shared-screen-input`). A probe
@@ -470,16 +470,16 @@ session, not a child of the review.
   is part of `typecheck`, and the errors are fixed (the in-page `three.js`
   imports no longer exist).
 
-- [x] Evaluate IWSDK-native ECS. Capture now runs on IWSDK World with ordered
+- [x] Evaluate IWSDK-native ECS. Capture now runs on IWSDK World with ordered <!-- T-00bbf3 -->
   ECS systems, keeping Rapier and its algorithms
   ([brief](docs/features/archive/iwsdk-runtime-refactor.md)). Native scene composition
   remains unused until a concrete authoring workflow requires it.
-- [x] Evaluate MetaVR as an explicit opt-in for physical Quest automation after
+- [x] Evaluate MetaVR as an explicit opt-in for physical Quest automation after <!-- T-d3cb55 -->
   reviewing its device access, native dependencies, and install-script requirements.
   Set up as the opt-in `metavr` MCP server in
   [`docs/features/archive/metavr-setup.md`](docs/features/archive/metavr-setup.md); host install
   and the one-time on-headset USB-debugging accept remain operator steps.
-- [x] Migrate the capture TypeScript config to the shared config chain and run
+- [x] Migrate the capture TypeScript config to the shared config chain and run <!-- T-0f740b -->
   the whole workspace on stable TypeScript 7. The stated blocker was stale:
   `tsgo` resolves package `extends`; the real fixes were dropping `baseUrl`
   (removed in TypeScript 7) and declaring `@holoim/config-ts` in capture.
@@ -487,32 +487,32 @@ session, not a child of the review.
   [`docs/features/archive/tsgo-typescript7-migration.md`](docs/features/archive/tsgo-typescript7-migration.md):
   catalog `typescript@^7.0.2` everywhere, `typescript-eslint` 8.71.2 bridged
   on the `@typescript/typescript6` sidecar until it supports the TS7 API.
-- [x] Decide whether the capture app needs a user-visible AR recenter control for
+- [x] Decide whether the capture app needs a user-visible AR recenter control for <!-- T-dc56b7 -->
   device-specific placement recovery. Delivered as a "Recenter AR" overlay
   button shown only in AR mode in
   [`docs/features/archive/ar-recenter-control.md`](docs/features/archive/ar-recenter-control.md).
-- [x] AR recording (phone as a camera-only author): on `main` since
+- [x] AR recording (phone as a camera-only author): on `main` since <!-- T-7110d6 -->
   2026-10-27, brief
   [`docs/features/archive/ar-recording.md`](docs/features/archive/ar-recording.md);
   its device checks are listed in `HANDOFF.md` under "Unverified / device-only".
-- [ ] AR recording follow-ups, waiting on the user: whether capture should
+- [ ] AR recording follow-ups, waiting on the user: whether capture should <!-- T-818a20 -->
   skip the microphone request at AR entry on a headset (today every AR entry
   asks, and a Quest in passthrough releases it once the session is not
   handheld), and whether the phone's ink line should be wider (the
   cross-vendor review suggested a 1.5 px stroke; it is faint in the proof video).
-- [ ] The Halo in phone AR capture (stop, undo and redo of a held mark there),
+- [ ] The Halo in phone AR capture (stop, undo and redo of a held mark there), <!-- T-fabd06 -->
   after AR recording lands: cut from
   [`docs/features/archive/ar-recording.md`](docs/features/archive/ar-recording.md) by its
   design review on 2026-10-25; the idiom is the phone's (press and hold the
   dock's Halo glyph, drag) through the shared screen-input bridge.
-- [ ] Props in AR capture, with real-floor and WebXR `plane-detection`
+- [ ] Props in AR capture, with real-floor and WebXR `plane-detection` <!-- T-ef625c -->
   colliders: cut from
   [`docs/features/archive/object-physics.md`](docs/features/archive/object-physics.md) by its
   design review on 2026-10-27, because a phone AR camera take never handles
   props (a headset in passthrough is a performer since 2026-11-17, but props
   there are unverified against the real floor). Start once AR recording
   carries objects.
-- [ ] Select one `IDEA-###` from [`docs/product/IDEAS.md`](docs/product/IDEAS.md) for a bounded PRD;
+- [ ] Select one `IDEA-###` from [`docs/product/IDEAS.md`](docs/product/IDEAS.md) for a bounded PRD; <!-- T-badb74 -->
   do not begin implementation until the user outcome
   and success signal are explicit. The lens points to IDEA-045 (portal view)
   or IDEA-032 (self-resolving pointing) first; PRD-001 is parked.
