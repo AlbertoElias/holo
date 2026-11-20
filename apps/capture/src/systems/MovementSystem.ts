@@ -1,6 +1,6 @@
 import { createSystem } from '@iwsdk/core';
 import * as THREE from 'three';
-import { KEYBOARD_WALK_HEIGHTS_PER_SEC, WALK_SPEED_HEIGHTS_PER_SEC } from '../physics/CharacterMotor';
+import { WALK_HEIGHTS_PER_SEC, WALK_SPEED_HEIGHTS_PER_SEC } from '../physics/CharacterMotor';
 import { type CaptureContext, captureContext } from './captureContext';
 
 // A crouched walk is a slow creep, about 0.8 m/s at the keyboard walk: faster reads as a hunched run.
@@ -49,7 +49,7 @@ export class MovementSystem extends createSystem() {
     const crouchAmount = c.crouch.amount;
     const stick = frame.vrActive ? c.locomotion.moveVector(this.stickMove) : { x: 0, z: 0 };
     motor.update(deltaSec, c.camera.lookYaw, input.moveState, input.consumeJumpQueued(), {
-      moveSpeedMultiplier: (1 - (1 - CROUCH_MOVE_SPEED_AT_FULL) * crouchAmount) * (frame.vrActive ? 1 : KEYBOARD_WALK_HEIGHTS_PER_SEC / WALK_SPEED_HEIGHTS_PER_SEC),
+      moveSpeedMultiplier: (1 - (1 - CROUCH_MOVE_SPEED_AT_FULL) * crouchAmount) * WALK_HEIGHTS_PER_SEC / WALK_SPEED_HEIGHTS_PER_SEC,
       allowJump: true,
       ...(frame.vrActive ? {} : { maxAccelerationMS2: KEYBOARD_ACCELERATION_MS2, jumpWindupSec: JUMP_WINDUP_SEC }),
       stickToTerrain: crouchAmount >= CROUCH_MIN_EFFECT_THRESHOLD,

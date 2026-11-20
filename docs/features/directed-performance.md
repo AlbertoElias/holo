@@ -701,7 +701,8 @@ existing expression mix value changes.
    sees, which slice 1d's lateral weight shifts and yaw glances are not.
    It gives way to every direction that moves the head or the hands, to a
    held object and to being reached for, as life does. `attend: false` on
-   a performer turns it off.
+   a performer turns it off. **Decided by the owner on 2026-11-20:** "yes
+   keep the nods". Attending life stays on by default.
 
 **Rejected:** larger amplitude of slice 1d's events (failed twice); event
 density keyed to a hold's length (breaks the seed-only schedule); asking
@@ -1101,7 +1102,7 @@ bars in the brief to the artist.
 | **2c3: the face matches the sheet** | Added 2026-11-19 on the owner's verdict on the default avatar: "issues with the eyes and mouth, it looks weird and uncanny as hell. it need to be much closer to the reference image". `build.py` rebuilds the eyes, lids, brows, nose and mouth to the clay expression sheet; the shared mixes, the body and the rig are unchanged. Built 2026-11-19 and merged 2026-11-20 on the owner's word "Merge as is", with the ink and light blind readings below the gate in the AI round and the turn row one vertex worse (see "Slice 2c3 evidence") | The face likeness check (`house-face-likeness.ts`) before and after; every 2c2 and 2f gate re-run unchanged; a new reader pack for people; a proof video | **Yes.** Authoring scripts, avatar files and `@holoim/avatar-look` colours; nothing in `apps/capture/src/` |
 | **2e: chosen per take** | `house:<finish>` and `look` in beat sheets; the dressing function in capture's avatar loading; height from the head-top bone; the "your look" step in the phone journey and the headset mirror; `?look=` | A phone e2e: set a look, record, upload, and the feed card shows it; an XR harness check of the mirror; a beat sheet re-dressed with another card; a proof video | **No.** Touches the phone journey (`CaptureOverlay.tsx` and its flow), owned by the phone mandate, and `src/avatar/` (loading, `AvatarRig`'s height fit), owned by the motion owner: built with both, after the phone's device checks |
 | **2f: finishes** | The other one or two finishes as material sets | Brow contrast and the blind reading per finish; one authored piece re-dressed in each | **Yes.** Avatar files. Built 2026-11-19: ink and light (see "Slice 2f evidence") |
-| **2g: the default and outside avatars** | `DEFAULT_AVATAR_URL` to the house base; the credit rule and verdict for outside avatars. The owner lifted the hold on the default on 2026-11-20; the swap was tried and fails five capture checks (see "Slice 2g attempt"), so it is not merged | Motion owner's agreement recorded; the phone journey's load measured against the 2.3 MB; an outside VRM passed and one refused, by name; a proof video | **No.** One constant in capture, on the motion owner's say |
+| **2g: the default and outside avatars** | `DEFAULT_AVATAR_URL` to the house base; the credit rule and verdict for outside avatars. The owner lifted the hold on the default on 2026-11-20; the swap was tried and fails five capture checks (see "Slice 2g attempt"), the wiring, fingertips and thumbs are fixed and the walk still fails (see "Slice 2g fixes"), so it is not merged | Motion owner's agreement recorded; the phone journey's load measured against the 2.3 MB; an outside VRM passed and one refused, by name; a proof video | **No.** One constant in capture, on the motion owner's say |
 
 2a and 2b start together and need nothing else. 2c needs both. 2d and 2f
 need 2c and can run side by side; 2f also waits on 2c2, so the ink finish
@@ -1451,6 +1452,40 @@ take from `sheets/goodbye.json`, publishes it, reads the feed card back
 through the API and writes `output/authoring/publish-check/report.json`; it
 also shows each refusal (no token, wrong token, take without a declared
 performer, over-budget load, oversize file, production without the flag).
+
+### Slice 7: an agent's path from an idea to a piece (2026-11-19)
+
+The owner asked for "a simple way for agents to use that avatar to create
+great holograms". Before this slice, an agent had to find six scripts, read
+a 1,400-line README and guess the trait names. A missed grip printed a number
+without a fix, and nothing said when a piece was done.
+
+**What it adds (authoring tool, skill and docs only).**
+
+- `scripts/authoring/make.ts`: one command that does the full loop.
+  - `make.ts new <name>` copies `sheets/starter.jsonc` into
+    `output/authoring/pieces/<name>/`.
+  - `make.ts <sheet> [--quick]` builds the next `vN/`. It prints the look
+    each performer wears, then one row per bar. Every failing row has a
+    `fix:` line in plain words.
+  - For a missed aim, put or grip, it searches small edits to the marks,
+    the surface (its position and height) and the take's `palm`. It prints
+    the edit that lands, or the best one it found.
+  - The full run records the review pack and the face-on-card bar.
+  - `make.ts verdict vN` reads the grader's `comparison.json` and says DONE
+    or NOT YET.
+  - `make.ts words` prints every choice.
+- `sheets/starter.jsonc`: a sheet that builds as it is. Its comments list
+  every look trait and direction.
+- Sheets can be JSONC (comments and trailing commas) in every script.
+- Errors name the fix.
+- A `bend` direction (from the hips, 45° at `amount` 1) for a performer who
+  leans over something low. The proof ideas needed it.
+- `.agents/skills/hologram-authoring/SKILL.md`: the loop, ready reader and
+  grader prompts, the bars, recipes (bend, pour, pick up, low pick-up, world
+  change, looks) and "what the body cannot do yet".
+
+No bar changed. `apps/capture/src/`, the viewer and contracts did not change.
 
 ### Later, each against the audition
 
@@ -1870,6 +1905,7 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
    - Attending life is on by default for a performer facing another;
      `attend: false` turns it off. It changes `goodbye` and
      `defaults-test` (slice 1e evidence).
+     Decided by the owner on 2026-11-20: "yes keep the nods".
    - The attending gaps were tightened once after the first blind
      reading: nods every 1.6 to 3.2 s (was 2.2 to 4.5), arms apart 0.6 to
      1.4 s (was 1.5 to 3.5).
@@ -2005,6 +2041,28 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
       faster cadence at the same walk speed). Only the owner and the motion
       owner can do this; the agent does not loosen a bar.
     - **Leave the stock avatar as the default** until one of the above.
+
+    **Update, same day.** The owner chose the first option through the
+    lead session ("fix the avatar so that the default swap passes the 5
+    failing XR checks. Do not change a bar"). The wiring, the fingertip
+    bones and the thumb joint are fixed on the branch (tip
+    `d8c1a44dcffe`); height passes and the hands' thumb rows pass. The
+    walk does not pass by changing the avatar (see "Slice 2g fixes"), so
+    the swap is still not merged and no bar was changed. What the owner
+    decides now:
+    - **Walk speed by leg length, not by height** (recommended). The
+      keyboard walk is one avatar height per second (the owner's call of
+      2026-11-13, `KEYBOARD_WALK_HEIGHTS_PER_SEC`). Tried on the branch
+      and not committed: with the speed scaled by the base's leg (0.88),
+      the base walks at 1.58 m/s and passes every flat row (pops 46.2,
+      jitter 0.61 mm, cadence 133.3). It changes that call and the
+      motion owner's `CharacterMotor.ts`, so it needs both.
+    - **Longer legs on the base.** Legs 8, 14 and 20% longer still fail
+      pops (52.5, 52.2, 50.3), and 14% or more leaves the owner's sheet.
+      Not a route.
+    - **A longer stride for this avatar.** The motion work tried 1.1 and
+      rejected it for its look.
+    - **Leave the stock avatar as the default.**
 
 ## Test plan and evidence
 
@@ -3552,6 +3610,111 @@ title. A proof video (card on the feed after the command) was sent to the
 owner. The Quick Look preview wait was not exercised (the check API has the
 converter off); it is `upload.mjs`'s unchanged code.
 
+### Slice 7 evidence (2026-11-20): three fresh agents, one skill each
+
+Three fresh subagents got only `.agents/skills/hologram-authoring/SKILL.md`, a one-line
+idea and a look each. Each had at most three revisions after its first full review.
+The readers and graders were fresh `sonnet` subagents run by the lead, because a
+subagent cannot start its own. No bar changed. The runs used the house base that was on
+`main` before the house face landed (4e2e1ee). After that merge the three finals were
+rebuilt from the same sheets on the new face and read again by fresh readers. Nothing was
+published. The pieces stay as local files under `apps/capture/output/authoring/pieces/`
+for the owner to choose from.
+
+Run history, on the old face:
+
+| Piece | Look | First sheet | Versions | Revisions | Final | Face box | Objects | Size | Quick Look | Beats read | Piece reads |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `baker` (pride in a loaf) | slight, porcelain, highBun copper, house:light | built; the put missed until v8 | 13 | 3 | v13 | 48.1 px | put 6.4 mm, 0.4° | 1.08 MB | pass | 5 of 6 | no ("showing and sniffing a loaf"; pride not named) |
+| `shrug-it-off` (a slip laughed off) | broad, espresso, shortTwists silver, house:ink | built, every bar passed | 7 | 3 | v7 | 44.4 px | none | 1.46 MB | pass | 2 of 4 (shrug, laugh) | yes ("awkward to easy and cheerful") |
+| `the-stone` (a stone given as a gift) | medium, goldenSand, centrePart chestnut, house:clay | built; the grip missed until v16 | 23 | 3 | v20 | 40.3 px | grip 0.2 mm, 2.5° | 1.16 MB | pass | 4 of 5 (offer missed) | no |
+
+Finals rebuilt on the new house face (same sheets, fresh reader and grader each):
+
+| Piece | Version | Face box | Objects | Size | Quick Look | Beats read | Piece reads |
+|---|---|---|---|---|---|---|---|
+| `baker` | v14 (v13 sheet) | 47.1 px | put 6.4 mm, 0.4° | 1.18 MB | pass | 5 of 6 (proud missed) | yes |
+| `shrug-it-off` | v8 (v7 sheet) | 41.3 px | none | 1.57 MB | pass | 3 of 4 (wince missed) | yes |
+| `the-stone` | v25 (v20 sheet) | **38.5 px, fails** | grip 0.2 mm, 2.5° | 1.26 MB | pass | 2 of 5 (notice, rise, offer missed) | no ("finding and then showing a stone") |
+
+So no piece is DONE. On the new face, baker and shrug pass every bar but the blind reading
+(one beat each), and the stone also fails the face bar: the new face is about 2 px shorter
+on the card, and v23's sheet rebuilt as v24 gives 38.1 px. No stone sheet passes the face
+bar on the new face. *Decided by the agent in the owner's absence, for review:* v25 (the
+v20 sheet) is the stone's final, and no further stone revision was made, since the run
+had used its three. The scalp-through-hair fault does not show on the new face (stone v24
+close view, 2.2 to 4.0 s). Notes per run:
+
+- `the-stone` v21 moved the stone further forward to make the offer plain; the face fell
+  to 38.4 px. v23 (revision 3) fell to 38.9 px. So v20 stays its best version. *Decided by
+  the agent in the owner's absence, for review:* v20, not the last version, is the
+  stone's final.
+- `shrug-it-off` read 1 of 4 beats at v2 and v3 and 2 of 4 at v5 and v7. The laugh read
+  only once it was acted with face channels (`jawOpen` with a smile), not with the named
+  expressions. `body.me` notes a joint-limit share (advisory, not a bar).
+- `baker` read 3 to 5 of its beats over four reviews; the grader at v13 counted `proud` as
+  read but the piece as not read, because the reader never named pride.
+- The same sheet can read differently between two readers (shrug v5 and v7 have the same
+  beats read; baker moved between 3 and 5 with small changes).
+
+Frictions found by the runs and fixed in this slice: the grip fit crashed on a `grip`
+kind and now prints the best edit it finds; a wrong field on a direction (`hand`, `to`)
+crashed the build and is now named with the fields that direction takes; `words` lists
+the face channels; the reader prompt extracts PNG frames, since `preview.mjs` folder mode
+reads PNG only; a full run after `--quick` made a new identical version, because `--quick`
+already writes `review/`, and now finishes that version.
+
+The code review of this slice found three more, now fixed: the reading bar passed with no
+beat intent or an ungraded piece (now it fails or waits); two reviews started together
+could take the same viewer ports (each now claims its pair with a lock directory in the
+system temp folder, created in one step and taken over when its process has ended); and
+a sheet with no `beats` or `directions` crashed (now it prints FIX THE SHEET).
+
+The independent verifier (a fresh Opus subagent, the brief and the diff only) confirmed
+the scope (no change to `apps/capture/src/`, the viewers, contracts or the house-base
+files) and that no bar threshold is looser. It found more, now fixed: a grade that is not
+`true` or `false` (`"yes"`) passed the reading bar (now it waits); a beat with no intent
+was left out of the reading bar (now it fails); `publish.ts` refused a `.jsonc` sheet; a
+malformed `comparison.json` crashed `verdict`; and three lines of the skill were wrong
+(a missed fit can print only the best edit found, a bend ends on its own after `hold` and
+`settle`, and the reading bar also needs the piece).
+
+Found by the verifier and left open (low):
+
+- Two overlapping bends add up past the 1.0 limit of one bend (two at 1.0 give 90°), and
+  the body check does not catch it.
+- A put or aim at literal coordinates gets a fix line that says nothing places it by
+  numbers; the fit only searches named marks and objects.
+- One out-of-reach direction anywhere in the take makes every fit say "best found", not
+  "lands".
+- Two sheets with the same file name outside `output/` share one version history.
+- `six-second-test.ts` names the sidecar wrongly for a `.jsonc` sheet.
+- The miss-and-fit path and the full review have no automated test; they were proven only
+  by the three runs above.
+
+Weaknesses that stay open:
+
+- A notice or look beat from a start that already faces the viewer shows almost no change
+  on the card.
+- No named laugh: only face channels give one.
+- A held object keeps the grip pose, and a push toward the camera barely shows on the card.
+- Objects far in front widen the dome and shrink the face under 40 px; the face margin is
+  thin (stone 38.4 to 40.3 px on the old face, 38.1 to 38.5 px on the new one).
+- make.ts fits a grip by the object's place and the palm, not the grip axis; a full review
+  takes 7 to 12 minutes of real time.
+- Outside this slice's files: copper hair on porcelain skin reads as bald at card size.
+  On the old face the scalp showed through the top of the hair when the performer bent;
+  on the new face it does not.
+- In stone v21 the stone passed into the chin.
+- `preview.mjs` writes its previews beside the image, so a reader leaves files in the
+  reader folder.
+- Graders are not always consistent, and an authoring agent sometimes rewrites a beat's
+  intent to make it more literal instead of changing the motion.
+
+Proof video (ignored, not committed): `output/agent-path-proof/agent-path-proof.mp4`. It
+shows the stone's run from the idea through six versions with their bar rows, then the
+three finals on the phone card, rebuilt on the new house face.
+
 ### Slice 4a evidence (2026-11-18)
 
 Commands from `apps/capture` (each writes its report under the ignored
@@ -3910,6 +4073,54 @@ and a proof video: the swap stopped at the first failing gate.
 
 **Not merged.** The branch is kept as the starting point. The stale lines
 this corrects: decision 11's two "hold" lines now point at decision 13.
+
+### Slice 2g fixes (2026-11-20): wiring, fingertips and thumbs fixed; the walk does not pass on the avatar alone
+
+On `feature/default-house-avatar` (tip `d8c1a44dcffe`, pushed, not merged).
+No bar was changed.
+
+**Fixed.**
+
+- Wiring: the height check's fixture and desktop-motion's clip row follow
+  `DEFAULT_AVATAR_URL`; desktop-motion has a `stock` row so the stock
+  avatar's own clips stay under test. Height passes.
+- The base has fingertip end bones (`*Hand<Finger>4`), so the hands check
+  measures a pinch: agreement 0.99 to 1.00.
+- The thumb's base joint sits where a tracked hand has it (`rig.thumbBase`
+  in `base.json`). MPFB's rig has it in the palm's plane, which the replay
+  read as 20 to 27 degrees of thumb curl error (bar 15). Now 5.0 to 8.2
+  degrees, correlation 0.98 to 0.99. The mesh and weights do not move; the
+  file is 1.18 MB.
+
+**Still failing.**
+
+| Check | Result | Bar | Note |
+|---|---|---|---|
+| desktop-motion, flat | Pops p99 56.4 m/s²; jitter p95 5.71 mm; cadence 150 | 50; 3; 100 to 140 | See the walk, below |
+| hands, headset fixture | Wrist error p95 2.13 cm | 2 | The right arm is at full reach (0.403 m against the 0.429 m the wrist needs). The head-top height fit of 2e scales the avatar 2.2% up; not measured with it |
+| body | Eyes p95 2.1 cm (crouch-and-lean); pops 36.1 (walk-ramp) | 2.0; 35 | Not measured with the head-top fit |
+| face | Eye pivot not measured | Under 5 mm | The fix is in `FaceRig.ts`, which the phone look session has open; it waits for that merge |
+
+**The walk.** The keyboard walk is one avatar height per second and the
+clip's rate is that speed over the clip's stance speed on the avatar, so
+cadence follows leg length. The base's leg is 0.803 m at 1.8 m (hip at
+48.7% of height); the stock's is 0.913 m (57.8%). Foot acceleration rises
+with cadence, and the stock avatar itself reads pops 48.9 against 50. The
+jitter is the last settle step after a stop (it ends about 770 ms in; the
+check judges from 600 ms), which depends on the stride phase at the stop.
+
+| Attempt | Cadence | Pops p99 | Jitter p95 | Speed | Verdict |
+|---|---|---|---|---|---|
+| The base as built | 150 | 56.4 | 5.71 mm | 1.8 m/s | Fails |
+| Legs 8% longer (test copy) | 144.0 | 52.5 | 0.60 mm | 1.8 | Fails |
+| Legs 14% longer | 138.5 | 52.2 | 0.56 mm | 1.8 | Fails pops; leaves the sheet |
+| Legs 20% longer | 133.3 | 50.3 | 0.49 mm | 1.8 | Fails pops; leaves the sheet |
+| Walk speed by leg length (0.88; engine test, not committed) | 133.3 | 46.2 | 0.61 mm | 1.58 (bar 1.35) | Passes; skate 1.63 cm |
+
+Two attempts were made and the task's stop rule applied: the swap stays
+unmerged. The choice is open decision 13.
+
+**Not run:** all 15 checks together, `verify:pr`, and a proof video.
 
 ## Physical-device limits
 

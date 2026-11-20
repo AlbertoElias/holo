@@ -1,5 +1,6 @@
 import type { HaloAction, HaloLayout, Handedness } from "@holoim/xr-ui-core";
 
+import type { HouseLook } from "../avatar/houseLook";
 import type { UiViewModel } from "../types/contracts";
 import type { FlatHaloView } from "./flatHalo";
 
@@ -28,4 +29,8 @@ export interface CaptureUiBridge {
   toggleFaceCamera: () => void;
   setHandedness: (handedness: Handedness) => void;
   toggleXr: (mode: "vr" | "ar") => void;
+  /** The look panel picked a look for the house base; false when refused (docs/features/your-look.md). */
+  setLook: (next: HouseLook) => boolean;
+  /** The look panel's height from the screen's bottom in CSS pixels, 0 when closed: the view frames the avatar above it. */
+  setLookPanelHeight: (px: number) => void;
 }

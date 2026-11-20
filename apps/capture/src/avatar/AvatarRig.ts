@@ -3,6 +3,7 @@ import { TerrainHeightIndex, WALKABLE_NORMAL_Y } from '../animation/TerrainHeigh
 import type { VrmHumanoidBone } from '@holoim/meaning';
 
 import { isThreeBone, isThreeMesh } from '../shared/threeTypeGuards';
+import { readHouseAvatar } from './houseAvatar';
 import { type HumanoidBoneRef, HumanoidSkeleton, type HumanoidSource } from './HumanoidSkeleton';
 import type { RuntimeConfig } from '../config/runtimeConfig';
 import type { TrackedHandJointName, VrHandSide } from '../types/contracts';
@@ -305,6 +306,18 @@ export class AvatarRig {
     this.resolveCrouchRig();
   }
 
+  /**
+   * The avatar's meshes changed (a new look on the same bones): the mesh and
+   * material lists follow. Height, scale and eye stay as fitted at load; the
+   * camera applies the first-person state to the new meshes on its next frame.
+   */
+  refreshMeshes(): void {
+    if (!this.avatar) return;
+    this.disableAvatarFrustumCulling(this.avatar);
+    this.classifyFirstPersonHeadMeshes(this.avatar);
+    this.collectAvatarMaterials(this.avatar);
+  }
+
   getEyeAnchorWorldPosition(out: THREE.Vector3, embodyOffset: number): THREE.Vector3 {
     if (this.leftEyeAnchor && this.rightEyeAnchor) {
       this.leftEyeAnchor.getWorldPosition(this.tmpVecA);
@@ -332,7 +345,11 @@ export class AvatarRig {
     this.avatarRoot.rotation.y = lookYaw + avatarForwardOffset;
   }
 
+  /** The view mode the camera last set, so a debug view that shows the whole body can put it back. */
+  firstPersonVisualMode: 'off' | 'desktop' | 'vr' = 'off';
+
   setFirstPersonVisualState(mode: 'off' | 'desktop' | 'vr'): void {
+    this.firstPersonVisualMode = mode;
     const isFirstPerson = mode !== 'off';
     this.setFirstPersonHeadVisible(!isFirstPerson);
     // Local body clipping is only used for desktop first-person. In VR it creates
@@ -652,15 +669,29 @@ export class AvatarRig {
     model.position.sub(new THREE.Vector3(this.tmpCenter.x, 0, this.tmpCenter.z));
   }
 
-  private getObjectHeight(model: THREE.Object3D): number {
+  /**
+   * The avatar's lowest and highest points. The house base's top is its head
+   * top bone, not its hair or glasses: a hairstyle must not change the fit
+   * or the eye (docs/features/your-look.md). Other avatars keep the whole box.
+   */
+  private measureVerticalExtent(model: THREE.Object3D): { min: number; max: number } {
     this.tmpBox.setFromObject(model);
-    return this.tmpBox.getSize(this.tmpSize).y;
+    const min = this.tmpBox.min.y;
+    let max = this.tmpBox.max.y;
+    const headTop = readHouseAvatar(model) ? model.getObjectByName('HeadTop_End') : undefined;
+    if (headTop) {
+      model.updateMatrixWorld(true);
+      const top = headTop.getWorldPosition(this.tmpVecA).y;
+      if (Number.isFinite(top) && top > min) max = top;
+    }
+    return { min, max };
   }
 
   private applyAvatarScaleAndMetrics(config: RuntimeConfig): void {
     if (!this.avatar) return;
 
-    const currentHeight = this.getObjectHeight(this.avatar);
+    const before = this.measureVerticalExtent(this.avatar);
+    const currentHeight = before.max - before.min;
     if (currentHeight > 0 && Number.isFinite(config.avatarHeightOverride) && config.avatarHeightOverride > 0) {
       const scaleToHeight = config.avatarHeightOverride / currentHeight;
       this.avatar.scale.multiplyScalar(scaleToHeight);
@@ -670,9 +701,9 @@ export class AvatarRig {
       this.avatar.scale.multiplyScalar(config.avatarScaleMultiplier);
     }
 
-    this.tmpBox.setFromObject(this.avatar);
-    this.avatarMinLocalY = this.tmpBox.min.y;
-    const avatarMaxLocalY = this.tmpBox.max.y;
+    const extent = this.measureVerticalExtent(this.avatar);
+    this.avatarMinLocalY = extent.min;
+    const avatarMaxLocalY = extent.max;
     this.avatarHeight = Math.max(0.01, avatarMaxLocalY - this.avatarMinLocalY);
     this.avatarEyeLocalY = this.avatarMinLocalY + this.avatarHeight * 0.92;
   }

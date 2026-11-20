@@ -1438,3 +1438,40 @@ bug above.)
   the root renders; a card torn down in between (the search feed replaced by the creator page) leaves the ref null.
   Fix candidate once reproduced: an `events` factory whose `connect` ignores a null target.
 - **Closed:** 2026-11-13, not reproducible. One hosted failure, none since: every pipeline shard has passed on later `main` runs (latest `852c65d4`), and 8 runs under `CI_EMULATE_LOAD=2` never showed it. Reopen if the `addEventListener` null error returns; the fix candidate above is the starting point.
+
+### B-071 — Place take's second pointing link plays back 1.39 m from its hit (fails `verify:pr` on `main`)
+
+- **Area:** apps/viewer-web (place playback) or apps/capture (link export)
+- **Severity:** P1 (a stored link draws in the wrong place, and `verify:pr` fails on every branch)
+- **Observed:** 2026-11-20, on a clean `origin/main` worktree (`b84dde250fb2`) and on `bug/avatar-jump`, the same value each run
+- **Evidence:** `e2e/place-capture.pipeline.spec.ts:711` "link 1: the end plays back within 0.02 m of the hit": received 1.388 m. Link 0 passes, and so does the stored end of link 1 (line 705), so the error is in playback, not in the stored point.
+- **Expected:** both links draw within 0.02 m of where their rays landed.
+- **Reproduction:** `cd apps/viewer-web && RUN_E2E_PIPELINE=1 XR_TEST_MODE=iwer pnpm exec playwright test e2e/place-capture.pipeline.spec.ts --workers=1`
+- **Cause:** a test that depended on the machine's speed, not a playback bug. After it seeks to link 1, the spec
+  waited 300 ms of wall time and then polled until one link drew. On a loaded machine a splat frame takes longer than
+  300 ms, so the probe still held the frame from before the seek, where link 0 drew alone. The poll passed at once on
+  that stale record, and the check measured link 0's end against link 1's hit: 1.388 m is exactly that distance.
+  Link 0 always passed, because no earlier link can be stale for it. CI shard 8 runs the place spec alone on an idle
+  runner, so it passed there.
+- **Fix:** `seek` waits for two frames drawn after the seek instead of 300 ms, and the poll waits for this mark's own
+  viewer index (its place among the record's link marks) to be the only one drawn. The 0.02 m tolerance is unchanged.
+  The full `place-capture.pipeline.spec.ts` passes locally beside a loaded CI emulation.
+- **Closed:** 2026-11-20.
+
+### B-072 — Feed card's reach controls sometimes stay folded under a hover (bubble-capture flake)
+
+- **Area:** apps/viewer-web (feed card reach controls, `e2e/bootstrap.ts` `reachFor`)
+- **Severity:** P3 (test flake; not seen by a person)
+- **Observed:** 2026-11-20: failed 2 of 4 runs on `bug/avatar-jump` and 1 of 2 on a clean `origin/main`
+- **Evidence:** `e2e/bubble-capture.pipeline.spec.ts:134` `pressViewInAr`: `.portal-controls` stays `data-reach="hidden"` through 120 s of hovers.
+- **Expected:** a cursor move over the card brings out its controls every time.
+- **Reproduction:** `cd apps/viewer-web && RUN_E2E_PIPELINE=1 XR_TEST_MODE=iwer pnpm exec playwright test e2e/bubble-capture.pipeline.spec.ts --workers=1`, a few runs.
+- **Cause:** the controls did come out on every hover; the press failed. With the take playing, a busy runner's page
+  needed 2 to 7 s for each of the click's checks (visible, stable, not covered). The reach controls fold 4 s after
+  the last cursor move, so at the cover check they had folded, and the click retried without moving the cursor. Each
+  `pressReach` attempt repeated this until its 120 s ran out (trace: `.portal-controls[data-reach="hidden"]
+  intercepts pointer events`).
+- **Fix:** the spec already runs the page on Playwright's clock, and the fold timer runs on it. It now holds the page
+  clock (`freezePageClock`) while it presses View in your room, then lets the take play on (`resumePageClock`). With
+  the frames stopped, the click's checks finish at once, and the press is still a real cursor press.
+- **Closed:** 2026-11-20.
