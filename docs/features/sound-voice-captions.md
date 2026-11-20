@@ -3,8 +3,8 @@
 **Lead:** Claude (Opus), session "Slice 4: a person's take as input", for the
 directed-performance lead (2026-11-18)
 **Status:** Slice 1a built in the authoring tool (2026-11-18,
-`feature/sound-1a`); slice 3 (captions) built 2026-11-19
-(`feature/sound-captions`); slices 1b, 4 to 6 not started. Written and built while the
+`feature/sound-1a`); slice 3 (captions) on `main` 2026-11-19
+(`feature/sound-captions`; six choices made by the agent in the owner's absence, for review); slices 1b, 4 to 6 not started. Written and built while the
 owner was away on 2026-11-18. On 2026-11-19 the owner heard the slice 1a clip
 and accepted all eight recommended decisions ("Owner decisions" at the end),
 and with them the agent's slice 1a choices (the local Kokoro voice and the
@@ -382,8 +382,8 @@ before any code. Folded into the plan:
 - **Contract** in `packages/contracts/src/captions.ts`: root extension
   `HOLOIM_captions` `{ version: 1, tracks: [{ language, cues: [{ from, to,
   text, kind, speaker? }] }] }`, in `extensionsUsed` only. `language` is a
-  BCP-47 tag (`en-US` for Kokoro's `a` voices, `en-GB` for `b`; a `file:`
-  voice says its own). `kind` is any string so a later kind does not void a
+  BCP-47 tag (`en-US` for Kokoro's `a` voices, `en-GB` for `b`; any other
+  voice, a `file:` one included, `en` until a sheet can name its language). `kind` is any string so a later kind does not void a
   file; viewers show `speech` only (decision 7). `speaker` is optional (the
   first performer when absent). The reader drops a bad cue, not the track,
   and ignores an invalid extension with a warning, as `findStoredPlace` does.
@@ -451,7 +451,7 @@ Evidence (all local):
 
 | Check | Command | Result |
 |---|---|---|
-| Sheet to card, in time with the clock and the voice | `direct.ts` on `spoken-line`, then `viewer-check.ts --captions --audio --video` (publishes to its own local API) | 2 cues (4.60–6.00 "That one is the tallest.", 6.00–7.19 "Almost twice the first."); 110 frames of a muted pass, 0 wrong; every edge on the first frame drawn past it (0 ms late); voice heard 81 ms after each cue's start (bar 100 ms) |
+| Sheet to card, in time with the clock and the voice | `direct.ts` on `spoken-line`, then `viewer-check.ts --captions --audio --video` (publishes to its own local API) | 2 cues (4.60–6.00 "That one is the tallest.", 6.00–7.19 "Almost twice the first."); two runs (110 and 47 frames of a muted pass, the second at a load average near 90), 0 wrong; every edge on the first frame drawn past it (0 ms late); voice heard 81 and 72 ms after each cue's start (bar 100 ms) |
 | Card sync, mute, contrast, type, no-caption file, phone reach row | `e2e/captions.spec.ts` (mocked feed, in `test:e2e:mocked` shard 2) | 0 wrong frames and every edge on the first frame drawn past it, over 9 runs (`--repeat-each=3`) at load averages of 60 to 97, 46 frames a pass at the slowest (8 inside every cue; bar 3); a `title` cue never shows; chip contrast 6.67:1 worst (fill `rgba(8,26,30,0.72)` over white and black, bar 4.5); unmuted, none shown; a GLB with no captions, none shown; phone, paused in Free mode with the row stacked: caption bottom 503 px, controls top 527 px |
 | WebXR, heard and not heard, head, fade, focus | `e2e/xr-viewer.spec.ts` "VR captions:" (IWER, `office_small`) | focused hologram shows none, the other shows its cue at opacity 1; chip foot 1.847 m against a head top of 1.769 m; 40 stepped reads, 19 of cue 1 and 21 of cue 2, none wrong; opacity 0 with the head 0.72 m from the hologram, back at 1 beyond 1 m; focus swap moves the chip |
 | Quick Look carries no text (decision 3) | `check_usdz_tools.sh` on `spoken-line.glb`; `glb_to_usdz.py` | 7/7 cases pass; the converter warns on `HOLOIM_captions` and the 4.9 MB USDZ holds no caption text |
@@ -463,6 +463,33 @@ its pose (about 200 ms at the 8 fps a loaded machine draws), now committed in
 the frame; the checks count lag from the first frame drawn past an edge, so a
 slow frame rate is not read as lag. Limits: `edit-take.ts` and `recast-take.ts` drop captions with the
 audio, as planned; no captions toggle yet (choice 2).
+
+Independent verifier (Opus, brief and diff only) and a code review (fresh
+context) found no blocker. Fixed from them:
+
+- The splitter cut at "Mr.", "Dr.", an initial and inside "3.50". It now
+  splits only at a space after end punctuation and joins a piece that ends
+  in a title, abbreviation or initial to the next.
+- A line took one voiced group per piece whenever the counts matched, so a
+  clause pause against a word-wrapped piece put words out of step. Now only
+  when every piece but the last ends a sentence; otherwise the pieces share
+  the voiced span by length.
+- The voice check failed a later piece of a length-split line (it opens
+  mid-sentence, not on an onset). A cue now passes on an onset within
+  100 ms or when it opens inside a voiced span, and the report says which.
+- The pass guard counted frames, so a fast display could fail a long clip;
+  it is now time, from the clip's duration.
+- The card commits a caption in the frame only while muted (the chip shows
+  only then), reading the take's clock through `getPlaybackTime`.
+- The XR chip finds each speaker's head bone once, not every frame, places
+  without a per-frame allocation, and hides at once with its hologram.
+- The stacked-row offset used an undefined CSS variable; it is now one touch
+  hit (`--holoim-hit-touch`).
+
+Not proven by a check: a speaker turned away from the viewer, reframing the
+card mid-cue, and AR with one hologram placed. In AR one hologram is the
+focused, heard one, so under choice 1 it never shows captions; that is the
+choice as recorded, for the owner to review.
 
 ## Acceptance criteria (slice 1a)
 

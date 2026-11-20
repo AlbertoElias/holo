@@ -85,7 +85,7 @@ export interface CaptionsReading {
   readonly passStartedAt: number;
   readonly passTakeTime: number;
   /** Each cue's start against the nearest heard voice onset (`--audio`). */
-  readonly voice?: { text: string; from: number; heardOnset: number | null; deltaMs: number | null }[];
+  readonly voice?: { text: string; from: number; heardOnset: number | null; deltaMs: number | null; match: 'onset' | 'inside' | null }[];
 }
 
 export interface HeardReading {
@@ -190,16 +190,17 @@ export async function read(page: Page, url: string): Promise<ViewerReading> {
 }
 
 /** One real-time pass of the muted card, from its clip's start to its wrap: the take time and the caption shown, every frame. */
-async function watchCaptions(page: Page, url: string, file: string): Promise<CaptionsReading> {
+async function watchCaptions(page: Page, url: string, file: string, duration: number): Promise<CaptionsReading> {
   const track = primaryTrack(readCaptions(new Uint8Array(await readFile(file))));
-  const pass = await page.evaluate((u) => new Promise<{ startedAt: number; samples: { t: number; caption: string }[] }>((done, fail) => {
+  const pass = await page.evaluate(([u, clip]) => new Promise<{ startedAt: number; samples: { t: number; caption: string }[] }>((done, fail) => {
     const p = Object.entries((window as unknown as { __feedProbes: Record<string, { actions: Record<string, { time: number } | null> }> }).__feedProbes).find(([k]) => k.endsWith(u))![1];
     const region = document.querySelector<HTMLElement>('[data-testid=card-caption]');
     const samples: { t: number; caption: string }[] = [];
-    let startedAt = 0; let frames = 0;
+    // A time guard, not a frame count: frame rates differ by machine and load. Two clips and a minute to start is the most a pass takes.
+    const begin = performance.now();
+    let startedAt = 0;
     const step = () => {
-      frames += 1;
-      if (frames > 60 * 120) return fail(new Error('no full pass of the clip'));
+      if (performance.now() - begin > (2 * clip + 60) * 1000) return fail(new Error('no full pass of the clip'));
       const t = Object.values(p.actions).find((a) => a)?.time ?? -1;
       if (!startedAt && t >= 0 && t < 0.3) startedAt = Date.now();
       if (startedAt) {
@@ -209,7 +210,7 @@ async function watchCaptions(page: Page, url: string, file: string): Promise<Cap
       requestAnimationFrame(step);
     };
     requestAnimationFrame(step);
-  }), url);
+  }), [url, duration] as const);
   const cues = track?.cues ?? [];
   const near = (t: number) => cues.some((c) => Math.abs(t - c.from) < CAPTION_EDGE_S || Math.abs(t - c.to) < CAPTION_EDGE_S);
   const wrongFrames = pass.samples
@@ -286,7 +287,7 @@ async function main(): Promise<void> {
       }, uploaded.url);
     }
     // The feed starts muted, so the captions pass comes first; `--audio` unmutes after it.
-    let captions: CaptionsReading | undefined = captionsOn ? await watchCaptions(page, uploaded.url, file) : undefined;
+    let captions: CaptionsReading | undefined = captionsOn ? await watchCaptions(page, uploaded.url, file, result.duration) : undefined;
     let heard: HeardReading | undefined;
     let heardStartedAt = 0;
     if (audioOut) {
@@ -315,9 +316,12 @@ async function main(): Promise<void> {
       if (captions) {
         const spans = heard.spans;
         captions = { ...captions, voice: captions.cues.map((c) => {
-          if (!spans.length) return { text: c.text, from: c.from, heardOnset: null, deltaMs: null };
+          if (!spans.length) return { text: c.text, from: c.from, heardOnset: null, deltaMs: null, match: null };
           const nearest = spans.reduce((best, sp) => (Math.abs(sp.start - c.from) < Math.abs(best.start - c.from) ? sp : best));
-          return { text: c.text, from: c.from, heardOnset: nearest.start, deltaMs: Math.round((nearest.start - c.from) * 1000) };
+          const deltaMs = Math.round((nearest.start - c.from) * 1000);
+          // A cue opens on a voice onset, or (a later piece of a line split by length) inside a voiced span.
+          const match = Math.abs(deltaMs) <= CAPTION_SYNC_MS ? 'onset' : spans.some((sp) => c.from > sp.start && c.from < sp.end) ? 'inside' : null;
+          return { text: c.text, from: c.from, heardOnset: nearest.start, deltaMs, match };
         }) };
       }
     } else if (videoOut) {
@@ -350,13 +354,13 @@ async function main(): Promise<void> {
     if (captions) {
       console.log(`  captions (${captions.language ?? 'none'}): ${captions.cues.length} cues, ${captions.frames} frames, ${captions.wrongFrames.length} showed the wrong caption`);
       for (const e of captions.edges) console.log(`  "${e.text}": shown ${e.showLagMs ?? '-'} ms after the first frame past its start, cleared ${e.hideLagMs ?? '-'} ms after the first past its end`);
-      for (const v of captions.voice ?? []) console.log(`  "${v.text}" from ${v.from.toFixed(2)} s, voice heard from ${v.heardOnset?.toFixed(2) ?? '-'} s (${v.deltaMs ?? '-'} ms)`);
+      for (const v of captions.voice ?? []) console.log(`  "${v.text}" from ${v.from.toFixed(2)} s, voice heard from ${v.heardOnset?.toFixed(2) ?? '-'} s (${v.deltaMs ?? '-'} ms, ${v.match === 'inside' ? 'inside a voiced span' : v.match ?? 'no voice'})`);
     }
     console.log(`  card: ${shot}`);
     if (reportOut) await writeFile(reportOut, `${JSON.stringify({ ...result, ...(heard ? { heard } : {}), ...(captions ? { captions } : {}) }, null, 2)}\n`);
     if (captions) {
       const late = captions.edges.some((e) => e.showLagMs === null || e.showLagMs > CAPTION_SYNC_MS || e.hideLagMs === null || e.hideLagMs > CAPTION_SYNC_MS);
-      const offVoice = (captions.voice ?? []).some((v) => v.deltaMs === null || Math.abs(v.deltaMs) > CAPTION_SYNC_MS);
+      const offVoice = (captions.voice ?? []).some((v) => v.match === null);
       if (!captions.cues.length || captions.wrongFrames.length || late || offVoice) { console.error('the card\'s captions are not the file\'s, in time with the clock and the voice'); process.exitCode = 1; }
     }
     if (heard && heard.sources.some((h) => h.deltaMs === null || Math.abs(h.deltaMs) > 100)) { console.error('a sound in the file was not heard where the file puts it'); process.exitCode = 1; }

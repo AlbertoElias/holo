@@ -3,7 +3,8 @@
  * slice 3): a `HOLOIM_captions` root extension written from the beat sheet's
  * `say` lines, timed by the voiced sound, not the file start.
  */
-import { CAPTIONS_EXTENSION, CAPTIONS_EXTENSION_VERSION, SPEECH_CUE_KIND, parseCaptions, splitCaptionText, type CaptionCue, type CaptionsExtension } from '@holoim/contracts';
+import { CAPTIONS_EXTENSION, CAPTIONS_EXTENSION_VERSION, SPEECH_CUE_KIND, endsSentence, parseCaptions, splitCaptionText, type CaptionCue, type CaptionsExtension } from '@holoim/contracts';
+import { parseGlb } from './gltf-read.ts';
 import type { Line } from './sound.ts';
 
 /** A gap between two cues shorter than this is bridged, so the chip does not blink between pieces of one line (s). */
@@ -11,7 +12,11 @@ const BRIDGE = 0.6;
 /** The shortest a cue shows, to be read (s); longer only within the clip and before the next cue. */
 const MIN_SHOW = 0.8;
 
-/** The BCP-47 tag of a line's language: Kokoro's `a…` voices are American, `b…` British (as `speak.mjs` phonemises them). */
+/**
+ * The BCP-47 tag of a line's language: Kokoro's `a…` voices are American, `b…` British (as `speak.mjs` phonemises them);
+ * every other voice, a `file:` one included, is spoken and phonemised as English and tagged `en`, since a sheet has no
+ * language field yet.
+ */
 export function lineLanguage(voice: string): string {
   if (voice.startsWith('local:a')) return 'en-US';
   if (voice.startsWith('local:b')) return 'en-GB';
@@ -20,8 +25,11 @@ export function lineLanguage(voice: string): string {
 
 /**
  * The cues for a take's lines. A line longer than one chip line is split at
- * sentence and clause ends (choice 5); its pieces take the line's voiced
- * groups when there are as many, else share its voiced span by length.
+ * sentence and clause ends (choice 5). When every piece but the last ends a
+ * sentence and there are as many voiced groups (a pause per sentence end), each
+ * piece takes its group; otherwise a count that matches by chance (a clause
+ * pause against a word-wrapped piece) would put words out of step with the
+ * voice, so the pieces share the voiced span by length.
  */
 export function captionCues(lines: readonly Line[], clip: number, speakerOf: (performer: string) => string): CaptionCue[] {
   const cues: CaptionCue[] = [];
@@ -32,7 +40,8 @@ export function captionCues(lines: readonly Line[], clip: number, speakerOf: (pe
     const end = line.at + groups[groups.length - 1]!.end;
     const pieces = splitCaptionText(line.text);
     const speaker = speakerOf(line.performer);
-    const spans = pieces.length === groups.length
+    const bySentence = pieces.length === groups.length && pieces.slice(0, -1).every(endsSentence);
+    const spans = bySentence
       ? groups.map((g) => [line.at + g.start, line.at + g.end] as const)
       : byLength(pieces, start, end);
     pieces.forEach((text, i) => {
@@ -67,12 +76,10 @@ const round = (s: number): number => Math.round(s * 1000) / 1000;
 
 /** The extension for a take's lines, or null when nothing is said. */
 export function takeCaptions(lines: readonly Line[], clip: number, speakerOf: (performer: string) => string): CaptionsExtension | null {
-  const byLanguage = new Map<string, Line[]>();
-  for (const l of lines) byLanguage.set(lineLanguage(l.voice), [...(byLanguage.get(lineLanguage(l.voice)) ?? []), l]);
   // One track: a take's lines are one language today; a mixed take keeps the first line's tag.
   const cues = captionCues(lines, clip, speakerOf);
   if (!cues.length) return null;
-  return { version: CAPTIONS_EXTENSION_VERSION, tracks: [{ language: [...byLanguage.keys()][0]!, cues }] };
+  return { version: CAPTIONS_EXTENSION_VERSION, tracks: [{ language: lineLanguage(lines[0]!.voice), cues }] };
 }
 
 /**
@@ -107,9 +114,7 @@ export function addCaptions(glb: Uint8Array, captions: CaptionsExtension | null)
 
 /** The captions a GLB carries, as a viewer reads them, or null. */
 export function readCaptions(glb: Uint8Array): CaptionsExtension | null {
-  const view = new DataView(glb.buffer, glb.byteOffset, glb.byteLength);
-  const json = JSON.parse(new TextDecoder().decode(glb.subarray(20, 20 + view.getUint32(12, true)))) as { extensions?: Record<string, unknown> };
-  const raw = json.extensions?.[CAPTIONS_EXTENSION];
+  const raw = (parseGlb(glb).json as { extensions?: Record<string, unknown> }).extensions?.[CAPTIONS_EXTENSION];
   if (raw === undefined) return null;
   const parsed = parseCaptions(raw);
   return parsed.ok ? parsed.value : null;

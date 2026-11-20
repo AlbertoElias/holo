@@ -325,7 +325,8 @@ body::before {
 }
 
 .feed-card:has(.feed-card-foot[data-reach-row="stacked"] .portal-controls[data-reach="shown"]) .feed-card-caption-chip {
-  bottom: calc(2 * var(--holoim-glyph-gap) + var(--feed-stacked-row-height, var(--holoim-hit-touch)));
+  /* The stacked row is one touch hit tall. */
+  bottom: calc(2 * var(--holoim-glyph-gap) + var(--holoim-hit-touch));
 }
 
 /* Over the picture the row takes the chip, no wider than the controls

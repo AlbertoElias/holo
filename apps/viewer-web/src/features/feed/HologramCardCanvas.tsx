@@ -340,11 +340,12 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
   const captionShown = useRef<string | null>(null);
   useFrame(() => {
     if (!onCaption) return;
-    const text = active && captionTrack ? activeCue(captionTrack, primaryActionRef.current?.time ?? 0)?.text ?? null : null;
+    const text = active && captionTrack ? activeCue(captionTrack, getPlaybackTime())?.text ?? null : null;
     if (text !== captionShown.current) {
       captionShown.current = text;
-      // Committed now, so the caption paints in the frame whose pose it belongs to, not one frame later.
-      flushSync(() => onCaption(text));
+      // While muted the chip shows, so commit now: the caption paints in the frame whose pose it belongs to, not one frame later.
+      if (muted) flushSync(() => onCaption(text));
+      else onCaption(text);
     }
   });
   useEffect(() => () => onCaption?.(null), [onCaption]);

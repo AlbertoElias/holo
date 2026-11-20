@@ -41,16 +41,23 @@ export interface CaptionChipProbe {
 
 const VIEW: Record<XrUiTarget, ViewTarget> = { vr: VIEW_TARGETS.vr, "ar-quest": VIEW_TARGETS.questPassthrough, "ar-phone": VIEW_TARGETS.androidChrome };
 
-/** The speaker's head: the head bone under their wrapper node, else the top of their body. */
-function speakerHead(model: Object3D, speaker: string, out: Vector3): boolean {
+interface SpeakerNodes { wrapper: Object3D | null; bone: Object3D | null }
+
+/** The speaker's wrapper node and head bone, found once per model and speaker (a rig does not change while placed). */
+function findSpeaker(model: Object3D, speaker: string): SpeakerNodes {
   const wrapper = model.getObjectByName(speaker) ?? (speaker === FIRST_PERFORMER ? model : null);
-  if (!wrapper) return false;
   let bone: Object3D | null = null;
-  wrapper.traverse((child) => {
+  wrapper?.traverse((child) => {
     if (!bone && (child as { isBone?: boolean }).isBone && /(^|[:_])head$/i.test(child.name)) bone = child;
   });
+  return { wrapper, bone };
+}
+
+/** The speaker's head: their head bone, else the top of their body. */
+function speakerHead({ wrapper, bone }: SpeakerNodes, out: Vector3): boolean {
+  if (!wrapper) return false;
   if (bone) {
-    (bone as Object3D).getWorldPosition(out);
+    bone.getWorldPosition(out);
     return true;
   }
   bounds.setFromObject(wrapper);
@@ -71,6 +78,8 @@ class CaptionChip {
   want = false;
   fromHeadM: number | null = null;
   toHologramM: number | null = null;
+  /** Each speaker's nodes in this chip's model, so a frame does not walk the rig. */
+  readonly speakers = new Map<string, SpeakerNodes>();
 
   constructor(world: World, target: XrUiTarget, pixelSize: number) {
     const metrics = targetMetrics(target);
@@ -115,6 +124,12 @@ class CaptionChip {
     return this.entity.object3D!.visible ? this.current : "";
   }
 
+  /** Hides the chip at once (its hologram is hidden, so nothing is left to fade beside). */
+  hide(): void {
+    this.opacity = 0;
+    this.entity.object3D!.visible = false;
+  }
+
   /** Steps the fade toward `want` (the chrome timings) and sets the text while it shows. */
   step(text: string | null, want: boolean, dtMs: number): void {
     if (text && text !== this.current) {
@@ -134,7 +149,8 @@ class CaptionChip {
   place(position: Vector3, viewer: Vector3): void {
     const object = this.entity.object3D!;
     object.parent?.updateWorldMatrix(true, false);
-    object.position.copy(object.parent ? object.parent.worldToLocal(position.clone()) : position);
+    object.position.copy(position);
+    object.parent?.worldToLocal(object.position);
     // Upright, turned to the viewer about the vertical.
     at.set(viewer.x, position.y, viewer.z);
     object.lookAt(at);
@@ -173,13 +189,23 @@ export class CaptionChips {
       const object = record.entity.object3D;
       const heard = Boolean(record.entity.getValue(HologramPlayback, "audible"));
       const placedAndShown = Boolean(object?.visible) && record.placement.stage !== "searching";
+      if (!object?.visible) {
+        chip.want = false;
+        chip.hide();
+        continue;
+      }
       const clipTime = record.entity.getValue(HologramPlayback, "clipTime") ?? 0;
       const cue = placedAndShown && (XR_CAPTIONS_WHEN === "always" || !heard) ? activeCue(record.captions, clipTime) : null;
       let want = false;
       if (cue && object) {
         const speaker = cue.speaker ?? FIRST_PERFORMER;
         chip.speaker = speaker;
-        if (speakerHead(record.model, speaker, anchor)) {
+        let nodes = chip.speakers.get(speaker);
+        if (!nodes) {
+          nodes = findSpeaker(record.model, speaker);
+          chip.speakers.set(speaker, nodes);
+        }
+        if (speakerHead(nodes, anchor)) {
           anchor.y += ABOVE_HEAD_M * object.getWorldScale(at).y;
           chip.place(anchor, head);
           object.getWorldPosition(at);

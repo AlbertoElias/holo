@@ -122,8 +122,28 @@ export function splitCaptionText(text: string, maxChars = CAPTION_LINE_CHARS): s
   const clean = text.replace(/\s+/g, " ").trim();
   if (!clean) return [];
   if (clean.length <= maxChars) return [clean];
-  const sentences = clean.match(/[^.!?…]+[.!?…]+["'”’)]*|[^.!?…]+$/g)?.map((s) => s.trim()).filter(Boolean) ?? [clean];
+  // A sentence ends at its punctuation and the space after it, so "3.50" and a leading "…" stay whole.
+  const sentences = joinAbbreviations(clean.split(/(?<=[.!?…]["'”’)]*)\s+/).filter(Boolean));
   return sentences.flatMap((sentence) => (sentence.length <= maxChars ? [sentence] : wrapAtClauses(sentence, maxChars)));
+}
+
+/** A period that ends a title, a common abbreviation or an initial ("Mr.", "e.g.", "J.") ends no sentence. */
+const NOT_A_SENTENCE_END = /(?:^|\s)(?:mr|mrs|ms|dr|prof|st|sr|jr|vs|etc|no|e\.g|i\.e|[a-z])\.$/i;
+
+/** Joins a piece the sentence match cut at such a period to the piece after it. */
+function joinAbbreviations(pieces: string[]): string[] {
+  const out: string[] = [];
+  for (const piece of pieces) {
+    const last = out[out.length - 1];
+    if (last !== undefined && NOT_A_SENTENCE_END.test(last)) out[out.length - 1] = `${last} ${piece}`;
+    else out.push(piece);
+  }
+  return out;
+}
+
+/** Whether a piece ends a sentence (its writer may then give it a voiced group of its own). */
+export function endsSentence(piece: string): boolean {
+  return /[.!?…]["'”’)]*$/.test(piece) && !NOT_A_SENTENCE_END.test(piece);
 }
 
 /**
