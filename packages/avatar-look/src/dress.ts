@@ -65,10 +65,12 @@ export function dressAvatar(doc: Document, card: LookCard): void {
     node.dispose();
     if (mesh && !root.listNodes().some((n) => n.getMesh() === mesh)) {
       for (const p of mesh.listPrimitives()) {
-        for (const a of p.listAttributes()) a.dispose();
-        p.getIndices()?.dispose();
-        for (const t of p.listTargets()) for (const a of t.listAttributes()) a.dispose();
+        const targets = p.listTargets();
+        const accessors = [...p.listAttributes(), ...(p.getIndices() ? [p.getIndices()!] : []), ...targets.flatMap((t) => t.listAttributes())];
+        for (const t of targets) t.dispose();
         p.dispose(); // else the primitive keeps its material alive below
+        // The wardrobe's kinds can share an accessor (the glasses kinds share one index list): dispose only what nothing else uses.
+        for (const a of new Set(accessors)) if (a.listParents().every((parent) => parent === root)) a.dispose();
       }
       mesh.dispose();
     }

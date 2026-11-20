@@ -213,7 +213,7 @@ export const REVIEW_PAGE = String.raw`
       };
     },
     /**
-     * view: { position: [x,y,z], target: [x,y,z], fov, width, height, label, background (hex number) }.
+     * view: { position: [x,y,z], target: [x,y,z], fov, width, height, label, background (hex number), far (m, optional: clips the stage behind the performer) }.
      * Returns a JPEG data URL and, when asked, the face box in output pixels.
      */
     close(i, view) {
@@ -222,7 +222,7 @@ export const REVIEW_PAGE = String.raw`
       // The card camera carries the card's view offset (its frame inside the canvas); the close view is a plain square camera.
       if (cam.clearViewOffset) cam.clearViewOffset();
       cam.zoom = 1;
-      cam.fov = view.fov; cam.aspect = view.width / view.height; cam.near = 0.01; cam.far = 100;
+      cam.fov = view.fov; cam.aspect = view.width / view.height; cam.near = 0.01; cam.far = view.far ?? 100;
       cam.position.set(...view.position); cam.lookAt(V().set(...view.target));
       cam.updateProjectionMatrix(); cam.updateMatrixWorld();
       const prev = { w: r.domElement.clientWidth, h: r.domElement.clientHeight, pr: r.getPixelRatio(), alpha: r.getClearAlpha() };

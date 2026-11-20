@@ -31,7 +31,7 @@ own mesh for the dressing function to keep or remove; exported as GLB.
 Blender: +Z up, the human faces -Y, its left is +X. glTF export turns that
 into +Y up, facing +Z.
 """
-import bpy, bmesh, json, math, os, sys
+import bpy, bmesh, itertools, json, math, os, sys
 import numpy as np
 from mathutils import Vector
 from mathutils.bvhtree import BVHTree
@@ -625,8 +625,63 @@ mouth_shapes["jawLeft"] = every(ms["jawSide"] * np.ones(cols))
 mouth_shapes["jawRight"] = every(-ms["jawSide"] * np.ones(cols))
 mouth_shapes["jawForward"] = every(dy=-ms["jawForward"] * np.ones(cols))
 mouth_offs = {c: mouth_at(d) - mouth_v for c, d in mouth_shapes.items()}
-mouth_faces, mouth_mats = [], []
+# Each shape puts the mouth back on the skin by itself, but a mix only adds the shapes' offsets: on the face's
+# curve the sum of a smile and an open jaw lies behind the skin (and the jaw moves the chin's skin as well), so
+# the skin showed through the open mouth (B-073). Each mix in `mixes` is a list of parts (shapes moved together);
+# every part takes each weight in `weights`. For each such mix a sample of the mouth needs to come forward by as
+# much as the skin (moved by the mix's skin units) is in front of it, plus `margin`. The samples are the mouth's
+# points and `faceSamples` points inside each of its faces, because the face's own skin round the lip slit lies
+# close behind the mouth and shows between the points. Each shape then gets, per column of the mouth, a forward
+# push such that the weighted pushes of every sampled mix cover each sample's need (averaged projections onto each
+# mix's half-spaces, kept at or above zero), so a shape alone moves forward only as much as its mixes need. A
+# column moves as one piece, so its rows keep their depth order and no tooth edge comes in front of the lips.
+fc = F["mouthMixes"]
 n_rows = len(ROWS)
+sample_k, sample_b = [[k] * 4 for k in range(len(mouth_v))], [[1.0, 0.0, 0.0, 0.0]] * len(mouth_v)
+for i in range(cols - 1):
+    for j, mat in enumerate(BETWEEN):
+        if mat is None:
+            continue
+        a, b = i * n_rows + j, (i + 1) * n_rows + j
+        for u, v in fc["faceSamples"]:
+            sample_k.append([a, b, a + 1, b + 1])
+            sample_b.append([(1 - u) * (1 - v), u * (1 - v), (1 - u) * v, u * v])
+sample_k, sample_b = np.array(sample_k), np.array(sample_b)
+at = lambda A: np.einsum("sj,sj...->s...", sample_b, A[sample_k])  # (n_points, ...) -> (n_samples, ...)
+on_cols = np.zeros((len(sample_k), cols))  # each sample's share of each column (mouth_v runs column by column)
+np.add.at(on_cols, (np.arange(len(sample_k))[:, None], sample_k // n_rows), sample_b)
+mix_rows = []  # (weights by shape, need per sample)
+for parts in fc["mixes"]:
+    for ws in itertools.product(fc["weights"], repeat=len(parts)):
+        w = {c: wt for part, wt in zip(parts, ws) for c in part}
+        p = at(mouth_v + sum(mouth_offs[c] * wt for c, wt in w.items()))
+        moved_skin = base + sum((moved[c] * wt for c, wt in w.items() if c in moved), np.zeros_like(base))
+        under = BVHTree.FromPolygons([tuple(v) for v in moved_skin], body_polys)
+        need = np.zeros(len(p))
+        for k, q in enumerate(p):
+            hit = under.ray_cast(Vector((q[0], -1.0, q[2])), Vector((0, 1, 0)))[0]
+            if hit is not None:
+                need[k] = max(0.0, q[1] - (hit[1] - fc["margin"]))
+        if need.max() > 0:
+            mix_rows.append((w, need))
+mix_shapes = sorted({c for w, _ in mix_rows for c in w})
+push = {c: np.zeros(cols) for c in mix_shapes}
+reach = (on_cols ** 2).sum(axis=1)
+for _ in range(fc["passes"]):
+    for w, need in mix_rows:
+        short = np.maximum(need - sum(on_cols @ push[c] * wt for c, wt in w.items()), 0.0)
+        if short.max() <= 0:
+            continue
+        step = short / (reach * sum(wt * wt for wt in w.values()))
+        count = on_cols[short > 0].sum(axis=0)
+        for c, wt in w.items():
+            total = on_cols.T @ (step * wt)
+            push[c] = np.maximum(0.0, push[c] + total / np.maximum(count, 1.0))
+short_left = max((float((need - sum(on_cols @ push[c] * wt for c, wt in w.items())).max()) for w, need in mix_rows), default=0.0)
+for c, n in push.items():
+    mouth_offs[c][:, 1] -= np.repeat(n, n_rows)
+mouth_mix_report = {"samples": len(sample_k), "sampledMixes": len(mix_rows), "shortMm": round(short_left * 1000, 3), "forwardMm": {c: round(float(n.max()) * 1000, 2) for c, n in push.items() if n.max() > 0}}
+mouth_faces, mouth_mats = [], []
 for i in range(cols - 1):
     for j, mat in enumerate(BETWEEN):
         if mat is None:
@@ -918,7 +973,7 @@ report = {
     "bones": [b.name for b in rig.data.bones],
     "materials": {n: sum(1 for p in human.data.polygons if p.material_index == i) for i, n in enumerate(slots)},
     "credits": credits, "build": BUILD, "landmarks": {k: round(v, 4) for k, v in land.items()},
-    "garments": garment_report, "hair": hair_report, "glasses": glasses_report, "fit": fit_report,
+    "garments": garment_report, "mouthMixes": mouth_mix_report, "hair": hair_report, "glasses": glasses_report, "fit": fit_report,
 }
 json.dump(report, open(REPORT, "w"), indent=2)
 print("HOUSE_BASE_DONE", OUT)
