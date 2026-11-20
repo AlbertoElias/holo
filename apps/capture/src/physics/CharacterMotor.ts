@@ -13,8 +13,13 @@ const groundedStickVelocity = -0.5;
 const SNAG_FRACTION = 0.5;
 /** A jump lifts the body this share of its height: a strong standing jump (0.6 m at 1.8 m tall), never superhuman. */
 const JUMP_RISE_HEIGHTS = 0.33;
-/** The steepest ground the character walks up; anything steeper is a wall. */
-const MAX_CLIMB_RAD = THREE.MathUtils.degToRad(40);
+/**
+ * The steepest ground the character walks up; anything steeper is a wall. 60° takes the default scene's grass hills
+ * (96% of the grass by area); what stays a wall there is near-vertical ledges 1.3–4.3 m tall.
+ */
+const MAX_CLIMB_RAD = THREE.MathUtils.degToRad(60);
+/** Ground the character stands on never slides it down: only slopes it could not climb do. */
+const MIN_SLIDE_RAD = MAX_CLIMB_RAD + THREE.MathUtils.degToRad(2);
 const MAX_CLIMB_COS = Math.cos(MAX_CLIMB_RAD);
 // Collision normals at least this vertical are floor (or ceiling), not walls.
 const SNAG_FLOOR_NORMAL_Y = MAX_CLIMB_COS;
@@ -484,7 +489,7 @@ export class CharacterMotor {
     this.characterController.setUp({ x: 0, y: 1, z: 0 });
     this.characterController.setSlideEnabled(true);
     this.characterController.setMaxSlopeClimbAngle(MAX_CLIMB_RAD);
-    this.characterController.setMinSlopeSlideAngle(THREE.MathUtils.degToRad(45));
+    this.characterController.setMinSlopeSlideAngle(MIN_SLIDE_RAD);
     this.characterController.enableAutostep(Math.max(0.08, this.avatarHeight * 0.2), Math.max(0.04, this.avatarHeight * 0.1), true);
     // Keep ground snap conservative; large snap distances can cause sticky horizontal motion.
     this.characterController.enableSnapToGround(Math.max(0.03, this.avatarHeight * 0.08));

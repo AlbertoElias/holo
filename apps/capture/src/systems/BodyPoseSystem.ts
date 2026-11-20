@@ -16,6 +16,14 @@ export class BodyPoseSystem extends createSystem() {
   /** Seconds since the last landing, and how hard it was (0..1); the absorb plays out from it. */
   private sinceLanding = Infinity;
   private landingPeak = 0;
+  /** Seconds since the feet left the ground, and the wind-up bend they left it with; the push-off unwinds it. */
+  private sinceTakeoff = Infinity;
+  private takeoffBend = 0;
+  private lastBend = 0;
+  private wasGrounded = true;
+  /** The wind-up's last bend and the seconds since: the launch frame can still read grounded, so it holds the squat. */
+  private windupBend = 0;
+  private sinceWindup = Infinity;
 
   init(): void {
     this.capture = captureContext(this.world);
@@ -58,7 +66,8 @@ export class BodyPoseSystem extends createSystem() {
       const moving = input.moveState.forward || input.moveState.back || input.moveState.left || input.moveState.right;
       // The plant is held through the last of the stand-up, until the crouch is gone, so the feet do not snap as the reach ends.
       const jump = this.jumpBend(deltaSec, character.grounded, character.velocityY);
-      const airborne = !character.grounded && jump > 0;
+      // The push-off still extends legs that stand on their feet; only the tuck after it folds them under the hips.
+      const airborne = !character.grounded && jump > 0 && this.sinceTakeoff >= PUSH_OFF_SEC;
       const poseAmount = Math.max(c.crouch.poseAmount, jump);
       // A jump's wind-up and landing bend the knees over feet that stay where they stood.
       const jumpPlant = character.grounded && jump > 0.02 && !moving;
@@ -76,21 +85,44 @@ export class BodyPoseSystem extends createSystem() {
   }
 
   /**
-   * The crouch a flat-screen jump adds (0..1): a squat through the wind-up, legs tucked up toward the apex (none at
-   * take-off or touch-down, where they push off and reach for the ground), and on landing a dip as deep as the
-   * fall was hard, in quickly and out over a few tenths of a second.
+   * The crouch a flat-screen jump adds (0..1): a squat through the wind-up; a push-off that straightens the legs over
+   * the first tenth of a second in the air, the hips rising with them rather than snapping up; legs drawn up a little
+   * toward the apex (none at take-off or touch-down, where they push off and reach for the ground); and on landing a
+   * dip as deep as the fall was hard, in over a tenth of a second and out over a few tenths.
    */
   private jumpBend(deltaSec: number, grounded: boolean, velocityY: number): number {
+    const bend = this.jumpBendRaw(deltaSec, grounded, velocityY);
+    this.lastBend = bend;
+    this.wasGrounded = grounded;
+    return bend;
+  }
+
+  private jumpBendRaw(deltaSec: number, grounded: boolean, velocityY: number): number {
     const motor = this.capture.motor;
     const impact = motor.takeLanding();
     if (impact > LANDING_MIN_SPEED) {
       this.sinceLanding = 0;
       this.landingPeak = THREE.MathUtils.clamp(impact / LANDING_FULL_SPEED, LANDING_MIN_PEAK, 1);
     } else this.sinceLanding += Math.max(0, deltaSec);
+    if (grounded) this.sinceTakeoff = Infinity;
+    else if (this.wasGrounded) {
+      this.sinceTakeoff = 0;
+      this.takeoffBend = this.lastBend;
+    } else this.sinceTakeoff += Math.max(0, deltaSec);
     if (this.capture.frame.vrActive) return 0;
     const windup = motor.jumpWindup;
-    if (windup > 0) return JUMP_WINDUP_DEPTH * THREE.MathUtils.smoothstep(windup, 0, 1);
-    if (!grounded) return JUMP_TUCK_DEPTH * Math.max(0, 1 - Math.abs(velocityY) / Math.max(1e-3, motor.jumpLaunchSpeed));
+    if (windup > 0) {
+      this.sinceWindup = 0;
+      this.windupBend = JUMP_WINDUP_DEPTH * THREE.MathUtils.smoothstep(windup, 0, 1);
+      return this.windupBend;
+    }
+    this.sinceWindup += Math.max(0, deltaSec);
+    if (grounded && this.sinceWindup < LAUNCH_GRACE_SEC) return this.windupBend;
+    if (!grounded) {
+      if (this.sinceTakeoff < PUSH_OFF_SEC) return this.takeoffBend * (1 - THREE.MathUtils.smoothstep(this.sinceTakeoff, 0, PUSH_OFF_SEC));
+      const rise = THREE.MathUtils.smoothstep(this.sinceTakeoff, PUSH_OFF_SEC, PUSH_OFF_SEC + TUCK_IN_SEC);
+      return JUMP_TUCK_DEPTH * rise * Math.max(0, 1 - Math.abs(velocityY) / Math.max(1e-3, motor.jumpLaunchSpeed));
+    }
     const t = this.sinceLanding;
     if (t >= LANDING_ATTACK_SEC + LANDING_RELEASE_SEC) return 0;
     const envelope = t < LANDING_ATTACK_SEC
@@ -100,17 +132,21 @@ export class BodyPoseSystem extends createSystem() {
   }
 }
 
-// A jump's wind-up squats to this crouch amount; the legs tuck to JUMP_TUCK_DEPTH at the apex.
-const JUMP_WINDUP_DEPTH = 0.75;
-const JUMP_TUCK_DEPTH = 0.5;
+// A jump's wind-up squats to this crouch amount; the legs straighten over PUSH_OFF_SEC after lift-off, then draw up
+// to JUMP_TUCK_DEPTH at the apex, eased in over TUCK_IN_SEC. A deeper tuck reads as sitting in the air.
+const JUMP_WINDUP_DEPTH = 0.6;
+const PUSH_OFF_SEC = 0.12;
+const TUCK_IN_SEC = 0.15;
+const LAUNCH_GRACE_SEC = 0.1;
+const JUMP_TUCK_DEPTH = 0.3;
 // A landing at LANDING_FULL_SPEED (m/s, a jump's own touch-down) dips to LANDING_DEPTH; slower ones less, down to
 // LANDING_MIN_PEAK of it, and a step down slower than LANDING_MIN_SPEED not at all.
 const LANDING_FULL_SPEED = 3.4;
 const LANDING_MIN_SPEED = 1.2;
 const LANDING_MIN_PEAK = 0.3;
-const LANDING_DEPTH = 0.8;
-const LANDING_ATTACK_SEC = 0.07;
-const LANDING_RELEASE_SEC = 0.32;
+const LANDING_DEPTH = 0.6;
+const LANDING_ATTACK_SEC = 0.12;
+const LANDING_RELEASE_SEC = 0.35;
 
 // The last frames' cost of animation + body IK (ms), for the desktop motion check's per-frame budget.
 const POSE_COST_FRAMES = 600;
