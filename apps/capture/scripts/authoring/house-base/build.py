@@ -685,6 +685,18 @@ top.head = (head_bone.head.x, head_bone.head.y, head_top[2])
 top.tail = (top.head.x, top.head.y, head_top[2] + 0.05)
 top.parent = head_bone
 top.use_deform = False
+# Fingertip end sites, named as the stock avatar's (`LeftHandIndex4`): capture reads a finger's tip from the
+# first child of its last joint (HumanoidSkeleton.tip), for the pinch and the hand replay's measures.
+for side in ("Left", "Right"):
+    for finger in ("Thumb", "Index", "Middle", "Ring", "Pinky"):
+        last = eb[f"{side}Hand{finger}3"]
+        tip = eb.new(f"{side}Hand{finger}4")
+        tip.head = last.tail
+        tip.tail = last.tail + (last.tail - last.head).normalized() * 0.01
+        tip.roll = last.roll
+        tip.parent = last
+        tip.use_connect = False
+        tip.use_deform = False
 bpy.ops.object.mode_set(mode="OBJECT")
 
 # --- Join the parts to the body (carried by the head), and the face shapes --------------------------------

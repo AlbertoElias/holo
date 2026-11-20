@@ -2,7 +2,7 @@
 // the avatar with keyboard input on the desktop capture page (frozen page
 // clock, 30 Hz), samples the body every frame, and grades it with the
 // shared motion-quality report (scripts/lib/motion-quality.ts, source
-// "desktop"), strictly, on the shipped avatar and on each skeleton the
+// "desktop"), strictly, on the shipped (default) avatar, on the stock avatar and on each skeleton the
 // avatars check replays (scripts/lib/avatar-fixtures.ts), one page each.
 // Samples and reports go to output/ci-desktop-motion/ (<avatar>-samples.json,
 // <avatar>-report.json, summary.json). MOTION_QUALITY_REPORT_ONLY=1 reports
@@ -19,6 +19,7 @@ import {
 } from '@holoim/tooling-testing/xr-env';
 import type {} from '../src/runtime/automationHooks';
 import type { BodySample } from '../src/types/contracts';
+import { DEFAULT_AVATAR_URL, STOCK_AVATAR_URL } from '../src/config/runtimeConfig';
 import { generateAvatarFixtures } from './lib/avatar-fixtures.ts';
 import { judgeGait, measureGait } from './lib/gait-metrics';
 import { framesFromBodySamples, judgeMotion, measureMotion, type MotionFrame } from './lib/motion-quality';
@@ -191,8 +192,10 @@ const fixtures = (await generateAvatarFixtures(path.join(artifactDir, 'fixtures'
 // walkClip: what the binding report must say walks the avatar, so a fixture that failed to load
 // (and left the shipped avatar, which walks on its own clip) cannot pass for it.
 const avatars: Array<{ name: string; url: string | null; walkClip: string; terrain?: boolean }> = [
-  { name: 'shipped', url: null, walkClip: 'own' },
-  { name: 'shipped-terrain', url: null, walkClip: 'own', terrain: true },
+  // The default avatar (the house base) has no clips of its own; the stock avatar, which the fixtures are made from, has.
+  { name: 'shipped', url: null, walkClip: DEFAULT_AVATAR_URL === STOCK_AVATAR_URL ? 'own' : 'retargeted' },
+  { name: 'shipped-terrain', url: null, walkClip: DEFAULT_AVATAR_URL === STOCK_AVATAR_URL ? 'own' : 'retargeted', terrain: true },
+  ...(DEFAULT_AVATAR_URL === STOCK_AVATAR_URL ? [] : [{ name: 'stock', url: STOCK_AVATAR_URL, walkClip: 'own' }]),
   ...fixtures.map((f) => ({ name: f.name, url: `/${path.relative(process.cwd(), f.file).split(path.sep).join('/')}`, walkClip: f.expect.ownClips ? 'own' : 'retargeted' }))
 ].filter((a) => !only || a.name.includes(only));
 const lost = SKELETONS.filter((name) => !fixtures.some((f) => f.name === name));
