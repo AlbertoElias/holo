@@ -1,3 +1,4 @@
+import type { Finish, LookCard } from '@holoim/avatar-look';
 import type { Handedness } from '@holoim/xr-ui-core';
 
 
@@ -114,6 +115,19 @@ export interface UiViewModel {
   xrEntry: { vr: XrEntryOffer; ar: XrEntryOffer };
   /** A brief word after a Halo action ("Mark undone"), on the status line; null otherwise. */
   notice: string | null;
+  /**
+   * The house base's look (docs/features/your-look.md), or null for any other
+   * avatar. `look` and `finish` are the latest pick, shown at once; `status`
+   * is `dressing` until the avatar wears it.
+   */
+  houseLook: HouseLookUi | null;
+}
+
+export interface HouseLookUi {
+  look: LookCard;
+  finish: Finish;
+  status: 'ready' | 'dressing' | 'error';
+  message: string | null;
 }
 
 export type XrEntryOffer = 'unknown' | 'unsupported' | 'available' | 'active';

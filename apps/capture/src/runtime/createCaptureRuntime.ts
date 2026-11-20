@@ -9,6 +9,8 @@ import { ArmClearance } from '../animation/ArmClearance';
 import { JumpArms } from '../animation/JumpArms';
 import { TerrainLegSolver } from '../animation/TerrainLegSolver';
 import { AvatarRig } from '../avatar/AvatarRig';
+import { HouseLookController } from '../avatar/HouseLookController';
+import { currentHouseLook, dressHouseBase, resolveHouseLook, sameHouseLook, wantedHouseLook } from '../avatar/houseLook';
 import { BodyTracking } from '../body/BodyTracking';
 import { CrouchState } from '../body/crouch';
 import { CameraController } from '../camera/CameraController';
@@ -147,6 +149,8 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     },
     isCameraAuthor: () => capture.frame.arCameraAuthor,
     isPlacementSettled: () => capture.ar.isSettled(),
+    // A take never starts on half a look change.
+    avatarSettled: () => houseLook.settled(),
     setFrame: stage.worldGroup,
     deliverTake: postFlow.deliverTake,
     getPlace: () => (place?.current ? { prepare: (path, maxSpzBytes) => place.prepareExport(path, maxSpzBytes), glbByteBudget: () => place.glbByteBudget() } : undefined)
@@ -348,6 +352,10 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     simulationSteps: () => capture.frame.steps
   });
 
+  const houseLook = new HouseLookController({
+    loader: stage.loader, avatar, face: capture.face, armClearance: capture.armClearance, recording, ui
+  });
+
   const chromeProbe = new ChromeProbe();
   const onResize = (): void => camera.onResize();
 
@@ -358,7 +366,20 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       let library: Promise<GLTF> | undefined;
       const loadLibrary = () => (library ??= load(config.locomotionLibraryUrl));
       if (config.avatarUrl !== DEFAULT_AVATAR_URL) void loadLibrary().catch(() => undefined);
-      const [sceneGltf, avatarGltf] = await Promise.all([load(config.sceneUrl), load(config.avatarUrl)]);
+      const [sceneGltf, loadedAvatar] = await Promise.all([load(config.sceneUrl), load(config.avatarUrl)]);
+      // The house base in a saved or linked look loads dressed in it (docs/features/your-look.md).
+      let avatarGltf = loadedAvatar;
+      const shipped = currentHouseLook(loadedAvatar.scene);
+      if (shipped) {
+        const want = resolveHouseLook(shipped, wantedHouseLook());
+        if (!sameHouseLook(shipped, want)) {
+          try {
+            avatarGltf = await stage.loader.parseAsync(await dressHouseBase(want), '');
+          } catch (error) {
+            console.warn('[look] the saved look did not load; the house base loads as shipped', error);
+          }
+        }
+      }
       avatar.applyLoadedModels(sceneGltf.scene, avatarGltf.scene, config, {
         json: avatarGltf.parser.json,
         associations: avatarGltf.parser.associations
@@ -386,6 +407,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
           head: avatar.bone('head'), leftEye: avatar.bone('leftEye'), rightEye: avatar.bone('rightEye')
         });
         avatar.humanoid.warnOnce();
+        houseLook.attach();
         // On by default: a refusal or a missing camera only changes the state the settings sheet shows.
         if (faceCameraOnByDefault()) void capture.face.webcam.start();
       }
@@ -430,7 +452,11 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
         // requestSession synchronously, and never awaited before it.
         if (entering && mode === 'ar') recording.holdMicForArTake();
       },
-      recenterAr
+      recenterAr,
+      setLook: (next) => houseLook.setLook(next),
+      setLookPanelHeight: (px) => {
+        camera.lookPanelPx = px;
+      }
     },
     start: async () => {
       const bodycamLog: BodycamLogEntry[] = [];
@@ -467,6 +493,12 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
         __captureHandCalibrationPose: () => hands.captureCalibrationPose(),
         __resetHandCalibrationPose: () => hands.resetCalibrationPose(),
         __loadObjectUrl: (url) => objects.loadUrl(url),
+        __sampleHouseLook: () => ({ ...houseLook.sample(), memory: { ...renderer.info.memory } }),
+        __setHouseLook: async (next) => {
+          if (!houseLook.setLook(next)) return false;
+          await houseLook.settled();
+          return true;
+        },
         __loadTrayUrls: (urls) => objects.loadTrayUrls(urls),
         __setFaceInput: (sample) => capture.face.setAutomationInput(sample),
         __sampleFace: () => capture.face.snapshot(),

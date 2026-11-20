@@ -234,7 +234,11 @@ export default defineConfig(async ({ command }) => {
     inputRecordingSinkPlugin(path.resolve('fixtures/input-recordings')),
     previewTestFilesPlugin(path.resolve('.'), ['fixtures', 'output']),
     optimizeGLTF({
-      level: 'medium'
+      level: 'medium',
+      // The house base wardrobes (docs/features/your-look.md) are dressed in the
+      // browser by name and must keep their one skin, as house-base.glb does.
+      // The bundle names them by their hashed output name (assets/wardrobe-<build>-<hash>.glb).
+      exclude: /(^|\/)wardrobe-[a-z]+(-[\w-]+)?\.glb$/
     })
   ];
 

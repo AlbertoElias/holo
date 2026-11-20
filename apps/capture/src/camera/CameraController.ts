@@ -26,6 +26,12 @@ export class CameraController {
    */
   mirrorView = false;
   private canvasFlipped = false;
+  /**
+   * The look panel's height from the screen's bottom, in CSS pixels; 0 when it is closed (docs/features/your-look.md).
+   * While it is open, a flat view faces the avatar, and the picture moves up by half that height, so the face shows above the panel.
+   */
+  lookPanelPx = 0;
+  private viewOffsetKey = '';
 
   /** A flat-screen reach, lift or lower is under way: the third-person view keeps what it looks at steady, so the floor does not tilt as the avatar squats. */
   holdLookHeight = false;
@@ -107,11 +113,13 @@ export class CameraController {
       this.postVrForceThirdFrames -= 1;
     }
 
-    const firstPersonMode: 'off' | 'desktop' | 'vr' = isVrActive ? 'vr' : this.desktopViewMode === 'first' ? 'desktop' : 'off';
+    const lookFraming = this.lookPanelPx > 0 && !isVrActive && !isXrPresenting;
+    this.applyLookViewOffset(lookFraming ? this.lookPanelPx : 0);
+    const firstPersonMode: 'off' | 'desktop' | 'vr' = isVrActive ? 'vr' : this.desktopViewMode === 'first' && !lookFraming ? 'desktop' : 'off';
     this.deps.avatarRig.setFirstPersonVisualState(firstPersonMode);
 
     if (!isVrActive) {
-      if (this.desktopViewMode === 'selfie') {
+      if (this.desktopViewMode === 'selfie' || lookFraming) {
         this.updateSelfieCamera(deltaSec);
       } else if (this.desktopViewMode === 'third') {
         const shouldSnap = this.snapDesktopCameraAfterVrExit || this.postVrExitSnapFrames > 0;
@@ -159,6 +167,7 @@ export class CameraController {
     this.deps.desktopCamera.scale.set(1, 1, 1);
     this.deps.desktopCamera.zoom = 1;
     this.deps.desktopCamera.clearViewOffset();
+    this.viewOffsetKey = '';
     this.deps.desktopCamera.aspect = window.innerWidth / window.innerHeight;
     this.deps.desktopCamera.updateProjectionMatrix();
     this.deps.desktopCamera.updateMatrixWorld(true);
@@ -193,6 +202,19 @@ export class CameraController {
     const smoothing = 1 - Math.exp(-8 * delta);
     this.deps.desktopCamera.position.lerp(this.tmpDesiredCam, smoothing);
     this.deps.desktopCamera.lookAt(this.tmpTargetCam);
+  }
+
+  private applyLookViewOffset(panelPx: number): void {
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    const shift = Math.round(Math.min(panelPx, height * 0.7) / 2);
+    const key = shift > 0 ? `${width}x${height}+${shift}` : '';
+    if (key === this.viewOffsetKey) return;
+    this.viewOffsetKey = key;
+    const camera = this.deps.desktopCamera;
+    if (shift > 0) camera.setViewOffset(width, height, 0, shift, width, height);
+    else camera.clearViewOffset();
+    camera.updateProjectionMatrix();
   }
 
   private applyCanvasFlip(flipped: boolean): void {

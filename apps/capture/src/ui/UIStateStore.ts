@@ -25,7 +25,8 @@ export class UIStateStore {
     recordingElapsedMs: 0,
     tracingElapsedMs: null,
     xrEntry: { vr: 'unknown', ar: 'unknown' },
-    notice: null
+    notice: null,
+    houseLook: null
   };
   private noticeTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -37,7 +38,12 @@ export class UIStateStore {
     return () => this.listeners.delete(listener);
   }
 
-  setLoadState(loadState: UiViewModel['loadState'], warning: string | null): void {
+  setHouseLook(houseLook: UiViewModel['houseLook']): void {
+    this.value = { ...this.value, houseLook };
+    this.emit();
+  }
+
+    setLoadState(loadState: UiViewModel['loadState'], warning: string | null): void {
     this.value = { ...this.value, loadState, warning };
     this.emit();
   }

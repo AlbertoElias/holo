@@ -32,6 +32,8 @@ export interface RuntimeConfig {
 }
 
 export const DEFAULT_AVATAR_URL = '/gltf/models/avatar.glb';
+/** The house base, the avatar a look (docs/features/your-look.md) dresses. */
+export const HOUSE_BASE_URL = '/gltf/models/house-base.glb';
 
 export function loadRuntimeConfig(search = window.location.search): RuntimeConfig {
   const query = new URLSearchParams(search);
@@ -42,7 +44,8 @@ export function loadRuntimeConfig(search = window.location.search): RuntimeConfi
 
   return {
     sceneUrl: query.get('scene') ?? defaultSceneUrl,
-    avatarUrl: query.get('avatar') ?? DEFAULT_AVATAR_URL,
+    // A look link (`?look=`) is a look for the house base, so it loads the house base (docs/features/your-look.md).
+    avatarUrl: query.get('avatar') ?? (query.has('look') ? HOUSE_BASE_URL : DEFAULT_AVATAR_URL),
     locomotionLibraryUrl: query.get('locomotionLibrary') ?? '/gltf/animations/locomotion.glb',
     objectUrl: query.get('object'),
     trayUrls: query.getAll('tray').filter(Boolean),

@@ -31,6 +31,8 @@ interface RecordingSessionDeps {
    * true when it was kept for Post, so no download sheet interrupts the journey.
    */
   deliverTake?: (blob: Blob, name: string) => boolean;
+  /** Settles when no look change is being dressed (docs/features/your-look.md): a take never starts on a half-changed avatar. */
+  avatarSettled?: () => Promise<void>;
 }
 
 /** What a take records: a performer (avatar, today) or the phone as a camera. */
@@ -145,6 +147,11 @@ export class RecordingSession {
     if (!retain) this.lastTake = null;
   }
 
+  /** The avatar's meshes changed: the kept take's morph paths name meshes that are gone. */
+  forgetLastTake(): void {
+    this.lastTake = null;
+  }
+
   /** The last take exported again from the same samples, against the scene as it is now. */
   async reexportLastTake(): Promise<ArrayBuffer | null> {
     const take = this.lastTake;
@@ -165,6 +172,7 @@ export class RecordingSession {
     }
     this.takeKind = 'performer';
     this.phase = 'starting';
+    await this.deps.avatarSettled?.();
     this.deps.onSizeLocked();
     this.lastTake = null;
     this.recorder.clear();

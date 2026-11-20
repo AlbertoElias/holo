@@ -89,6 +89,41 @@ export class FaceRig {
   /** `avatar` is the avatar's facing-corrected frame: gaze is measured against it. */
   constructor(avatar: THREE.Object3D, bones: FaceRigBones = {}) {
     avatar.updateMatrixWorld(true);
+    this.bindMorphs(avatar);
+    const rootInverse = avatar.getWorldQuaternion(new THREE.Quaternion()).invert();
+    for (const side of ['left', 'right'] as const) {
+      const bone = bones[side === 'left' ? 'leftEye' : 'rightEye'] ?? findFirst(avatar, EYE_BONE_NAMES[side], (o) => (o as THREE.Bone).isBone === true);
+      if (!bone?.parent) continue;
+      const eyeBind = rootInverse.clone().multiply(bone.getWorldQuaternion(new THREE.Quaternion()));
+      const parentBind = rootInverse.clone().multiply(bone.parent.getWorldQuaternion(new THREE.Quaternion()));
+      const eyeMesh = findFirst(avatar, EYE_MESH_NAMES[side], (o) => (o as THREE.Mesh).isMesh === true) as THREE.Mesh | undefined;
+      this.eyes[side] = {
+        bone,
+        parentBind,
+        parentBindInverse: parentBind.clone().invert(),
+        eyeBind,
+        pivotOffsetMm: eyeMesh ? pivotOffset(bone, eyeMesh) : null
+      };
+    }
+    const head = bones.head ?? findFirst(avatar, HEAD_BONE_NAMES, (o) => (o as THREE.Bone).isBone === true);
+    if (head) this.head = { bone: head, bindInverse: rootInverse.clone().multiply(head.getWorldQuaternion(new THREE.Quaternion())).invert() };
+  }
+
+  /**
+   * The avatar's meshes changed (a new look): binds the morph targets again.
+   * The eye and head bindings stay, because they were read at the bind pose
+   * and the live avatar is posed now.
+   */
+  rebindMorphs(avatar: THREE.Object3D): void {
+    this.morphs.length = 0;
+    this.unresolved.length = 0;
+    this.suppressed.length = 0;
+    this.suppressedBindings.length = 0;
+    this.bound.clear();
+    this.bindMorphs(avatar);
+  }
+
+  private bindMorphs(avatar: THREE.Object3D): void {
     avatar.traverse((object) => {
       const mesh = object as THREE.Mesh;
       if (!mesh.isMesh || !mesh.morphTargetDictionary || !mesh.morphTargetInfluences) return;
@@ -119,23 +154,6 @@ export class FaceRig {
         }
       }
     });
-    const rootInverse = avatar.getWorldQuaternion(new THREE.Quaternion()).invert();
-    for (const side of ['left', 'right'] as const) {
-      const bone = bones[side === 'left' ? 'leftEye' : 'rightEye'] ?? findFirst(avatar, EYE_BONE_NAMES[side], (o) => (o as THREE.Bone).isBone === true);
-      if (!bone?.parent) continue;
-      const eyeBind = rootInverse.clone().multiply(bone.getWorldQuaternion(new THREE.Quaternion()));
-      const parentBind = rootInverse.clone().multiply(bone.parent.getWorldQuaternion(new THREE.Quaternion()));
-      const eyeMesh = findFirst(avatar, EYE_MESH_NAMES[side], (o) => (o as THREE.Mesh).isMesh === true) as THREE.Mesh | undefined;
-      this.eyes[side] = {
-        bone,
-        parentBind,
-        parentBindInverse: parentBind.clone().invert(),
-        eyeBind,
-        pivotOffsetMm: eyeMesh ? pivotOffset(bone, eyeMesh) : null
-      };
-    }
-    const head = bones.head ?? findFirst(avatar, HEAD_BONE_NAMES, (o) => (o as THREE.Bone).isBone === true);
-    if (head) this.head = { bone: head, bindInverse: rootInverse.clone().multiply(head.getWorldQuaternion(new THREE.Quaternion())).invert() };
     for (const binding of this.suppressedBindings) binding.mesh.morphTargetInfluences![binding.index] = 0;
   }
 

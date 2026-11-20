@@ -38,3 +38,11 @@ export function parseLook(input: unknown, where = 'look'): LookCard {
 export function lookKey(card: LookCard): string {
   return [card.build, card.skin, card.eyes, card.hair.style, card.hair.colour, card.glasses, card.clothing].join('-');
 }
+
+/** Reads a card back from `lookKey` (a `?look=` link value); throws naming every bad trait. */
+export function parseLookKey(key: string, where = 'look'): LookCard {
+  const parts = key.split('-');
+  if (parts.length !== 7) throw new Error(`${where} must have 7 parts joined by "-" (got ${parts.length})`);
+  const [build, skin, eyes, style, colour, glasses, clothing] = parts;
+  return parseLook({ build, skin, eyes, hair: { style, colour }, glasses, clothing }, where);
+}
