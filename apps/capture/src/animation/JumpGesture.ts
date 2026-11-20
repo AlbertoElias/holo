@@ -5,10 +5,11 @@ import type { HumanoidSkeleton } from '../avatar/HumanoidSkeleton';
 /**
  * The upper body of a flat-screen jump. The library's jump and fall clips move the legs only, so the desktop body
  * keeps its idle (or walk) arms through the whole jump and reads as stiff. A person swings the arms back through the
- * squat, throws them forward and up as the legs push off, lets them float out to the sides at the top, and holds them
- * out and forward for balance as they land. Each frame, after the clip and the leg pose, this turns the upper arms,
- * elbows and chest by offsets that follow those targets through underdamped springs: the arms whip through the
- * launch and settle with a little follow-through instead of snapping between poses. With every target at rest the
+ * squat, drives them forward, nearly straight, as the legs push off, and lets them drop back by the sides as the
+ * body rises and falls, a little forward for the landing. The swing stays in front of the body: arms spread wide or
+ * floating up with bent elbows read as a flutter. Each frame, after the clip and the leg pose, this turns the upper
+ * arms, elbows and chest by offsets that follow those targets through lightly damped springs, so the drive has
+ * momentum instead of snapping between poses. With every target at rest the
  * offsets settle to zero and the clip plays untouched.
  */
 
@@ -34,9 +35,10 @@ interface Offsets {
 }
 
 const KEYS = ['flex', 'abduct', 'elbow', 'chest'] as const;
-/** The springs' natural frequency (rad/s) and damping ratio: a ~0.15 s throw with a little overshoot. */
-const SPRING_OMEGA = 2 * Math.PI * 2;
-const SPRING_ZETA = 0.62;
+/** The springs' natural frequency (rad/s) and damping ratio: a ~0.12 s drive that barely overshoots (a loose,
+ * bouncing follow-through reads as floaty). */
+const SPRING_OMEGA = 2 * Math.PI * 2.4;
+const SPRING_ZETA = 0.85;
 /** Below this (degrees) every offset counts as settled and the clip plays untouched. */
 const REST_DEG = 0.05;
 
@@ -118,18 +120,18 @@ export class JumpGesture {
     const launch = Math.max(1e-3, phase.launchSpeed);
     if (phase.airborne) {
       if (phase.velocityY > 0) {
-        // 1 as the feet leave the ground, 0 at the apex: the throw forward and up, easing to a float.
+        // 1 as the feet leave the ground, 0 at the apex: a straight-armed drive forward, dropping as the body rises.
+        // It stays in front of the body: arms that spread or float up with bent elbows read as a flutter, not a jump.
         const rise = THREE.MathUtils.clamp(phase.velocityY / launch, 0, 1);
-        t.flex = 40 + 55 * rise;
-        t.abduct = 14 + 18 * (1 - rise);
-        t.elbow = 32;
-        t.chest = -7 * rise;
+        t.flex = 20 + 55 * rise;
+        t.abduct = 5;
+        t.elbow = 12;
       } else {
-        // Falling: the arms come down a little and out, ready to balance the landing.
+        // Falling: the arms come down by the sides, a little forward, and the trunk tips to meet the ground.
         const fall = THREE.MathUtils.clamp(-phase.velocityY / launch, 0, 1);
-        t.flex = 45 - 15 * fall;
-        t.abduct = 32 + 10 * fall;
-        t.elbow = 28;
+        t.flex = 20 - 5 * fall;
+        t.abduct = 7;
+        t.elbow = 14;
         t.chest = 4 * fall;
       }
       return;
@@ -137,17 +139,17 @@ export class JumpGesture {
     if (phase.windup > 0) {
       // The squat: the arms swing back as the knees bend, ready to be thrown.
       const w = THREE.MathUtils.smoothstep(phase.windup, 0, 1);
-      t.flex = -42 * w;
-      t.abduct = 8 * w;
-      t.elbow = 14 * w;
+      t.flex = -50 * w;
+      t.abduct = 4 * w;
+      t.elbow = 8 * w;
       return;
     }
     if (phase.landing > 0) {
-      // The absorb: arms forward and out, the chest folding over the bent knees.
+      // The absorb: arms a little forward, the chest folding over the bent knees.
       const e = phase.landing;
-      t.flex = 38 * e;
-      t.abduct = 30 * e;
-      t.elbow = 30 * e;
+      t.flex = 22 * e;
+      t.abduct = 7 * e;
+      t.elbow = 18 * e;
       t.chest = 8 * e;
     }
   }

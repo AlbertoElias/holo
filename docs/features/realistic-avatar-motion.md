@@ -152,22 +152,19 @@ jitters"), fixed in 1b:
     library's Jump and Fall clips move only the hips and legs, so the desktop
     body is skipped onto the idle clip and the arms hang still through the
     whole jump. `JumpGesture` layers the upper body over the clip after the
-    leg pose. Each phase has its own arm target:
-    - wind-up: the arms swing back;
-    - push-off: they are thrown forward and up, peaking about 96° from
-      hanging just after lift-off;
-    - apex: they float out to the sides;
-    - fall: they hold out and forward;
-    - landing: they stay there from touch-down and ease down with the absorb.
-
-    The chest arches slightly as the arms rise. Each offset follows its target
-    through an underdamped spring (2 Hz, damping 0.62), so the arms whip and
-    settle rather than snap. The springs rest at zero, which leaves the clip
-    untouched. A fall without a jump raises the arms only after 0.25 s in the
-    air, so bumps on terrain do not flick them. The jump clips do not write
-    the arms, so each layer puts back what it wrote last frame before turning
-    the arms again (`ArmClearance.restore` runs first); otherwise the offsets
-    pile up.
+    leg pose: the arms swing back through the wind-up, drive forward
+    nearly straight at push-off (about 75° from hanging), and drop back by
+    the sides through the rise and fall, a little forward for the landing
+    absorb. The swing stays in front of the body: a first pass that spread
+    the arms and floated them up with bent elbows read as a flutter (owner:
+    "looks very girly, make it more natural"). Each offset follows its target
+    through a lightly damped spring (2.4 Hz, damping 0.85), so the drive has
+    momentum without bouncing, and the springs rest at zero, which leaves the
+    clip untouched. A fall without a jump moves the arms only after 0.25 s in
+    the air, so bumps on terrain do not flick them. The jump clips do not
+    write the arms, so each layer puts back what it wrote last frame before
+    turning the arms again (`ArmClearance.restore` runs first); otherwise the
+    offsets pile up.
 
 ## Scope
 
