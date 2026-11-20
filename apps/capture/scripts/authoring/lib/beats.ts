@@ -98,6 +98,8 @@ export type Direction = Timing & (
   | { readonly kind: 'weight'; readonly toward: 'left' | 'right' | 'forward' | 'back'; /** 0..1, default 1 (about 6 cm). */ readonly amount?: number }
   /** Bend forward from the waist, hips back and knees soft, as over a plant or a low table; the arms and the look are solved on the bent body. */
   | { readonly kind: 'bend'; /** 0..1 of the deepest bend (`BEND` in `direct.ts`: 45° at the waist), default 0.7. */ readonly amount?: number }
+  /** Lower the body: the knees bend and the hips sink and go back over planted feet, the chest leans a little forward, as to pick something up from the floor or to talk to a child. */
+  | { readonly kind: 'crouch'; /** 0..1 of the deepest crouch (`CROUCH` in `direct.ts`), default 0.7. */ readonly amount?: number }
   | { readonly kind: 'turn'; readonly degrees?: number; readonly toward?: Point; /** `upper` twists and comes back; `whole` turns the performer and stays. */ readonly body?: 'upper' | 'whole' }
   | { readonly kind: 'step'; readonly foot: Side; /** Metres in the performer's frame: [left, forward]. */ readonly by: readonly [number, number]; /** Bring the other foot alongside. */ readonly follow?: boolean }
   | { readonly kind: 'take'; readonly side: Side; readonly object: string; readonly palm?: 'up' | 'down' | 'in' | 'toward' }
@@ -123,6 +125,7 @@ const DIRECTION_FIELDS = {
   hand: { required: ['side', 'shape'], optional: ['strength'] },
   weight: { required: ['toward'], optional: ['amount'] },
   bend: { required: [], optional: ['amount'] },
+  crouch: { required: [], optional: ['amount'] },
   turn: { required: [], optional: ['degrees', 'toward', 'body'] },
   step: { required: ['foot', 'by'], optional: ['follow'] },
   take: { required: ['side', 'object'], optional: ['palm'] },
@@ -318,6 +321,7 @@ export const DEFAULT_TIMING: Readonly<Record<DirectionKind, Required<Omit<Timing
   hand: { anticipation: 0, attack: 0.3, settle: 0.5 },
   weight: { anticipation: 0.2, attack: 0.6, settle: 0.7 },
   bend: { anticipation: 0.2, attack: 0.8, settle: 0.8 },
+  crouch: { anticipation: 0.15, attack: 0.9, settle: 0.9 },
   turn: { anticipation: 0.2, attack: 0.8, settle: 0.5 },
   step: { anticipation: 0.15, attack: 0.6, settle: 0.3 },
   take: { anticipation: 0.2, attack: 0.8, settle: 0.8 },
@@ -681,6 +685,7 @@ export function validateSheet(sheet: BeatSheet): string[] {
       }
       if (d.kind === 'state' && !Object.hasOwn(STATES, d.name)) problems.push(`${where}: no state ${String(d.name)} (${Object.keys(STATES).join(', ')})`);
       if ((d.kind === 'gesture' || d.kind === 'state') && d.strength !== undefined && !(d.strength >= 0)) problems.push(`${where}: strength is 0 or more`);
+      if (d.kind === 'crouch' && d.amount !== undefined && !(d.amount >= 0 && d.amount <= 1)) problems.push(`${where}: amount is 0 to 1 (1 is the deepest crouch)`);
       if (d.kind === 'bend' && d.amount !== undefined && !(d.amount >= 0 && d.amount <= 1)) problems.push(`${where}: amount is 0 to 1 (1 is the deepest bend)`);
       if (d.kind === 'reach' && !(d.stopShort >= 0)) problems.push(`${where}: stopShort must be ≥ 0`);
       if (d.kind === 'turn' && d.degrees === undefined && d.toward === undefined) problems.push(`${where}: needs degrees or toward`);
