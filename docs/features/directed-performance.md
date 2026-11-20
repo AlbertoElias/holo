@@ -1101,7 +1101,7 @@ bars in the brief to the artist.
 | **2c3: the face matches the sheet** | Added 2026-11-19 on the owner's verdict on the default avatar: "issues with the eyes and mouth, it looks weird and uncanny as hell. it need to be much closer to the reference image". `build.py` rebuilds the eyes, lids, brows, nose and mouth to the clay expression sheet; the shared mixes, the body and the rig are unchanged. Built 2026-11-19 and merged 2026-11-20 on the owner's word "Merge as is", with the ink and light blind readings below the gate in the AI round and the turn row one vertex worse (see "Slice 2c3 evidence") | The face likeness check (`house-face-likeness.ts`) before and after; every 2c2 and 2f gate re-run unchanged; a new reader pack for people; a proof video | **Yes.** Authoring scripts, avatar files and `@holoim/avatar-look` colours; nothing in `apps/capture/src/` |
 | **2e: chosen per take** | `house:<finish>` and `look` in beat sheets; the dressing function in capture's avatar loading; height from the head-top bone; the "your look" step in the phone journey and the headset mirror; `?look=` | A phone e2e: set a look, record, upload, and the feed card shows it; an XR harness check of the mirror; a beat sheet re-dressed with another card; a proof video | **No.** Touches the phone journey (`CaptureOverlay.tsx` and its flow), owned by the phone mandate, and `src/avatar/` (loading, `AvatarRig`'s height fit), owned by the motion owner: built with both, after the phone's device checks |
 | **2f: finishes** | The other one or two finishes as material sets | Brow contrast and the blind reading per finish; one authored piece re-dressed in each | **Yes.** Avatar files. Built 2026-11-19: ink and light (see "Slice 2f evidence") |
-| **2g: the default and outside avatars** | `DEFAULT_AVATAR_URL` to the house base; the credit rule and verdict for outside avatars | Motion owner's agreement recorded; the phone journey's load measured against the 2.3 MB; an outside VRM passed and one refused, by name; a proof video | **No.** One constant in capture, on the motion owner's say |
+| **2g: the default and outside avatars** | `DEFAULT_AVATAR_URL` to the house base; the credit rule and verdict for outside avatars. The owner lifted the hold on the default on 2026-11-20; the swap was tried and fails five capture checks (see "Slice 2g attempt"), so it is not merged | Motion owner's agreement recorded; the phone journey's load measured against the 2.3 MB; an outside VRM passed and one refused, by name; a proof video | **No.** One constant in capture, on the motion owner's say |
 
 2a and 2b start together and need nothing else. 2c needs both. 2d and 2f
 need 2c and can run side by side; 2f also waits on 2c2, so the ink finish
@@ -1935,7 +1935,9 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
     the lead session; the numbers are that session's list, the words the
     owner's):
    - **"Decision 1: hold"** the default avatar until the licence call and a
-     reading with people. `DEFAULT_AVATAR_URL` stays unchanged.
+     reading with people. `DEFAULT_AVATAR_URL` stays unchanged. The owner
+     lifted this hold on 2026-11-20 (decision 13); the constant is still
+     unchanged, because the swap fails capture's checks.
    - **"Decision 4: Tune"** the light finish, so garments keep their colour.
      One pass: a smaller mix for garments that keeps their hue, skin and face
      unchanged (see "Light finish tune" in slice 2f's evidence). Whether it
@@ -1945,6 +1947,8 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
      forward (see "The reader pack for people" in slice 2f's evidence). The
      bar is unchanged: each reader at least 5 of 7.
    - **"Decision 8: hold"**: the phone journey, 2e and 2g, stays on hold.
+     For 2g's default avatar the owner lifted it on 2026-11-20 (decision
+     13); the phone journey and 2e are as they were.
    - **Open, not acted on:** the owner was not told of the Hunyuan3D-2mv
      territory restriction (decision 10) before it was built on, and asked
      whether an unrestricted model or another route can replace it. The lead
@@ -1981,6 +1985,26 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
    - **The "Pixar look"** (skin shading, blush, soft light) is not built:
      the owner said the smile was enough for now. It is a material and
      lighting question for the viewer, not this face's geometry.
+
+13. **The default avatar: the hold is lifted, the swap is not merged.**
+    The owner's words on 2026-11-20, passed on by the lead session: "we can
+    swap the default avatar at this point. even if we keep improving it,
+    it's already better than the current default." The swap was made on
+    the branch `feature/default-house-avatar` (commit `45999031015e`,
+    pushed, not merged) and five of capture's XR checks fail on it (see
+    "Slice 2g attempt"). No bar was changed, so `DEFAULT_AVATAR_URL` on
+    `main` is still the stock avatar. The motion owner was not asked: the
+    checks are their instrument and they answer first. What the owner
+    decides:
+    - **Do the avatar work the checks ask for** (recommended): fingertip
+      joints on the base, the eye pivots, and the height fit from the
+      head-top bone that 2e already names, then the walk on the base's
+      shorter legs. This is 2e's work in `src/avatar/` with the motion
+      owner, so it lifts decision 8's hold for 2e too.
+    - **Change the bars for a stylised avatar** (a shorter leg gives a
+      faster cadence at the same walk speed). Only the owner and the motion
+      owner can do this; the agent does not loosen a bar.
+    - **Leave the stock avatar as the default** until one of the above.
 
 ## Test plan and evidence
 
@@ -3843,6 +3867,49 @@ untextured base (see 2c). No physical device.
 **Proof video:** the sheet's face beside the old and the new face, at card
 size and close, turning, through the expressions, in clay with a pass of
 ink and light: `output/authoring/face-proof/` in the worktree (ignored).
+
+### Slice 2g attempt (2026-11-20): the house base as the default fails five capture checks
+
+On the owner's words (open decision 13) the default was pointed at the
+house base on a branch: `DEFAULT_AVATAR_URL = '/gltf/models/house-base.glb'`
+(clay, neutral card: the published file), and the clip library loads for
+every avatar but the stock one, which is the only file with its own clips.
+Three lines in `runtimeConfig.ts`, its test and `createCaptureRuntime.ts`.
+
+**What holds.**
+
+- Load: scene 505 KB + house base 1,173 KB + clip library 115 KB = 1.79 MB,
+  against 2.42 MB today (scene + the stock's 1,914 KB; the "2.3 MB" of
+  `phone-capture.md`). The base is under its 1.8 MB bar.
+- Typecheck and the unit tests pass. Of capture's 15 XR checks, 10 pass on
+  the house base: mock-vr, recording, take, locomotion, loco-states,
+  held-states, terrain, ui, marks, ar-record.
+- The viewer, the API, the authoring tool's `stock` cast, the fixtures, the
+  clip library, the face build and `doctor` read `avatar.glb` by path and
+  do not follow the constant. Quick Look passed on the base in clay, ink
+  and light in slice 2c3.
+
+**What fails** (`pnpm --filter @holoim/capture run test:xr`, one run, no
+bar changed):
+
+| Check | Result on the house base | Bar | Kind |
+|---|---|---|---|
+| desktop-motion, flat | Pops p99 56.4 m/s²; jitter p95 5.71 mm; cadence 150 steps/min at 1.8 m/s; walks on the retargeted clip where the check expects the avatar's own | 50; 3; 100 to 140; own | The avatar's walk: shorter legs take more steps. The clip row is the check's wiring |
+| desktop-motion, terrain | Runs; no row of its own missed (feet below ground 0.00 cm) but fails with the clip row | | Wiring |
+| body | Eyes p95 2.1 cm from the tracked eyes while standing (crouch-and-lean); pops p99 36.07 m/s² (walk-ramp) | 2.0 cm; 35 | The avatar: `AvatarRig` places the eye at 0.92 of the model's box (the 2e note in "The audition bar") |
+| face | Left and right eye bone: no distance to the eyeball centre could be measured (null) | Under 5 mm | The avatar or the check: the base's eyes are not found as the stock's are |
+| hands | The replay analysis stops: the avatar gives no `thumb-tip` or `index-finger-tip` joint, so no pinch is measured | Pinch and curl rows | The avatar: the base's fingers end at the third joint, with no tip bones |
+| height | "fixture has nonzero base origin" in the seated row | | Wiring: the check builds its fixture from `avatar.glb` and swaps it in for that URL, which the default no longer requests |
+
+The six avatar-format fixtures in desktop-motion had no misses; the run
+names them as failed only because the check fails as a whole.
+
+**Not run:** `verify:pr` and the viewer pipeline specs on the swap (they
+record a capture with the default), the phone journey's load in a browser,
+and a proof video: the swap stopped at the first failing gate.
+
+**Not merged.** The branch is kept as the starting point. The stale lines
+this corrects: decision 11's two "hold" lines now point at decision 13.
 
 ## Physical-device limits
 
