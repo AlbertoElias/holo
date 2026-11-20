@@ -1098,6 +1098,7 @@ bars in the brief to the artist.
 | **2c: the base** | One base in the picked style, neutral finish, neutral card, made the recommended way | Every audition row passes; three blind readers at 5 of 7 or better at card size; a review pack of `sheets/expressions.json` and the watering piece on the base beside the stock; the motion owner's report; `check_usdz_tools.sh`; a proof video | **Yes.** Loads through `?avatar=` and beat sheets only; edits nothing the mandates own |
 | **2d: traits** | The shared dressing function, used by `direct.ts` only; three builds; hair and glasses parts; the poem's two characters from cards. Built 2026-11-18 (see "Slice 2d evidence"); the turn row still fails, worse with garments | The audition on every trait value at its extreme; a contact sheet of the trait values; the poem's two characters made from cards alone, in a take whose GLB carries the look | **Yes.** A workspace package, authoring scripts and avatar files; nothing in `apps/capture/src/` |
 | **2c2: the base looks like the sheets** | Added 2026-11-18 on the owner's verdict: "the images its based on are great, we need to reach the point where the avatars look just like those images". The owner picked the route "Generate, then fit"; on 2026-11-19 the owner's licence decision replaced the generated shape with a visual hull carved from the sheet's own silhouettes (`house-base/carve.py`), and the house base's own mesh is wrapped onto it (`house-base/fit.py`), keeping the rig, the face shapes, the three builds and the trait parts | The likeness check (`house-likeness.ts`): silhouette overlap per turnaround view, "which is the drawing?" pairs for fresh readers, a contact sheet against each sheet. The audition and the blind reading unchanged, `house-traits.ts` over every trait value, the base at 1.8 MB or under, a proof video | **Yes.** Authoring scripts and avatar files; nothing in `apps/capture/src/`; `DEFAULT_AVATAR_URL` unchanged |
+| **2c3: the face matches the sheet** | Added 2026-11-19 on the owner's verdict on the default avatar: "issues with the eyes and mouth, it looks weird and uncanny as hell. it need to be much closer to the reference image". `build.py` rebuilds the eyes, lids, brows, nose and mouth to the clay expression sheet; the shared mixes, the body and the rig are unchanged. Built 2026-11-19 on `feature/house-face-match`, **not merged**: the ink and light blind readings fell below the gate in the AI round (see "Slice 2c3 evidence") | The face likeness check (`house-face-likeness.ts`) before and after; every 2c2 and 2f gate re-run unchanged; a new reader pack for people; a proof video | **Yes.** Authoring scripts, avatar files and `@holoim/avatar-look` colours; nothing in `apps/capture/src/` |
 | **2e: chosen per take** | `house:<finish>` and `look` in beat sheets; the dressing function in capture's avatar loading; height from the head-top bone; the "your look" step in the phone journey and the headset mirror; `?look=` | A phone e2e: set a look, record, upload, and the feed card shows it; an XR harness check of the mirror; a beat sheet re-dressed with another card; a proof video | **No.** Touches the phone journey (`CaptureOverlay.tsx` and its flow), owned by the phone mandate, and `src/avatar/` (loading, `AvatarRig`'s height fit), owned by the motion owner: built with both, after the phone's device checks |
 | **2f: finishes** | The other one or two finishes as material sets | Brow contrast and the blind reading per finish; one authored piece re-dressed in each | **Yes.** Avatar files. Built 2026-11-19: ink and light (see "Slice 2f evidence") |
 | **2g: the default and outside avatars** | `DEFAULT_AVATAR_URL` to the house base; the credit rule and verdict for outside avatars | Motion owner's agreement recorded; the phone journey's load measured against the 2.3 MB; an outside VRM passed and one refused, by name; a proof video | **No.** One constant in capture, on the motion owner's say |
@@ -1817,6 +1818,9 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
    - a wide dark mouth;
    - a simple nose.
 
+   The owner rejected this face on 2026-11-19; slice 2c3 rebuilt the lids,
+   brows, mouth and nose to the sheet (decision 12).
+
    Its face shapes are authored for it on the channels the base already
    declared. The shared mixes are unchanged. It passes the blind reading at
    5, 5 and 5 of 7 (slice 2c evidence, "The stylised face"). The base stays
@@ -1941,6 +1945,35 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
      territory restriction (decision 10) before it was built on, and asked
      whether an unrestricted model or another route can replace it. The lead
      is researching that; the fit is unchanged until it does.
+
+12. **Slice 2c3's calls** (the face rebuilt to the sheet). The owner's
+    words, in order, on 2026-11-19: the default avatar "has issues with the
+    eyes and mouth, it looks weird and uncanny as hell. it need to be much
+    closer to the reference image"; on the first rebuilt face, "this is so
+    much better, though the smile is so freaky. and the overall avatar is
+    missing the pixar look of the frame image. but if we fix the smile, i
+    think thats enough for now"; on the smile with teeth, "the smile looks
+    even more scary now with those super fake teeth"; "the rest looks pretty
+    good".
+   - **The smile has no teeth** (the owner's word on the teeth). It is a
+     closed-lip smile; the sheet's smile shows teeth.
+   - **Decided by the agent in the owner's absence on 2026-11-19, for
+     review** (each is one value or a few lines, and reversible):
+     the lip colour as shares of the skin (`LIP_SHARE`) and the iris rim as
+     a share of the iris (`LIMBUS_SHARE`), so every skin and eye colour
+     gets its own; the lips stay opaque in the light finish, with the skin;
+     the brows sit 0.09 eye radii higher than the sheet's, because at the
+     sheet's height the face box on the card fell to 39.9 px under the
+     40 px bar; a patch of skin behind MPFB's mouth slit, so a closed smile
+     does not open a dark line; the glasses frames re-sized to the larger
+     eyes.
+   - **Not merged, by the agent's call.** The clay gate is met, and ink
+     and light read below 5 of 7 with the AI readers in this round, and
+     the turn row counts 17 vertices against 16 (see the evidence). No bar is loosened; the owner decides whether to
+     merge, read with people first, or tune further.
+   - **The "Pixar look"** (skin shading, blush, soft light) is not built:
+     the owner said the smile was enough for now. It is a material and
+     lighting question for the viewer, not this face's geometry.
 
 ## Test plan and evidence
 
@@ -2964,18 +2997,31 @@ in the `face` block of `base.json`. The body, joints and build settings are
 unchanged, apart from the eye bones, which now sit at the new eyes. The ears
 are MPFB's own, unchanged.
 
+This section records the face of 2026-11-18. Slice 2c3 rebuilt the eyes,
+lids, brows, nose and mouth on 2026-11-19; the bullets below say what each
+part is now, and the rounds f1 to f10 below were read on the old parts.
+
 - **The front of the face** is smoothed through a depth map, which takes
-  off MPFB's lip and nose creases.
-- **The eyes** are spheres at x ±47 mm with a 24 mm radius, a big iris and
-  white around it.
-- **The lids** are shells over each eye, with a dark lash line on the
-  upper lid. Their shapes move the lid edge, pushed out so a part-way blink
+  off MPFB's lip creases (since 2c3 the MPFB nose is kept through it).
+- **The eyes** are spheres at x ±49 mm with a 34 mm radius set deep in a
+  socket, with a small iris, a dark rim round it, a glint, and white on
+  both sides (2c3; before, 47 mm, 24 mm radius and an iris that filled
+  the opening).
+- **The lids** are shells over each eye that meet at two corners, with a
+  thin lash on the upper lid that thickens to a wing at the outer corner
+  and a faint lower line (2c3; before, a slab of dark lash on a goggle
+  shell). Their shapes move the lid edge, pushed out so a part-way blink
   never cuts into the eye. The blink is mostly the upper lid: at the 0.55
   of looking down, the eye reads lowered, not as a slit.
-- **The brows** are separate dark ribbons well above the eyes. Down makes a
+- **The brows** are separate dark ribbons close above the eyes, thick at
+  the inner end and tapering to a point (2c3; before, flat slabs 0.07
+  head heights higher). Down makes a
   V, and inner-up and outer-up raise them.
-- **The nose** is a small ball.
-- **The mouth** is a dark three-row shape with teeth, carrying every mouth
+- **The nose** is MPFB's own, kept through the smoothing (2c3; before, a
+  small ball).
+- **The mouth** is two lips in a lip colour round a thin dark line, with
+  teeth behind that no shared mix shows (2c3; before, a dark three-row
+  shape with no lips), carrying every mouth
   shape (smile, frown, press, roll, funnel, pucker and the jaw's).
 
 The skin keeps only faceunits01's jaw and cheek units. The shared mixes
@@ -3669,6 +3715,126 @@ measurement, and one grader per take is a single judge. Open question for the
 owner: whether the directed acting needs to change, or the sheet's beats
 (restraint and a turn-away) need a staging the card framing can show. The
 result is recorded as measured; the bar was not loosened.
+
+### Slice 2c3 evidence (2026-11-19): the face rebuilt to the clay sheet
+
+Branch `feature/house-face-match`, not merged (decision 12). Readers are
+AI throughout; people are the real test, and their pack is rebuilt (below).
+
+**The diagnosis (old face against the clay expression sheet).**
+`house-face-likeness.ts` poses the base in the sheet's seven faces with the
+shared mixes, frames both heads alike (top to chin) and compares the
+features. In head heights, neutral face:
+
+| Feature | Sheet | Old face | What it did |
+|---|---|---|---|
+| Brow to eye gap | 0.007 | 0.105 | brows floated 0.07 too high, as flat slabs: a fixed look of surprise |
+| White of the eyes (area) | 0.0123 | 0.0064 | the iris filled the opening, so no gaze direction and a stare |
+| Lids | almond, thin lash | goggle shells with a slab of lash | read as a mask over the eye |
+| Mouth dark area | 0.0024 | 0.0063 | a black slit with no lips |
+| Mouth width | 0.198 | 0.244 | too wide for the face |
+| Nose | small, with nostrils and a bridge | a ball | read as a clown nose close up |
+
+The stare (no whites, high brows) and the lipless black mouth caused the
+uncanny look; the same held through smiling, sad and determined, where
+the old mouth only bent its slit.
+
+**What was rebuilt** (`house-base/build.py`, values in `base.json`):
+larger eyes set deep in sockets, a small iris with a dark rim and a glint;
+lids that meet at corners, the upper with a thin lash and a wing; brows
+close over the eyes, tapering, a V when down; MPFB's own nose kept; two
+lips round a thin line; a closed-lip smile; the frames re-sized. In
+`@holoim/avatar-look`, `dress.ts` colours the lips and the iris rim from
+the card's skin and eyes, and `finish.ts` keeps the lips opaque in light.
+The shared mixes, the body, the rig, the builds and `LIGHT_GARMENT_LIFT`
+are unchanged.
+
+**Face likeness** (mean of the seven faces, intersection over union with
+the sheet's features; `output/authoring/house-face-likeness/{before,after}`):
+
+| | Features | Dark | White | Brow | Eye | Mouth |
+|---|---|---|---|---|---|---|
+| Before | 0.265 | 0.178 | 0.065 | 0.064 | 0.383 | 0.199 |
+| After | 0.290 | 0.197 | 0.104 | 0.103 | 0.362 | 0.292 |
+
+A build with a toothed smile and brows at the sheet's height scored 0.325
+(mouth 0.339). The owner rejected its teeth, and its face box was 39.9 px,
+so the shipped numbers are lower than the best the measure reached. The
+measure is strict (thin features overlap little when a pixel off) and is
+not a pass bar; it shows direction.
+
+**Gates, none loosened** (final build):
+
+| Gate | Bar | Result |
+|---|---|---|
+| Audition, published file | every row | 60 of 61; `turn.armR-in-torso` fails as before |
+| Turn row | known failure, not worse | 17 of 2,110 arm vertices, up to 28.2 mm; `main` has 16, up to 28.2 mm. The rebuilt face stayed at 16 (28.1 mm) until the mouth patch was added; that build moved the deepest vertex by 0.1 mm and took one more over the line. Cause not found: the patch is on the head. By the count it is one vertex worse |
+| Face box | 40 px | 41 clay and light, 40.8 ink |
+| Brow contrast | 0.25 | 0.352 |
+| Body likeness | 0.80, head 0.90 | 0.830, head 0.914 |
+| Size | 1.8 MB | wardrobes 1.63 MB, dressed 1.17 MB |
+| Traits, 8 looks × clay, ink, light | every row but the turn | only the turn row fails (slight 26, medium 17, broad 15; up to 28.2 mm) |
+| Blind reading, clay | each of 3 at 5 of 7 | **5, 5, 5: met** |
+| Blind reading, ink | each of 3 at 5 of 7 | **3, 3, 7: not met** |
+| Blind reading, light | each of 3 at 5 of 7 | **3, 5, 5: not met** |
+
+**The blind readings** (faces 43 px, `blind-05`, each word used once, three
+fresh Claude Sonnet readers per finish with the three wordings of 2f; all
+answers in the worktree's ignored
+`output/authoring/house-base/face/readers-clay.json`). Three more readers
+on the first wording gave clay 5, 5, 5, ink 3, 3, 3 and light 3, 3, 3 with
+identical answers each, so readers on one wording are not independent.
+Every clay reader swapped holding something back with looking down, the
+same weak pair as f10. On the old face 2f recorded ink 5, 5, 5 and light
+7, 5, 5 and, in the same run, clay 4, 3, 2, and put reader noise at about
+two labels. So this round does not show that ink and light became worse,
+and it does not show that they pass. The toothed builds read lower in
+clay (2 to 5).
+
+**The reader pack for people** is rebuilt on this face:
+`output/reader-pack/holoim-face-reading.zip` in the main checkout
+(ignored; sheet 1 light, 2 ink, 3 clay; the key and scoring note in
+`for-us/`). The pack on the old face moved to
+`superseded-clean-fit-face-2026-11-19/`.
+
+**Quick Look:** the clay, ink and light expression takes convert with
+`glb_to_usdz.py` (4.24, 4.74 and 4.26 MB); `inspect_usdz.py` passes each
+with no failures and `usdchecker --arkit` reports success.
+`check_usdz_tools.sh` still cannot run its material challenge on this
+untextured base (see 2c). No physical device.
+
+**What still differs from the sheet:**
+
+- the smile is closed, with no teeth (the owner's word), and has no cheek
+  lift or dimples;
+- the brows sit a little higher than the sheet's (for the face-box bar);
+- holding something back and looking down keep more open lids than the
+  sheet's, because the shared mixes are fixed and the shapes blend in
+  straight lines; readers swap the two;
+- hopeful opens the mouth a little, where the sheet's is a soft closed smile;
+- no skin shading, blush or soft light (the "Pixar look");
+- the ears are smaller, the nose bridge broader and the upper lid thicker
+  than the sheet's;
+- at about three times card size a faint line shows where MPFB's mouth
+  slit is, and one smile corner shows a speck of the teeth.
+
+**Options from here, with costs** (the owner's call):
+
+1. Merge as is. No cost. Clay is at the gate; ink and light are below it
+   with AI readers in this round.
+2. Read with people first, with the new pack. No spend; the owner's and
+   three readers' time. It is the test the brief names as the real one.
+3. More free tuning of held and looking down in `base.json`. No spend;
+   about a day; earlier rounds show these two trade against each other.
+4. Change the shared mixes for held and looking down (`lib/beats.ts`). No
+   spend; it changes every avatar's acting, so it needs the motion owner.
+5. The look of the skin (shading, blush, soft light) in the viewer and the
+   finishes. No spend; a slice of its own.
+6. A commissioned sculpt of the head. Spend, the owner's; not priced here.
+
+**Proof video:** the sheet's face beside the old and the new face, at card
+size and close, turning, through the expressions, in clay with a pass of
+ink and light: `output/authoring/face-proof/` in the worktree (ignored).
 
 ## Physical-device limits
 

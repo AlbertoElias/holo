@@ -32,6 +32,14 @@ export function browColour(hair: readonly number[], skin: readonly number[]): [n
   return now <= target ? brow : (brow.map((v) => v * (target / now) ** 3) as [number, number, number]);
 }
 
+/** The lips' linear colour: the skin's own, warmer and darker by LIP_SHARE per channel (the clay sheet's lip against its skin). */
+export const LIP_SHARE = [0.65, 0.45, 0.38] as const;
+export function lipColour(skin: readonly number[]): [number, number, number] {
+  return [skin[0]! * LIP_SHARE[0], skin[1]! * LIP_SHARE[1], skin[2]! * LIP_SHARE[2]];
+}
+/** The ring round the iris: the iris's own colour at this share of its brightness. */
+export const LIMBUS_SHARE = 0.26;
+
 /**
  * Dresses a house-base wardrobe (every hair style and glasses kind, one
  * build) as the card says, in place: keeps the card's hair and glasses
@@ -69,9 +77,12 @@ export function dressAvatar(doc: Document, card: LookCard): void {
 
   const hair = linear(HAIR_COLOUR[card.hair.colour]);
   const skin = linear(SKIN[card.skin]);
+  const iris = linear(EYES[card.eyes]);
   const colours: Record<string, readonly number[]> = {
     HouseBase_skin: skin,
-    HouseBase_eye_iris: linear(EYES[card.eyes]),
+    HouseBase_lips: lipColour(skin),
+    HouseBase_eye_iris: iris,
+    HouseBase_eye_limbus: iris.map((v) => v * LIMBUS_SHARE),
     HouseBase_hair: hair,
     HouseBase_brow: browColour(hair, skin),
     HouseBase_top: linear(CLOTHING[card.clothing].top),
