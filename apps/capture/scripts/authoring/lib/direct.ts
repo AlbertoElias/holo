@@ -1707,9 +1707,12 @@ function lookTarget(cast: Cast[], c: Cast, t: number, flat: boolean, by: 'head' 
       : env(r, t, flat);
     if (e === 0) continue;
     const p = im ? im.p : pointOf(cast, c.spec, (d as Extract<Direction, { kind: 'look' }>).at);
+    const first = !point;
     point = point ? point.lerp(p, clamp01(e)) : p;
     weight = point === p ? e : Math.max(weight, e);
-    share = im ? im.share : (d as Extract<Direction, { kind: 'look' }>).head ?? 0.6;
+    // Blend the head's share with the same weight as the point, so a new look does not snap the head.
+    const s = im ? im.share : (d as Extract<Direction, { kind: 'look' }>).head ?? 0.6;
+    share = first ? s : share + (s - share) * clamp01(e);
   }
   return point ? { point, weight, share } : undefined;
 }
