@@ -6,7 +6,7 @@ import type * as Three from "three";
 
 import type { Probe } from "./ar-bubble-types";
 import { assertViewerShell, expect, test } from "./bootstrap";
-import { chartTakeGltf } from "./bubble-fixture";
+import { chartTakeGltf, setTakeGltf } from "./bubble-fixture";
 
 // A far recorded object must not shrink the performer on the feed card
 // (feature brief card-framing-objects, option B, styleguide 3.4). The same
@@ -23,7 +23,7 @@ const FLOOR = 0.75;
 const PHONE = { width: 390, height: 844 };
 
 type Placement = { label: string; at: readonly [number, number] };
-type Reading = { label: string; performerPx: number; performerOnCard: number; chartOnCard: number | null; camera: number[] };
+type Reading = { label: string; performerPx: number; performerOnCard: number; chartOnCard: number | null; setOnCard: number | null; camera: number[] };
 
 const placements: Placement[] = [
   { label: "chart inside her", at: [0, 0] },
@@ -104,7 +104,8 @@ async function readCard(page: Page, glb: Buffer, label: string): Promise<Reading
     };
     const performer = read("RecordedAvatar")!;
     const chart = read("RecordedObject");
-    return { label, performerPx: performer.height, performerOnCard: performer.onCard, chartOnCard: chart ? chart.onCard : null, camera: camera.position.toArray() };
+    const set = read("RecordedSet");
+    return { label, performerPx: performer.height, performerOnCard: performer.onCard, chartOnCard: chart ? chart.onCard : null, setOnCard: set ? set.onCard : null, camera: camera.position.toArray() };
   }, label);
 }
 
@@ -134,4 +135,36 @@ test("a far recorded object leaves the performer at 75 % or more of her size, wh
   expect(chartOnCard("chart 0.5 m to her side"), "a near chart is wholly on the card").toBe(1);
   expect(chartOnCard("chart 3 m to her side"), "a chart 3 m off is only partly on the card, the performer being kept large").toBeLessThan(1);
   expect(chartOnCard("chart 5 m to her side"), "and further, less of it").toBeLessThanOrEqual(chartOnCard("chart 3 m to her side"));
+});
+
+// A wide recorded set (a phone take's default or scanned scene) widened the
+// dome until the performer stood a few dozen pixels tall on a phone. The
+// performer comes first (styleguide 3.4): against a dome fitted to her and
+// her reach alone she keeps 75 % of her size or more (the far-object floor),
+// wholly on the card, and a wide set runs off the card instead.
+const setWidths = [1, 6, 12, 24] as const;
+
+test("a wide recorded set leaves the performer at 75 % of her own size or more, wholly on the card", async ({ browser }, testInfo) => {
+  test.setTimeout(240_000);
+  const readings: Reading[] = [];
+  for (const width of setWidths) {
+    const { baseURL } = testInfo.project.use;
+    const context = await browser.newContext({ viewport: PHONE, ignoreHTTPSErrors: true, ...(baseURL ? { baseURL } : {}) });
+    const page = await context.newPage();
+    try {
+      readings.push(await readCard(page, setTakeGltf(width), `set ${width} m wide`));
+    } finally {
+      await context.close();
+    }
+  }
+  await mkdir(artifactDir, { recursive: true });
+  await writeFile(resolve(artifactDir, "set-report.json"), `${JSON.stringify(readings, null, 2)}\n`);
+  const reference = readings[0]!;
+  expect(reference.performerPx, "the performer is read at a usable size").toBeGreaterThan(100);
+  for (const reading of readings.slice(1)) {
+    expect(reading.performerPx, `${reading.label}: the performer keeps ${FLOOR * 100} % of her size on a set no wider than she is (${reference.performerPx.toFixed(0)} px)`).toBeGreaterThanOrEqual(reference.performerPx * FLOOR - 2);
+    expect(reading.performerOnCard, `${reading.label}: she is wholly on the card`).toBe(1);
+  }
+  const widest = readings.at(-1)!;
+  expect(widest.setOnCard, "the widest set runs off the card, the performer being kept large").toBeLessThan(1);
 });
