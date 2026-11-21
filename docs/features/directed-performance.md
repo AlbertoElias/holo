@@ -1593,6 +1593,14 @@ up to the full face (26 px for a face drawn 0.7 px). The goodbye takes now measu
 flat her 28 and him 35.1; directed her 33 and him 41 (his last second is 8.1, where
 he turns away).
 
+Two performers that stand close need one more rule. The id render gives each
+performer its own blue code in its own materials. Antialiasing blends the edge of one
+face with the background, and a blended pixel can round to the code of the other
+performer. Two such pixels at the edge of her face made his box 23 px too wide. So the
+decode counts a pixel only when its blue is within 8 of a code and at least 2 of its
+4 neighbours have the same code. The review reports the count of pixels it leaves out.
+A copy of her face recoded as his still fails the check.
+
 **Done when** fresh agents get only the skill and the same three ideas, remake the
 pieces, and a blind reader gets the setup, the event and the reaction in each. Then a
 proof video goes to the owner, `verify:pr` passes, and the work merges to `main`.

@@ -72,7 +72,7 @@ export const BACKGROUND = Number.parseInt(tokens.color.ground.mid.slice(1), 16);
 const STILL_PX = 1;
 
 type Vec = [number, number, number];
-interface CardPerformer { name: string; points: Record<string, [number, number]>; /** The drawn face pixels. */ face: ScreenBox | null; /** The box of every face vertex. */ faceBound: ScreenBox | null }
+interface CardPerformer { name: string; points: Record<string, [number, number]>; /** The drawn face pixels. */ face: ScreenBox | null; /** The box of every face vertex. */ faceBound: ScreenBox | null; /** Blended edge pixels left out of face. */ faceStray?: number }
 type ScreenBox = [number, number, number, number];
 interface CardReading { canvas: { width: number; height: number; pixelRatio: number }; performers: CardPerformer[]; objects: { name: string; box: ScreenBox | null }[] }
 interface WorldBox { name: string; min: Vec; max: Vec }
@@ -114,7 +114,8 @@ export interface OnScreen {
   }[];
 }
 
-interface FaceCheck { readonly t: number; readonly drawnCssPx: number; readonly boundCssPx: number }
+/** strayPx: device pixels on an edge between two face colours, which the decode leaves out (a plain rounding gave them to this performer). */
+interface FaceCheck { readonly t: number; readonly drawnCssPx: number; readonly boundCssPx: number; readonly strayPx: number }
 /** How far the drawn face may reach past the box of its vertices: the pixels add one pixel of edge. */
 const FACE_CHECK_TOLERANCE_CSS_PX = 1.5;
 
@@ -129,9 +130,9 @@ function checkFaceBox(cards: readonly CardReading[], times: readonly number[], c
     const drawn = perf.face, bound = perf.faceBound, t = times[f]!;
     if (drawn && (!bound || drawn[0] < bound[0] - FACE_CHECK_TOLERANCE_CSS_PX || drawn[1] < bound[1] - FACE_CHECK_TOLERANCE_CSS_PX
       || drawn[2] > bound[2] + FACE_CHECK_TOLERANCE_CSS_PX || drawn[3] > bound[3] + FACE_CHECK_TOLERANCE_CSS_PX)) {
-      throw new Error(`face measure fault: performer ${p} at ${t.toFixed(2)} s is drawn at [${drawn.join(', ')}] CSS px, outside the box of its face vertices [${bound ? bound.join(', ') : 'none'}] (the review's face measure is wrong; fix lib/review-page.ts, not the sheet)`);
+      throw new Error(`face measure fault: performer ${p} at ${t.toFixed(2)} s is drawn at [${drawn.join(', ')}] CSS px, outside the box of its face vertices [${bound ? bound.join(', ') : 'none'}], ${perf.faceStray ?? 0} blended pixels left out (the review's face measure is wrong; fix lib/review-page.ts, not the sheet)`);
     }
-    out[p]!.push({ t: round(t, 100), drawnCssPx: drawn ? round(drawn[3] - drawn[1]) : 0, boundCssPx: bound ? round(bound[3] - bound[1]) : 0 });
+    out[p]!.push({ t: round(t, 100), drawnCssPx: drawn ? round(drawn[3] - drawn[1]) : 0, boundCssPx: bound ? round(bound[3] - bound[1]) : 0, strayPx: perf.faceStray ?? 0 });
   }));
   return out;
 }

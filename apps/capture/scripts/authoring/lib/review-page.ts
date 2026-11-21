@@ -67,7 +67,7 @@ export const REVIEW_PAGE = String.raw`
     return box;
   };
   // Each performer's face box in the drawn pixels, CSS px of the card canvas: in one render, every performer's face
-  // vertices drawn magenta (blue 64 × (i + 1) tells performer i) and the rest of their meshes green, unlit, with the
+  // vertices drawn red plus a blue of 64 × (i + 1) set in performer i's own materials, the rest of their meshes green, unlit, with the
   // card's own renderer and camera (the GPU skins them, and the depth test hides what a head or a body hides), every
   // other mesh hidden. This is the face a viewer sees; a box of the face vertices also counts a face turned away and
   // the mouth's inside (a pair's turned head measured 25.9 CSS px where 0.7 px of face was drawn). Null for a
@@ -79,7 +79,9 @@ export const REVIEW_PAGE = String.raw`
     state.performers.forEach((p, i) => p.wrapper.traverse((o) => { if (o.isMesh) own.set(o, { i, all: (p.face.find((f) => f.mesh === o) || { all: [] }).all }); }));
     const hidden = [];
     scene.traverse((o) => { if (o.visible && (o.isMesh || o.isPoints || o.isLine || o.isSprite) && !own.has(o)) { o.visible = false; hidden.push(o); } });
-    const flat = (m) => {
+    // The performer code (the blue) is in each mesh's own material, not in the vertex colours: two performers can share
+    // one geometry, and a colour attribute written for the second performer then paints the first one's face too.
+    const flat = (m, code) => {
       const c = m.clone();
       for (const k of ['map', 'emissiveMap', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'alphaMap']) if (k in c) c[k] = null;
       if (c.color) c.color.setRGB(1, 1, 1);
@@ -88,20 +90,25 @@ export const REVIEW_PAGE = String.raw`
       if ('metalness' in c) c.metalness = 0;
       c.vertexColors = true; c.transparent = false; c.opacity = 1; c.needsUpdate = true;
       // Unlit: the pixel is the vertex colour, so a face turned from the light still shows (lit, it went too dark to read).
-      c.onBeforeCompile = (shader) => { shader.fragmentShader = shader.fragmentShader.replace('#include <dithering_fragment>', '#include <dithering_fragment>\n  gl_FragColor = vec4(vColor.rgb, 1.0);'); };
-      c.customProgramCacheKey = () => 'holoim-face-truth';
+      c.onBeforeCompile = (shader) => { shader.fragmentShader = shader.fragmentShader.replace('#include <dithering_fragment>', '#include <dithering_fragment>\n  gl_FragColor = vec4(vColor.r, vColor.g, vColor.r * ' + code.toFixed(4) + ', 1.0);'); };
+      c.customProgramCacheKey = () => 'holoim-face-truth-' + code;
       return c;
     };
-    const saved = [];
+    const saved = [], geometries = new Map();
     for (const [mesh, { i, all }] of own) {
       if (!mesh.visible) continue;
       const g = mesh.geometry;
-      const colour = g.attributes.position.clone();
-      for (let k = 0; k < colour.count; k += 1) colour.setXYZ(k, 0, 1, 0);
-      for (const k of all) colour.setXYZ(k, 1, 0, (64 * (i + 1)) / 255);
-      saved.push({ mesh, colour: g.attributes.color, material: mesh.material });
-      g.setAttribute('color', colour);
-      mesh.material = Array.isArray(mesh.material) ? mesh.material.map(flat) : flat(mesh.material);
+      if (!geometries.has(g)) {
+        // Face vertices red, the rest green; the same for every performer that shares this geometry.
+        const colour = g.attributes.position.clone();
+        for (let k = 0; k < colour.count; k += 1) colour.setXYZ(k, 0, 1, 0);
+        for (const k of all) colour.setXYZ(k, 1, 0, 0);
+        geometries.set(g, g.attributes.color);
+        g.setAttribute('color', colour);
+      }
+      saved.push({ mesh, material: mesh.material });
+      const code = (64 * (i + 1)) / 255;
+      mesh.material = Array.isArray(mesh.material) ? mesh.material.map((m) => flat(m, code)) : flat(mesh.material, code);
     }
     const background = scene.background, fog = scene.fog;
     scene.background = null; scene.fog = null;
@@ -115,17 +122,30 @@ export const REVIEW_PAGE = String.raw`
     ctx.drawImage(r.domElement, 0, 0);
     const px = ctx.getImageData(0, 0, w, h).data;
     const boxes = state.performers.map(() => null);
-    for (let y = 0; y < h; y += 1) for (let x = 0; x < w; x += 1) {
-      const k = (y * w + x) * 4;
+    const stray = state.performers.map(() => 0);
+    // A pixel's performer: its blue within 8 of a code. The antialiasing resolve leaves lone edge pixels whose blue
+    // falls near the wrong code (a 2-pixel speck of 112 at the edge of performer 0's face stretched performer 1's box
+    // over her face), so a pixel counts only when 2 or more of its 4 neighbours have the same code. stray: the face
+    // pixels left out, per the code a plain rounding gives them.
+    const code = new Int8Array(w * h).fill(-1);
+    for (let k = 0, n = 0; n < w * h; n += 1, k += 4) {
       if (px[k + 3] === 0 || px[k] <= 128 || px[k + 1] >= 64) continue;
       const i = Math.round(px[k + 2] / 64) - 1;
       if (i < 0 || i >= boxes.length) continue;
+      if (Math.abs(px[k + 2] - 64 * (i + 1)) > 8) { stray[i] += 1; continue; }
+      code[n] = i;
+    }
+    for (let y = 0; y < h; y += 1) for (let x = 0; x < w; x += 1) {
+      const i = code[y * w + x];
+      if (i < 0) continue;
+      const same = (x > 0 && code[y * w + x - 1] === i) + (x < w - 1 && code[y * w + x + 1] === i)
+        + (y > 0 && code[(y - 1) * w + x] === i) + (y < h - 1 && code[(y + 1) * w + x] === i);
+      if (same < 2) { stray[i] += 1; continue; }
       const b = boxes[i];
       boxes[i] = b ? [Math.min(b[0], x), Math.min(b[1], y), Math.max(b[2], x + 1), Math.max(b[3], y + 1)] : [x, y, x + 1, y + 1];
     }
+    for (const [g, colour] of geometries) if (colour) g.setAttribute('color', colour); else g.deleteAttribute('color');
     for (const s of saved) {
-      const g = s.mesh.geometry;
-      if (s.colour) g.setAttribute('color', s.colour); else g.deleteAttribute('color');
       (Array.isArray(s.mesh.material) ? s.mesh.material : [s.mesh.material]).forEach((c) => c.dispose());
       s.mesh.material = s.material;
     }
@@ -135,7 +155,7 @@ export const REVIEW_PAGE = String.raw`
     if (restore) r.render(scene, cam);
     const rect = r.domElement.getBoundingClientRect();
     const sx = rect.width / w, sy = rect.height / h;
-    return boxes.map((box) => (box ? [box[0] * sx, box[1] * sy, box[2] * sx, box[3] * sy].map((v) => Math.round(v * 10) / 10) : null));
+    return { stray, boxes: boxes.map((box) => (box ? [box[0] * sx, box[1] * sy, box[2] * sx, box[3] * sy].map((v) => Math.round(v * 10) / 10) : null)) };
   };
   // Every vertex of a recorded object, thinned to about 1500 per object: enough for its box.
   const objectPoints = (node, each) => {
@@ -255,7 +275,7 @@ export const REVIEW_PAGE = String.raw`
           if (p.bones.head) points.headTop = project(p.bones.head.getWorldPosition(V()).add(V().set(0, 0.17, 0)));
           const r1 = (n) => Math.round(n * 10) / 10;
           const bound = withBound && vertexFace(p, cam, ([x, y]) => [r1(((x + 1) / 2) * rect.width), r1(((1 - y) / 2) * rect.height)]);
-          return { name: p.name, points, face: drawn[i], faceBound: bound || null };
+          return { name: p.name, points, face: drawn.boxes[i], faceStray: drawn.stray[i], faceBound: bound || null };
         }),
         objects: state.objects.map((o) => {
           let box = null;
