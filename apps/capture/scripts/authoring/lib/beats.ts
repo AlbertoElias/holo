@@ -347,7 +347,7 @@ export const GESTURES = {
   nod: { anticipation: 0.06, attack: 0.15, settle: 0.3, cycle: 0.8, count: 3, from: 'at', hand: false },
   'head-shake': { anticipation: 0.05, attack: 0.15, settle: 0.35, cycle: 0.8, count: 3, from: 'at', hand: false },
   shrug: { anticipation: 0.1, attack: 0.35, settle: 0.5, hold: 0.5, hand: false },
-  wave: { anticipation: 0.15, attack: 0.5, settle: 0.6, cycle: 0.42, count: 3, from: 'arrive', hand: true },
+  wave: { anticipation: 0.15, attack: 0.5, settle: 1.0, cycle: 0.42, count: 3, from: 'arrive', hand: true },
   rub: { anticipation: 0.15, attack: 0.6, settle: 0.6, cycle: 0.4, count: 5, from: 'arrive', hand: true },
   'hand-to-chest': { anticipation: 0.15, attack: 0.6, settle: 0.7, hold: 1.0, hand: true }
 } as const satisfies Record<string, { anticipation: number; attack: number; settle: number; cycle?: number; count?: number; from?: 'at' | 'arrive'; hold?: number; hand: boolean }>;
