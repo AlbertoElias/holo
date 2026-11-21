@@ -135,19 +135,36 @@ def material_challenge(doc, binary):
     materials = doc.get("materials", [])
     # Prefer actual hair/eye assets, retaining their source RGB detail.
     candidates = sorted(range(len(materials)), key=lambda i: (not any(word in materials[i].get("name", "").lower() for word in ("hair", "eye")), i))
-    for material_index in candidates:
+    def embedded(index):
+        info = materials[index].get("pbrMetallicRoughness", {}).get("baseColorTexture")
+        return bool(info) and "bufferView" in doc["images"][doc["textures"][info["index"]]["source"]]
+
+    # A take with flat-colour materials (the house base and its set carry no texture) has no source image. The
+    # challenge then paints one from the material's own colour, on materials whose every primitive has UVs, so
+    # the alpha, UV and PBR conversion is still exercised.
+    with_uvs = {}
+    for mesh in doc.get("meshes", []):
+        for primitive in mesh["primitives"]:
+            if "material" in primitive:
+                with_uvs[primitive["material"]] = with_uvs.get(primitive["material"], True) and "TEXCOORD_0" in primitive["attributes"]
+    textured = [index for index in candidates if embedded(index)]
+    painted = [index for index in candidates if not materials[index].get("pbrMetallicRoughness", {}).get("baseColorTexture") and with_uvs.get(index)]
+    for material_index in (textured + painted)[:2]:
         material = materials[material_index]
-        pbr = material.get("pbrMetallicRoughness", {})
+        pbr = material.setdefault("pbrMetallicRoughness", {})
         info = pbr.get("baseColorTexture")
-        if not info:
-            continue
-        texture = copy.deepcopy(doc["textures"][info["index"]])
-        source_image = doc["images"][texture["source"]]
-        if "bufferView" not in source_image:
-            continue
-        view = doc["bufferViews"][source_image["bufferView"]]
-        start = view.get("byteOffset", 0)
-        image = Image.open(io.BytesIO(bytes(binary[start:start+view["byteLength"]]))).convert("RGBA")
+        if info:
+            texture = copy.deepcopy(doc["textures"][info["index"]])
+            view = doc["bufferViews"][doc["images"][texture["source"]]["bufferView"]]
+            start = view.get("byteOffset", 0)
+            image = Image.open(io.BytesIO(bytes(binary[start:start+view["byteLength"]]))).convert("RGBA")
+        else:
+            texture, info = {}, {}
+            pbr["baseColorTexture"] = info
+            doc.setdefault("images", []), doc.setdefault("textures", [])
+            colour = np.array(pbr.get("baseColorFactor", [1, 1, 1, 1])[:3])
+            shade = np.linspace(.55, 1, 64)[:, None, None] * np.linspace(1, .7, 64)[None, :, None]
+            image = Image.fromarray(np.dstack([np.clip(shade * colour * 255, 0, 255).astype(np.uint8), np.full((64, 64), 255, dtype=np.uint8)]), "RGBA")
         pixels = np.array(image)
         # Opaque, translucent, and cutout texels, including alpha under MASK's
         # threshold after the nonunit alpha factor is applied.
@@ -179,10 +196,8 @@ def material_challenge(doc, binary):
             material["normalTexture"]["scale"] = .65
             material["normalTexture"].setdefault("extensions", {})["KHR_texture_transform"] = copy.deepcopy(transform)
         selected.append({"material": material_index, "name": material.get("name"), "alphaMode": material["alphaMode"], "sourceAlphaBytes": [0, 64, 191, 255], "baseColorFactor": pbr["baseColorFactor"], "textureTransform": transform, "normalScale": material.get("normalTexture", {}).get("scale")})
-        if len(selected) == 2:
-            break
     if len(selected) != 2:
-        raise ValueError("Source needs two embedded base color materials for alpha challenges")
+        raise ValueError("Source needs two materials with an embedded base color texture, or with UVs, for alpha challenges")
     for extension in ("KHR_texture_transform", "KHR_materials_emissive_strength"):
         if extension not in doc.setdefault("extensionsUsed", []):
             doc["extensionsUsed"].append(extension)
