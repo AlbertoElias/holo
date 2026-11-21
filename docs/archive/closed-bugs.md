@@ -1510,6 +1510,77 @@ bug above.)
 - **Fix:** `dressAvatar` disposes a removed primitive's accessor only when nothing else uses it. The look e2e checks that the posted hair and glasses keep an index list longer than their point list.
 - **Closed:** 2026-11-20.
 
+### B-078 — VR head walk: the legs seem to walk forward in every direction
+
+- **Area:** apps/capture (`VrBodySolver` gait)
+- **Severity:** P2
+- **Observed:** 2026-11-20 (owner, on a Quest: "When using headset movement, the legs are always moving forward,
+  even when lateral or backwards.")
+- **Evidence:** the IWER head walk at 1.14 m/s (ignored audit `output/motion-audit/direction.ts`, tag `before-dir`).
+  The recorded (forward) walk plays only forward and front-right, as decision 4 = B asks; every step lands within
+  8° of the travel. Sideways the feet trail the pelvis: hips 51 cm (left) and 45 cm (right) ahead of the feet's
+  midpoint, against 11 cm forward. The legs reach back under a body that slides sideways.
+- **Expected:** the feet step in the travel direction and stay under the pelvis in every direction.
+- **Reproduction:** `pnpm --filter @holoim/capture run test:xr:walk-direction`, head rows left and right.
+- **After:** head sideways 10 cm (left) and 12 cm (right), forward 11 cm; every step within 12° of the travel;
+  the recorded walk plays only forward and front-right.
+- **Cause:** a sideways step cannot pass the other foot, so it covers about half a forward stride. The gait kept its
+  forward cadence, so the feet fell behind a body that slid sideways.
+- **Fix:** `VrBodySolver.sideCadence` raises the step rate (procedural gait and recorded clock) to what the sideways
+  share of the travel needs, up to 4.5 steps a second. A sideways walk starts with the foot on the side of travel.
+  `test:xr:walk-direction` checks the step direction and the pelvis over the feet in six directions.
+- **Open:** the emulator did not show legs "always walking forward" (each step lands in the travel direction). The
+  owner confirms on a Quest; reopen with a recording if it still shows.
+- **Closed:** 2026-11-20.
+
+### B-079 — VR stick walk: the body and the legs are not vertically aligned
+
+- **Area:** apps/capture (`VrBodySolver.planRoot`, `MovementSystem`)
+- **Severity:** P1
+- **Observed:** 2026-11-20 (owner, on a Quest: "With stick, the body and the legs don't seem to be vertically
+  aligned.")
+- **Evidence:** full stick (1.83 m/s), audit tag `before-dir`. Forward: torso leans back 10.5° (neck 6 cm behind its
+  standing place), pelvis 13 cm ahead of the feet. The root ran 8 cm ahead of the tracked eyes in the travel
+  direction (backward too). Sideways the pelvis is 50–52 cm ahead of the feet; diagonals 41–45 cm ahead and 34–35 cm
+  aside. Desktop at the same speed: 12.5 cm, no lean.
+- **Expected:** the torso keeps its standing posture and the pelvis stays over the feet.
+- **Reproduction:** `pnpm --filter @holoim/capture run test:xr:walk-direction`, stick rows.
+- **After:** forward 14 cm ahead, no lean (torso offsets equal to standing, posture change 0.1 cm); sideways
+  12.5 cm (left) and 14 cm (right); diagonals 5–12 cm ahead and 5–10 cm aside.
+- **Cause:** the stick move was counted twice. `planRoot` read the head after the rig had carried it, so the root
+  plan already held the stick move, and the motor then added the same move again. The root ran ahead of the eyes and
+  the torso leaned back to reach the head. Sideways, the feet also trailed (as in B-078).
+- **Fix:** `MovementSystem` records the rig's move in `BodyTracking.carried`, and `planRoot` takes it out of the root
+  plan. Side cadence and the travel-side first step as in B-078. The stick strafe moves at 65% of the forward speed
+  (`STICK_STRAFE_SHARE`), so a sideways stride can keep pace (pending owner confirmation).
+- **Closed:** 2026-11-20.
+
+### B-077 — VR head walk start: the body jumps from rest to full speed in one frame (arms pop)
+
+- **Area:** apps/capture (`VrBodySolver.planRoot`)
+- **Severity:** P2 (the owner saw it as a pop at the end of the controller arm video)
+- **Observed:** 2026-11-20, on `main` (`55f421598851`) and on `bug/vr-arm-natural`
+- **Evidence:** `arms` check, controller run, walk segment: at the first recorded step the root went from 0 to about
+  1.1 m/s in one frame; hips 33.7 m/s², chest 20.8 m/s², so the elbows folded against the torso. That check moves the
+  head once per 33 ms sample (2 or 3 frames), which adds burst noise. With the head moved on every XR frame
+  (`test:xr:walk-direction`, head rows), the hips' horizontal peak in the first second of a walk is 14.6–31.6 m/s²
+  (forward 19.0, left 29.4, back 15.7, right 31.6, diagonals 17.4 and 14.6). The head itself reaches 4 m/s².
+- **Expected:** the body eases into the walk; no frame of the walk start above the walk's own acceleration.
+- **Reproduction:** `pnpm --filter @holoim/capture run test:xr:walk-direction`, head rows, `start` column.
+- **After:** 7.1–9.2 m/s² in every direction (forward 8.1, left 7.1, back 8.6, right 9.2, diagonals 8.2 and 7.1). Steps,
+  pelvis and posture do not change; the stops are the same (peak 2–3.7 m/s², the root ends at the same place).
+  In the `arms` check the walk-start frame is 10 m/s² (from 33.7). Its later 16–26 m/s² spikes are single samples
+  that hold three frames instead of two (the speed reads 1.38, 2.22, then 1.62 m/s): the check's sampling, not the body.
+- **Cause:** before the walk is detected (smoothed head speed above 0.55 m/s), the root holds inside the lean leash.
+  Then the leash or the walk's full head step takes it to walking speed in one frame.
+- **Fix:** `planRoot` changes the root's planned velocity by at most 8 m/s² (`ROOT_ACCEL`); meanwhile the head may run
+  a little past the leash. A planned step over 0.3 m in one frame (`ROOT_JUMP_METERS`) is a re-origin, such as a
+  respawn, and passes at once. `test:xr:walk-direction` now moves the head on every XR frame from the page clock and
+  fails a head walk start above 10 m/s².
+- **Open:** the stick walk start is not eased (29–45 m/s²): the stick moves the view at full speed at once, and
+  view acceleration in VR is a comfort risk. That is an owner decision.
+- **Closed:** 2026-11-20.
+
 > **Two bugs use the same numbers.** B-073 and B-074 above are the look bugs (smile, glasses).
 > B-073, B-074 and B-075 below are the VR arm bugs. The arm bugs were filed first, in `BUGS.md`.
 
