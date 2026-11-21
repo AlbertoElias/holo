@@ -33,6 +33,8 @@ const STEP_MS = 1000 / 60;
 const FLOOR_TOLERANCE_M = 0.01;
 const SURFACES_Y = [0.01, 0.29];
 const FLOOR_Y = 0.01;
+/** Recorded frames before the stretched prop is let go: the GLB comparison samples one frame in 12 and needs more than 20. */
+const MIN_HELD_FRAMES = 200;
 const round = (value, digits = 4) => Number(Number(value).toFixed(digits));
 
 function makeRows(failures) {
@@ -583,6 +585,9 @@ export async function runIwerResizeTake({ browser, baseUrl, artifactDir, console
       size = (await item()).size;
     }
     await step(10);
+    // A hand that reaches the prop in few moves makes a short take. Hold the stretched prop until the take is long enough for the
+    // GLB comparison below to sample more than 20 frames.
+    while (series.length < MIN_HELD_FRAMES) await step(1);
     const stretched = await item();
     row('stretching the left hand away -> size ~2 (+-10%)', Math.abs(stretched.size / 2 - 1) <= 0.1, { size: round(stretched.size), startHandGapM: round(d0, 3) });
     row('still held by the right hand while stretching', stretched.heldBy === 'right', { heldBy: stretched.heldBy });

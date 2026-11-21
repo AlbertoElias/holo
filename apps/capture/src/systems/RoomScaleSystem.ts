@@ -27,6 +27,7 @@ export class RoomScaleSystem extends createSystem() {
     if (c.frame.arCameraAuthor) return;
     if (!c.frame.bodyTracking) {
       c.body.displacement.set(0, 0, 0);
+      c.body.carried.set(0, 0, 0);
       return;
     }
     const { body, tracking, motor, avatar, config } = c;
@@ -62,6 +63,6 @@ export class RoomScaleSystem extends createSystem() {
       body.solver.align(body.head, rootPosition, body.groundSampler);
     }
     body.copyHead(pose);
-    body.solver.planRoot(body.head, rootPosition, deltaSec, body.groundSampler, body.displacement);
+    body.solver.planRoot(body.head, rootPosition, deltaSec, body.groundSampler, body.displacement, body.carried);
   }
 }

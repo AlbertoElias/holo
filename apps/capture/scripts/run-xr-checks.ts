@@ -40,6 +40,8 @@ const CHECKS = {
   hands: 'scripts/ci-hand-replay-playwright.ts',
   height: 'scripts/ci-xr-height-playwright.ts',
   body: 'scripts/ci-body-replay-playwright.ts',
+  // Head and stick walks in six directions: steps along the travel, the pelvis over the feet, the torso upright.
+  'walk-direction': 'scripts/ci-vr-walk-direction-playwright.ts',
   pointing: 'scripts/ci-pointing-playwright.ts',
   // Scripted arm reaches on hands and controllers, graded on the elbow, clavicle and wrist (arm IK).
   arms: 'scripts/ci-arm-reach-playwright.ts',

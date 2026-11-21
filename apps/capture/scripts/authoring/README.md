@@ -130,7 +130,7 @@ checked (the review lists them).
 Each beat belongs to a performer, starts `at` a time and holds `directions`:
 
 - `look` at a point (`head` sets how much of it the head takes);
-- `expression`, a named one (`held`, `hope`, `sad`, `smile`, `small-smile`,
+- `expression`, a named one (`held`, `hope`, `sad`, `smile`, `laugh`, `delighted`, `small-smile`,
   `breath`, `resolve`, `eyes-down`, and the states' faces `noticing` and
   `concerned`; `FACE_MIXES` in `lib/beats.ts`) or face channels, with a `strength`. On the stock avatar only mouth-led shapes
   (`smile`, `sad`) read at feed-card size; brow and lip-press shapes move

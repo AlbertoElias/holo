@@ -6,7 +6,7 @@ describe("loadRuntimeConfig", () => {
   it("uses expected defaults", () => {
     const config = loadRuntimeConfig("");
     expect(config.sceneUrl).toBe("/gltf/models/scene.glb");
-    expect(config.avatarUrl).toBe("/gltf/models/avatar.glb");
+    expect(config.avatarUrl).toBe("/gltf/models/house-base.glb");
     expect(config.sceneSpanAvatars).toBe(72);
     expect(config.mockVrEnabledFromQuery).toBe(false);
     expect(config.handRetargetMode).toBe("hybrid");

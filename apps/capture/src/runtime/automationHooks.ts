@@ -59,7 +59,7 @@ export interface AutomationHooks {
   __setBodyFaults: (faults: readonly string[]) => void;
   __setHandOverlay: (enabled: boolean) => void;
   __setHeightEvidenceView: (enabled: boolean) => void;
-  __setSpectatorView: (mode: boolean | SpectatorViewMode) => void;
+  __setSpectatorView: (mode: boolean | SpectatorViewMode, options?: { yawOffset?: number }) => void;
   __captureHandCalibrationPose: () => Record<VrHandSide, boolean>;
   __resetHandCalibrationPose: () => void;
   __loadObjectUrl: (url: string) => Promise<boolean>;

@@ -30,6 +30,7 @@ export class DiagnosticViews {
   private readonly spectatorFocus = new THREE.Vector3();
   private spectatorFocusReady = false;
   private spectatorViewYaw = 0;
+  private spectatorYawOffset = Math.PI * 0.25;
   private headPathLine: THREE.Line | null = null;
   private headMarker: THREE.Mesh | null = null;
   private eyeMarker: THREE.Mesh | null = null;
@@ -44,8 +45,11 @@ export class DiagnosticViews {
   }
 
   // 'hands' shows both hands close up; 'body' follows the avatar from a fixed
-  // world direction with the tracked head path overlaid.
-  setSpectatorView(mode: boolean | SpectatorViewMode): void {
+  // world direction with the tracked head path overlaid. `yawOffset` turns
+  // that direction about the body's start yaw (0 films the face, π/2 the
+  // left side); it defaults to the three-quarter view.
+  setSpectatorView(mode: boolean | SpectatorViewMode, options: { yawOffset?: number } = {}): void {
+    this.spectatorYawOffset = options.yawOffset ?? Math.PI * 0.25;
     this.spectatorMode = mode === true ? 'hands' : mode === false ? 'off' : mode;
     this.spectatorCamera = this.spectatorMode === 'off' ? null : (this.spectatorCamera ?? new THREE.PerspectiveCamera(38, 16 / 9, 0.01, 200));
     this.spectatorFocusReady = false;
@@ -218,7 +222,7 @@ export class DiagnosticViews {
     if ((this.spectatorMode !== 'body' && this.spectatorMode !== 'body-fixed') || !this.headPathLine || !this.headMarker || !this.eyeMarker) return;
     const pose = this.deps.tracking.getHeadPose();
     if (!pose.valid) return;
-    if (this.headPathCount === 0) this.spectatorViewYaw = this.deps.getBodyYaw() + Math.PI * 0.25;
+    if (this.headPathCount === 0) this.spectatorViewYaw = this.deps.getBodyYaw() + this.spectatorYawOffset;
     const positions = this.headPathLine.geometry.getAttribute('position') as THREE.BufferAttribute;
     if (this.headPathCount === HEAD_PATH_POINTS) {
       positions.array.copyWithin(0, 3);

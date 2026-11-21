@@ -264,7 +264,12 @@ export const EXPRESSIONS = {
   // Hopeful: inner and outer brows high, eyes wide, the mouth a little open; no smile.
   hope: { browInnerUp: 0.75, browOuterUpLeft: 0.6, browOuterUpRight: 0.6, eyeWideLeft: 0.6, eyeWideRight: 0.6, jawOpen: 0.14, mouthFunnel: 0.15 },
   sad: { browInnerUp: 0.85, mouthFrownLeft: 0.55, mouthFrownRight: 0.55, eyeSquintLeft: 0.15, eyeSquintRight: 0.15, mouthLowerDownLeft: 0.1, mouthLowerDownRight: 0.1 },
-  smile: { mouthSmileLeft: 0.7, mouthSmileRight: 0.7, cheekSquintLeft: 0.35, cheekSquintRight: 0.35, eyeSquintLeft: 0.2, eyeSquintRight: 0.2 },
+  smile: { mouthSmileLeft: 0.7, mouthSmileRight: 0.7, cheekSquintLeft: 0.7, cheekSquintRight: 0.7, eyeSquintLeft: 0.2, eyeSquintRight: 0.2 },
+  // A laugh: the mouth open and wide with the upper teeth and the tongue showing, the corners out more than up, the cheeks lifting the
+  // lower lids, the brows up. No eye squint: a lowered upper lid over a wide grin reads as menace.
+  laugh: { mouthSmileLeft: 0.6, mouthSmileRight: 0.6, mouthStretchLeft: 0.3, mouthStretchRight: 0.3, jawOpen: 0.6, cheekSquintLeft: 1, cheekSquintRight: 1, browInnerUp: 0.4, browOuterUpLeft: 0.5, browOuterUpRight: 0.5 },
+  // Delighted: the laugh's open mouth with the eyes wide and the brows high; enthusiasm, not laughter.
+  delighted: { mouthSmileLeft: 0.6, mouthSmileRight: 0.6, mouthStretchLeft: 0.3, mouthStretchRight: 0.3, jawOpen: 0.6, cheekSquintLeft: 1, cheekSquintRight: 1, browInnerUp: 0.5, browOuterUpLeft: 0.6, browOuterUpRight: 0.6, eyeWideLeft: 0.25, eyeWideRight: 0.25 },
   'small-smile': { mouthSmileLeft: 0.3, mouthSmileRight: 0.25, mouthPressLeft: 0.15, mouthPressRight: 0.15 },
   breath: { jawOpen: 0.12, mouthFunnel: 0.08, browInnerUp: 0.3 },
   // Determined: brows hard down toward the nose, eyes narrowed, mouth pressed straight.
@@ -342,7 +347,7 @@ export const GESTURES = {
   nod: { anticipation: 0.06, attack: 0.15, settle: 0.3, cycle: 0.8, count: 3, from: 'at', hand: false },
   'head-shake': { anticipation: 0.05, attack: 0.15, settle: 0.35, cycle: 0.8, count: 3, from: 'at', hand: false },
   shrug: { anticipation: 0.1, attack: 0.35, settle: 0.5, hold: 0.5, hand: false },
-  wave: { anticipation: 0.15, attack: 0.5, settle: 0.6, cycle: 0.42, count: 3, from: 'arrive', hand: true },
+  wave: { anticipation: 0.15, attack: 0.5, settle: 1.0, cycle: 0.42, count: 3, from: 'arrive', hand: true },
   rub: { anticipation: 0.15, attack: 0.6, settle: 0.6, cycle: 0.4, count: 5, from: 'arrive', hand: true },
   'hand-to-chest': { anticipation: 0.15, attack: 0.6, settle: 0.7, hold: 1.0, hand: true }
 } as const satisfies Record<string, { anticipation: number; attack: number; settle: number; cycle?: number; count?: number; from?: 'at' | 'arrive'; hold?: number; hand: boolean }>;

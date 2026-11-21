@@ -31,6 +31,10 @@
       "scale": 1.3
     }
   },
+  "rig": {
+    "$comment": "thumbBase: where the thumb's base joint sits, in hand lengths (wrist to middle knuckle) from the wrist: along the wrist-to-middle-knuckle line, toward the index side, out of the palm's plane on the thumb's side. Read from the tracked hands of capture's hand replays (headset 0.39, 0.24, 0.20; IWER 0.38, 0.26, 0.18; 2026-11-20). MPFB's mixamo rig has it in the plane (0.41, 0.25, 0.00), which the replay counted as 20 to 27 degrees of thumb curl error (bar 15).",
+    "thumbBase": [0.38, 0.26, 0.19]
+  },
   "fit": {
     "$comment": "The fit (slice 2c2, fit.py): the MPFB human, proportioned, is moved onto `target`, a visual hull carved by carve.py from clay-turnaround.png's silhouettes alone (no generator, no third-party weights: the owner's licence decision of 2026-11-19 retired the Hunyuan3D target, whose licence excludes the EU, UK and South Korea). stance: the sheet's pose against the human's rest (degrees: upper arms down, legs in), so a limb wraps onto the same limb. regions (strongest rig weight wins; a bone ending in * is every bone starting so): strength (1 wraps fully, 0 only follows its surroundings), inset (m, under the target's surface, where garments are eased out again) and rigid (the head: it moves as a whole, by the mean move to its matches, so the face made after the fit keeps its shape; its size is proportions.head.scale). rounds: smoothing passes of the move field per round; maxDistance (m) and minFacing (cosine) refuse a nearest point on another limb. The values are decided by the agent on 2026-11-19 against house-likeness.ts (brief: slice 2c2 evidence), owner's review pending (open decision 10).",
     "enabled": true,
@@ -171,7 +175,7 @@
       }
     },
     "lids": {
-      "$comment": "Shells about each eye (radius in eye radii), `columns` across from -extent to extent, the opening's corners at -corner (inner) and corner (outer) on a line from `inner` to `outer` degrees, the frame turned `yaw` degrees outward; each lid's edge `open` degrees from that line at the middle, falling to the corners as (1 - (u/corner)^2)^power, the lid's `rows` spread from the edge to `back`; where the skin is in front of the shell the lid lies on it (`lift` m in front), the two meeting in a fillet of `fillet` (m). The upper lid's first row is the dark lash line, `lash` degrees thick, `lashInner` of that at the inner corner and full from `lashFull` of the way across, running past the outer corner as a wing that rises wingRise degrees. shapes: the openings [upper, lower] each shape moves to (null: that lid stays; below 0: across the corners' line onto the other lid's edge). A shape's targets go out along their radius as far as needed for every vertex's straight path to stay `clear` eye radii from the centre. Each lid's first row is its dark line (`lash` degrees deep), the lower lid's a thin one. From `hold` to `settle` degrees behind its edge a lid leaves the shell for the skin behind it, never nearer the eye's centre than `over` eye radii. The upper lash runs `wing` (in u) past the outer corner, rising wingRise degrees. Past the inner corner the lash lines end within `tail`.",
+      "$comment": "Shells about each eye (radius in eye radii), `columns` across from -extent to extent, the opening's corners at -corner (inner) and corner (outer) on a line from `inner` to `outer` degrees, the frame turned `yaw` degrees outward; each lid's edge `open` degrees from that line at the middle, falling to the corners as (1 - (u/corner)^2)^power, the lid's `rows` spread from the edge to `back`; where the skin is in front of the shell the lid lies on it (`lift` m in front), the two meeting in a fillet of `fillet` (m). The upper lid's first row is the dark lash line, `lash` degrees thick, `lashInner` of that at the inner corner and full from `lashFull` of the way across, running past the outer corner as a wing that rises wingRise degrees. shapes: the openings [upper, lower] each shape moves to (null: that lid stays; below 0: across the corners' line onto the other lid's edge). A shape's targets go out along their radius as far as needed for every vertex's straight path to stay `clear` eye radii from the centre; so does every mix of the `mixShapes` at the `mixWeights` (over mixPasses rounds), because a mix only adds the shapes' moves. Each lid's first row is its dark line (`lash` degrees deep), the lower lid's a thin one. From `hold` to `settle` degrees behind its edge a lid leaves the shell for the skin behind it, never nearer the eye's centre than `over` eye radii. The upper lash runs `wing` (in u) past the outer corner, rising wingRise degrees. Past the inner corner the lash lines end within `tail`.",
       "columns": 25,
       "corner": 0.7,
       "extent": 0.985,
@@ -211,11 +215,22 @@
           31
         ],
         "cheekSquint": [
-          36,
-          -24
+          33,
+          0
         ]
       },
       "clear": 1.01,
+      "mixShapes": [
+        "eyeBlink",
+        "eyeSquint",
+        "cheekSquint"
+      ],
+      "mixWeights": [
+        0,
+        0.5,
+        1
+      ],
+      "mixPasses": 12,
       "lift": 0.001,
       "fillet": 0.003,
       "hold": 6,
@@ -297,10 +312,10 @@
       }
     },
     "mouthShapes": {
-      "$comment": "Moves (m) of the mouth's edges in the face's plane unless named. smile: the corners up and out, the upper edge's middle up by midUp, the middle open, the teeth row dropping `teeth` (a fraction) of the way, the opening keeping its height toward the corners as `round` falls below 1, the mouth `lift` forward (depth) halfway out so the cheek's curve stays behind it; frown: the corners down and out; stretch: the corners out and a little down; press: the corners out, the lips thinner, the corners down; lowerDown / upperUp: the lower lip down, the upper up; dimple: the corners back into the cheek; funnel: the corners in, the lips apart up and down; pucker: the corners in and the mouth forward (depth); roll: corners in, the rolled lip thinner and down; shrug: the lower lip up; side: mouthLeft/Right across; jawSide, jawForward (depth) and jawOpen: the mouth following the jaw units.",
+      "$comment": "Moves (m) of the mouth's edges in the face's plane unless named. smile: the corners up and out, the upper edge's middle up by midUp, the middle open, the teeth row dropping `teeth` (a fraction) of the way, the opening keeping its height toward the corners as `round` falls below 1, the mouth `lift` forward (depth) halfway out so the cheek's curve stays behind it; frown: the corners down and out; stretch: the corners out and a little down; press: the corners out, the lips thinner, the corners down; lowerDown / upperUp: the lower lip down, the upper up; dimple: the corners back into the cheek; funnel: the corners in, the lips apart up and down; pucker: the corners in and the mouth forward (depth); roll: corners in, the rolled lip thinner and down; shrug: the lower lip up; side: mouthLeft/Right across; jawSide, jawForward (depth) and jawOpen: the mouth following the jaw units. jawMouth: with the open jaw the corners come `in` and `down`, the upper teeth show over `teeth` of the opening and the tongue over `tongue` of it at the middle, across `tongueWide` of the half-width (rounded by tongueRound); the opening keeps its height toward the corners as `round` falls below 1.",
       "smile": {
-        "up": 0.038,
-        "out": 0.03,
+        "up": 0.026,
+        "out": 0.034,
         "midUp": 0.012,
         "open": 0.0,
         "teeth": 0.8,
@@ -330,7 +345,7 @@
         "down": 0.018
       },
       "pucker": {
-        "in": 0.012,
+        "in": 0.006,
         "forward": 0.006
       },
       "roll": {
@@ -343,7 +358,15 @@
       "side": 0.006,
       "jawSide": 0.006,
       "jawForward": 0.004,
-      "jawOpen": 0.038
+      "jawOpen": 0.038,
+      "jawMouth": {
+        "in": 0.006,
+        "down": 0.004,
+        "teeth": 0.28,
+        "tongue": 0.42,
+        "tongueWide": 0.75,
+        "tongueRound": 0.6, "round": 0.6
+      }
     },
     "mouthMixes": {
       "$comment": "Mixes whose summed offsets put the mouth behind the skin (B-073). Each mix is a list of parts (shapes moved together); every part takes each of `weights`. The build pushes each shape's mouth forward, column by column, so every sampled mix keeps the mouth `margin` (m) in front of the skin, at the mouth's points and at `faceSamples` (u, v) inside each of its faces, over `passes` rounds of projections (build.py).",
@@ -364,11 +387,12 @@
       ]
     },
     "socket": {
-      "$comment": "The skin within `rim` (m) of each opening goes back to `behind` eye radii from the eye's centre, easing out over `slope` (m). Past a corner the distance counts `past` times, so the socket ends within the lids' reach.",
+      "$comment": "The skin within `rim` (m) of each opening goes back to `behind` eye radii from the eye's centre, easing out over `slope` (m). Past a corner the distance counts `past` times, so the socket ends within the lids' reach; above the opening it counts `above` times, so the skin under the upper lid stays behind the eye where a view from below sees in under the lid's edge.",
       "rim": 0.002,
       "slope": 0.006,
       "behind": 0.93,
-      "past": 3
+      "past": 1.2,
+      "above": 0.3
     }
   },
   "colours": {
@@ -421,6 +445,11 @@
       0.871,
       0.807,
       0.716
+    ],
+    "tongue": [
+      0.44,
+      0.07,
+      0.055
     ],
     "lash": [
       0.012,

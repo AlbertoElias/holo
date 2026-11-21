@@ -1488,6 +1488,16 @@ bug above.)
 - **Fix:** the build samples each mix over a weight grid, at the mouth's points and at points inside each of its faces, and pushes each shape's mouth forward one column at a time, so every sampled mix keeps the mouth 0.4 mm in front of the skin. Largest push 3.0 mm (jawOpen); the report lists them under `mouthMixes`.
 - **Closed:** 2026-11-20.
 
+### B-080 — The feed card's hover-hint check reads the hint still fading out, and races the reach fold
+
+- **Area:** `apps/viewer-web/e2e/redesign.spec.ts` ("desktop/phone: the feed card in the new look": the fold check and the hover-hint loop)
+- **Severity:** P2 (test flake: hosted run 44789036601 on `7fcacf540c50` went red in Viewer shard 2/4; that merge changed no viewer code)
+- **Observed:** 2026-11-20, hosted CI: `strict mode violation: locator('[data-hint]') resolved to 2 elements` ("Step inside" and "Pause"). Under `CI_EMULATE_LOAD=2` two more failures in the same test: `locator.hover` timing out on a reach control that `.portal-controls` intercepts, and `data-reach` still `shown` after 5 s at the first fold check.
+- **Evidence:** `packages/ui-dom/src/Hint.tsx` keeps a hint mounted until its fade-out ends, and within `WARM_MS` the next control's hint shows at once, so two `[data-hint]` nodes exist for one fade; the check took any hint on the page. `useReach` (`HologramCard.tsx`) folds the reach controls `tokens.glyph.idleAfter` (4 s) after the last pointer or focus event, to no width (`max-width: 0`), so a slow loop lost them from its live `:visible` list mid-way, and a 5 s wait for the fold left 1 s of slack. The product behaviour is intended in all three.
+- **Expected:** each step judges the hovered control's own hint, with the reach controls present while they are named, and the fold check allows the idle time it waits on.
+- **Reproduction:** load-dependent; the whole spec ×5 at CI's 2 workers under `CI_EMULATE_LOAD=2` failed 3 of 45 before the reach part of the fix.
+- **Fix:** the hint locator keeps only the hint whose text is the control's name and needs exactly one at opacity 1; the loop holds the card reached with the spec's `holdReach` and lets go before the final "no hint after the mouse leaves" check; the fold check waits `idleAfter` + 5 s. The loop names only this card's controls and the dock (another card's folded controls keep a clipped, non-empty box, so they count as visible but cannot be hovered), and the spec's two AR session waits allow 30 s (one timed out at the 10 s default under load). The whole spec ×5 at 2 workers under `CI_EMULATE_LOAD=2 scripts/ci-emulate.sh` then passed 45/45.
+
 ### B-074 — Dressed house avatars show no glasses (specks instead of frames)
 
 - **Area:** packages/avatar-look (`dressAvatar` in `src/dress.ts`), so the phone's live avatar, posted takes and authored takes
@@ -1498,6 +1508,77 @@ bug above.)
 - **Reproduction:** dress any look with Round or Square glasses (`dressedFile` in `scripts/authoring/lib/house-look.ts`) and read the glasses primitive's `indices`.
 - **Cause:** the wardrobe's two glasses kinds share one index accessor (same tube topology). `dressAvatar` disposed every accessor of the kind it removed, the shared index list too, so the kept kind lost its faces and drew its points three at a time as slivers.
 - **Fix:** `dressAvatar` disposes a removed primitive's accessor only when nothing else uses it. The look e2e checks that the posted hair and glasses keep an index list longer than their point list.
+- **Closed:** 2026-11-20.
+
+### B-078 — VR head walk: the legs seem to walk forward in every direction
+
+- **Area:** apps/capture (`VrBodySolver` gait)
+- **Severity:** P2
+- **Observed:** 2026-11-20 (owner, on a Quest: "When using headset movement, the legs are always moving forward,
+  even when lateral or backwards.")
+- **Evidence:** the IWER head walk at 1.14 m/s (ignored audit `output/motion-audit/direction.ts`, tag `before-dir`).
+  The recorded (forward) walk plays only forward and front-right, as decision 4 = B asks; every step lands within
+  8° of the travel. Sideways the feet trail the pelvis: hips 51 cm (left) and 45 cm (right) ahead of the feet's
+  midpoint, against 11 cm forward. The legs reach back under a body that slides sideways.
+- **Expected:** the feet step in the travel direction and stay under the pelvis in every direction.
+- **Reproduction:** `pnpm --filter @holoim/capture run test:xr:walk-direction`, head rows left and right.
+- **After:** head sideways 10 cm (left) and 12 cm (right), forward 11 cm; every step within 12° of the travel;
+  the recorded walk plays only forward and front-right.
+- **Cause:** a sideways step cannot pass the other foot, so it covers about half a forward stride. The gait kept its
+  forward cadence, so the feet fell behind a body that slid sideways.
+- **Fix:** `VrBodySolver.sideCadence` raises the step rate (procedural gait and recorded clock) to what the sideways
+  share of the travel needs, up to 4.5 steps a second. A sideways walk starts with the foot on the side of travel.
+  `test:xr:walk-direction` checks the step direction and the pelvis over the feet in six directions.
+- **Open:** the emulator did not show legs "always walking forward" (each step lands in the travel direction). The
+  owner confirms on a Quest; reopen with a recording if it still shows.
+- **Closed:** 2026-11-20.
+
+### B-079 — VR stick walk: the body and the legs are not vertically aligned
+
+- **Area:** apps/capture (`VrBodySolver.planRoot`, `MovementSystem`)
+- **Severity:** P1
+- **Observed:** 2026-11-20 (owner, on a Quest: "With stick, the body and the legs don't seem to be vertically
+  aligned.")
+- **Evidence:** full stick (1.83 m/s), audit tag `before-dir`. Forward: torso leans back 10.5° (neck 6 cm behind its
+  standing place), pelvis 13 cm ahead of the feet. The root ran 8 cm ahead of the tracked eyes in the travel
+  direction (backward too). Sideways the pelvis is 50–52 cm ahead of the feet; diagonals 41–45 cm ahead and 34–35 cm
+  aside. Desktop at the same speed: 12.5 cm, no lean.
+- **Expected:** the torso keeps its standing posture and the pelvis stays over the feet.
+- **Reproduction:** `pnpm --filter @holoim/capture run test:xr:walk-direction`, stick rows.
+- **After:** forward 14 cm ahead, no lean (torso offsets equal to standing, posture change 0.1 cm); sideways
+  12.5 cm (left) and 14 cm (right); diagonals 5–12 cm ahead and 5–10 cm aside.
+- **Cause:** the stick move was counted twice. `planRoot` read the head after the rig had carried it, so the root
+  plan already held the stick move, and the motor then added the same move again. The root ran ahead of the eyes and
+  the torso leaned back to reach the head. Sideways, the feet also trailed (as in B-078).
+- **Fix:** `MovementSystem` records the rig's move in `BodyTracking.carried`, and `planRoot` takes it out of the root
+  plan. Side cadence and the travel-side first step as in B-078. The stick strafe moves at 65% of the forward speed
+  (`STICK_STRAFE_SHARE`), so a sideways stride can keep pace (pending owner confirmation).
+- **Closed:** 2026-11-20.
+
+### B-077 — VR head walk start: the body jumps from rest to full speed in one frame (arms pop)
+
+- **Area:** apps/capture (`VrBodySolver.planRoot`)
+- **Severity:** P2 (the owner saw it as a pop at the end of the controller arm video)
+- **Observed:** 2026-11-20, on `main` (`55f421598851`) and on `bug/vr-arm-natural`
+- **Evidence:** `arms` check, controller run, walk segment: at the first recorded step the root went from 0 to about
+  1.1 m/s in one frame; hips 33.7 m/s², chest 20.8 m/s², so the elbows folded against the torso. That check moves the
+  head once per 33 ms sample (2 or 3 frames), which adds burst noise. With the head moved on every XR frame
+  (`test:xr:walk-direction`, head rows), the hips' horizontal peak in the first second of a walk is 14.6–31.6 m/s²
+  (forward 19.0, left 29.4, back 15.7, right 31.6, diagonals 17.4 and 14.6). The head itself reaches 4 m/s².
+- **Expected:** the body eases into the walk; no frame of the walk start above the walk's own acceleration.
+- **Reproduction:** `pnpm --filter @holoim/capture run test:xr:walk-direction`, head rows, `start` column.
+- **After:** 7.1–9.2 m/s² in every direction (forward 8.1, left 7.1, back 8.6, right 9.2, diagonals 8.2 and 7.1). Steps,
+  pelvis and posture do not change; the stops are the same (peak 2–3.7 m/s², the root ends at the same place).
+  In the `arms` check the walk-start frame is 10 m/s² (from 33.7). Its later 16–26 m/s² spikes are single samples
+  that hold three frames instead of two (the speed reads 1.38, 2.22, then 1.62 m/s): the check's sampling, not the body.
+- **Cause:** before the walk is detected (smoothed head speed above 0.55 m/s), the root holds inside the lean leash.
+  Then the leash or the walk's full head step takes it to walking speed in one frame.
+- **Fix:** `planRoot` changes the root's planned velocity by at most 8 m/s² (`ROOT_ACCEL`); meanwhile the head may run
+  a little past the leash. A planned step over 0.3 m in one frame (`ROOT_JUMP_METERS`) is a re-origin, such as a
+  respawn, and passes at once. `test:xr:walk-direction` now moves the head on every XR frame from the page clock and
+  fails a head walk start above 10 m/s².
+- **Open:** the stick walk start is not eased (29–45 m/s²): the stick moves the view at full speed at once, and
+  view acceleration in VR is a comfort risk. That is an owner decision.
 - **Closed:** 2026-11-20.
 
 > **Two bugs use the same numbers.** B-073 and B-074 above are the look bugs (smile, glasses).
@@ -1545,3 +1626,34 @@ bug above.)
 - **Reproduction:** as B-073 with `ARM_REACH_INPUTS=controller`.
 - **Fix:** the full-reach shoulder push, a fitted arm length (0.406 × shoulder height, at most ×1.08) and a 1.8% reserve, with no reach stretch. Controller wrist p95 forward-far / overhead 14.8 / 14.5 → 12.3 / 12.0 cm; those targets lie at 1.10× and 1.2× of a full reach, past a human arm. Forward 0.3 → 0.0 cm. Arm length spread 8% → 1.8%.
 - **Closed:** 2026-11-20.
+
+### B-083 — The performer floor on the card makes the AR route miss its 20 s load on a slow runner
+
+- **Area:** apps/viewer-web (`HologramCardCanvas` fit, `motionPoints`)
+- **Severity:** P1 (`main` red on runs 44815715770 and 44826449489)
+- **Observed:** 2026-11-20, hosted pipeline shard 1
+- **Evidence:**
+  - `bubble-capture.pipeline.spec.ts:142`: `.xr-view-container` does not mount within 20 s after "View in your room"; the page shows "Loading hologram…" later.
+  - CI emulator, bubble-capture ×3: 0af7fc10cc under `CI_EMULATE_LOAD=2` passes 3/3; caf7cad fails at :142; caf7cad without 85ee704b62ba passes 3/3; caf7cad at plain load passes 3/3.
+  - 85ee704b62ba adds a third `drawnPoints` + `motionPoints` pass over the whole take for each card, in `fitClocheNow`, which runs again when the bubble or the place gate changes.
+- **Expected:** the performer floor costs no more than one fit pass, and the AR route mounts in time on a loaded runner.
+- **Reproduction:** `CI_EMULATE_LOAD=2 scripts/ci-emulate.sh bash -c "cd apps/viewer-web && RUN_E2E_PIPELINE=1 XR_TEST_MODE=iwer npx playwright test e2e/bubble-capture.pipeline.spec.ts --workers=1 --repeat-each=3"` on caf7cad.
+- **Next:** 85ee704b62ba is reverted on `main`. Bring the floor back with the performer's points taken from the same sampling pass, and pass the reproduction above before the merge.
+- **Cause:** not the fit pass. R3F's unmount loses the card's WebGL context, and on a software GPU (SwiftShader) that waits for every queued frame. rAF asks for about 63 frames a second; one frame of the closer floor framing takes about 520 ms (210 ms without the floor), so the queue grows without a limit and leaving for AR waits about 37 s at load 2.
+- **Fix:** `FrameGate` (`apps/viewer-web/src/features/feed/FrameGate.tsx`) draws the card only when the WebGL2 fence of the last frame has signalled, and the floor uses one fit pass. AR load at load 2 fell from about 37 s to 3.1–3.3 s; bubble-capture at the real 20 s bar passed 11 of 11 under `CI_EMULATE_LOAD=2`.
+- **Closed:** 2026-11-21.
+
+### B-084 — The feed take does not start in bubble-capture after the VR arm change
+
+- **Area:** apps/capture (arm IK, 12b0a45c2d1a) or apps/viewer-web feed playback
+- **Severity:** P2
+- **Observed:** 2026-11-20, CI emulator
+- **Evidence:**
+  - `bubble-capture.pipeline.spec.ts:98`: "feed sphere follows recorded motion (clip time 0 → 0 s, running false)".
+  - 12b0a45 without 85ee704b62ba: 1 of 3 at plain load, and with :126 ("the rim's largest change in a frame") in 3 of 3 under `CI_EMULATE_LOAD=2`.
+  - 0af7fc10cc and caf7cad without 85ee704b62ba never failed at :98 or :126 (6 runs).
+- **Expected:** the take plays in the feed on every run.
+- **Reproduction:** the B-083 command on `main` after the revert, at plain load and at load 2.
+- **Cause:** not the arm change or the gate (1 of 5 on `main` and on the gate branch alike). The feed also loads the neighbour cards, paused, and each reports its own probe; the spec kept whichever card reported last, so it sometimes read a paused neighbour (clip time 0, running false).
+- **Fix:** the spec keeps each card's probe by URL and reads the uploaded card's. Bubble-capture at load 2 passed 11 of 11.
+- **Closed:** 2026-11-21.

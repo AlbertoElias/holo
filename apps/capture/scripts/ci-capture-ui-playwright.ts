@@ -385,9 +385,11 @@ async function headsetPhase(): Promise<void> {
   const idle = await chrome(page);
   const unscaledRing = glyphMetrics({ headset: false }).ringApx;
   assert(idle.wrist?.visible && idle.wrist.hand === 'left' && idle.wrist.input === 'ray', `headset: record on the left wrist for a right-handed controller user (${JSON.stringify(idle.wrist)})`);
-  assert(Math.abs(distance(idle.wrist.position, idle.wrist.anchor!) - tokens.placement.wristOffsetM) < 0.002, 'headset: the wrist row sits 4 cm off the wrist');
   // On the inside of the wrist (the user, 2026-10-25): a left grip's palm faces +X (WebXR).
   assert(idle.poke.glyphNormal && idle.poke.glyphNormal[0]! > 0.9, `headset: Record faces out of the controller hand's palm (${idle.poke.glyphNormal})`);
+  // Measured out of the palm: Record's place along the row changes with the glyphs shown (Look shows only for the house avatar).
+  const offWristM = Math.abs(idle.wrist.position.reduce((sum, v, axis) => sum + (v - idle.wrist!.anchor![axis]!) * idle.poke.glyphNormal![axis]!, 0));
+  assert(Math.abs(offWristM - tokens.placement.wristOffsetM) < 0.002, `headset: the wrist row sits 4 cm off the wrist (${offWristM})`);
   assert(Math.abs(idle.wrist.drawnSizeM - apxToMeters(unscaledRing, tokens.placement.armReachM, { headset: true })) < 1e-6, 'headset: the record ring is drawn at 2.5×');
   assert(idle.wrist.hitSizeM >= hitAreaMeters('ray', unscaledRing * tokens.size.headsetScale, tokens.placement.armReachM, { headset: false }) - 1e-6, 'headset: the record glyph takes a ray minimum');
   assert(idle.panel?.visible && idle.panel.distanceFromHeadM >= tokens.placement.worldPanelMinM, `headset: settings on a world panel 1 m away or more (${idle.panel?.distanceFromHeadM})`);
