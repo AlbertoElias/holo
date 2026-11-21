@@ -55,10 +55,11 @@ export function drawnBounds(root: Object3D): Box3 {
  * `withoutObjects`, what the author handled (the recorded objects) is left
  * out: the cast and its set alone.
  */
-export function drawnPoints(root: Object3D, bubble: DrawnBubble, into?: Object3D, { withoutObjects = false }: { withoutObjects?: boolean } = {}): Vector3[] {
+export function drawnPoints(root: Object3D, bubble: DrawnBubble, into?: Object3D, { withoutObjects = false, inside }: { withoutObjects?: boolean; inside?: InsidePoints | undefined } = {}): Vector3[] {
   const points: Vector3[] = [];
   root.updateWorldMatrix(true, true);
   const space = toSpace(into);
+  const members = insideMembers(inside);
   root.traverse((child) => {
     const mesh = child as Mesh & Partial<SkinnedMesh>;
     if (!mesh.isMesh || !mesh.geometry || isHidden(child, root) || isInChrome(child)) return;
@@ -77,16 +78,33 @@ export function drawnPoints(root: Object3D, bubble: DrawnBubble, into?: Object3D
       if (space) point.applyMatrix4(space);
       if (bubble && point.distanceTo(bubble.center) > bubble.radius) continue;
       points.push(point);
+      if (members?.has(child)) inside!.points.push(point);
     }
   });
   return points;
 }
 
 /**
+ * A second set of points read in the same pass: those from the bones and
+ * meshes inside `root` (such as the performer), pushed onto `points` as well
+ * as onto the whole take's list. One pass costs what the whole take costs;
+ * a pass of its own for the part would cost that again (B-083).
+ */
+export type InsidePoints = { root: Object3D; points: Vector3[] };
+
+function insideMembers(inside: InsidePoints | undefined): Set<Object3D> | null {
+  if (!inside) return null;
+  const members = new Set<Object3D>();
+  inside.root.traverse((child) => { members.add(child); });
+  return members;
+}
+
+/**
  * Where the take moves through, at evenly spaced times: the bones' world
  * positions, with head room over the highest, and the box corners of every
  * mesh the take moves by its own transform (a recorded object, a walk not
- * driven by bones; not the objects with `withoutObjects`), kept to `bubble`
+ * driven by bones; not the objects with `withoutObjects`; with `inside`, the
+ * points of the bones and meshes inside its root also go to its list), kept to `bubble`
  * when there is one. With `anchor` (a
  * bubble that follows its author), each sample is taken relative to where
  * the anchor is then, and put back where it is now: the dome travels with the
@@ -101,12 +119,13 @@ export function drawnPoints(root: Object3D, bubble: DrawnBubble, into?: Object3D
 export function motionPoints(
   root: Object3D,
   clips: readonly AnimationClip[],
-  { into, anchor, bubble = null, withoutObjects = false }: { into?: Object3D | undefined; anchor?: Object3D | undefined; bubble?: DrawnBubble; withoutObjects?: boolean } = {}
+  { into, anchor, bubble = null, withoutObjects = false, inside }: { into?: Object3D | undefined; anchor?: Object3D | undefined; bubble?: DrawnBubble; withoutObjects?: boolean; inside?: InsidePoints | undefined } = {}
 ): Vector3[] {
   const played = clips.filter((clip) => clip.duration > 0);
   if (played.length === 0) return [];
   const bones: Bone[] = [];
   const meshes: Mesh[] = [];
+  const members = insideMembers(inside);
   root.traverse((child) => {
     const mesh = child as Mesh & Partial<SkinnedMesh>;
     if ((child as Bone).isBone) bones.push(child as Bone);
@@ -128,12 +147,18 @@ export function motionPoints(
     root.updateWorldMatrix(true, true);
     if (anchor && anchorNow) anchor.getWorldPosition(anchorThen);
     let top: Vector3 | null = null;
+    let insideTop: Vector3 | null = null;
     for (const bone of bones) {
       const point = place(bone.getWorldPosition(new Vector3()));
       points.push(point);
       if (!top || point.y > top.y) top = point;
+      if (members?.has(bone)) {
+        inside!.points.push(point);
+        if (!insideTop || point.y > insideTop.y) insideTop = point;
+      }
     }
     if (top) points.push(top.clone().setY(top.y + HEAD_ROOM_METERS));
+    if (insideTop) inside!.points.push(insideTop.clone().setY(insideTop.y + HEAD_ROOM_METERS));
     for (const mesh of meshes) {
       const first = firstMatrices.get(mesh);
       if (!first) {
@@ -149,6 +174,7 @@ export function motionPoints(
         const point = place(corner.clone());
         if (bubble && point.distanceTo(bubble.center) > bubble.radius) continue;
         points.push(point);
+        if (members?.has(mesh)) inside!.points.push(point);
       }
     }
   };
