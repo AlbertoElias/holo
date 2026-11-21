@@ -7,6 +7,29 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
+### B-088 — Feed card: R3F events connect to a null div (seen once, not reproduced)
+
+- **Area:** apps/viewer-web (`HologramCardCanvas`, R3F 8.18 `Canvas`)
+- **Severity:** P3 (one e2e failure, no user report)
+- **Observed:** 2026-11-21, once, in a `verify:pr` on `feature/story-first-authoring` merged with `b4cdc100`
+- **Evidence:** `e2e/profiles.pipeline.spec.ts:127` ("search narrows by title or creator…") failed on "viewer
+  runtime errors": `TypeError: Cannot read properties of null (reading 'addEventListener')` in
+  `Object.connect` ← `onCreated`. R3F's Canvas calls `events.connect(divRef.current)` when the inner
+  (concurrent) root makes its first commit, a task after the outer commit. So the card's div was detached
+  before that commit. FrameGate is not the cause: the card Canvas had the same props before it (`06572ed5`).
+- **Not reproduced:** on `b4cdc100` under `CI_EMULATE_LOAD=2 scripts/ci-emulate.sh`: the test alone ×20 and the
+  whole spec ×5 (30 tests) all passed. Four forced-race pages on the dev server did not throw either: an
+  unmount during the inner render, an unmount at four timings (with and without StrictMode and transitions),
+  suspending canvases under an outer Suspense, and StrictMode's double cleanup then a re-render and an unmount.
+  React 18 renders the default-lane inner root without yielding, and an unmount before it batches a null update
+  with the mount, so the window that is left is narrow.
+- **Expected:** a card that leaves before its scene commits throws nothing.
+- **Candidate fix (not landed, unproven):** pass `events={safeCanvasEvents}` to the card and AR canvases, where
+  `safeCanvasEvents` wraps R3F's `events` and skips `connect` for a null target. The root then connects to its
+  own canvas element. Land it when the failure shows again, and prove it against that run's conditions.
+- **Reproduction:** none known. If it shows again, keep the run's `test-results` trace and note the load and
+  the other specs in the same worker.
+
 ### B-087 — VR head walk: the pelvis drops in one frame at each foot landing
 
 - **Area:** apps/capture (`VrBodySolver` pelvis height in the gait)
