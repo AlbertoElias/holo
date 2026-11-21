@@ -39,8 +39,9 @@ import { BUILDS, CLOTHING, EYES, FINISHES, GLASSES, HAIR_COLOUR, HAIR_STYLES, SK
 import { actingReport, diffTakes, summarize } from './acting-report.ts';
 import { bodyLine, build, loadSheet, OBJECT_LIMITS, resolveAvatar } from './direct.ts';
 import { BAR } from './lib/audition-bar.ts';
+import { faceBarPasses, FACE_AWAY_MAX_SHARE } from './lib/face-bar.ts';
 import { FACE_CHANNELS } from '@holoim/avatar-face';
-import { DEFAULT_TIMING, FACE_MIXES, GESTURES, houseFinish, parseSheetText, resolveTiming, STATES, validateSheet, type BeatSheet, type ObjectSpec, type Place, type Point } from './lib/beats.ts';
+import { DEFAULT_TIMING, FACE_MIXES, GESTURES, houseFinish, parseSheetText, resolveTiming, STATES, STORY_PARTS, storyEventProblem, validateSheet, type BeatSheet, type ObjectSpec, type Place, type Point } from './lib/beats.ts';
 import { solveTake } from './lib/direct.ts';
 import { ARM_LIMITS, type ArmReport } from './lib/arm-quality.ts';
 import { parseGlb } from './lib/gltf-read.ts';
@@ -279,11 +280,44 @@ async function fitMissOrThrow(sheetFile: string, m: Miss): Promise<string> {
 }
 
 /** The face-box fix: what widens the card's frame. */
-const FACE_FIX = 'the card frames the performers, every object and everything that moves, so the face gets smaller as that grows: '
-  + 'keep objects within about 0.6 m of the performer and no higher than the head, leave out objects nobody acts on, '
-  + 'avoid steps and wide reaches, and use one performer where the idea allows (two halve the face)';
+const FACE_FIX = 'the bar reads the median face outside the sheet\'s marked face-away seconds, and a face that tips down or away is shorter on the card; '
+  + `mark a performer's seconds that turn the head down or away on purpose with "faceAway": [{ "from", "to", "why" }] (at most ${Math.round(FACE_AWAY_MAX_SHARE * 100)} % of the piece) `
+  + '(for one performer the card frames from the hips and head, so objects do not change it): '
+  + 'look at objects mostly with the eyes ("head": 0.3 or less), look at the viewer for more than half the take, '
+  + 'keep forward leans short, and use one performer where the idea allows (two halve the face)';
 
-/** The reading bar from a filled comparison.json; pending while any beat is unread. */
+/** The seconds where the face is under the bar, so the fix names the beats to change. */
+function smallFace(p: { readonly travelPerSecond: readonly { readonly from: number; readonly faceDevicePx?: number | null; readonly faceAway?: boolean }[] }): string {
+  const small = p.travelPerSecond.filter((s) => !s.faceAway && typeof s.faceDevicePx === 'number' && s.faceDevicePx < BAR.faceBoxDevicePx);
+  return small.length ? `the face is under ${BAR.faceBoxDevicePx} px at ${small.map((s) => `${s.from}-${s.from + 1} s (${s.faceDevicePx})`).join(', ')}; ` : '';
+}
+
+const STORY_BAR = 'a fresh reader gets the setup, the event and the reaction';
+const STORY_FIX = 'write the sheet\'s "story" first (hologram-authoring skill, "First, the story"), then beats that show it';
+
+/**
+ * The main bar (brief slice 8): a fresh reader, told nothing, gets who and where,
+ * what happens, and how the person reacts. Fails at once for a sheet with no story.
+ */
+async function storyRow(reviewDir: string, sheet: BeatSheet | undefined): Promise<Row> {
+  if (!sheet?.story) return { id: 'story', bar: STORY_BAR, value: 'the sheet has no story', pass: false, fix: STORY_FIX };
+  const event = storyEventProblem(sheet);
+  if (event) return { id: 'story', bar: STORY_BAR, value: event, pass: false, fix: 'the event needs a take, put or drop, or a world line, after the setup (hologram-authoring skill, "First, the story")' };
+  const file = join(reviewDir, 'comparison.json');
+  type Part = { says: string; seen: string | null; reads: boolean | null; revise: string | null };
+  let c: { story?: Record<string, Part> | null };
+  try { c = JSON.parse(await readFile(file, 'utf8')); } catch { return { id: 'story', bar: STORY_BAR, value: 'no review', pass: null, fix: 'run without --quick to make the review pack' }; }
+  if (!c.story) return { id: 'story', bar: STORY_BAR, value: 'comparison.json has no story', pass: null, fix: `run make.ts again without --quick to write a fresh ${rel(file)}` };
+  // The request part (when the sheet gives one) checks the story against what was asked, not only against itself.
+  const parts = [...STORY_PARTS, ...(sheet.story.request ? ['request' as const] : [])].map((k) => ({ k, p: c.story![k] }));
+  const unread = parts.filter(({ p }) => typeof p?.reads !== 'boolean');
+  if (unread.length) return { id: 'story', bar: STORY_BAR, value: `${parts.length - unread.length} of ${parts.length} parts graded`, pass: null, fix: `have a fresh grader fill story.{${parts.map(({ k }) => k).join(',')}}.seen/reads/revise in ${rel(file)} from the reader's part 4, then run make.ts verdict ${rel(dirname(reviewDir))}` };
+  const missed = parts.filter(({ p }) => p!.reads === false);
+  return { id: 'story', bar: STORY_BAR, value: missed.length ? `missed: ${missed.map(({ k }) => k).join(', ')}` : `${parts.map(({ k }) => k).join(', ')} read`, pass: missed.length === 0,
+    ...(missed.length ? { fix: missed.map(({ k, p }) => `${k}: ${p!.revise ?? `the reader saw "${p!.seen}"; make "${p!.says}" plainer`}`).join('; ') } : {}) };
+}
+
+/** The reading bar from a filled comparison.json; pending while any beat is unread. A bar beside the story row (slice 8). */
 async function readingRow(reviewDir: string): Promise<Row> {
   const file = join(reviewDir, 'comparison.json');
   let c: { beats: { beat: string; intent: string | null; seen: string | null; reads: boolean | null; revise: string | null }[]; piece?: { reads: boolean | null } };
@@ -302,6 +336,19 @@ async function readingRow(reviewDir: string): Promise<Row> {
   return { id: 'reading', bar: 'a fresh reader reads every beat', value: `${beats.length - missed.length} of ${beats.length} beats read${c.piece?.reads === false ? '; the piece as a whole did not' : ''}`,
     pass: missed.length === 0 && c.piece?.reads !== false,
     ...(missed.length ? { fix: missed.map((b) => `${b.beat}: ${b.revise ?? `the reader saw "${b.seen}"; make "${b.intent}" plainer`}`).join('; ') } : {}) };
+}
+
+/**
+ * The face bar on the seconds the sheet does not mark face-away (owner, 2026-11-21): the median face outside the
+ * marks must meet it. The marked seconds and their median are in the value, not barred.
+ */
+export function faceBoxRow(p: OnScreen['performers'][number]): Row {
+  const split = p.faceSplitDevicePx;
+  const pass = faceBarPasses(split, BAR.faceBoxDevicePx);
+  const marks = p.faceAway.length ? `; marked away ${p.faceAway.map((a) => `${a.from}–${a.to} s (${a.why})`).join(', ')}: ${split.marked ?? 'no face'} px there` : '';
+  return { id: `faceBox.${p.name}`, bar: `face ≥ ${BAR.faceBoxDevicePx} device px brow to chin on the phone card, outside marked face-away seconds`,
+    value: `${split.unmarked ?? 'no face'} px${p.faceAway.length ? ' outside the marks' : ''} (${p.faceMmOnPhone} mm over the take)${marks}`, pass,
+    ...(pass ? {} : { fix: `${smallFace(p)}${FACE_FIX}` }) };
 }
 
 /** The degrees the review swings a second camera about the cast, so an arm in the body shows from the side. */
@@ -374,7 +421,7 @@ function faceRows(onScreen: OnScreen, ids: readonly string[]): Row[] {
   const rows: Row[] = [];
   for (const [i, perf] of onScreen.performers.entries()) {
     const p = { ...perf, name: onScreen.performers.length === ids.length ? ids[i]! : perf.name };
-    rows.push({ id: `faceBox.${p.name}`, bar: `face ≥ ${BAR.faceBoxDevicePx} device px brow to chin on the phone card`, value: `${p.faceDevicePx} px (${p.faceMmOnPhone} mm)`, pass: p.faceDevicePx >= BAR.faceBoxDevicePx, ...(p.faceDevicePx < BAR.faceBoxDevicePx ? { fix: FACE_FIX } : {}) });
+    rows.push(faceBoxRow(p));
     const still = p.travelPerSecond.filter((s) => s.still).map((s) => `${s.from}–${s.from + 1} s`);
     if (still.length) rows.push({ id: `still.${p.name}`, bar: 'something moves every second at card size', value: `frozen ${still.join(', ')}`, pass: false, advisory: true, fix: 'give that second a direction (a look, a breath expression, a small weight shift) or shorten the hold' });
   }
@@ -460,8 +507,12 @@ async function make(sheetFile: string, quick: boolean): Promise<boolean> {
     rows.push({ id: `aim.${a.beat}`, bar: `${a.object}'s tool within ${L.aimResidual}° of its target`, value: `${a.residual.toFixed(1)}°`, pass, ...(pass ? {} : { fix: await fitMiss(sheetFile, { kind: 'aim', beat: a.beat, side: a.side }) }) });
   }
   for (const t of built.take.tracks) for (const r of t.reaches) {
-    const out = r.targetDistance - r.stopShort > 0.02 && r.outOfReach > 0.01;
-    rows.push({ id: `reach.${r.beat}`, bar: 'the palm gets to its point (within 2 cm, leaning allowed)', value: `${(r.targetDistance * 1000).toFixed(0)} mm from it`, pass: !out, ...(out ? { fix: `the point is beyond the arm even leaning: move it (or the performer) about ${(r.outOfReach * 100).toFixed(0)} cm nearer, add a step, or a bend for a low point` } : {}) });
+    const miss = r.targetDistance - r.stopShort > 0.02;
+    // A point within the arm that the palm still misses: another beat (a gesture such as a shrug, or an overlapping reach) moves the same arm.
+    const fix = r.outOfReach > 0.01
+      ? `the point is beyond the arm even leaning: move it (or the performer) about ${(r.outOfReach * 100).toFixed(0)} cm nearer, add a step, or a bend for a low point`
+      : 'the point is within reach but the palm does not get there: another beat moves this arm at the same time (a gesture such as a shrug, or an overlapping reach); give the arm to one beat at a time';
+    rows.push({ id: `reach.${r.beat}`, bar: 'the palm gets to its point (within 2 cm, leaning allowed)', value: `${(r.targetDistance * 1000).toFixed(0)} mm from it`, pass: !miss, ...(miss ? { fix } : {}) });
   }
   for (const t of built.take.tracks) {
     const line = bodyLine(t.motion);
@@ -515,8 +566,7 @@ async function make(sheetFile: string, quick: boolean): Promise<boolean> {
       notes.push(`twelve stills: ${rel(frames)}-sheet.jpg (look at it before the full review)`);
     } else notes.push(`stills failed: ${(r.stderr || r.stdout).split('\n').slice(-3).join(' ')}`);
     rows.push({ id: 'faceBox', bar: `face ≥ ${BAR.faceBoxDevicePx} device px on the card`, value: 'not measured', pass: null, fix: 'run without --quick (the review measures it)' });
-    rows.push(await visualRow(join(dir, 'review')));
-    rows.push(await readingRow(join(dir, 'review')));
+    rows.push(await storyRow(join(dir, 'review'), sheet), await visualRow(join(dir, 'review')), await readingRow(join(dir, 'review')));
   } else {
     console.log('  reviewing (real time, a few minutes)…');
     const { onScreen } = await review(take, { sheet: join(dir, 'take.beats.json'), out: join(dir, 'review'), orbit: SIDE_ORBIT });
@@ -525,8 +575,7 @@ async function make(sheetFile: string, quick: boolean): Promise<boolean> {
     spawnSync('node', ['packages/tooling-testing/src/preview.mjs', join(reviewDir, 'reader')], { cwd: ROOT, encoding: 'utf8' });
     notes.push(`watch: ${rel(join(reviewDir, 'reader', 'review.mp4'))}; card stills: ${rel(join(reviewDir, 'reader'))}/sheet-card-NN.jpg (preview with node packages/tooling-testing/src/preview.mjs <file>)`);
     await writeVisualBrief(reviewDir, built.take.tracks);
-    rows.push(await visualRow(reviewDir));
-    rows.push(await readingRow(reviewDir));
+    rows.push(await storyRow(reviewDir, sheet), await visualRow(reviewDir), await readingRow(reviewDir));
   }
 
   const verdict = await writeReport(dir, sheetFile, rows, notes);
@@ -538,7 +587,10 @@ async function make(sheetFile: string, quick: boolean): Promise<boolean> {
 
 async function verdict(dir: string): Promise<boolean> {
   const report = JSON.parse(await readFile(join(dir, 'report.json'), 'utf8')) as { sheet: string; rows: Row[]; notes: string[] };
-  const rows = [...report.rows.filter((r) => r.id !== 'reading' && r.id !== 'visual'), await visualRow(join(dir, 'review')), await readingRow(join(dir, 'review'))];
+  // The sheet as it was built (its copy in the version), else the sheet file.
+  const built = await readFile(join(dir, 'sheet.jsonc'), 'utf8').then((t) => parseSheetText(t, join(dir, 'sheet.jsonc')), () => undefined)
+    ?? await readFile(report.sheet, 'utf8').then((t) => parseSheetText(t, report.sheet), () => undefined);
+  const rows = [...report.rows.filter((r) => r.id !== 'reading' && r.id !== 'story' && r.id !== 'visual'), await storyRow(join(dir, 'review'), built), await visualRow(join(dir, 'review')), await readingRow(join(dir, 'review'))];
   const text = await writeReport(dir, report.sheet, rows, report.notes);
   console.log(`${formatRows(rows)}\n\n${text}`);
   return !verdictLine(rows).failed;

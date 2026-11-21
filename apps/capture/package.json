@@ -40,6 +40,7 @@
     "test:xr:ui": "node --import tsx scripts/run-xr-checks.ts ui",
     "test:xr:avatars": "node --import tsx scripts/run-xr-checks.ts avatars",
     "test:avatars:bind": "node --conditions=development --import tsx scripts/check-avatar-bindings.ts",
+    "test:authoring:face-bar": "node --conditions=development --import tsx scripts/authoring/face-bar-check.ts",
     "showcase:build": "node scripts/showcase/build.mjs",
     "showcase:upload": "node scripts/showcase/upload.mjs",
     "fixtures:hands": "node --import tsx scripts/run-xr-checks.ts pose-fixture",

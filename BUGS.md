@@ -7,6 +7,29 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
+### B-088 — Feed card: R3F events connect to a null div (seen once, not reproduced)
+
+- **Area:** apps/viewer-web (`HologramCardCanvas`, R3F 8.18 `Canvas`)
+- **Severity:** P3 (one e2e failure, no user report)
+- **Observed:** 2026-11-21, once, in a `verify:pr` on `feature/story-first-authoring` merged with `b4cdc100`
+- **Evidence:** `e2e/profiles.pipeline.spec.ts:127` ("search narrows by title or creator…") failed on "viewer
+  runtime errors": `TypeError: Cannot read properties of null (reading 'addEventListener')` in
+  `Object.connect` ← `onCreated`. R3F's Canvas calls `events.connect(divRef.current)` when the inner
+  (concurrent) root makes its first commit, a task after the outer commit. So the card's div was detached
+  before that commit. FrameGate is not the cause: the card Canvas had the same props before it (`06572ed5`).
+- **Not reproduced:** on `b4cdc100` under `CI_EMULATE_LOAD=2 scripts/ci-emulate.sh`: the test alone ×20 and the
+  whole spec ×5 (30 tests) all passed. Four forced-race pages on the dev server did not throw either: an
+  unmount during the inner render, an unmount at four timings (with and without StrictMode and transitions),
+  suspending canvases under an outer Suspense, and StrictMode's double cleanup then a re-render and an unmount.
+  React 18 renders the default-lane inner root without yielding, and an unmount before it batches a null update
+  with the mount, so the window that is left is narrow.
+- **Expected:** a card that leaves before its scene commits throws nothing.
+- **Candidate fix (not landed, unproven):** pass `events={safeCanvasEvents}` to the card and AR canvases, where
+  `safeCanvasEvents` wraps R3F's `events` and skips `connect` for a null target. The root then connects to its
+  own canvas element. Land it when the failure shows again, and prove it against that run's conditions.
+- **Reproduction:** none known. If it shows again, keep the run's `test-results` trace and note the load and
+  the other specs in the same worker.
+
 ### B-087 — VR head walk: the pelvis drops in one frame at each foot landing
 
 - **Area:** apps/capture (`VrBodySolver` pelvis height in the gait)
@@ -105,6 +128,8 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   - The sphere's soft fade in the feed: it faded the ground under the performer on another old take.
   - The owner kept the card as it is.
 - **Next:** a take whose spawn keeps the mountain more than 6 m away removes the strip at its source (B-082).
+  On 2026-11-21, B-082 option C (spawn off the statue) exported no mountain triangles, and option E (statue moved,
+  spawn at the centre) exported 113. So only C removes the strip, and C fails the rim bar (see B-082).
 - **Reproduction:** post a phone take on the default scene, then view its card from behind the performer.
 
 ### B-082 — A take on the default scene starts on the statue
@@ -117,11 +142,19 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   - The fix 3400acffe803 (branch `bug/spawn-off-statue`) skips a pedestal.
   - With that fix, `bubble-capture.pipeline.spec.ts` failed twice with "start: bins off the ground". At bin 12 the rim is at 18.67 and the raycast ground at 17.91, edge (7.95, 2.99).
   - So the fix is not on `main`.
+  - 2026-11-21, both options merged with `main` 22f48373262f, `bubble-capture.pipeline.spec.ts` ×3 under `CI_EMULATE_LOAD=2`:
+    - Option E (branch `bug/statue-off-centre`, only `scene.glb` changed: the statue stands off the centre): 3 of 3 pass.
+      In the last run's rim report, the bins that pass only at the lift cap are none at the start, 32 in the middle (119–150) and 36 at the end (117–152).
+      The export keeps 113 mountain triangles, so the B-081 strip stays.
+    - Option C (branch `bug/spawn-off-statue-2`, commit 1ec5fdc574d6: the spawn takes a level spot off the pedestal): 3 of 3 fail at the start with 10 bins off the ground.
+      The worst is bin 26: rim 17.04, ground 16.23, slope 30°, edge (−1.55, 13.04). The middle and the end each have 4 bins off the ground and 30–33 capped passes (26 at the start).
+      The export has no mountain triangles.
 - **Expected:** the performer starts on the grass beside the statue, and the rim stays on the ground.
 - **Reproduction:** record any take on the default scene in capture.
 - **Next:**
   - Find what the rim stands on at bin 12 with the spawn fix: geometry that the test's ground list (grass and mountain) leaves out, or an export fault.
   - A spawn spot off the statue with flat ground at the rim, and with the mountain more than 6 m away, is also acceptable.
+  - Owner decision: merge option E (passes the bar, fixes the statue start, keeps the B-081 strip), or keep working on C (removes the strip, fails the rim on a 30° slope).
 
 ### B-085 — Deep zoom: the camera mode is "follow", not "free", when the wheel stops (hosted, once)
 

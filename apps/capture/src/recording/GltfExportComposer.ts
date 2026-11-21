@@ -22,6 +22,7 @@ import type { PointSampleStore } from './PointSampleStore';
 import { type MeaningDraft, PointResolver, type PointResolutionReport } from './PointResolver';
 import { SceneBubbleSampler } from './SceneBubbleSampler';
 import { nextFrame } from '../shared/async';
+import { sparseMorphTargets } from './sparseMorphTargets';
 
 interface MorphExportBinding {
   uuid: string;
@@ -287,7 +288,7 @@ export class GltfExportComposer {
         scene,
         (result) => {
           if (result instanceof ArrayBuffer) {
-            resolve(new Blob([result], { type: 'model/gltf-binary' }));
+            resolve(new Blob([sparseMorphTargets(result)], { type: 'model/gltf-binary' }));
           } else {
             resolve(new Blob([JSON.stringify(result)], { type: 'application/json' }));
           }
@@ -417,7 +418,7 @@ export class GltfExportComposer {
       exporter.parse(
         scene,
         (result) => {
-          if (result instanceof ArrayBuffer) resolve(new Blob([result], { type: 'model/gltf-binary' }));
+          if (result instanceof ArrayBuffer) resolve(new Blob([sparseMorphTargets(result)], { type: 'model/gltf-binary' }));
           else resolve(new Blob([JSON.stringify(result)], { type: 'application/json' }));
         },
         reject,

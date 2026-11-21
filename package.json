@@ -35,6 +35,7 @@
     "test:xr:all": "pnpm run test:xr:capture && pnpm run test:xr:viewer",
     "test:xr:smoke": "pnpm run test:xr:all",
     "test:smoke:pipeline": "pnpm --filter @holoim/web run test:e2e:pipeline",
+    "test:usdz-tools": "bash scripts/verify-usdz-tools.sh",
     "test:portal": "pnpm --filter @holoim/web run test:e2e:portal",
     "doctor": "node scripts/doctor.mjs",
     "hooks:install": "node scripts/hooks/install.mjs",
