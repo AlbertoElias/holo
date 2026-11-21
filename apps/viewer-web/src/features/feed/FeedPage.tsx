@@ -130,7 +130,7 @@ function emptyText(source: FeedSource, creatorName: string | null, creatorMissin
     case "one":
       return "This hologram is not here any more. It may have been deleted.";
     default:
-      return "No holograms yet. Upload one to start the feed.";
+      return "No holograms yet. Record or upload one to start the feed.";
   }
 }
 
@@ -357,7 +357,7 @@ export function FeedPage({ source = { kind: "all" } }: { source?: FeedSource }) 
   );
 
   return (
-    <main className="app-shell" data-flat-device={target.device} data-narrowed={context ? "" : undefined}>
+    <main className="app-shell" data-flat-device={target.device} data-narrowed={context || source.kind === "one" ? "" : undefined}>
       <section ref={feedRef} className="feed-scroll" aria-label="Hologram feed">
         {cards}
         <div ref={sentinelRef} className="feed-sentinel" aria-hidden="true" />

@@ -7,7 +7,7 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
-### B-080 — VR head walk: the pelvis drops in one frame at each foot landing
+### B-087 — VR head walk: the pelvis drops in one frame at each foot landing
 
 - **Area:** apps/capture (`VrBodySolver` pelvis height in the gait)
 - **Severity:** P3 (found by measurement, not yet seen by the owner)
@@ -19,47 +19,19 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Reproduction:** `pnpm --filter @holoim/capture run test:xr:walk-direction`, then the hips' vertical second
   difference against the sample time `t` in `output/ci-walk-direction/head-samples.json`.
 
-### B-073 — VR elbows point out or up, not down (fixed elbow hint)
+### B-076 — No-fingers avatar's desktop take diverges from the shipped avatar on `main`
 
-- **Area:** apps/capture (`ArmIkSolver`, `AvatarRig.createArmIkChain`)
-- **Severity:** P2
-- **Observed:** 2026-11-20
-- **Evidence:** `test:xr:arms` and the Quest 3 hand take (`docs/features/realistic-avatar-motion.md`,
-  cause 24). The bend plane comes from a fixed avatar-space hint that points almost straight
-  sideways (`elbowHintLocal`). Elbow swivel about the shoulder–wrist line (0° down, 90° out):
-  Quest take median 92° (elbows straight out the whole take); scripted rest and walk 140° (forward
-  and up, 93–100% of frames above 120°); low side reach −175° (elbow up).
-- **Expected:** a relaxed arm's elbow hangs down and back; a reach bends it down and out.
-- **Reproduction:** `cd apps/capture && node --import tsx scripts/run-xr-checks.ts arms`, rows
-  rest, side-low and walk, column swivelMed.
-- **Decision needed (owner):** a better constant hint, or an elbow from the pose or from
-  recorded motion (the owner prefers recorded motion to hand-tuned springs).
-
-### B-074 — VR shoulders swing past a human range
-
-- **Area:** apps/capture (`ArmIkSolver` protraction)
-- **Severity:** P2
-- **Observed:** 2026-11-20
-- **Evidence:** cause 24. The clavicle aims at the target near full reach. Clavicle swing range:
-  Quest take 77°, scripted hands 103°, across and chest reaches 68° (a human clavicle moves
-  about 25–30°). The steep band (`smoothstep` 0.75–1.0 of the reach) still steps the clavicle
-  up to 21°/frame on the across reach and 22° on the Quest take.
-- **Expected:** the shoulder shrugs and protracts in a human range, without steps.
-- **Reproduction:** as B-073, columns clavPush and clavStep.
-- **Decision needed (owner):** cap the clavicle (a wrist then misses long reaches, the
-  height-fitted arm is short) or fit the avatar's arm length to the user's.
-
-### B-075 — Controllers miss long reaches by 15 cm
-
-- **Area:** apps/capture (`HandEmbodiment`, `ArmIkSolver` reach stretch)
-- **Severity:** P3
-- **Observed:** 2026-11-20
-- **Evidence:** cause 24: forward-far and overhead rows, controller wrist error 14.8 cm (hands
-  3.6 cm). The 8% reach stretch is for tracked hands only; on controllers it broke the IWER
-  resize take and desktop-reach-interruptions (gap 4).
-- **Expected:** the avatar's hand stays on the controller on a full reach.
-- **Reproduction:** as B-073 with `ARM_REACH_INPUTS=controller`.
-- **Decision needed (owner):** together with B-074 (arm-length fit would close both).
+- **Area:** apps/capture (`scripts/ci-avatar-formats-playwright.ts`, desktop locomotion take)
+- **Severity:** P3 (the check fails; no person has seen a wrong pose)
+- **Observed:** 2026-11-20, on `main` (`55f421598851`) and on `bug/vr-arm-natural`, the same values
+- **Evidence:** `XR_AVATAR_ONLY=no-fingers` avatars check: the take's states are
+  walk>idle>fall>idle>jump>fall>idle against the shipped avatar's
+  walk>idle>fall>idle>fall>idle>jump>fall>idle, and leftHand is 4.0 / 7.1 / 1.6 / 4.0 cm off at
+  2200 / 2300 / 2500 / 2600 ms. Its object sub-check also fails, on the B-069 desktop and phone rows.
+- **Expected:** the no-fingers avatar plays the same take as the shipped avatar, inside the pose tolerance.
+- **Reproduction:** `cd apps/capture && XR_AVATAR_ONLY=no-fingers node --import tsx scripts/run-xr-checks.ts avatars`
+- **Cause (suspected):** the physics of the take diverges (one fall>idle is missing), so the hand
+  error follows from a different state, not from the arm solve.
 
 ### B-069 — Desktop and phone object checks fail on `main` (outside `verify:pr`)
 
@@ -100,6 +72,41 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   - Other runs of the same file pass all four cases.
 - **Expected:** the CPU budget (`ITIMER_PROF`) fires only when the conversion itself spends 100 s of CPU.
 - **Reproduction:** `bash apps/viewer-api/tools/check_usdz_tools.sh <watering.glb> <out>` on a loaded Mac. It is intermittent (about 1 run in 3 so far). The case with audio is the one that fails, so the ffmpeg child or its teardown is a suspect.
+
+### B-081 — A dark strip of the default scene's mountain floats behind the performer on the card
+
+- **Area:** apps/capture (`SceneBubbleSampler.triangleInsideBubble`), apps/viewer-web (feed dome clip)
+- **Severity:** P3
+- **Observed:** 2026-11-20, phone journey audit, card seen from behind the performer
+- **Evidence:**
+  - The strip is 82 triangles of `Montanha_lambert13_0`, 5.99–8.67 m from the bubble centre.
+  - The export keeps a triangle whose nearest point lies within 6 m of a sample.
+  - The feed's dome (radii about 7 × 4.7 × 7 m) is wider than the 6 m reach, so the card shows the triangles.
+  - The viewer, XR and AR fade the set past the reach, so they do not show it.
+  - Renders and per-mesh measurements are in the session notes `option-b/` folder (`compare.jpg`, `C-compare.jpg`, `clip-reach-3d.txt`).
+- **Expected:** set past the take's reach does not float as a separate shape on the card.
+- **Tried and rejected:**
+  - A hard cut at the reach in the feed: it broke a structure 2 m behind the performer on an old take.
+  - The sphere's soft fade in the feed: it faded the ground under the performer on another old take.
+  - The owner kept the card as it is.
+- **Next:** a take whose spawn keeps the mountain more than 6 m away removes the strip at its source (B-082).
+- **Reproduction:** post a phone take on the default scene, then view its card from behind the performer.
+
+### B-082 — A take on the default scene starts on the statue
+
+- **Area:** apps/capture (`CharacterMotor` spawn search), apps/viewer-web (cloche rim)
+- **Severity:** P2
+- **Observed:** 2026-11-20, phone journey audit
+- **Evidence:**
+  - The spawn search takes the scene's centre first, and the statue stands there, so every default-scene take starts on top of it.
+  - The fix 3400acffe803 (branch `bug/spawn-off-statue`) skips a pedestal.
+  - With that fix, `bubble-capture.pipeline.spec.ts` failed twice with "start: bins off the ground". At bin 12 the rim is at 18.67 and the raycast ground at 17.91, edge (7.95, 2.99).
+  - So the fix is not on `main`.
+- **Expected:** the performer starts on the grass beside the statue, and the rim stays on the ground.
+- **Reproduction:** record any take on the default scene in capture.
+- **Next:**
+  - Find what the rim stands on at bin 12 with the spawn fix: geometry that the test's ground list (grass and mountain) leaves out, or an export fault.
+  - A spawn spot off the statue with flat ground at the rim, and with the mountain more than 6 m away, is also acceptable.
 
 ## Entry template
 

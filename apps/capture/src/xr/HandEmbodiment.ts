@@ -15,9 +15,13 @@ const SIDES = ['left', 'right'] as const;
 // The forearm rolls by half the wrist twist (no rig has twist bones), so the
 // skin twists along the forearm and not all at the wrist.
 const FOREARM_TWIST_SHARE = 0.5;
-// Tracked hands may stretch an arm up to 8% past full reach (ArmIkSolver).
-// Controllers keep the unstretched arm: their grip and resize checks are tuned on it.
+// The camera tracker's tracked hands may stretch an arm up to 8% past full
+// reach (ArmIkSolver); its controllers keep the unstretched arm.
 const ARM_REACH_STRETCH = 0.08;
+// In VR the arm has a constant human length (ArmIkChain.armLengthFit) and the
+// recorded arm model; past full reach it may stretch by this small reserve,
+// for both sources (under AvatarColliders' 2% rebuild step, and not visible).
+const VR_REACH_RESERVE = 0.018;
 
 // Avatar bones that sit on the same anatomical joint as each WebXR hand joint;
 // tips are the distal bones' end sites, when the rig has them.
@@ -100,6 +104,10 @@ export class HandEmbodiment {
 
   /** Clears per-session retarget state on XR entry and exit. */
   resetRuntimeState(): void {
+    for (const side of SIDES) {
+      const chain = this.armChains[side];
+      if (chain) chain.clavicleAngles = undefined;
+    }
     this.legacyRetargeter?.reset();
     this.fingerRetargeter.resetRuntimeState();
   }
@@ -135,8 +143,10 @@ export class HandEmbodiment {
   /**
    * Solves both arms toward the tracked hands. `headAnchor` gives the world
    * point tracked hand offsets are measured from (the tracked or avatar eyes).
+   * `vr` (with the step's `deltaSec`) selects the VR arm: the recorded arm
+   * model and the fitted arm length; the camera tracker passes none.
    */
-  update(headAnchor: (out: THREE.Vector3) => THREE.Vector3): void {
+  update(headAnchor: (out: THREE.Vector3) => THREE.Vector3, vr?: { deltaSec: number }): void {
     if (!this.rigReady || !this.avatar.avatar) return;
 
     this.tracking.updateHandTrackingTargets(headAnchor);
@@ -147,7 +157,9 @@ export class HandEmbodiment {
       const trackingState = this.tracking.getHandTrackingState(side);
       if (!chain) continue;
       if (!trackingState.poseValid) {
-        this.ikSolver.restLengths(chain);
+        // In VR the arm keeps its fitted length while the hand is lost, so it
+        // does not shrink and grow again on regain (and the take records no pop).
+        if (!vr) this.ikSolver.restLengths(chain);
         continue;
       }
 
@@ -155,14 +167,20 @@ export class HandEmbodiment {
       // A held pose keeps the reach of the source it holds, so a lost hand's arm does not snap.
       const source = this.tracking.getHandPoseSource(side);
       if (source !== 'held') this.handReach[side] = source === 'xr-hand';
-      const maxStretch = this.handReach[side] ? ARM_REACH_STRETCH : 0;
+      const maxStretch = vr ? VR_REACH_RESERVE : this.handReach[side] ? ARM_REACH_STRETCH : 0;
       // Nothing else poses the clavicle in VR, so it still holds the last
       // solve's swing. Start from bind: the protraction reads the reach from
       // the resting shoulder, not from last frame's swing (that feedback made
       // the shoulder pop up to 70° in one frame on near-body reaches).
       chain.shoulder.quaternion.copy(chain.shoulderBindQuaternion);
       chain.shoulder.updateMatrixWorld(true);
-      if (!this.ikSolver.solve(chain, trackingState.targetPosition, trackingState.targetQuaternion, this.avatar.avatarRoot, { handWorldQuaternion: handWorld, maxStretch, forearmTwistShare: FOREARM_TWIST_SHARE })) {
+      if (!this.ikSolver.solve(chain, trackingState.targetPosition, trackingState.targetQuaternion, this.avatar.avatarRoot, {
+        handWorldQuaternion: handWorld,
+        maxStretch,
+        forearmTwistShare: FOREARM_TWIST_SHARE,
+        armModel: vr,
+        armLengthRatio: vr ? chain.armLengthFit : 1
+      })) {
         if (!this.ikWarningLogged) {
           console.warn('VR arm IK solve produced invalid output; skipping frame write.');
           this.ikWarningLogged = true;

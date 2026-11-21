@@ -163,14 +163,10 @@ Routing is the agent's job, not the user's. Do it automatically:
   tier check: `-p light` for a bounded diff or log read, `-p standard` for
   verifier and design reviews, `-p deep` only when the user approves it in
   that task. Prefer a Claude subagent when one fits.
-- Gemini's Neon model reviews every design decision first: a feature's
-  design review of UI, a visual direction, a layout, taste, and UI or
-  product copy. Run `scripts/gemini-review.sh <prompt-file>`; it runs Neon
-  through the Antigravity CLI (`agy`) in plan mode on the owner's
-  subscription and never uses an API key. Name the brief, the styleguide,
-  `tokens.json` and any screenshots by path in the prompt. When the script exits 75 (no usage left, not signed in, or no
-  Neon model), run the `design-reviewer` subagent instead. Confirm each
-  finding yourself; taste decisions stay with the user.
+- Do not start Gemini (`agy -p` or `agy acp`) from an agent or a script on
+  the owner's Google login: Google's consumer terms do not allow it, and it
+  can suspend the account. `scripts/gemini-review.sh` is disabled and always
+  exits 75. Design reviews use the `design-reviewer` subagent.
 - The independent verifier in `docs/FEATURE_WORKFLOW.md` uses a different
   vendor from the implementer when one has quota (for example Codex
   implements, Claude verifies); same-model review shares the implementer's

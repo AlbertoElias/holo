@@ -1488,6 +1488,16 @@ bug above.)
 - **Fix:** the build samples each mix over a weight grid, at the mouth's points and at points inside each of its faces, and pushes each shape's mouth forward one column at a time, so every sampled mix keeps the mouth 0.4 mm in front of the skin. Largest push 3.0 mm (jawOpen); the report lists them under `mouthMixes`.
 - **Closed:** 2026-11-20.
 
+### B-080 — The feed card's hover-hint check reads the hint still fading out, and races the reach fold
+
+- **Area:** `apps/viewer-web/e2e/redesign.spec.ts` ("desktop/phone: the feed card in the new look": the fold check and the hover-hint loop)
+- **Severity:** P2 (test flake: hosted run 44789036601 on `7fcacf540c50` went red in Viewer shard 2/4; that merge changed no viewer code)
+- **Observed:** 2026-11-20, hosted CI: `strict mode violation: locator('[data-hint]') resolved to 2 elements` ("Step inside" and "Pause"). Under `CI_EMULATE_LOAD=2` two more failures in the same test: `locator.hover` timing out on a reach control that `.portal-controls` intercepts, and `data-reach` still `shown` after 5 s at the first fold check.
+- **Evidence:** `packages/ui-dom/src/Hint.tsx` keeps a hint mounted until its fade-out ends, and within `WARM_MS` the next control's hint shows at once, so two `[data-hint]` nodes exist for one fade; the check took any hint on the page. `useReach` (`HologramCard.tsx`) folds the reach controls `tokens.glyph.idleAfter` (4 s) after the last pointer or focus event, to no width (`max-width: 0`), so a slow loop lost them from its live `:visible` list mid-way, and a 5 s wait for the fold left 1 s of slack. The product behaviour is intended in all three.
+- **Expected:** each step judges the hovered control's own hint, with the reach controls present while they are named, and the fold check allows the idle time it waits on.
+- **Reproduction:** load-dependent; the whole spec ×5 at CI's 2 workers under `CI_EMULATE_LOAD=2` failed 3 of 45 before the reach part of the fix.
+- **Fix:** the hint locator keeps only the hint whose text is the control's name and needs exactly one at opacity 1; the loop holds the card reached with the spec's `holdReach` and lets go before the final "no hint after the mouse leaves" check; the fold check waits `idleAfter` + 5 s. The loop names only this card's controls and the dock (another card's folded controls keep a clipped, non-empty box, so they count as visible but cannot be hovered), and the spec's two AR session waits allow 30 s (one timed out at the 10 s default under load). The whole spec ×5 at 2 workers under `CI_EMULATE_LOAD=2 scripts/ci-emulate.sh` then passed 45/45.
+
 ### B-074 — Dressed house avatars show no glasses (specks instead of frames)
 
 - **Area:** packages/avatar-look (`dressAvatar` in `src/dress.ts`), so the phone's live avatar, posted takes and authored takes
@@ -1569,4 +1579,50 @@ bug above.)
   fails a head walk start above 10 m/s².
 - **Open:** the stick walk start is not eased (29–45 m/s²): the stick moves the view at full speed at once, and
   view acceleration in VR is a comfort risk. That is an owner decision.
+- **Closed:** 2026-11-20.
+
+> **Two bugs use the same numbers.** B-073 and B-074 above are the look bugs (smile, glasses).
+> B-073, B-074 and B-075 below are the VR arm bugs. The arm bugs were filed first, in `BUGS.md`.
+
+### B-073 — VR elbows point out or up, not down (fixed elbow hint)
+
+- **Area:** apps/capture (`ArmIkSolver`, `AvatarRig.createArmIkChain`)
+- **Severity:** P2
+- **Observed:** 2026-11-20
+- **Evidence:** `test:xr:arms` and the Quest 3 hand take (`docs/features/realistic-avatar-motion.md`,
+  cause 24). The bend plane comes from a fixed avatar-space hint that points almost straight
+  sideways (`elbowHintLocal`). Elbow swivel about the shoulder–wrist line (0° down, 90° out):
+  Quest take median 92° (elbows straight out the whole take); scripted rest and walk 140° (forward
+  and up, 93–100% of frames above 120°); low side reach −175° (elbow up).
+- **Expected:** a relaxed arm's elbow hangs down and back; a reach bends it down and out.
+- **Reproduction:** `cd apps/capture && node --import tsx scripts/run-xr-checks.ts arms`, rows
+  rest, side-low and walk, column swivelMed.
+- **Fix:** the elbow pole comes from a ridge fit to recorded CMU arms (13 features: the normalised wrist position, its squares and the palm's across direction, plus a small fixed prior), not a fixed hint. Swivel median rest / stand / walk 141° / 131° / 138° → 40° / 34° / 39° (hands), 140° / 132° / 133° → 34° / 33° / 34° (controllers); side-low −175° → 60°; flips 1.0 → 0 per minute; Quest take 92.7° → 37.6°. Brief: [`docs/features/archive/vr-arm-natural.md`](../features/archive/vr-arm-natural.md).
+- **Closed:** 2026-11-20.
+
+### B-074 — VR shoulders swing past a human range
+
+- **Area:** apps/capture (`ArmIkSolver` protraction)
+- **Severity:** P2
+- **Observed:** 2026-11-20
+- **Evidence:** cause 24. The clavicle aims at the target near full reach. Clavicle swing range:
+  Quest take 77°, scripted hands 103°, across and chest reaches 68° (a human clavicle moves
+  about 25–30°). The steep band (`smoothstep` 0.75–1.0 of the reach) still steps the clavicle
+  up to 21°/frame on the across reach and 22° on the Quest take.
+- **Expected:** the shoulder shrugs and protracts in a human range, without steps.
+- **Reproduction:** as B-073, columns clavPush and clavStep.
+- **Fix:** the clavicle protraction comes from the recorded arms, the elevation follows the shoulder rhythm, and a full reach pushes the shoulder toward the target; all inside a soft 30° limit and a 150°/s rate limit. Elevation range 86° → 23° (hands), 127° → 23° (controllers); protraction range 103° → 37° (worst segment 83° → 27°); largest step 21° → 7.1°; Quest take protraction 76.7° → 26.7°.
+- **Closed:** 2026-11-20.
+
+### B-075 — Controllers miss long reaches by 15 cm
+
+- **Area:** apps/capture (`HandEmbodiment`, `ArmIkSolver` reach stretch)
+- **Severity:** P3
+- **Observed:** 2026-11-20
+- **Evidence:** cause 24: forward-far and overhead rows, controller wrist error 14.8 cm (hands
+  3.6 cm). The 8% reach stretch is for tracked hands only; on controllers it broke the IWER
+  resize take and desktop-reach-interruptions (gap 4).
+- **Expected:** the avatar's hand stays on the controller on a full reach.
+- **Reproduction:** as B-073 with `ARM_REACH_INPUTS=controller`.
+- **Fix:** the full-reach shoulder push, a fitted arm length (0.406 × shoulder height, at most ×1.08) and a 1.8% reserve, with no reach stretch. Controller wrist p95 forward-far / overhead 14.8 / 14.5 → 12.3 / 12.0 cm; those targets lie at 1.10× and 1.2× of a full reach, past a human arm. Forward 0.3 → 0.0 cm. Arm length spread 8% → 1.8%.
 - **Closed:** 2026-11-20.
