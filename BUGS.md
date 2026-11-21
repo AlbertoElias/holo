@@ -7,24 +7,17 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
-### B-077 — VR stick/head walk start: the body jumps from rest to full speed in one frame (arms pop)
+### B-087 — VR head walk: the pelvis drops in one frame at each foot landing
 
-- **Area:** apps/capture (`VrBodySolver` root translation at the first recorded step)
-- **Severity:** P2 (the owner saw it as a pop at the end of the controller arm video)
-- **Observed:** 2026-11-20, on `main` (`55f421598851`) and on `bug/vr-arm-natural`
-- **Evidence:** `arms` check, controller run, walk segment (`output/arm-after2/controller-samples.json`).
-  The tracked head moves 4.4 cm ahead while the avatar root holds still; at the first recorded step
-  (27.17 s) the root goes from 0 to about 1.1 m/s in one frame (3.7 cm per frame). World acceleration
-  at that frame: hips 33.7 m/s², chest 20.8 m/s², wrist 1.7 m/s² (the hand stays on the controller), so
-  the elbow folds against the torso (22 m/s² relative to the chest). Before the arm change: shoulders
-  26.7 m/s² at the same frame.
-- **Expected:** the body eases into the walk; no frame of the walk start above the walk's own
-  acceleration (about 7 m/s² on the hips here).
-- **Reproduction:** `cd apps/capture && ARM_REACH_INPUTS=controller node --import tsx scripts/run-xr-checks.ts arms`,
-  then the hips' world acceleration in the walk segment of `controller-samples.json`.
-- **Decision (pending owner confirmation):** fixed by the walk owner, not in the arm change: the arm
-  brief kept `VrBodySolver` out of scope. It is the walk-start transition gap of
-  `docs/features/archive/vr-recorded-walk.md` in `TODOS.md`.
+- **Area:** apps/capture (`VrBodySolver` pelvis height in the gait)
+- **Severity:** P3 (found by measurement, not yet seen by the owner)
+- **Observed:** 2026-11-20, on `bug/vr-legs-direction`
+- **Evidence:** `test:xr:walk-direction`, head rows, with the head moved on every XR frame. In the steady walk the hips'
+  vertical acceleration averages 1.8–4.1 m/s², but single frames at a foot landing reach 12.8 (forward), 20.7 (left),
+  16.8 (back), 20.2 (right), 18.8 and 18.6 m/s² (diagonals). The head bobs smoothly (2 cm).
+- **Expected:** the pelvis rises and falls smoothly with the stride, with no single-frame drop.
+- **Reproduction:** `pnpm --filter @holoim/capture run test:xr:walk-direction`, then the hips' vertical second
+  difference against the sample time `t` in `output/ci-walk-direction/head-samples.json`.
 
 ### B-076 — No-fingers avatar's desktop take diverges from the shipped avatar on `main`
 

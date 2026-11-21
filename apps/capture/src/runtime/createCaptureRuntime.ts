@@ -493,7 +493,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
         __setBodyFaults: (faults) => body.setFaults(faults),
         __setHandOverlay: (enabled) => capture.diagnostics.setHandOverlay(enabled),
         __setHeightEvidenceView: (enabled) => capture.diagnostics.setHeightEvidenceView(enabled),
-        __setSpectatorView: (mode) => capture.diagnostics.setSpectatorView(mode),
+        __setSpectatorView: (mode, options) => capture.diagnostics.setSpectatorView(mode, options),
         __captureHandCalibrationPose: () => hands.captureCalibrationPose(),
         __resetHandCalibrationPose: () => hands.resetCalibrationPose(),
         __loadObjectUrl: (url) => objects.loadUrl(url),

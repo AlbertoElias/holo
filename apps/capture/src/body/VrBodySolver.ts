@@ -156,6 +156,13 @@ const TARGET_SPEED_TIME_SEC = 0.08;
 const LEAN_DROP_TIME_SEC = 0.3;
 // The root may outrun the head by this much while catching up.
 const CATCH_UP_EXTRA_SPEED = 0.3;
+// The root's velocity changes by at most this much a second (m/s²), about a brisk walk start. Without it the root
+// held still while the head left, then took the full walking speed in one frame when the lean leash or the walk
+// caught it (hips 15-32 m/s², B-077).
+const ROOT_ACCEL = 8;
+// A planned step longer than this in one frame is a re-origin (a respawn or teleport leaves the head far from the
+// root), not a walk: it passes at once, as a jump.
+const ROOT_JUMP_METERS = 0.3;
 // Stepping.
 const GAIT_ON_SPEED = 0.25;
 const GAIT_OFF_SPEED = 0.15;
@@ -262,6 +269,11 @@ const WALK_SPEED_EASE_PER_SEC = 12;
 // Never slower: a swing in flight at a stop still lands.
 const WALK_RATE_MIN = 0.5;
 const WALK_RATE_MAX = 3;
+// Sideways the feet cannot pass each other, so a pair of steps carries the body at most this far (in legs) across
+// its facing. Travel with a sideways share steps faster to keep that pace, up to SIDE_MAX_CADENCE steps a second;
+// at the old cadence a 1.8 m/s strafe left the feet half a metre behind the pelvis.
+const SIDE_CYCLE_LEGS = 0.7;
+const SIDE_MAX_CADENCE = 4.5;
 // Sideways and backward travel keep the procedural step (decision 4).
 const RECORDED_ON_COS = Math.cos(THREE.MathUtils.degToRad(40));
 const RECORDED_OFF_COS = Math.cos(THREE.MathUtils.degToRad(50));
@@ -359,6 +371,8 @@ export class VrBodySolver {
   private readonly targetVelocity = new THREE.Vector3();
   private readonly gaitVelocity = new THREE.Vector3();
   private readonly rootOvershootVelocity = new THREE.Vector3();
+  /** The root's last planned velocity (m/s), for ROOT_ACCEL. */
+  private readonly plannedVelocity = new THREE.Vector3();
   private readonly prevHead = new THREE.Vector3();
   private readonly feet: Record<'left' | 'right', FootState>;
 
@@ -558,6 +572,7 @@ export class VrBodySolver {
     this.rootVelocity.set(0, 0, 0);
     this.targetVelocity.set(0, 0, 0);
     this.rootOvershootVelocity.set(0, 0, 0);
+    this.plannedVelocity.set(0, 0, 0);
     const bindDims = this.bind!.dims;
     this.hipsToEyes = bindDims.eyeHeight - bindDims.hipHeight;
     this.standingHeadHeight = head.worldPosition.y - this.groundUnder(rootPosition, ground);
@@ -661,7 +676,10 @@ export class VrBodySolver {
 
   // Before physics: turns the body and returns where the root should move
   // (horizontal displacement) so the body stays under the head.
-  planRoot(head: BodyHeadInput, rootPosition: THREE.Vector3, deltaSec: number, ground: GroundSampler, outDisplacement: THREE.Vector3): THREE.Vector3 {
+  // carried: the rig's input move since the last plan. The head moved by it, and the motor moves the root by it
+  // again this frame, so the root follows only the rest of the head's move (a stick walk counted twice ran the root
+  // ahead of the head to the leash, and the spine leaned back to reach the eyes).
+  planRoot(head: BodyHeadInput, rootPosition: THREE.Vector3, deltaSec: number, ground: GroundSampler, outDisplacement: THREE.Vector3, carried?: THREE.Vector3): THREE.Vector3 {
     outDisplacement.set(0, 0, 0);
     if (!this.bind || !this.aligned || deltaSec <= 0) return outDisplacement;
     const dt = deltaSec;
@@ -725,8 +743,8 @@ export class VrBodySolver {
     if (this.translating) {
       // Move with the head, and close the remaining gap exponentially so the
       // root never passes the target.
-      next.x += this.rootTarget.x - this.prevRootTarget.x;
-      next.z += this.rootTarget.z - this.prevRootTarget.z;
+      next.x += this.rootTarget.x - this.prevRootTarget.x - (carried?.x ?? 0);
+      next.z += this.rootTarget.z - this.prevRootTarget.z - (carried?.z ?? 0);
       const k = 1 - Math.exp(-dt / ROOT_CATCH_UP_TIME_SEC);
       const headMoveX = next.x - this.root.x;
       const headMoveZ = next.z - this.root.z;
@@ -768,7 +786,15 @@ export class VrBodySolver {
       next.x = this.rootTarget.x - (clampedAlong * forwardX + clampedAcross * -forwardZ);
       next.z = this.rootTarget.z - (clampedAlong * forwardZ + clampedAcross * forwardX);
     }
-    return outDisplacement.subVectors(next, this.root).setY(0);
+    outDisplacement.subVectors(next, this.root).setY(0);
+    if (outDisplacement.length() > ROOT_JUMP_METERS) return outDisplacement;
+    // Ease the root's velocity toward the plan; the head may run a little past the leash meanwhile.
+    const change = this.planB.copy(outDisplacement).multiplyScalar(1 / dt).sub(this.plannedVelocity);
+    const most = ROOT_ACCEL * dt;
+    if (change.length() > most) change.setLength(most);
+    this.plannedVelocity.add(change);
+    outDisplacement.copy(this.plannedVelocity).multiplyScalar(dt);
+    return outDisplacement;
   }
 
   // After physics: plants and steps the feet around the new root and poses the
@@ -952,6 +978,9 @@ export class VrBodySolver {
     if (!this.gaitActive && speed > GAIT_ON_SPEED) {
       this.gaitActive = true;
       this.gaitSteps = 0;
+      // A sideways walk starts with the foot on the side of travel; the other foot cannot pass it (B-079).
+      const across = gaitVelocity.x * Math.cos(this.bodyYawValue) - gaitVelocity.z * Math.sin(this.bodyYawValue);
+      if (Math.abs(across) > 0.7 * speed) this.nextGaitSide = across > 0 ? 'right' : 'left';
     } else if (this.gaitActive && speed < GAIT_OFF_SPEED) {
       this.gaitActive = false;
     }
@@ -962,7 +991,7 @@ export class VrBodySolver {
       // lift-off, so a planted foot never needs to slide.
       // Steps per second rise with speed (about 2.2/s at 1.2 m/s); each swing
       // takes 80% of a step, 40% of the gait cycle, as in human walking.
-      const cadence = clamp(1.6 + 0.5 * speed, 1.6, 2.6);
+      const cadence = this.sideCadence(gaitVelocity, clamp(1.6 + 0.5 * speed, 1.6, 2.6));
       const period = 1 / cadence;
       if (this.sinceLastLanding < MIN_STANCE_SEC * 0.5) return;
       let side = this.nextGaitSide;
@@ -1056,6 +1085,9 @@ export class VrBodySolver {
     let rate = ratio >= 1 ? ratio : Math.sqrt(ratio);
     // The first steps from standing are quicker, as the body accelerates.
     if (this.gaitSteps < 2) rate /= 0.7;
+    // Two steps a clip cycle: a sideways share of the travel speeds the clip up the way it speeds the steps up.
+    const cadence = (2 * clamp(rate, WALK_RATE_MIN, WALK_RATE_MAX)) / walk.duration;
+    rate *= this.sideCadence(travel, cadence) / cadence;
     this.walkRate = clamp(rate, WALK_RATE_MIN, WALK_RATE_MAX);
     const inFlight = (this.feet.left.swinging && this.feet.left.recorded) || (this.feet.right.swinging && this.feet.right.recorded);
     const stickShare = this.walkSpeed > 0.1 && this.hasPrevHeadLocal ? clamp(1 - this.localHeadSpeed / this.walkSpeed, 0, 1) : 0;
@@ -1070,6 +1102,13 @@ export class VrBodySolver {
       this.prevWalkPhase = this.walkPhase;
     }
     this.walkPhase = (this.walkPhase + (this.walkRate * dt) / walk.duration) % 1;
+  }
+
+  // Steps a second for travel at `velocity`: `base`, or faster where the travel's sideways share needs it.
+  private sideCadence(velocity: THREE.Vector3, base: number): number {
+    const across = Math.abs(velocity.x * Math.cos(this.bodyYawValue) - velocity.z * Math.sin(this.bodyYawValue));
+    const needed = (2 * across) / (SIDE_CYCLE_LEGS * this.bind!.dims.legLength);
+    return Math.max(base, Math.min(needed, SIDE_MAX_CADENCE));
   }
 
   private furthestBehind(rootPosition: THREE.Vector3, velocity: THREE.Vector3): 'left' | 'right' {
