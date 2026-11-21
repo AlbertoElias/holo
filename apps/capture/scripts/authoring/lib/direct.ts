@@ -16,7 +16,7 @@ import type { FaceGaze, FaceWeights } from '../../../src/face/faceTypes.ts';
 import { resetPose, type LoadedAvatar } from './avatar.ts';
 import { ArmMeter, armPoints, armSkin, BodySkin, measureArmBody, partDepth, propNormal, propParts, propSurface, type ArmBody, type ArmReport } from './arm-quality.ts';
 import { FACE_MIXES, GESTURES, STATE_FACES, envelope, gestureCycle, holdingsOf, pointObjects, resolveTiming, validateSheet, type BeatSheet, type Direction, type Holding, type ObjectSpec, type PerformerSpec, type Place, type Point, type Resolved, type Side } from './beats.ts';
-import { FINGERS, HAND_SHAPES, blendPose, shapePose, type FingerName, type HandPose } from './hands.ts';
+import { FINGERS, HAND_SHAPES, blendPose, shapePose, type FingerName, type HandPose, type HandRig } from './hands.ts';
 import { elbowPole } from '../../../src/ik/armPoseModel.ts';
 import { armRestOffset, bodyUp, hangArm, keepingTwist, rollHand, moveBoneWorld, orientHand, plantFeet, restElbowHint, rotateBoneWorld, solveArm, steadyTwist, easeTwist, toWorld, turnBody, TURN_SHARE } from './pose.ts';
 import { speakingAt, visemesAt, type LineLips } from './lips.ts';
@@ -58,6 +58,9 @@ const LEAN_SHARE: ReadonlyArray<readonly [VrmHumanoidBone, number]> = [['spine',
 
 // Held objects: the fingers close over this long before a take's hand arrives, and open over this long after a put's lands.
 const GRIP_CLOSE = 0.2;
+/** How far a finger may rest into what it holds (skin presses a little), metres, and the finger's radius as the arm meter takes it. */
+const GRIP_REST = 0.002;
+const GRIP_FINGER_RADIUS = 0.009;
 const GRIP_OPEN = 0.25;
 /** A put's object settles from where the hand let it go to upright on its place over this long. */
 const PUT_SETTLE = 0.2;
@@ -356,7 +359,8 @@ export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, 
       c.a.frame.quaternion.toArray(tr.root.rotation, f * 4);
       tr.motion.push(motionFrame(c.a, t));
       c.a.scene.updateMatrixWorld(true);
-      meters[ci]!.sample(t, [...stage.props.values()].map((st) => st.prop), (s, prop) => mayTouch(c, s, prop, t));
+      // A hand is measured against what it holds: fingers may rest on it, not sink into it.
+      meters[ci]!.sample(t, [...stage.props.values()].map((st) => st.prop), (s, prop) => gripOf(c.spec.id, s, t)?.prop !== prop && mayTouch(c, s, prop, t));
       see(c, t);
     });
     // Measured as the file plays: every performer at this frame. (A performer
@@ -690,6 +694,49 @@ function heldIn(performer: string, side: Side, t: number): PropState | undefined
     if (st.holdings.some((h) => h.performer === performer && h.side === side && h.from <= t && t <= h.to)) return st;
   }
   return undefined;
+}
+
+/** How far a finger is into what the hand holds, metres: its tip, and the point the arm meter samples (0.4 of the way to the palm). */
+function fingerDepth(rig: HandRig, finger: FingerName, prop: Prop): number {
+  const tip = rig.tip(finger, new THREE.Vector3());
+  if (!tip) return -Infinity;
+  const mid = tip.clone().lerp(rig.palmCenter(new THREE.Vector3()), 0.4);
+  let worst = -Infinity;
+  for (const part of propParts(prop)) worst = Math.max(worst, partDepth(prop, part, tip, GRIP_FINGER_RADIUS), partDepth(prop, part, mid, GRIP_FINGER_RADIUS));
+  return worst;
+}
+
+/**
+ * A hand closes round what it holds only until each finger rests on it: a
+ * fist's grip curl suits a handle, and would sink into a ball. Each finger
+ * that would go in opens (a binary search on its curl) until it touches.
+ */
+function fitGrip(c: Cast, t: number, posed: Partial<Record<Side, HandPose>>): void {
+  for (const s of SIDES) {
+    const rig = c.a.hands[s];
+    const pose = posed[s];
+    const held = gripOf(c.spec.id, s, t);
+    if (!rig || !pose || !held) continue;
+    rig.hand.updateMatrixWorld(true);
+    const curl = { ...pose.curl } as Record<FingerName, number>;
+    let changed = false;
+    for (const finger of FINGERS) {
+      if (fingerDepth(rig, finger, held.prop) <= GRIP_REST) continue;
+      let lo = Math.min(0, curl[finger]); let hi = curl[finger];
+      for (let i = 0; i < 10; i++) {
+        const mid = (lo + hi) / 2;
+        rig.apply({ curl: { ...curl, [finger]: mid }, spread: pose.spread });
+        rig.hand.updateMatrixWorld(true);
+        if (fingerDepth(rig, finger, held.prop) <= GRIP_REST) lo = mid; else hi = mid;
+      }
+      curl[finger] = lo;
+      changed = true;
+    }
+    if (changed) {
+      rig.apply({ curl, spread: pose.spread });
+      rig.hand.updateMatrixWorld(true);
+    }
+  }
 }
 
 /** How closed a hand is on an object (0..1) at `t`, with the object: closing before a take arrives, open again after a put lands. */
@@ -1502,6 +1549,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
   if (flat) { moveHeld(cast, c, t); clearArms(cast, c, t); return; }
 
   // 8. Hands: relaxed, opened by a reach, shaped by hand directions (fingers arrive one after another).
+  const posed: Partial<Record<Side, HandPose>> = {};
   for (const s of SIDES) {
     const hand = a.hands[s];
     if (!hand) continue;
@@ -1563,10 +1611,12 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
       }
     }
     hand.apply(pose);
+    posed[s] = pose;
   }
   a.frame.updateMatrixWorld(true);
   moveHeld(cast, c, t);
   clearArms(cast, c, t);
+  fitGrip(c, t, posed);
 
   // 9. Face: expressions summed, life's face under them, then blinks (always, and on a big look shift), then gaze.
   const weights: FaceWeights = {};
