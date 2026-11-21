@@ -1487,6 +1487,138 @@ without a fix, and nothing said when a piece was done.
 
 No bar changed. `apps/capture/src/`, the viewer and contracts did not change.
 
+### Slice 8: from a one-line idea to a story a viewer gets (2026-11-20)
+
+The owner's verdict on slice 7 (below, under slice 7's evidence) was that the pieces
+tell no story. In the owner's words: "this is more about interpreting the request for a
+hologram better". So this slice changes how an agent reads the idea first. It changes
+the tool only where a story needs something the tool cannot show.
+
+**1. A story step before any beat (skill only).** The hologram-authoring skill gets a
+section "First, the story". The agent does these steps before it writes a beat:
+
+1. Say the story in three parts. **Setup**: who the person is and where they are.
+   **Event**: what happens; it must be a change in the world that a viewer can see.
+   **Reaction**: how the person answers it; the reaction points at its cause.
+2. For each part, write what a viewer must see. The skill gives rules for this:
+   - The role shows through things and actions in the first 1.5 s.
+   - An object that matters has a past. It does not start in the hand.
+   - A small object is made big: size, contrast with the outfit and what is behind
+     it, a clear surface, and chest height for 1 s or more.
+   - The event has a visible cause.
+   - A gift moves toward the viewer and waits.
+3. Mark each item `shown` or `cannot` against a table of what the tool can show.
+4. When an item cannot be shown, change the story and write the change in
+   `story.changes`. Never drop a part silently. If no change keeps the meaning, stop
+   and report it.
+5. Write `story` into the sheet, then the beats in three groups: setup, event and
+   reaction.
+
+Dry runs with three fresh agents (Sonnet; skill only; steps 1 to 4, no build) gave a
+story for each idea and named the changes:
+
+| Idea | Setup | Event | Reaction | Changes the agent wrote |
+|---|---|---|---|---|
+| A baker proud of a loaf | an oven, a loaf shelf, a flour sack | the oven door swings open; she takes out a big loaf; steam | she smells it, holds it out, smiles | the hand cannot pull the door; no apron or hat |
+| A slip laughed off | a table with juice, a jug, a bowl of oranges | her reach knocks a glass; it tips; a puddle grows | she looks at the puddle, then at you; laughs; shrugs | no body slip and no fall, so a tipped glass is "the slip" |
+| A stone given as a gift | a stream strip and a heap of stones | she picks the big orange stone, rubs it bright, a ribbon appears | she holds it out to you and waits | no receiver (the viewer receives it); no sitting |
+
+The agents also named what the skill left unclear: where the object and world syntax
+is, how to "hold out" an object, size numbers, which colours contrast with each
+outfit, a laugh mix, and how much change is enough for an event. The skill answers each.
+
+**2. A story bar.** The blind reader's README gets a fourth part: "Who is this and
+where? What happens? How do they react?" The grader writes
+`story: { setup, event, reaction }` into `comparison.json`, each with `says`, `seen`,
+`reads` and `revise`. `make.ts` gets a `story` row: it passes when all three parts
+read. It is the main bar. The per-beat reading row stays a bar (no owner approval to
+make it advisory; open decision 15). A sheet with no
+`story` gets a fix line that points to the skill step.
+
+**3. Tool gaps the story step found.** The dry runs and the slice 7 faults show four
+gaps. Prototypes for A and B are in the authoring tool only (`lib/beats.ts`,
+`lib/direct.ts`). They write object node tracks, as held objects do now, so the
+export/upload/render contract does not change. Demos (stills and card videos) are under
+the ignored `apps/capture/output/authoring/demos/`.
+
+- **A. Things happen: `drop` and `fall` (prototype, demo `mech`).** A `drop` direction
+  opens the hand; the object leaves with the hand's speed. A world `fall` line knocks an
+  object at rest at a cue, with an optional `push` (m/s). Both fall under gravity,
+  bounce up to two times, and land on the floor or on the top of another object. The
+  spin carries on for a short time, then the object rests on its nearest face. In the
+  demo a knock tips a glass onto its side on the table, and a dropped loaf lands on the
+  table. Without this, an event is an eased turn that the agent must aim by hand.
+- **B. Who they are: `wear` (prototype, demo `mech` and `hands`).** An object with
+  `wear: { on: <bone>, at, turn }` rides that bone: a hat on `head`, an apron on
+  `hips`. It is a box, sphere or cylinder, so it is stiff; an apron does not bend with
+  the legs. Real models from the project's Poly Pizza list (a loaf, an oven) are a
+  possible extra: `props.ts` reads only `polyhaven:` sources today.
+- **C. Hands like a person (today's tool, demo `hands`).** Two reaches show a loaf in
+  both hands at chest height with bent elbows: the right hand holds it, the left reach
+  goes just under it. This needs no tool change; the skill teaches it as the way to
+  show or offer an object, in place of one arm held straight out. A tool change (a
+  two-hand hold, and objects kept out of the face) comes later only if the skill is
+  not enough.
+- **D. A hand-driven change (not built).** The oven door opens as an eased change timed
+  to the reach. The hand does not pull it. A receiver for a gift (a second performer
+  who takes it) is also not built.
+
+**Open tension.** A set (an oven, a shelf, a table) widens what the card frames, so the
+face gets smaller. Slice 7 asked to keep objects within 0.6 m for the faceBox bar. The
+skill tells the agent to keep the set narrow and behind or beside the body.
+
+**The owner's pick** (2026-11-20, "Open decisions for the user", item 14): keep A, B
+and C. D and real models are not in this slice.
+
+**Face measure (2026-11-20).** The review used the box of the face vertices as the
+face size. That box does not know whether the face is turned away, so it counted a
+hidden face as visible. Now `review.ts` measures the drawn face: one unlit id render
+colours each performer's face, and depth hides a face that turns away. On three frames
+per take (0.2, 0.5 and 0.8 of the take) it also computes the vertex box. The review
+fails when the drawn box is outside the vertex box plus 1.5 CSS px.
+
+Proof on five takes (drawn CSS px, vertex-box CSS px, at 0.2 / 0.5 / 0.8):
+
+| Take | 0.2 | 0.5 | 0.8 | Median device px (old) |
+|---|---|---|---|---|
+| iso-her | 32 / 31.9 | 30.6 / 30.6 | 33.3 / 32.9 | 48.9 (47.5) |
+| slip v13 | 26 / 25.7 | 34 / 33.6 | 30 / 29.3 | 45 (43.8) |
+| stone v9 | 24.6 / 24.7 | 30 / 29.1 | 24 / 23.8 | 44 (42.5) |
+| goodbye flat, her | 18.7 / 18.6 | 19.3 / 18.5 | 16.7 / 16.5 | 28 |
+| goodbye flat, him | 0.7 / 26.3 | 23.4 / 25.1 | 1.4 / 25 | 35.1 |
+
+The old error had two directions. For a frontal face the old measure was 1 to 1.5
+device px low, so no past 40 px pass becomes a fail. For a turned head it was high by
+up to the full face (26 px for a face drawn 0.7 px). The goodbye takes now measure:
+flat her 28 and him 35.1; directed her 33 and him 41 (his last second is 8.1, where
+he turns away).
+
+Two performers that stand close need one more rule. The id render gives each
+performer its own blue code in its own materials. Antialiasing blends the edge of one
+face with the background, and a blended pixel can round to the code of the other
+performer. Two such pixels at the edge of her face made his box 23 px too wide. So the
+decode counts a pixel only when its blue is within 8 of a code and at least 2 of its
+4 neighbours have the same code. The review reports the count of pixels it leaves out.
+A copy of her face recoded as his still fails the check.
+
+**Marked face-away seconds (owner decision, 2026-11-21).** The owner chose "b for the
+bar": the 40 px face bar does not apply to a performer in the seconds where the beat
+sheet marks that the head is turned down or away on purpose. In all other seconds the
+bar applies, unchanged. The mark is `faceAway` on the performer, a list of
+`{ "from", "to", "why" }` spans with a reason ("looks down", "walks away"). No mark
+means the bar applies. One performer may mark at most one third of the piece
+(`FACE_AWAY_MAX_SHARE` in `lib/face-bar.ts`; the lead proposed this limit to the owner).
+The sheet check and `review.ts` fail a sheet over the limit or a mark with no reason.
+`review.ts` reports the median face outside and inside the marks
+(`faceSplitDevicePx` in `on-screen.json`) and lists the marked seconds; the
+`faceBox` row reads the median outside the marks. A performer with no face outside the
+marks fails. `scripts/authoring/face-bar-check.ts` checks that an unmarked small face
+still fails. No other bar changes.
+
+**Done when** fresh agents get only the skill and the same three ideas, remake the
+pieces, and a blind reader gets the setup, the event and the reaction in each. Then a
+proof video goes to the owner, `verify:pr` passes, and the work merges to `main`.
+
 ### Later, each against the audition
 
 A second family (a new base with its own design language); per-style
@@ -2075,6 +2207,25 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
     stride, and the arm stretch on and off: about 17% on controllers, up
     to about 26% with tracked hands) and accepted both on 2026-11-20
     ("Videos 1, 2 and 3 look fine", through the lead session).
+
+14. **Slice 8: which tool gaps to keep.** Answered 2026-11-20: "Keep A, B and C".
+    Demos are under
+    `apps/capture/output/authoring/demos/` (`mech`: a hat, an apron, a knocked glass
+    and a dropped loaf; `hands`: a two-hand show).
+    - **(A)** `drop` and `fall` under gravity. Recommended: the slip and every
+      "something happens" story need it.
+    - **(B)** `wear` on a bone (hat, apron). Recommended: it is the cheapest way to
+      show a role.
+    - **(C)** Two-hand show and offer, taught in the skill with today's reaches.
+      Recommended; no tool change.
+    - Not built: a door the hand pulls, a second performer who takes a gift, real
+      low-poly models (Poly Pizza). Each is a later slice if the owner wants it.
+
+15. **Slice 8: should the per-beat reading become advisory?** Answered 2026-11-20:
+    "Agree with recommendations". Both stay bars: a piece is done only when the story
+    and every beat read. (Reversible: one `advisory: true` in `make.ts` `readingRow`.)
+    The evidence is each piece's two results (story parts read, beats read), in the
+    slice 8 evidence below. This is not approval of a piece or of a piece video.
 
 ## Test plan and evidence
 

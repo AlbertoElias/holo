@@ -32,6 +32,7 @@ type Area =
   | "e2e"
   | "pipeline"
   | "portal"
+  | "usdz_tools"
   | "web";
 
 interface Step {
@@ -53,6 +54,7 @@ export const STEPS: Step[] = [
   { area: "e2e", label: "knowledge", command: "pnpm run test:knowledge" },
   { area: "pipeline", label: "pipeline", command: "pnpm run test:smoke:pipeline" },
   { area: "portal", label: "portal", command: "pnpm run test:portal" },
+  { area: "usdz_tools", label: "usdz-tools", command: "pnpm run test:usdz-tools" },
   { area: "capture_xr", label: "xr-capture", command: "pnpm run test:xr:capture" },
   { area: "web", label: "xr-viewer", command: "pnpm run test:xr:viewer" }
 ];
@@ -153,7 +155,7 @@ async function main(): Promise<void> {
 
   const { areas, note } = resolveAreas(full, !args.has("--no-fetch"));
   const noAreaInfo = Object.keys(areas).length === 0;
-  const steps = selectSteps(noAreaInfo ? { quality: true, capture_xr: true, e2e: true, pipeline: true, portal: true, web: true } : areas, full || noAreaInfo);
+  const steps = selectSteps(noAreaInfo ? { quality: true, capture_xr: true, e2e: true, pipeline: true, portal: true, usdz_tools: true, web: true } : areas, full || noAreaInfo);
   const skipped = STEPS.filter((step) => !steps.includes(step)).map((step) => step.label);
   console.log(`[verify-pr] ${note}`);
   console.log(`[verify-pr] running: ${steps.map((step) => step.label).join(", ")}`);

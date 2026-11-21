@@ -14,7 +14,7 @@ below are its parts.
 
 | Script | What it does |
 |---|---|
-| `make.ts new <name>` / `words` / `<sheet> [--quick]` / `verdict <version dir>` | The one command for a piece. `new` copies `sheets/starter.jsonc` to `output/authoring/pieces/<name>/sheet.jsonc`; `words` prints every name a sheet can use, from the code (finishes, look-card traits, directions, expressions, gestures, states, hand shapes, measures); `<sheet>` validates the sheet, builds the next version (`v1/`, `v2/`, … beside a sheet under `output/`, else under `output/authoring/pieces/<sheet name>/`) with `direct.ts`, prints the look each performer wears, checks every grip, put, aim and reach, the dressed avatar file per performer (1.8 MB), the Quick Look budget (`validateTake`), and, from `review.ts`, the 40 device px face box; it lists the seconds changed since the version before. Each failing row says what to change; for a grip, put or aim that misses, it solves again with the numbers that decide where the hand must go nudged (the hand's mark, the object's place, the surface's place and height) and prints the edit that lands it. `--quick` saves twelve stills instead of the review. Writes `vN/report.md` / `.json`. `verdict` reruns the bars once a fresh reader's account has been graded into `vN/review/comparison.json`. Exits 1 when a bar fails. |
+| `make.ts new <name>` / `words` / `<sheet> [--quick]` / `verdict <version dir>` | The one command for a piece. `new` copies `sheets/starter.jsonc` to `output/authoring/pieces/<name>/sheet.jsonc`; `words` prints every name a sheet can use, from the code (finishes, look-card traits, directions, expressions, gestures, states, hand shapes, measures); `<sheet>` validates the sheet, builds the next version (`v1/`, `v2/`, … beside a sheet under `output/`, else under `output/authoring/pieces/<sheet name>/`) with `direct.ts`, prints the look each performer wears, checks every grip, put, aim and reach, the dressed avatar file per performer (1.8 MB), the Quick Look budget (`validateTake`), and, from `review.ts`, the 40 device px face box; it lists the seconds changed since the version before. Each failing row says what to change; for a grip, put or aim that misses, it solves again with the numbers that decide where the hand must go nudged (the hand's mark, the object's place, the surface's place and height) and prints the edit that lands it. `--quick` saves twelve stills instead of the review. Writes `vN/report.md` / `.json`. `verdict` reruns the bars once a fresh reader's account has been graded into `vN/review/comparison.json`. The `story` row is the main bar: a sheet with no `story` (setup, event and reaction, each `{ says, see }`) fails it at once, and the grader fills `story.<part>.seen/reads/revise` from the reader's fourth answer; the per-beat `reading` row stays a bar beside it. Exits 1 when a bar fails. |
 | `acting-report.ts <take.glb> [--against other.glb] [--json out.json]` | Per performer (found by skin): which bones and face shapes move and when, frozen spans, and whether fingers, face and eyes ever move. `--against` lists the spans where two takes differ. |
 | `avatar-audition.ts <avatar.glb\|.gltf> [--geometry] [--out dir] [--json out.json]` | Grades any avatar against the audition bar (`lib/audition-bar.ts`): one row per bar with its measured value and pass or fail, in `audition.json` (below). Exits 1 when a binding row fails. |
 | `direct.ts <sheet.json[c]> [--out take.glb] [--style flat\|directed] [--against earlier.glb] [--avatar spec]` | Solves the beat sheet on each performer's avatar (`--avatar` casts every performer on that avatar instead: a spec as in a sheet, or a GLB path relative to the working directory), writes the GLB and the sheet beside it (and, with objects, `<take>.objects.json`; with sound, each padded source in `<take>.audio/`), prints each reach's stop-short distance, each grip, put and aim's miss, each sound's place and padded length, and the acting report. Exits 1 when a grip, put or aim misses past its limit (the files are still written). |
@@ -284,7 +284,9 @@ its node and in `asset.copyright`, with its sha256 and origin in
 
 An object's frame has its origin at the bottom centre, +Y up and +Z its
 front. It stands `at` a point or `on` another object, turned by `facing`
-(degrees, or toward a point). Objects and marks are placed once, on the
+(degrees, or toward a point). With both, `on` gives the height (the
+support's top) and `at` the world x and z: `[x, y, z]` is world metres,
+not an offset on the support, so use a place `{ "of": … }` there. Objects and marks are placed once, on the
 first frame, in the order they depend on each other (a mark counts as the
 point it names); a circle, or a place measured from an object that is in a
 hand from the first frame, is refused. Its anchors are `top`, `center`, `bottom`,
@@ -316,6 +318,13 @@ gives each object's size on the card. The 1c reader who saw the pointer
 aimed at nothing was given stills cropped to the cast, a fault in the review
 tool, not in the viewer (fixed).
 
+A `wear` on an object puts it on a performer's bone in place of `at` or
+`on`: `"wear": { "on": "head", "at": [0, 0.17, -0.01], "turn": [0, 0, 0] }`
+puts a hat's bottom centre 0.17 m above the head bone, in the performer's
+facing (`at` is right, up, forward in metres; `performer` defaults to the
+first). The offset is fixed on the first frame and the object follows the
+bone after that. It is stiff: an apron on `hips` does not bend with the legs.
+
 ## Change in the world
 
 A sheet's `world` lists what changes in the set, one line each:
@@ -340,6 +349,14 @@ A sheet's `world` lists what changes in the set, one line each:
   `{ "when": 5.3, "from": { "turn": [36, 0, 16] } }` stands a slumped plant
   back up. A line with `show` (`true` or `false`) and nothing else makes the
   object appear or disappear at its cue.
+- `{ "kind": "fall", "object", "when" }`: an object at rest is knocked at its
+  cue with `push` `[x, y, z]` m/s (world axes, default none) and falls under
+  gravity. It spins the way it travels, bounces at most twice, lands on the
+  floor or on the top of an object under it, and settles over 0.35 s onto
+  the face its spin carries it to (a small push on a glass on a table tips
+  it onto its side). A held object takes a `drop` direction instead: the
+  hand opens at the direction's start (its beat's start plus `delay`) and the object leaves with the hand's
+  speed. Both write the object's node track, as a held object does.
 
 A cue is seconds, a beat id (its `at`) or `<beat>.end`. A point is an
 object's anchor, a mark or `[x, y, z]`. The build prints a line per change
