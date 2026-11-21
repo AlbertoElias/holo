@@ -50,6 +50,7 @@ import { layerIndexOf, outermostDrawn, readDeepZoom, soundLayers as layeredSound
 import type { PortalStore } from "../portal/portalStore";
 import { usePortalValue } from "../portal/usePortalValue";
 import { DEFAULT_CAMERA_FRAMING_CONFIG, computeDesiredFraming } from "./cameraFraming";
+import { FrameGate } from "./FrameGate";
 import { HologramLighting } from "./HologramLighting";
 import { createPlaceGate, PLACE_FIT_WAIT_MS, warnPlaceOnce } from "../place/placeGate";
 import type { PlaceRequest } from "../place/placeRequest";
@@ -434,7 +435,10 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
     const bubble = sphereClip.active && sphereClip.radius > 0 ? { center: sphereClip.center.clone(), radius: sphereClip.radius } : null;
     // A bubble follows its author, so the walk is read relative to it: the author's full reach, not their path.
     const anchor = bubble ? clonedScene.getObjectByName("RecordedBubbleSphere") ?? undefined : undefined;
-    const points = [...drawnPoints(clonedScene, bubble), ...motionPoints(clonedScene, animations, { anchor, bubble })];
+    // The performer's own points come from the same pass: her size alone, for the performer floor (3.4).
+    const performer = isCameraTake(clonedScene) ? undefined : clonedScene.getObjectByName("RecordedAvatar");
+    const inside = performer ? { root: performer, points: [] as Vector3[] } : undefined;
+    const points = [...drawnPoints(clonedScene, bubble, undefined, { inside }), ...motionPoints(clonedScene, animations, { anchor, bubble, inside })];
     // The dome wraps everything the bubble draws, ground falling away from the author included (B-033).
     // A camera take's set stands on its origin, the recorded floor; what lies below only widens the foot.
     const shape = fitCloche(points, { floorY: isCameraTake(clonedScene) ? clonedScene.getWorldPosition(new Vector3()).y : undefined });
@@ -447,12 +451,7 @@ function HologramModel({ url, placeDetailUrl, textureDetailUrl, active, muted, o
       const castPoints = [...drawnPoints(clonedScene, bubble, undefined, without), ...motionPoints(clonedScene, animations, { anchor, bubble, ...without })];
       castClocheRef.current = fitCloche(castPoints, { floorY: isCameraTake(clonedScene) ? clonedScene.getWorldPosition(new Vector3()).y : undefined });
     }
-    performerClocheRef.current = null;
-    const performer = isCameraTake(clonedScene) ? undefined : clonedScene.getObjectByName("RecordedAvatar");
-    if (performer) {
-      const performerPoints = [...drawnPoints(performer, bubble), ...motionPoints(clonedScene, animations, { anchor, bubble, only: performer })];
-      performerClocheRef.current = fitCloche(performerPoints);
-    }
+    performerClocheRef.current = inside && inside.points.length > 0 ? fitCloche(inside.points) : null;
     setCloche(shape);
     // A scanned place replaces the recorded set: the dome was fitted with the set in, so it is the same dome, and the set is hidden after.
     const showsPlace = placeGate.status === "ready";
@@ -1151,6 +1150,7 @@ export function HologramCardCanvas({
         toneMappingExposure: colorAccurateMode ? 0.82 : 1.1
       }}
     >
+      <FrameGate />
       <HologramLighting colorAccurate={colorAccurateMode} />
       <HologramModel url={modelUrl} placeDetailUrl={placeDetailUrl} textureDetailUrl={textureDetailUrl} active={active} muted={muted} onHasAudio={onHasAudio} onCredits={onCredits} onCaption={onCaption} onRendered={onRendered} portal={portal} target={target} reducedMotion={reducedMotion} seed={seed} frameRect={frameRect} soot={soot} author={author} placeRequest={placeRequest ?? null} />
     </Canvas>
