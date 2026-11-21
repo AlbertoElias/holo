@@ -592,7 +592,12 @@ async function verdict(dir: string): Promise<boolean> {
   // The sheet as it was built (its copy in the version), else the sheet file.
   const built = await readFile(join(dir, 'sheet.jsonc'), 'utf8').then((t) => parseSheetText(t, join(dir, 'sheet.jsonc')), () => undefined)
     ?? await readFile(report.sheet, 'utf8').then((t) => parseSheetText(t, report.sheet), () => undefined);
-  const rows = [...report.rows.filter((r) => r.id !== 'reading' && r.id !== 'story' && r.id !== 'visual'), await storyRow(join(dir, 'review'), built), await visualRow(join(dir, 'review')), await readingRow(join(dir, 'review'))];
+  // The face rows again from the review's measures, so a face bar changed since the build applies.
+  const onScreen = await readFile(join(dir, 'review', 'on-screen.json'), 'utf8').then((t) => JSON.parse(t) as OnScreen, () => undefined);
+  const isFace = (id: string) => /^(faceBox|still|onCard)\./.test(id);
+  const kept = report.rows.filter((r) => r.id !== 'reading' && r.id !== 'story' && r.id !== 'visual' && !(onScreen && isFace(r.id)));
+  const face = onScreen ? faceRows(onScreen, built?.performers.map((p) => p.id) ?? []) : [];
+  const rows = [...kept, ...face, await storyRow(join(dir, 'review'), built), await visualRow(join(dir, 'review')), await readingRow(join(dir, 'review'))];
   const text = await writeReport(dir, report.sheet, rows, report.notes);
   console.log(`${formatRows(rows)}\n\n${text}`);
   return !verdictLine(rows).failed;
