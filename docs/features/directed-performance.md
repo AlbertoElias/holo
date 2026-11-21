@@ -1615,6 +1615,14 @@ The sheet check and `review.ts` fail a sheet over the limit or a mark with no re
 marks fails. `scripts/authoring/face-bar-check.ts` checks that an unmarked small face
 still fails. No other bar changes.
 
+**The pair face bar (owner decision, 2026-11-21).** The owner agreed with the lead's
+option A: a piece with two performers has a 36 px face bar (`PAIR_FACE_BAR_PX` in
+`lib/face-bar.ts`). The evidence: the readers scored 0.75 to 0.79 on her face at
+33 px in the goodbye pair. One performer, or three and more, keeps the 40 px bar.
+The readers still judge each piece (three readers and one grader for the goodbye).
+`face-bar-check.ts` checks that a pair under 36 px fails, that one performer under
+40 px fails, and that `make.ts`'s face row reads the pair bar for two performers.
+
 **Done when** fresh agents get only the skill and the same three ideas, remake the
 pieces, and a blind reader gets the setup, the event and the reaction in each. Then a
 proof video goes to the owner, `verify:pr` passes, and the work merges to `main`.
