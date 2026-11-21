@@ -248,8 +248,33 @@ const yawQuat = (deg: number) => new THREE.Quaternion().setFromAxisAngle(new THR
 /** Degrees about +Y that a rotation turns +Z to. */
 const yawOf = (q: THREE.Quaternion): number => { const z = new THREE.Vector3(0, 0, 1).applyQuaternion(q); return Math.atan2(z.x, z.z) / DEG; };
 
+/**
+ * Solves the take. An arm that must clear the body or an object moves frame by
+ * frame, and those moves alone jump (the way out of an object changes from one
+ * frame to the next). So a take whose arms had to clear solves twice: the
+ * first time records each frame's move, and the second applies those moves
+ * widened and smoothed over time, then clears what is left.
+ */
 export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources: ReadonlyMap<string, LoadedSource> = new Map(), speech: ReadonlyMap<string, readonly Speech[]> = new Map()): SolvedTake {
+  clearing.plan = undefined;
+  clearing.record = new Map();
+  const first = solveOnce(sheet, avatars, sources, speech);
+  const record = clearing.record;
+  clearing.record = undefined;
+  if (![...record.values()].some((moves) => moves.some((m) => m.wrist.lengthSq() + m.elbow.lengthSq() > 1e-10))) return first;
+  clearing.plan = smoothClearing(record, first.times.length);
+  try {
+    return solveOnce(sheet, avatars, sources, speech);
+  } finally {
+    clearing.plan = undefined;
+  }
+}
+
+function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources: ReadonlyMap<string, LoadedSource>, speech: ReadonlyMap<string, readonly Speech[]>): SolvedTake {
   const problems = validateSheet(sheet);
+  // Before the first frame (the rest pose and the set), no clearing move is recorded or applied.
+  solving.f = -1;
+  clearWays.clear();
   if (problems.length) throw new Error(`beat sheet: ${problems.join('; ')}`);
   stage.marks.clear();
   stage.fixed = new WeakMap();
@@ -348,6 +373,7 @@ export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, 
   for (let f = 0; f < frames; f += 1) {
     const t = times[f]!;
     solving.t = t;
+    solving.f = f;
     cast.forEach((c, ci) => {
       fixPersistent(cast, c, t);
       solveFrame(cast, c, t, 1 / fps, life, flat);
@@ -450,7 +476,7 @@ const stage = {
   report: { grips: [], puts: [], aims: [] } as ObjectReport,
   swivels: new Map<Direction, number>()
 };
-const solving = { t: 0 };
+const solving = { t: 0, f: 0 };
 
 function pointOf(cast: Cast[], self: PerformerSpec, p: Point): THREE.Vector3 {
   if (typeof p !== 'string') return isPlace(p) ? placeOf(cast, p) : new THREE.Vector3(p[0], p[1], p[2]);
@@ -596,14 +622,13 @@ function swivelClear(cast: Cast[], c: Cast, t: number, s: Side, props: readonly 
   if (out.lengthSq() < 1e-8) return;
   out.normalize();
   const frameInv = a.frame.getWorldQuaternion(new THREE.Quaternion()).invert();
-  const fore = ch.foreArm.quaternion.clone();
-  const upper = ch.upperArm.quaternion.clone();
-  const hand = ch.hand.quaternion.clone();
-  const save = (): [THREE.Quaternion, THREE.Quaternion, THREE.Quaternion] => [ch.upperArm.quaternion.clone(), ch.foreArm.quaternion.clone(), ch.hand.quaternion.clone()];
-  const load = (q: [THREE.Quaternion, THREE.Quaternion, THREE.Quaternion]): void => { ch.upperArm.quaternion.copy(q[0]); ch.foreArm.quaternion.copy(q[1]); ch.hand.quaternion.copy(q[2]); a.frame.updateMatrixWorld(true); };
-  let best = { depth: start, pose: save() };
+  // The clavicle too: the arm solve turns it.
+  const save = (): THREE.Quaternion[] => armBones(ch).map((b) => b.quaternion.clone());
+  const load = (q: readonly THREE.Quaternion[]): void => { armBones(ch).forEach((b, i) => b.quaternion.copy(q[i]!)); a.frame.updateMatrixWorld(true); };
+  const start0 = save();
+  let best = { depth: start, pose: start0 };
   for (const deg of SWIVELS) {
-    load([upper, fore, hand]);
+    load(start0);
     const hint = out.clone().applyAxisAngle(line, deg * DEG).applyQuaternion(frameInv);
     keepingTwist(a, s, () => solveArm(a, s, wrist, { elbowHint: hint }));
     a.frame.updateMatrixWorld(true);
@@ -616,7 +641,7 @@ function swivelClear(cast: Cast[], c: Cast, t: number, s: Side, props: readonly 
 }
 
 /** How far an arm may sink before the clearance moves it, and how far clear it lands, metres. */
-const CLEAR = { slack: 0.004, margin: 0.008, passes: 8 } as const;
+const CLEAR = { slack: 0.004, margin: 0.008, passes: 8, most: 0.1, residual: 0.03 } as const;
 
 /**
  * Keeps each arm out of the body, the head and the objects it is not
@@ -630,12 +655,30 @@ function clearArms(cast: Cast[], c: Cast, t: number): void {
   a.frame.updateMatrixWorld(true);
   c.skin.pose();
   const props = [...stage.props.values()].map((st) => st.prop);
+  const frameQ = a.frame.getWorldQuaternion(new THREE.Quaternion());
   for (const s of SIDES) {
     const ch = a.arms[s];
-    // The first way out of each surface, kept for the later passes: in a thin slab the nearest face flips as the arm crosses its middle.
+    const key = `${c.spec.id}/${s}`;
+    const wrist0 = ch.hand.getWorldPosition(new THREE.Vector3());
+    const elbow0 = ch.foreArm.getWorldPosition(new THREE.Vector3());
+    const planned = solving.f >= 0 ? clearing.plan?.get(key)?.[solving.f] : undefined;
+    if (planned && planned.wrist.lengthSq() + planned.elbow.lengthSq() > 1e-10) {
+      moveArm(a, s, wrist0.clone().add(planned.wrist.clone().applyQuaternion(frameQ)), elbow0.clone().add(planned.elbow.clone().applyQuaternion(frameQ)));
+      moveHeld(cast, c, t);
+    }
+    // The first way out of each surface, kept for the later passes and the next frames while the contact lasts: in a thin slab the nearest face flips as the arm crosses its middle.
     const ways = new Map<string, THREE.Vector3>();
     let last = Infinity;
-    for (let pass = 0; pass < CLEAR.passes; pass += 1) {
+    // The pose with the shallowest overlap so far: an arm caught between two surfaces would otherwise end where its last push sent it.
+    // The clavicle too: the arm solve turns it.
+    const pose = (): THREE.Quaternion[] => armBones(ch).map((b) => b.quaternion.clone());
+    const load = (q: readonly THREE.Quaternion[]): void => { armBones(ch).forEach((b, i) => b.quaternion.copy(q[i]!)); a.frame.updateMatrixWorld(true); };
+    let best = { depth: Infinity, pose: pose() };
+    // How far the wrist may go from where the take put it (after the planned move on a second solve): a clear arm that jumps is worse than a clip the meter reports.
+    const from = ch.hand.getWorldPosition(new THREE.Vector3());
+    const fromElbow = ch.foreArm.getWorldPosition(new THREE.Vector3());
+    const most = planned ? CLEAR.residual : CLEAR.most;
+    for (let pass = 0; pass <= CLEAR.passes; pass += 1) {
       let worst: { depth: number; normal: THREE.Vector3; along: number; upper: THREE.Vector3 | null } = { depth: CLEAR.slack, normal: new THREE.Vector3(), along: 1, upper: null };
       for (const q of armSkin(a, c.armBody, s)) {
         const d = c.skin.depth(q.p, q.x.part.endsWith('upper arm') ? (p) => p === 'torso' : undefined);
@@ -649,8 +692,10 @@ function clearArms(cast: Cast[], c: Cast, t: number): void {
           const d = partDepth(prop, part, pt.p, pt.r);
           if (d <= worst.depth) continue;
           const key = `${prop.id}/${k}`;
-          const way = ways.get(key) ?? propNormal(prop, part, pt.p, pt.r);
+          const kept = solving.f >= 0 ? clearWays.get(`${c.spec.id}/${s}/${key}`) : undefined;
+          const way = ways.get(key) ?? (kept && kept.f >= solving.f - 1 ? kept.way : propNormal(prop, part, pt.p, pt.r));
           ways.set(key, way);
+          if (solving.f >= 0) clearWays.set(`${c.spec.id}/${s}/${key}`, { way, f: solving.f });
           worst = { depth: d, normal: way, along: pt.along, upper: pt.upper ? pt.p : null };
         }
       }
@@ -661,7 +706,8 @@ function clearArms(cast: Cast[], c: Cast, t: number): void {
           if (d.depth > worst.depth) worst = { depth: d.depth, normal: d.away, along: 1, upper: null };
         }
       }
-      if (worst.depth <= CLEAR.slack) break;
+      if (worst.depth < best.depth) best = { depth: worst.depth, pose: pose() };
+      if (worst.depth <= CLEAR.slack || pass === CLEAR.passes) break;
       const push = worst.normal.clone().multiplyScalar(worst.depth + CLEAR.margin);
       const shoulder = ch.upperArm.getWorldPosition(new THREE.Vector3());
       const elbow = ch.foreArm.getWorldPosition(new THREE.Vector3());
@@ -679,13 +725,88 @@ function clearArms(cast: Cast[], c: Cast, t: number): void {
       out.addScaledVector(line, -out.dot(line));
       if (out.lengthSq() < 1e-8) break;
       const hint = out.normalize().applyQuaternion(a.frame.getWorldQuaternion(new THREE.Quaternion()).invert());
+      const before = pose();
       keepingTwist(a, s, () => solveArm(a, s, wrist, { elbowHint: hint }));
       a.frame.updateMatrixWorld(true);
+      if (ch.hand.getWorldPosition(new THREE.Vector3()).distanceTo(from) > most || ch.foreArm.getWorldPosition(new THREE.Vector3()).distanceTo(fromElbow) > most) {
+        load(before);
+        break;
+      }
       moveHeld(cast, c, t);
       last = worst.depth;
     }
-    swivelClear(cast, c, t, s, props);
+    load(best.pose);
+    moveHeld(cast, c, t);
+    // On a second solve the planned move already holds the first solve's swivel, smoothed: a second swivel undoes that smoothing.
+    if (!planned) swivelClear(cast, c, t, s, props);
+    if (clearing.record && solving.f >= 0) {
+      const inv = frameQ.clone().invert();
+      const moves = clearing.record.get(key) ?? [];
+      moves[solving.f] = {
+        wrist: ch.hand.getWorldPosition(new THREE.Vector3()).sub(wrist0).applyQuaternion(inv),
+        elbow: ch.foreArm.getWorldPosition(new THREE.Vector3()).sub(elbow0).applyQuaternion(inv)
+      };
+      clearing.record.set(key, moves);
+    }
   }
+}
+
+/** The bones an arm solve turns, clavicle first. */
+const armBones = (ch: LoadedAvatar['arms'][Side]): THREE.Object3D[] => [ch.shoulder, ch.upperArm, ch.foreArm, ch.hand];
+
+/** How a performer's arm moved to clear, per frame, in the performer's frame. */
+interface ClearMove { readonly wrist: THREE.Vector3; readonly elbow: THREE.Vector3 }
+/** The first solve records each arm's clearing moves; the second applies them smoothed. Keyed `performer/side`. */
+const clearing: { record: Map<string, ClearMove[]> | undefined; plan: Map<string, ClearMove[]> | undefined } = { record: undefined, plan: undefined };
+/** The way out of each surface while a contact lasts, by arm and prop part, with the last frame that used it: the nearest face of a deep overlap changes from frame to frame, and a push that changes direction makes the elbow pop. */
+const clearWays = new Map<string, { way: THREE.Vector3; f: number }>();
+/** Frames on each side over which a clearing move holds (widen) and then blends (Gaussian sigma), at 30 fps. */
+const CLEAR_SMOOTH = { widen: 4, sigma: 3 } as const;
+
+/**
+ * Each arm's clearing moves, widened (each frame takes the largest move near
+ * it, so the arm is clear on every frame that needed it) and then blurred (so
+ * it eases in and out instead of jumping).
+ */
+function smoothClearing(record: ReadonlyMap<string, ClearMove[]>, frames: number): Map<string, ClearMove[]> {
+  const zero = (): ClearMove => ({ wrist: new THREE.Vector3(), elbow: new THREE.Vector3() });
+  const size = (m: ClearMove): number => m.wrist.lengthSq() + m.elbow.lengthSq();
+  const plan = new Map<string, ClearMove[]>();
+  for (const [key, moves] of record) {
+    const at = (f: number): ClearMove => moves[f] ?? zero();
+    const wide = Array.from({ length: frames }, (_, f) => {
+      let best = at(f);
+      for (let g = Math.max(0, f - CLEAR_SMOOTH.widen); g <= Math.min(frames - 1, f + CLEAR_SMOOTH.widen); g += 1) if (size(at(g)) > size(best)) best = at(g);
+      return best;
+    });
+    const reach = Math.ceil(3 * CLEAR_SMOOTH.sigma);
+    plan.set(key, wide.map((_, f) => {
+      const out = zero();
+      let total = 0;
+      for (let g = f - reach; g <= f + reach; g += 1) {
+        const w = Math.exp(-((g - f) ** 2) / (2 * CLEAR_SMOOTH.sigma ** 2));
+        total += w;
+        const m = wide[Math.min(frames - 1, Math.max(0, g))]!;
+        out.wrist.addScaledVector(m.wrist, w);
+        out.elbow.addScaledVector(m.elbow, w);
+      }
+      out.wrist.multiplyScalar(1 / total);
+      out.elbow.multiplyScalar(1 / total);
+      return out;
+    }));
+  }
+  return plan;
+}
+
+/** Puts an arm's wrist at `wrist` with its elbow toward `elbow`, keeping the forearm's twist. */
+function moveArm(a: LoadedAvatar, s: Side, wrist: THREE.Vector3, elbow: THREE.Vector3): void {
+  const shoulder = a.arms[s].upperArm.getWorldPosition(new THREE.Vector3());
+  const line = wrist.clone().sub(shoulder).normalize();
+  const out = elbow.clone().sub(shoulder);
+  out.addScaledVector(line, -out.dot(line));
+  const hint = out.lengthSq() > 1e-8 ? out.normalize().applyQuaternion(a.frame.getWorldQuaternion(new THREE.Quaternion()).invert()) : undefined;
+  keepingTwist(a, s, () => solveArm(a, s, wrist, hint ? { elbowHint: hint } : {}));
+  a.frame.updateMatrixWorld(true);
 }
 
 /** The object in a performer's hand at `t`, if any. */
