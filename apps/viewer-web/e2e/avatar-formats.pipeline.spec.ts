@@ -123,7 +123,10 @@ async function upload(page: Page, name: string, glb: Buffer): Promise<{ id: stri
 /** The feed shows only this hologram, so its card is the one presented. */
 async function showOnly(page: Page, id: string): Promise<void> {
   await page.route("**/api/holograms?*", async (route) => {
-    const response = await route.fetch();
+    // The feed asks again on its own clock. A request still in flight when the test ends has no page to answer:
+    // that is the end of the test, not a failure of it.
+    const response = await route.fetch().catch((error: unknown) => { if (page.isClosed()) return null; throw error; });
+    if (!response) return;
     const body = (await response.json()) as { items: Array<{ id: string }> };
     await route.fulfill({ response, json: { ...body, items: body.items.filter((item) => item.id === id), nextCursor: null } });
   });
