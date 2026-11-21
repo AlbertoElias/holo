@@ -7,6 +7,15 @@
   "title": "Hello",
   // What a viewer should come away with, in a viewer's words. A fresh reader is compared with it.
   "intent": "Someone notices me, smiles and waves hello.",
+  // The story a viewer must get with no words: write it before any beat (the hologram-authoring
+  // skill, "First, the story"). The main bar: a fresh reader is asked who and where, what happens,
+  // and how they react. Here the "event" is you arriving, so the story bar fails ("nothing changes in
+  // the world"): a real piece needs a take, put or drop, or a world line, at 1.5 s or later.
+  "story": {
+    "setup": { "says": "Someone stands on their own, idle.", "see": ["they look down and away, still"] },
+    "event": { "says": "They notice you.", "see": ["their head and eyes come up to the viewer"] },
+    "reaction": { "says": "They are glad and wave hello.", "see": ["a wide smile", "a wave", "a nod"] }
+  },
   // Seconds. 5 to 9 s reads on a feed card; longer costs review time and Quick Look budget.
   "duration": 6,
   "performers": [

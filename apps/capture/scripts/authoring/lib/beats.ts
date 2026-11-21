@@ -10,7 +10,9 @@ import { FINISHES, parseLook, type Finish, type LookCard } from '@holoim/avatar-
 import type { HandShapeName } from './hands.ts';
 import { HAND_SHAPES } from './hands.ts';
 import { measureProblem, placeProblem } from './stage.ts';
+import { type FaceAway, faceAwayProblems } from './face-bar.ts';
 import { objectCreditSchema } from '@holoim/objects';
+import { VRM_HUMANOID_BONES } from '@holoim/meaning';
 
 export type Side = 'left' | 'right';
 /**
@@ -72,6 +74,8 @@ export interface ObjectSpec {
   readonly grip?: string | { readonly at: Vec3Measure; readonly axis: readonly [number, number, number]; readonly radius?: number };
   /** A part (its tip and +Y axis) or a tip and an axis, what an `aim` points. */
   readonly tool?: string | { readonly tip: Vec3Measure; readonly axis: readonly [number, number, number] };
+  /** Worn on a bone (a hat on `head`, an apron on `hips`): placed `at` [right, up, forward] m from the bone in the performer's facing, turned `turn` degrees, then it moves with the bone. A worn object takes no `at` or `on`. */
+  readonly wear?: { readonly performer?: string; readonly on: string; readonly at?: readonly [number, number, number]; readonly turn?: readonly [number, number, number] };
 }
 
 /** Built-in anchors of every object; no part or named anchor may use these names. */
@@ -105,6 +109,8 @@ export type Direction = Timing & (
   | { readonly kind: 'take'; readonly side: Side; readonly object: string; readonly palm?: 'up' | 'down' | 'in' | 'toward' }
   | { readonly kind: 'put'; readonly side: Side; readonly object: string; readonly at?: Point; readonly on?: string }
   | { readonly kind: 'aim'; readonly side: Side; readonly at: Point }
+  /** The hand opens and lets the held object fall: it keeps the hand's speed, falls under gravity, bounces and comes to rest on the floor or a surface below it. */
+  | { readonly kind: 'drop'; readonly side: Side; readonly object: string }
   | {
       readonly kind: 'gesture'; readonly name: GestureName;
       /** The hand of a hand gesture (default right). */ readonly side?: Side;
@@ -131,6 +137,7 @@ const DIRECTION_FIELDS = {
   take: { required: ['side', 'object'], optional: ['palm'] },
   put: { required: ['side', 'object'], optional: ['at', 'on'] },
   aim: { required: ['side', 'at'], optional: [] },
+  drop: { required: ['side', 'object'], optional: [] },
   gesture: { required: ['name'], optional: ['side', 'count', 'strength', 'at'] },
   state: { required: ['name'], optional: ['strength', 'at'] },
 } as const satisfies Record<Direction['kind'], { required: readonly string[]; optional: readonly string[] }>;
@@ -198,6 +205,8 @@ export interface PerformerSpec {
   readonly hold?: Partial<Record<Side, string>>;
   /** false: no attending life (the nods and arm changes of a performer facing another). Default true. */
   readonly attend?: boolean;
+  /** Seconds where the head is turned down or away on purpose, each with a reason; the face bar skips them (lib/face-bar.ts). */
+  readonly faceAway?: readonly FaceAway[];
 }
 
 /** When a world change happens: seconds, a beat id (its start) or `<beat>.end`. */
@@ -228,6 +237,8 @@ export type WorldChange =
     }
   | { readonly kind: 'burst'; readonly at: Point; readonly when: Cue; readonly count?: number; readonly spread?: number; readonly life?: number; readonly color?: Color; readonly size?: number }
   | { readonly kind: 'drift'; readonly at: Point; readonly when: Cue; readonly until: Cue; readonly count?: number; readonly rise?: number; readonly spread?: number; readonly life?: number; readonly color?: Color; readonly size?: number }
+  /** An object at rest is knocked: it leaves its place at `when` with `push` (m/s, world [x, y, z]), falls under gravity, bounces and comes to rest. */
+  | { readonly kind: 'fall'; readonly object: string; readonly when: Cue; readonly push?: readonly [number, number, number] }
   | (ChangeState & {
       readonly kind: 'change'; readonly object: string; readonly when: Cue;
       /** Seconds the change takes; default 1.5. */ readonly over?: number;
@@ -255,6 +266,59 @@ export interface BeatSheet {
   readonly sounds?: readonly SoundSpec[];
   /** Visible change in the set: water, particles, an object responding. */
   readonly world?: readonly WorldChange[];
+  /** The story a viewer must get with no words (brief slice 8): the review grades each part. */
+  readonly story?: Story;
+}
+
+/** One part of a story: what it says, and what a viewer must see for it. */
+export interface StoryPart {
+  readonly says: string;
+  readonly see: readonly string[];
+}
+
+export interface Story {
+  /** The one-line idea as it was asked, word for word: the review checks the story against it, not only against its own parts. */
+  readonly request?: string;
+  readonly setup: StoryPart;
+  readonly event: StoryPart;
+  readonly reaction: StoryPart;
+  /** Each change from the first story, and why (a part the tool cannot show). */
+  readonly changes?: readonly string[];
+}
+
+export const STORY_PARTS = ['setup', 'event', 'reaction'] as const;
+
+/** The setup's time on screen before the event may start, seconds. */
+export const EVENT_AFTER_S = 1.5;
+
+/**
+ * A story's event changes the world where a viewer sees it, after the setup has had its 1.5 s:
+ * a take, put or drop, or a world line. The `story` bar fails without one; the sheet still builds.
+ */
+export function storyEventProblem(sheet: BeatSheet): string | undefined {
+  const { holdings } = holdingsOf(sheet);
+  const changes = [
+    ...holdings.flatMap((h) => [...(h.take ? [h.from] : []), ...(h.put || h.drop ? [h.to] : [])]),
+    ...(sheet.world ?? []).flatMap((w) => { if (!('when' in w)) return []; try { const t = cueTime(sheet, w.when); return t === undefined ? [] : [t]; } catch { return []; } })
+  ];
+  return changes.some((t) => t >= EVENT_AFTER_S) ? undefined : `nothing changes in the world at ${EVENT_AFTER_S} s or later`;
+}
+
+/** Problems in a sheet's `story`; none when it has no story (make.ts asks for one). */
+export function storyProblems(story: unknown): string[] {
+  if (story === undefined) return [];
+  if (typeof story !== 'object' || story === null) return ['story: give setup, event and reaction, each { "says": "…", "see": ["…"] }'];
+  const s = story as Record<string, unknown>;
+  const problems: string[] = [];
+  for (const k of STORY_PARTS) {
+    const part = s[k] as { says?: unknown; see?: unknown } | undefined;
+    if (!part || typeof part.says !== 'string' || !part.says.trim()) problems.push(`story.${k}: give "says", one sentence`);
+    if (!part || !Array.isArray(part.see) || !part.see.length || !part.see.every((x) => typeof x === 'string' && x.trim())) problems.push(`story.${k}: give "see", a list of what a viewer must see`);
+  }
+  if (s.changes !== undefined && !(Array.isArray(s.changes) && s.changes.every((x) => typeof x === 'string'))) problems.push('story.changes: a list of sentences');
+  if (s.request !== undefined && !(typeof s.request === 'string' && s.request.trim())) problems.push('story.request: the one-line idea, word for word');
+  for (const k of Object.keys(s)) if (![...STORY_PARTS, 'changes', 'request'].includes(k)) problems.push(`story.${k}: unknown field (request, setup, event, reaction, changes)`);
+  return problems;
 }
 
 export const EXPRESSIONS = {
@@ -331,6 +395,7 @@ export const DEFAULT_TIMING: Readonly<Record<DirectionKind, Required<Omit<Timing
   step: { anticipation: 0.15, attack: 0.6, settle: 0.3 },
   take: { anticipation: 0.2, attack: 0.8, settle: 0.8 },
   put: { anticipation: 0.15, attack: 0.8, settle: 0.8 },
+  drop: { anticipation: 0, attack: 0.1, settle: 0.4 },
   aim: { anticipation: 0.1, attack: 0.6, settle: 0.6 },
   // Per name in `GESTURES` and `STATES`; these are the fallbacks.
   gesture: { anticipation: 0.1, attack: 0.3, settle: 0.5 },
@@ -477,6 +542,7 @@ export interface Holding {
   readonly to: number;
   readonly take?: Resolved;
   readonly put?: Resolved;
+  readonly drop?: Resolved;
 }
 
 /** The objects of a point: `"obj.anchor"` and a place `of` an object. */
@@ -506,11 +572,11 @@ export function holdingsOf(sheet: BeatSheet, duration = sheet.duration): { holdi
       else open.set(o, { performer: p.id, side, from: 0 });
     }
   }
-  const events = sheet.beats.flatMap((b) => b.directions.flatMap((d) => (d.kind === 'take' || d.kind === 'put' ? [resolveTiming(b, d)] : [])))
+  const events = sheet.beats.flatMap((b) => b.directions.flatMap((d) => (d.kind === 'take' || d.kind === 'put' || d.kind === 'drop' ? [resolveTiming(b, d)] : [])))
     .sort((a, b) => a.at + a.attack - (b.at + b.attack));
   for (const r of events) {
-    const d = r.direction as Extract<Direction, { kind: 'take' | 'put' }>;
-    const when = r.at + r.attack;
+    const d = r.direction as Extract<Direction, { kind: 'take' | 'put' | 'drop' }>;
+    const when = d.kind === 'drop' ? r.at : r.at + r.attack;
     const where = `beat ${r.beat.id} ${d.kind} ${d.object}`;
     if (when >= duration) { problems.push(`${where}: the hand arrives at ${Math.round(when * 100) / 100} s, not before the take ends (${duration} s)`); continue; }
     const held = open.get(d.object);
@@ -522,7 +588,7 @@ export function holdingsOf(sheet: BeatSheet, duration = sheet.duration): { holdi
     } else if (!held || held.performer !== r.beat.performer || held.side !== d.side) {
       problems.push(`${where}: ${r.beat.performer}'s ${d.side} hand does not hold it then`);
     } else {
-      holdings.push({ object: d.object, ...held, to: when, put: r });
+      holdings.push({ object: d.object, ...held, to: when, ...(d.kind === 'drop' ? { drop: r } : { put: r }) });
       open.delete(d.object);
     }
   }
@@ -536,9 +602,11 @@ export function validateSheet(sheet: BeatSheet): string[] {
   const objects = new Set(Object.keys(sheet.objects ?? {}));
   const marks = new Set(Object.keys(sheet.marks ?? {}));
   if (!sheet.performers.length) problems.push('no performers');
+  problems.push(...storyProblems(sheet.story));
   if (!(sheet.duration > 0)) problems.push('duration must be > 0');
   for (const p of sheet.performers) {
     if ((p.avatar === 'house' || p.avatar.startsWith('house:')) && !houseFinish(p.avatar)) problems.push(`${p.id}: avatar "${p.avatar}": the house base is ${FINISHES.map((f) => `"house:${f}"`).join(', ')}`);
+    problems.push(...faceAwayProblems(p.id, p.faceAway, sheet.duration));
     if (p.look === undefined) continue;
     if (!houseFinish(p.avatar)) { problems.push(`${p.id}: a look needs a house avatar ("${HOUSE_AVATAR}" or another finish)`); continue; }
     try { parseLook(p.look, `${p.id} look`); } catch (e) { problems.push((e as Error).message); }
@@ -626,7 +694,16 @@ export function validateSheet(sheet: BeatSheet): string[] {
     }
     if (o.on !== undefined && (!objects.has(o.on) || o.on === id)) problems.push(`${where}: on ${o.on}: no other object`);
     if (held.has(id) && (o.at !== undefined || o.on !== undefined)) problems.push(`${where}: it is in a hand from the first frame, so it takes no at or on`);
-    if (!held.has(id) && o.at === undefined && o.on === undefined) problems.push(`${where}: needs at or on (or a performer's hold)`);
+    if (o.wear !== undefined) {
+      for (const k of Object.keys(o.wear)) if (!['performer', 'on', 'at', 'turn'].includes(k)) problems.push(`${where}: wear.${k}: unknown field (performer, on, at, turn)`);
+      if (o.at !== undefined || o.on !== undefined || held.has(id)) problems.push(`${where}: a worn object takes no at, on or hold`);
+      if (typeof o.wear.on !== 'string' || !(VRM_HUMANOID_BONES as readonly string[]).includes(o.wear.on)) problems.push(`${where}: wear.on must name a bone (head, hips, chest, upperChest, neck, leftHand, ...)`);
+      if (o.wear.performer !== undefined && !sheet.performers.some((p) => p.id === o.wear!.performer)) problems.push(`${where}: wear.performer ${o.wear.performer}: no such performer`);
+      if (sheet.beats.some((b) => b.directions.some((d) => d.kind === 'take' && d.object === id))) problems.push(`${where}: a worn object is not taken`);
+      if (Object.values(sheet.objects ?? {}).some((x) => x.on === id)) problems.push(`${where}: nothing stands on a worn object`);
+      if (o.wear.performer === undefined && sheet.performers.length > 1) problems.push(`${where}: two or more performers; give wear.performer`);
+      for (const [k, v] of [['at', o.wear.at], ['turn', o.wear.turn]] as const) if (v !== undefined && !(Array.isArray(v) && v.length === 3 && v.every((n) => typeof n === 'number'))) problems.push(`${where}: wear.${k} must be [x, y, z]`);
+    } else if (!held.has(id) && o.at === undefined && o.on === undefined) problems.push(`${where}: needs at or on (or a performer's hold)`);
     for (const p of [o.at, typeof o.facing === 'number' ? undefined : o.facing]) {
       const problem = pointProblem(p);
       if (problem) problems.push(`${where}: ${problem}`);
@@ -694,7 +771,7 @@ export function validateSheet(sheet: BeatSheet): string[] {
       if (d.kind === 'bend' && d.amount !== undefined && !(d.amount >= 0 && d.amount <= 1)) problems.push(`${where}: amount is 0 to 1 (1 is the deepest bend)`);
       if (d.kind === 'reach' && !(d.stopShort >= 0)) problems.push(`${where}: stopShort must be ≥ 0`);
       if (d.kind === 'turn' && d.degrees === undefined && d.toward === undefined) problems.push(`${where}: needs degrees or toward`);
-      if ((d.kind === 'take' || d.kind === 'put') && !objects.has(d.object)) problems.push(`${where}: no object ${d.object}`);
+      if ((d.kind === 'take' || d.kind === 'put' || d.kind === 'drop') && !objects.has(d.object)) problems.push(`${where}: no object ${d.object}`);
       if (d.kind === 'take' && sheet.objects?.[d.object] && !sheet.objects[d.object]!.grip) problems.push(`${where}: ${d.object} has no grip`);
       if (d.kind === 'put' && (d.at === undefined) === (d.on === undefined)) problems.push(`${where}: give at or on`);
       if (d.kind === 'put' && d.on !== undefined && (!objects.has(d.on) || d.on === d.object)) problems.push(`${where}: on ${d.on}: no other object`);
@@ -749,7 +826,7 @@ export function validateSheet(sheet: BeatSheet): string[] {
   return problems;
 }
 
-const WORLD_KINDS: readonly WorldChangeKind[] = ['pour', 'burst', 'drift', 'change'];
+const WORLD_KINDS: readonly WorldChangeKind[] = ['pour', 'burst', 'drift', 'fall', 'change'];
 
 function worldProblems(sheet: BeatSheet, holdings: readonly Holding[]): string[] {
   const problems: string[] = [];
@@ -828,6 +905,15 @@ function worldProblems(sheet: BeatSheet, holdings: readonly Holding[]): string[]
       if (w.count !== undefined && !(Number.isInteger(w.count) && w.count > 0 && w.count <= 400)) problems.push(`${where} count: a whole number from 1 to 400`);
       positive(w.spread, `${where} spread`); positive(w.life, `${where} life`); positive(w.size, `${where} size`);
       color(w.color, `${where} color`);
+    } else if (w.kind === 'fall') {
+      if (!objects[w.object]) { problems.push(`${where}: no object ${w.object}`); continue; }
+      const t = cue(w.when, `${where} when`);
+      if (w.push !== undefined && (!Array.isArray(w.push) || w.push.length !== 3 || w.push.some((x) => !Number.isFinite(x)))) problems.push(`${where} push: [x, y, z] in m/s`);
+      if (t !== undefined && holdings.some((h) => h.object === w.object && h.from <= t && t < h.to)) problems.push(`${where}: ${w.object} is in a hand then; a held object falls with a drop direction`);
+      if (objects[w.object]!.wear) problems.push(`${where}: ${w.object} is worn; a worn object does not fall`);
+      const on = Object.entries(objects).find(([, o]) => o.on === w.object);
+      if (on) problems.push(`${where}: ${on[0]} stands on ${w.object} and would stay in the air; place it elsewhere`);
+      for (const k of Object.keys(w)) if (!['kind', 'object', 'when', 'push'].includes(k)) problems.push(`${where}: ${k}: unknown field (object, when, push)`);
     } else {
       const spec = objects[w.object];
       if (!spec) { problems.push(`${where}: no object ${w.object}`); continue; }

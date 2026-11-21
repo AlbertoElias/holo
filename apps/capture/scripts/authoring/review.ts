@@ -50,7 +50,8 @@ import { chromium, type Page } from 'playwright';
 import { tokens } from '@holoim/design-tokens';
 
 import { actingReport, summarize } from './acting-report.ts';
-import { beatSpan, holdingsOf, parseSheetText, pointObjects, type BeatSheet, type Direction, type Point } from './lib/beats.ts';
+import { beatSpan, holdingsOf, parseSheetText, pointObjects, STORY_PARTS, type BeatSheet, type Direction, type Point } from './lib/beats.ts';
+import { type FaceAway, type FaceSplit, faceAwayProblems, isFaceAway, splitFace } from './lib/face-bar.ts';
 import { parseGlb } from './lib/gltf-read.ts';
 import { REVIEW_PAGE, SHEET_PAGE } from './lib/review-page.ts';
 import { takeSoundtrack } from './lib/sound.ts';
@@ -72,7 +73,7 @@ export const BACKGROUND = Number.parseInt(tokens.color.ground.mid.slice(1), 16);
 const STILL_PX = 1;
 
 type Vec = [number, number, number];
-interface CardPerformer { name: string; points: Record<string, [number, number]>; face: [number, number, number, number] | null }
+interface CardPerformer { name: string; points: Record<string, [number, number]>; /** The drawn face pixels. */ face: ScreenBox | null; /** The box of every face vertex. */ faceBound: ScreenBox | null; /** Blended edge pixels left out of face. */ faceStray?: number }
 type ScreenBox = [number, number, number, number];
 interface CardReading { canvas: { width: number; height: number; pixelRatio: number }; performers: CardPerformer[]; objects: { name: string; box: ScreenBox | null }[] }
 interface WorldBox { name: string; min: Vec; max: Vec }
@@ -104,12 +105,41 @@ export interface OnScreen {
     /** Height of the part of the mesh the face channels move (brow to chin), at the card's framing. */
     readonly faceCssPx: { readonly min: number; readonly median: number; readonly max: number };
     readonly faceDevicePx: number;
+    /** The face's median height (device px) outside and inside the sheet's marked face-away seconds; the bar reads `unmarked`. */
+    readonly faceSplitDevicePx: FaceSplit;
+    /** The sheet's marked face-away seconds for this performer, with their reasons. */
+    readonly faceAway: readonly FaceAway[];
     readonly faceMmOnPhone: number;
     /** Head top to feet, CSS px, median. */
     readonly bodyCssPx: number;
-    /** Per second of the take: the largest distance the head or either hand moves on the card from where it was at the start of that second (CSS px). */
-    readonly travelPerSecond: { readonly from: number; readonly head: number; readonly hands: number; readonly still: boolean }[];
+    /** The drawn face's height (CSS px) beside the height of the box of its face vertices, at three moments: the check on the measure. */
+    readonly faceCheck: readonly FaceCheck[];
+    /** Per second: how far head and hands travel (CSS px), whether nothing moves, and the face's median height in device px (null when no frame has a face). */
+    readonly travelPerSecond: { readonly from: number; readonly head: number; readonly hands: number; readonly still: boolean; readonly faceDevicePx: number | null; readonly faceAway: boolean }[];
   }[];
+}
+
+/** strayPx: device pixels on an edge between two face colours, which the decode leaves out (a plain rounding gave them to this performer). */
+interface FaceCheck { readonly t: number; readonly drawnCssPx: number; readonly boundCssPx: number; readonly strayPx: number }
+/** How far the drawn face may reach past the box of its vertices: the pixels add one pixel of edge. */
+const FACE_CHECK_TOLERANCE_CSS_PX = 1.5;
+
+/**
+ * On the checked frames (0.2, 0.5 and 0.8 of the take), each performer's drawn face (the face pixels) must lie inside the box of its face vertices: a
+ * face drawn outside its own vertices, or drawn with no vertices, means the measure is wrong, not the take. Throws
+ * on the first fault; returns the heights on those frames for the report.
+ */
+function checkFaceBox(cards: readonly CardReading[], times: readonly number[], checked: ReadonlySet<number>): FaceCheck[][] {
+  const out: FaceCheck[][] = (cards[0]?.performers ?? []).map(() => []);
+  cards.forEach((card, f) => checked.has(f) && card.performers.forEach((perf, p) => {
+    const drawn = perf.face, bound = perf.faceBound, t = times[f]!;
+    if (drawn && (!bound || drawn[0] < bound[0] - FACE_CHECK_TOLERANCE_CSS_PX || drawn[1] < bound[1] - FACE_CHECK_TOLERANCE_CSS_PX
+      || drawn[2] > bound[2] + FACE_CHECK_TOLERANCE_CSS_PX || drawn[3] > bound[3] + FACE_CHECK_TOLERANCE_CSS_PX)) {
+      throw new Error(`face measure fault: performer ${p} at ${t.toFixed(2)} s is drawn at [${drawn.join(', ')}] CSS px, outside the box of its face vertices [${bound ? bound.join(', ') : 'none'}], ${perf.faceStray ?? 0} blended pixels left out (the review's face measure is wrong; fix lib/review-page.ts, not the sheet)`);
+    }
+    out[p]!.push({ t: round(t, 100), drawnCssPx: drawn ? round(drawn[3] - drawn[1]) : 0, boundCssPx: bound ? round(bound[3] - bound[1]) : 0, strayPx: perf.faceStray ?? 0 });
+  }));
+  return out;
 }
 
 const add = (a: Vec, b: Vec, k = 1): Vec => [a[0] + b[0] * k, a[1] + b[1] * k, a[2] + b[2] * k];
@@ -199,7 +229,7 @@ export function actedOn(sheet: BeatSheet | undefined, performers: readonly strin
       if (p < 0) continue;
       const span = beatSpan(beat);
       const named = new Set(beat.directions.flatMap((d) => [
-        ...(d.kind === 'take' || d.kind === 'put' ? [d.object] : []),
+        ...(d.kind === 'take' || d.kind === 'put' || d.kind === 'drop' ? [d.object] : []),
         ...directionPoints(d).flatMap((pt) => (typeof pt === 'string' && ids.has(pt) ? [pt] : pointObjects(pt, ids, sheet.marks ?? {})))
       ]));
       for (const id of named) spans.push({ performer: p, object: declared(id), from: span.from - ACT_MARGIN_S, to: span.to + ACT_MARGIN_S });
@@ -236,6 +266,10 @@ export async function review(take: string, options: ReviewOptions = {}): Promise
   // A sheet beside the take is optional; one named with --sheet must load.
   const sheetData = await readFile(sheetFile, 'utf8').then((s) => parseSheetText(s, sheetFile))
     .catch((error: unknown) => { if (options.sheet) throw new Error(`--sheet ${options.sheet}: ${String(error)}`); return undefined; });
+  // Marked face-away seconds the bar skips: a sheet that marks too much (or marks badly) fails here.
+  const awayProblems = (sheetData?.performers ?? []).flatMap((p) => faceAwayProblems(p.id, p.faceAway, sheetData!.duration));
+  if (awayProblems.length) throw new Error(`${sheetFile}: ${awayProblems.join('; ')}`);
+  const awayOf = (p: number): readonly FaceAway[] => sheetData?.performers[p]?.faceAway ?? [];
   const out = resolve(options.out ?? join(OUTPUT, 'review', basename(take, '.glb')));
   const reader = join(out, 'reader');
   const step = options.step ?? 0.2;
@@ -269,13 +303,17 @@ export async function review(take: string, options: ReviewOptions = {}): Promise
     // Pass 1: the card as it plays (its camera follows frame to frame), and where each body is.
     const cards: CardReading[] = [];
     const bodies: Bodies[] = [];
+    const checked = new Set([0.2, 0.5, 0.8].map((k) => Math.round(k * (frames - 1))));
     for (let f = 0; f < frames; f += 1) {
       await R('seek', times[f]);
-      cards.push(await R('card') as CardReading);
-      bodies.push(await R('bodies') as Bodies);
       await page.screenshot({ path: join(frameDir, 'card', `${String(f).padStart(4, '0')}.jpg`), type: 'jpeg', quality: 88 });
+      // After the screenshot: the face pass draws over the canvas, and the next seek draws the card again.
+      cards.push(await R('card', checked.has(f), false) as CardReading);
+      bodies.push(await R('bodies') as Bodies);
     }
 
+    const faceCheck = checkFaceBox(cards, times, checked);
+    
     const acts = actedOn(sheetData, init.performers.map((x) => x.name), init.objects);
     // Pass 2: a close view per performer, its camera smoothed over a second so it does not hide small movement.
     const closed = options.cardOnly ? 0 : init.performers.length;
@@ -411,15 +449,20 @@ export async function review(take: string, options: ReviewOptions = {}): Promise
           const far = (k: string) => { const s = cards[fs[0]!]!.performers[p]!.points[k]; return s ? Math.max(...fs.map((i) => dist2(cards[i]!.performers[p]!.points[k]!, s))) : 0; };
           const head = round(far('head'));
           const hands = round(Math.max(far('leftHand'), far('rightHand')));
-          travel.push({ from, head, hands, still: head < STILL_PX && hands < STILL_PX });
+          const faceInSecond = fs.map((i) => cards[i]!.performers[p]!.face).filter((b): b is [number, number, number, number] => Boolean(b)).map((b) => b[3] - b[1]);
+          travel.push({ from, head, hands, still: head < STILL_PX && hands < STILL_PX, faceDevicePx: faceInSecond.length ? round(median(faceInSecond) * pr) : null, faceAway: isFaceAway(from + 0.5, awayOf(p)) });
         }
         const med = median(faces);
+        const perFrame = cards.map((c, i) => { const b = c.performers[p]!.face; return { t: times[i]!, px: b ? (b[3] - b[1]) * pr : null }; });
         return {
           name: perf.name,
           faceCssPx: { min: round(Math.min(...faces)), median: round(med), max: round(Math.max(...faces)) },
           faceDevicePx: round(med * pr),
+          faceSplitDevicePx: splitFace(perFrame, awayOf(p)),
+          faceAway: awayOf(p),
           faceMmOnPhone: round(med * MM_PER_CSS_PX, 100),
           bodyCssPx: round(median(bodiesPx)),
+          faceCheck: faceCheck[p]!,
           travelPerSecond: travel
         };
       })
@@ -440,11 +483,12 @@ export async function review(take: string, options: ReviewOptions = {}): Promise
     '- `sheet-close-<performer>-NN.jpg`: the close view at the same times.',
     ...(takeHasSound && !options.cardOnly ? ['- `sheet-face-<performer>-NN.jpg`: each performer\'s face at the same times; in the video, the rightmost view.'] : []),
     '',
-    'Answer in three parts:',
+    'Answer in four parts:',
     '',
     '1. **Overall:** in one or two sentences, what happens and what it is about.',
     '2. **Moment by moment:** a list of time spans (from the labels on the stills) and, for each, what the performer does and what you think it means. Say where you are unsure.',
     '3. **What you could not read:** anything too small, too fast, ambiguous or frozen, and at which framing.',
+    '4. **The story, in three short answers:** (a) Who is this person, and where are they? (b) What happens? Name the thing that changes. (c) How do they react to it? For each, say what you saw that tells you, or say "I cannot tell".',
     ''
   ].join('\n'));
 
@@ -457,6 +501,7 @@ export async function review(take: string, options: ReviewOptions = {}): Promise
       sheet: basename(sheetFile),
       reader: null,
       piece: { intent: sheetData.intent ?? null, seen: null, reads: null },
+      story: sheetData.story ? { ...Object.fromEntries(STORY_PARTS.map((k) => [k, { says: sheetData.story![k].says, see: sheetData.story![k].see, seen: null, reads: null, revise: null }])), ...(sheetData.story.request ? { request: { says: sheetData.story.request, seen: null, reads: null, revise: null } } : {}) } : null,
       beats: sheetData.beats.map((b) => {
         const s = beatSpan(b);
         return { beat: b.id, performer: b.performer, from: round(s.from, 100), to: round(s.to, 100), intent: b.intent ?? null, seen: null, reads: null, revise: null };
@@ -492,7 +537,8 @@ async function main(): Promise<void> {
   console.log(summarize(acting));
   for (const p of r.onScreen.performers) {
     const still = p.travelPerSecond.filter((s) => s.still).map((s) => `${s.from}-${s.from + 1} s`);
-    console.log(`  ${p.name} on the card: face ${p.faceCssPx.median} CSS px tall (${p.faceDevicePx} device px, ${p.faceMmOnPhone} mm on a phone), body ${p.bodyCssPx} CSS px` +
+    const away = p.faceAway.length ? `; outside the marks ${p.faceSplitDevicePx.unmarked ?? 'no face'} device px, inside ${p.faceSplitDevicePx.marked ?? 'no face'} (marked ${p.faceAway.map((a) => `${a.from}–${a.to} s ${a.why}`).join(', ')})` : '';
+    console.log(`  ${p.name} on the card: face ${p.faceCssPx.median} CSS px tall (${p.faceDevicePx} device px${away}, ${p.faceMmOnPhone} mm on a phone), body ${p.bodyCssPx} CSS px` +
       (still.length ? `; still at card size (head and hands < ${STILL_PX} px): ${still.join(', ')}` : '; never still at card size'));
   }
   console.log(`review pack: ${r.out}\n  give a fresh reader only ${join(r.out, 'reader')}; fill ${join(r.out, 'comparison.json')} from their account`);
