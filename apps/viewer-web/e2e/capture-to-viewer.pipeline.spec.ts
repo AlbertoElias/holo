@@ -25,6 +25,10 @@ test("a recording exported from capture uploads and renders in the viewer", asyn
   const glbPath = testInfo.outputPath("capture-export.glb");
   await copyFile(take.glbPath, glbPath);
   const glbBytes = take.bytes;
+  // The meshes of the take that carry morph targets (the default avatar's face and what it wears).
+  const takeJson = JSON.parse(glbBytes.subarray(20, 20 + glbBytes.readUInt32LE(12)).toString("utf8")) as { meshes: Array<{ primitives: Array<{ targets?: unknown[] }> }> };
+  const capturedMorphMeshes = takeJson.meshes.filter((mesh) => mesh.primitives.some((primitive) => (primitive.targets?.length ?? 0) > 0)).length;
+  expect(capturedMorphMeshes, "the take carries facial morph meshes").toBeGreaterThan(0);
 
   const hologramName = `Pipeline ${testInfo.testId.slice(0, 8)}-${Date.now()}`;
   await signInForUpload(page, { displayName: "pipeline-e2e" });
@@ -100,7 +104,7 @@ test("a recording exported from capture uploads and renders in the viewer", asyn
   expect(report.geometry.some((mesh) => mesh.skinned && (mesh.maximumVertexMotionMeters ?? 0) > 0.01),
     "actual captured avatar changes evaluated geometry").toBe(true);
   expect(report.geometry.filter((mesh) => (mesh.morphTargetCount ?? 0) > 0).length,
-    "all captured facial meshes survive").toBe(4);
+    "all captured facial meshes survive").toBe(capturedMorphMeshes);
   expect(report.passed, "independent USD animation/material/audio validation").toBe(true);
   // The baked cloche (styleguide 9.5), refitted by the inspector, burns by this hologram's id as the web does.
   expect(report.cloche?.seed, "the preview's cloche is seeded by the hologram's id").toBe(uploaded.id);

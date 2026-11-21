@@ -51,7 +51,7 @@ type HologramDto = { id: string; url: string; placeDetailUrl?: string | null; te
 // ---------------------------------------------------------------- capture
 
 /** Capture at `?place=` a scan served from a local server: Playwright's route cannot carry a 300 MB PLY. */
-async function openCapture(browser: Browser, bytes: Buffer): Promise<{ context: BrowserContext; page: Page; errors: string[] }> {
+async function openCapture(browser: Browser, bytes: Buffer, avatar?: string): Promise<{ context: BrowserContext; page: Page; errors: string[] }> {
   const context = await createXrContext(browser);
   const page = await context.newPage();
   await page.setViewportSize(CAPTURE_VIEWPORT);
@@ -67,7 +67,7 @@ async function openCapture(browser: Browser, bytes: Buffer): Promise<{ context: 
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address() as { port: number };
   context.on("close", () => server.close());
-  await page.goto(new URL(`?placeCapture=1&place=${encodeURIComponent(`http://127.0.0.1:${port}/scan.ply`)}`, captureUrl).href, { waitUntil: "load" });
+  await page.goto(new URL(`?placeCapture=1&place=${encodeURIComponent(`http://127.0.0.1:${port}/scan.ply`)}${avatar ? `&avatar=${encodeURIComponent(avatar)}` : ""}`, captureUrl).href, { waitUntil: "load" });
   await waitForTextContentPrefix(page, "#status", "loaded", { timeout: 60_000 });
   await page.evaluate(() => (window as unknown as CaptureWindow).__setManualClock(true, false));
   return { context, page, errors };
@@ -80,8 +80,8 @@ const mock = (page: Page, input: Parameters<CaptureWindow["__setMockInput"]>[0])
 type Take = { glb: Buffer; stopMs: number; lastExport: Record<string, unknown>; errors: string[] };
 
 /** A short walk on the scan, recorded; the GLB the capture page downloads at Stop. */
-async function recordTake(browser: Browser, scan: Buffer, name: string): Promise<Take> {
-  const { context, page, errors } = await openCapture(browser, scan);
+async function recordTake(browser: Browser, scan: Buffer, name: string, avatar?: string): Promise<Take> {
+  const { context, page, errors } = await openCapture(browser, scan, avatar);
   try {
     await expect.poll(async () => (await placeReport(page))?.status, { timeout: 240_000 }).toBe("ready");
     await advance(page, 1);
@@ -395,7 +395,8 @@ test.describe("hologram budgets: two levels of the place, the 100 MB cap", () =>
 
   test("a 4096 px texture is served as KTX2 at 1024 px with reduced animation, and the focused card swaps in the full size", async ({ browser, page }) => {
     test.setTimeout(600_000);
-    const small = await recordTake(browser, makeFixture(BASE).bytes, "sh0-small-texture");
+    // The stock avatar has textures; the default house base has none (its colours are material factors).
+    const small = await recordTake(browser, makeFixture(BASE).bytes, "sh0-small-texture", "/gltf/models/avatar.glb");
     // The avatar's skin (texture 1) at 4096 px, as a heavy prop would bring.
     const heavy = withTexture(small.glb, 1, gradientPng(4096));
     const uploaded = await upload(page, "Budgets texture", heavy);

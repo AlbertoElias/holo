@@ -82,6 +82,13 @@ export interface GaitState {
  * (docs/features/realistic-avatar-motion.md, 16).
  */
 const WALK_STRIDE_SCALE = 1.0;
+/**
+ * An avatar with short legs for its height takes short steps, so at the walk speed (a share of its height) its own
+ * stride gives a hurried cadence (the house base: 150 steps/min). Its stride is laid longer, up to this cadence at
+ * the walk speed and no more than the limit. An avatar at or under the cadence keeps its own stride.
+ */
+const WALK_CADENCE_MAX_STEPS_PER_MIN = 130;
+const WALK_STRIDE_SCALE_MAX = 1.2;
 
 export function inStance(gait: WalkGait, leg: GaitLeg, phase: number): boolean {
   const { land, lift } = gait.stance[leg];
@@ -176,6 +183,9 @@ export class LocomotionAnimator {
   private activeAction: THREE.AnimationAction | null = null;
   private currentTimeScale = 1;
   private strideShare = 1;
+  /** How much longer than the clip's own the walk's stride is laid for this avatar (see WALK_CADENCE_MAX_STEPS_PER_MIN). */
+  private strideScale = WALK_STRIDE_SCALE;
+  private readonly tmpScale = new THREE.Vector3();
   private clipSources: Record<LocomotionState, LocomotionClipSource> = { idle: 'none', walk: 'none', jump: 'none', fall: 'none' };
   private root: THREE.Object3D | undefined;
   private gait: WalkGait | undefined;
@@ -286,6 +296,7 @@ export class LocomotionAnimator {
   }
 
   update(input: LocomotionUpdateInput): void {
+    this.fitStrideScale(input.referenceSpeed);
     const nextProfile: LocomotionProfile = input.vrMode ? 'vr-lower-body' : 'desktop-full';
     const travel = Math.min(input.horizontalSpeed, this.netSpeed(input.position, input.deltaSec) ?? input.horizontalSpeed);
     const nextState = this.resolveState(input.grounded, input.velocityY, travel);
@@ -357,6 +368,16 @@ export class LocomotionAnimator {
     return this.walkTrajectory;
   }
 
+  /** Lays this avatar's stride longer when its own stride would step faster than the cadence limit at the walk speed. */
+  private fitStrideScale(referenceSpeed: number | undefined): void {
+    const duration = this.actionsByProfile['desktop-full'].walk?.getClip().duration ?? 0;
+    if (!this.gait || !this.root || !referenceSpeed || !(duration > 0)) return;
+    const ownStanceSpeed = this.gait.stanceSpeed * Math.abs(this.root.getWorldScale(this.tmpScale).z);
+    if (!(ownStanceSpeed > 1e-4)) return;
+    const ownCadence = (120 / duration) * (referenceSpeed / ownStanceSpeed);
+    this.strideScale = THREE.MathUtils.clamp((WALK_STRIDE_SCALE * ownCadence) / WALK_CADENCE_MAX_STEPS_PER_MIN, WALK_STRIDE_SCALE, WALK_STRIDE_SCALE_MAX);
+  }
+
   /** The walk's footfall phase this frame, for the leg solver's planted feet; undefined without a measured gait. */
   getGaitState(): GaitState | undefined {
     // The gait is measured on the desktop clip; the VR clips keep their own speed-scaled cadence (gap 3).
@@ -365,14 +386,14 @@ export class LocomotionAnimator {
     const walking = this.state === 'walk' && walk !== undefined && this.activeAction === walk;
     const duration = walk?.getClip().duration ?? 0;
     const phase = walk && duration > 0 ? (((walk.time / duration) % 1) + 1) % 1 : 0;
-    return { gait: this.gait, walking, phase, stride: WALK_STRIDE_SCALE * this.strideShare };
+    return { gait: this.gait, walking, phase, stride: this.strideScale * this.strideShare };
   }
 
   /** The planted foot's speed at time scale 1, in world metres per second (the avatar's scale applied). */
   stanceSpeedWorld(): number | undefined {
     if (!this.gait || !this.root || this.activeProfile !== 'desktop-full') return undefined;
     const scale = this.root.getWorldScale(new THREE.Vector3()).z;
-    return this.gait.stanceSpeed * WALK_STRIDE_SCALE * Math.abs(scale);
+    return this.gait.stanceSpeed * this.strideScale * Math.abs(scale);
   }
 
   /**
