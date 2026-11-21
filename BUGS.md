@@ -40,7 +40,7 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Cause (suspected):** the physics of the take diverges (one fall>idle is missing), so the hand
   error follows from a different state, not from the arm solve.
 
-### B-083 — The house avatar sinks to the floor on a floor reach
+### B-086 — The house avatar sinks to the floor on a floor reach
 
 - **Area:** apps/capture (floor reach, house base avatar)
 - **Severity:** P2
