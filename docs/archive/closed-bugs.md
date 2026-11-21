@@ -1626,3 +1626,34 @@ bug above.)
 - **Reproduction:** as B-073 with `ARM_REACH_INPUTS=controller`.
 - **Fix:** the full-reach shoulder push, a fitted arm length (0.406 × shoulder height, at most ×1.08) and a 1.8% reserve, with no reach stretch. Controller wrist p95 forward-far / overhead 14.8 / 14.5 → 12.3 / 12.0 cm; those targets lie at 1.10× and 1.2× of a full reach, past a human arm. Forward 0.3 → 0.0 cm. Arm length spread 8% → 1.8%.
 - **Closed:** 2026-11-20.
+
+### B-083 — The performer floor on the card makes the AR route miss its 20 s load on a slow runner
+
+- **Area:** apps/viewer-web (`HologramCardCanvas` fit, `motionPoints`)
+- **Severity:** P1 (`main` red on runs 44815715770 and 44826449489)
+- **Observed:** 2026-11-20, hosted pipeline shard 1
+- **Evidence:**
+  - `bubble-capture.pipeline.spec.ts:142`: `.xr-view-container` does not mount within 20 s after "View in your room"; the page shows "Loading hologram…" later.
+  - CI emulator, bubble-capture ×3: 0af7fc10cc under `CI_EMULATE_LOAD=2` passes 3/3; caf7cad fails at :142; caf7cad without 85ee704b62ba passes 3/3; caf7cad at plain load passes 3/3.
+  - 85ee704b62ba adds a third `drawnPoints` + `motionPoints` pass over the whole take for each card, in `fitClocheNow`, which runs again when the bubble or the place gate changes.
+- **Expected:** the performer floor costs no more than one fit pass, and the AR route mounts in time on a loaded runner.
+- **Reproduction:** `CI_EMULATE_LOAD=2 scripts/ci-emulate.sh bash -c "cd apps/viewer-web && RUN_E2E_PIPELINE=1 XR_TEST_MODE=iwer npx playwright test e2e/bubble-capture.pipeline.spec.ts --workers=1 --repeat-each=3"` on caf7cad.
+- **Next:** 85ee704b62ba is reverted on `main`. Bring the floor back with the performer's points taken from the same sampling pass, and pass the reproduction above before the merge.
+- **Cause:** not the fit pass. R3F's unmount loses the card's WebGL context, and on a software GPU (SwiftShader) that waits for every queued frame. rAF asks for about 63 frames a second; one frame of the closer floor framing takes about 520 ms (210 ms without the floor), so the queue grows without a limit and leaving for AR waits about 37 s at load 2.
+- **Fix:** `FrameGate` (`apps/viewer-web/src/features/feed/FrameGate.tsx`) draws the card only when the WebGL2 fence of the last frame has signalled, and the floor uses one fit pass. AR load at load 2 fell from about 37 s to 3.1–3.3 s; bubble-capture at the real 20 s bar passed 11 of 11 under `CI_EMULATE_LOAD=2`.
+- **Closed:** 2026-11-21.
+
+### B-084 — The feed take does not start in bubble-capture after the VR arm change
+
+- **Area:** apps/capture (arm IK, 12b0a45c2d1a) or apps/viewer-web feed playback
+- **Severity:** P2
+- **Observed:** 2026-11-20, CI emulator
+- **Evidence:**
+  - `bubble-capture.pipeline.spec.ts:98`: "feed sphere follows recorded motion (clip time 0 → 0 s, running false)".
+  - 12b0a45 without 85ee704b62ba: 1 of 3 at plain load, and with :126 ("the rim's largest change in a frame") in 3 of 3 under `CI_EMULATE_LOAD=2`.
+  - 0af7fc10cc and caf7cad without 85ee704b62ba never failed at :98 or :126 (6 runs).
+- **Expected:** the take plays in the feed on every run.
+- **Reproduction:** the B-083 command on `main` after the revert, at plain load and at load 2.
+- **Cause:** not the arm change or the gate (1 of 5 on `main` and on the gate branch alike). The feed also loads the neighbour cards, paused, and each reports its own probe; the spec kept whichever card reported last, so it sometimes read a paused neighbour (clip time 0, running false).
+- **Fix:** the spec keeps each card's probe by URL and reads the uploaded card's. Bubble-capture at load 2 passed 11 of 11.
+- **Closed:** 2026-11-21.
