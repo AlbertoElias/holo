@@ -667,7 +667,7 @@ function swivelClear(cast: Cast[], c: Cast, t: number, s: Side, props: readonly 
 }
 
 /** How far an arm may sink before the clearance moves it, and how far clear it lands, metres. */
-const CLEAR = { slack: 0.004, margin: 0.008, passes: 8, most: 0.1, residual: 0.03 } as const;
+const CLEAR = { slack: 0.004, margin: 0.008, passes: 14, residual: 0.03 } as const;
 
 /**
  * Keeps each arm out of the body, the head and the objects it is not
@@ -700,10 +700,12 @@ function clearArms(cast: Cast[], c: Cast, t: number): void {
     const pose = (): THREE.Quaternion[] => armBones(ch).map((b) => b.quaternion.clone());
     const load = (q: readonly THREE.Quaternion[]): void => { armBones(ch).forEach((b, i) => b.quaternion.copy(q[i]!)); a.frame.updateMatrixWorld(true); };
     let best = { depth: Infinity, pose: pose() };
-    // How far the wrist may go from where the take put it (after the planned move on a second solve): a clear arm that jumps is worse than a clip the meter reports.
+    // On a second solve, how far the wrist and the elbow may go from the planned move: a clear arm that jumps is worse than a clip the meter reports.
+    // The first solve has no limit: an arm caught between two surfaces (a hand on the chest, the forearm on the side) can need a long way out,
+    // and the second solve smooths that move over time.
     const from = ch.hand.getWorldPosition(new THREE.Vector3());
     const fromElbow = ch.foreArm.getWorldPosition(new THREE.Vector3());
-    const most = planned ? CLEAR.residual : CLEAR.most;
+    const most = planned ? CLEAR.residual : Infinity;
     for (let pass = 0; pass <= CLEAR.passes; pass += 1) {
       let worst: { depth: number; normal: THREE.Vector3; along: number; upper: THREE.Vector3 | null } = { depth: CLEAR.slack, normal: new THREE.Vector3(), along: 1, upper: null };
       for (const q of armSkin(a, c.armBody, s)) {
