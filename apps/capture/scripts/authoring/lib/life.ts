@@ -366,7 +366,9 @@ export function busy(dirs: readonly Resolved[], t: number, kinds: Readonly<Parti
       const holdEnd = arrive + r.hold;
       v = r.persistent || t < arrive || t > holdEnd ? 1 : level + (1 - level) * (1 - smoother(Math.min(t - arrive, holdEnd - t) / HOLD_EASE));
     }
-    if (v > b) b = v;
+    // A soft union, not the max: where one direction's mask eases out as the next eases in, the
+    // max has a corner, and life's weight shift under it turned the hips back in one frame.
+    b = 1 - (1 - b) * (1 - Math.max(0, v));
     if (b >= 1) return 1;
   }
   return b;
