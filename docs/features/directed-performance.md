@@ -1601,6 +1601,20 @@ decode counts a pixel only when its blue is within 8 of a code and at least 2 of
 4 neighbours have the same code. The review reports the count of pixels it leaves out.
 A copy of her face recoded as his still fails the check.
 
+**Marked face-away seconds (owner decision, 2026-11-21).** The owner chose "b for the
+bar": the 40 px face bar does not apply to a performer in the seconds where the beat
+sheet marks that the head is turned down or away on purpose. In all other seconds the
+bar applies, unchanged. The mark is `faceAway` on the performer, a list of
+`{ "from", "to", "why" }` spans with a reason ("looks down", "walks away"). No mark
+means the bar applies. One performer may mark at most one third of the piece
+(`FACE_AWAY_MAX_SHARE` in `lib/face-bar.ts`; the lead proposed this limit to the owner).
+The sheet check and `review.ts` fail a sheet over the limit or a mark with no reason.
+`review.ts` reports the median face outside and inside the marks
+(`faceSplitDevicePx` in `on-screen.json`) and lists the marked seconds; the
+`faceBox` row reads the median outside the marks. A performer with no face outside the
+marks fails. `scripts/authoring/face-bar-check.ts` checks that an unmarked small face
+still fails. No other bar changes.
+
 **Done when** fresh agents get only the skill and the same three ideas, remake the
 pieces, and a blind reader gets the setup, the event and the reaction in each. Then a
 proof video goes to the owner, `verify:pr` passes, and the work merges to `main`.

@@ -10,6 +10,7 @@ import { FINISHES, parseLook, type Finish, type LookCard } from '@holoim/avatar-
 import type { HandShapeName } from './hands.ts';
 import { HAND_SHAPES } from './hands.ts';
 import { measureProblem, placeProblem } from './stage.ts';
+import { type FaceAway, faceAwayProblems } from './face-bar.ts';
 import { objectCreditSchema } from '@holoim/objects';
 import { VRM_HUMANOID_BONES } from '@holoim/meaning';
 
@@ -204,6 +205,8 @@ export interface PerformerSpec {
   readonly hold?: Partial<Record<Side, string>>;
   /** false: no attending life (the nods and arm changes of a performer facing another). Default true. */
   readonly attend?: boolean;
+  /** Seconds where the head is turned down or away on purpose, each with a reason; the face bar skips them (lib/face-bar.ts). */
+  readonly faceAway?: readonly FaceAway[];
 }
 
 /** When a world change happens: seconds, a beat id (its start) or `<beat>.end`. */
@@ -598,6 +601,7 @@ export function validateSheet(sheet: BeatSheet): string[] {
   if (!(sheet.duration > 0)) problems.push('duration must be > 0');
   for (const p of sheet.performers) {
     if ((p.avatar === 'house' || p.avatar.startsWith('house:')) && !houseFinish(p.avatar)) problems.push(`${p.id}: avatar "${p.avatar}": the house base is ${FINISHES.map((f) => `"house:${f}"`).join(', ')}`);
+    problems.push(...faceAwayProblems(p.id, p.faceAway, sheet.duration));
     if (p.look === undefined) continue;
     if (!houseFinish(p.avatar)) { problems.push(`${p.id}: a look needs a house avatar ("${HOUSE_AVATAR}" or another finish)`); continue; }
     try { parseLook(p.look, `${p.id} look`); } catch (e) { problems.push((e as Error).message); }

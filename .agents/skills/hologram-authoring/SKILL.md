@@ -298,7 +298,7 @@ production and needs the owner's word.
 | `reach.*` | the palm gets to its point (leaning allowed) |
 | `size.*` | each dressed avatar file is at most 1.8 MB (house avatars are about 1.1-1.5) |
 | `quickLook` | the take fits the iPhone Quick Look budget |
-| `faceBox.*` | the face is at least 40 device px brow to chin on the phone card |
+| `faceBox.*` | the face is at least 40 device px brow to chin on the phone card, outside the seconds the sheet marks `faceAway` |
 | `story` | the main bar: a fresh reader, told nothing, gets the setup (who and where), the event and the reaction. Fails at once when the sheet has no `story` |
 | `reading` | a fresh reader reads every beat (each beat needs an `intent`) and the piece as a whole |
 | `body.*`, `still.*`, `onCard.*` | notes, not bars: feet planted, something moving every second, objects wholly on the card |
@@ -307,7 +307,7 @@ production and needs the owner's word.
 
 - **The face is small.** For one performer the card frames the body from
   the hips and the head only, so objects and reaches do not change the
-  face size. The bar reads the median face over the take, brow to chin. A
+  face size. The bar reads the median face over the take, brow to chin, outside the marked seconds below. A
   face that tips down or away is shorter on the screen. So:
   - Look at an object mostly with the eyes: `"head": 0.3` or less. A look
     with `"head": 0.8` at a thing on a table cost about 3 px in a test.
@@ -316,7 +316,16 @@ production and needs the owner's word.
   - Keep a forward lean (a reach far forward, a bow) short. A `nod` tips
     the head down too: two nods cost a slip piece about 16 px for two
     seconds. Use one nod, or none.
-  - The faceBox fix names the seconds where the face is small, and
+  - A beat that turns the head down or away on purpose (she looks down at
+    a letter, he walks away) can be marked on the performer, with a reason:
+    `"faceAway": [{ "from": 2.4, "to": 3.6, "why": "looks down" }]`. The
+    bar skips those seconds and reads the median outside them. Mark at most
+    one third of the piece per performer; more fails the sheet. Mark only a
+    turn the story needs, not a look you could make with the eyes. The
+    review prints the face inside and outside the marks
+    (`faceSplitDevicePx` in `review/on-screen.json`). Owner rule,
+    2026-11-21.
+  - The faceBox fix names the unmarked seconds where the face is small, and
     `review/on-screen.json` gives each second's face
     (`travelPerSecond[].faceDevicePx`). Change the beats in those seconds.
   Two performers roughly halve the face.

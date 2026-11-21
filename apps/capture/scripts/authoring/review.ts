@@ -51,6 +51,7 @@ import { tokens } from '@holoim/design-tokens';
 
 import { actingReport, summarize } from './acting-report.ts';
 import { beatSpan, holdingsOf, parseSheetText, pointObjects, STORY_PARTS, type BeatSheet, type Direction, type Point } from './lib/beats.ts';
+import { type FaceAway, type FaceSplit, faceAwayProblems, isFaceAway, splitFace } from './lib/face-bar.ts';
 import { parseGlb } from './lib/gltf-read.ts';
 import { REVIEW_PAGE, SHEET_PAGE } from './lib/review-page.ts';
 import { takeSoundtrack } from './lib/sound.ts';
@@ -104,13 +105,17 @@ export interface OnScreen {
     /** Height of the part of the mesh the face channels move (brow to chin), at the card's framing. */
     readonly faceCssPx: { readonly min: number; readonly median: number; readonly max: number };
     readonly faceDevicePx: number;
+    /** The face's median height (device px) outside and inside the sheet's marked face-away seconds; the bar reads `unmarked`. */
+    readonly faceSplitDevicePx: FaceSplit;
+    /** The sheet's marked face-away seconds for this performer, with their reasons. */
+    readonly faceAway: readonly FaceAway[];
     readonly faceMmOnPhone: number;
     /** Head top to feet, CSS px, median. */
     readonly bodyCssPx: number;
     /** The drawn face's height (CSS px) beside the height of the box of its face vertices, at three moments: the check on the measure. */
     readonly faceCheck: readonly FaceCheck[];
     /** Per second: how far head and hands travel (CSS px), whether nothing moves, and the face's median height in device px (null when no frame has a face). */
-    readonly travelPerSecond: { readonly from: number; readonly head: number; readonly hands: number; readonly still: boolean; readonly faceDevicePx: number | null }[];
+    readonly travelPerSecond: { readonly from: number; readonly head: number; readonly hands: number; readonly still: boolean; readonly faceDevicePx: number | null; readonly faceAway: boolean }[];
   }[];
 }
 
@@ -261,6 +266,10 @@ export async function review(take: string, options: ReviewOptions = {}): Promise
   // A sheet beside the take is optional; one named with --sheet must load.
   const sheetData = await readFile(sheetFile, 'utf8').then((s) => parseSheetText(s, sheetFile))
     .catch((error: unknown) => { if (options.sheet) throw new Error(`--sheet ${options.sheet}: ${String(error)}`); return undefined; });
+  // Marked face-away seconds the bar skips: a sheet that marks too much (or marks badly) fails here.
+  const awayProblems = (sheetData?.performers ?? []).flatMap((p) => faceAwayProblems(p.id, p.faceAway, sheetData!.duration));
+  if (awayProblems.length) throw new Error(`${sheetFile}: ${awayProblems.join('; ')}`);
+  const awayOf = (p: number): readonly FaceAway[] => sheetData?.performers[p]?.faceAway ?? [];
   const out = resolve(options.out ?? join(OUTPUT, 'review', basename(take, '.glb')));
   const reader = join(out, 'reader');
   const step = options.step ?? 0.2;
@@ -441,13 +450,16 @@ export async function review(take: string, options: ReviewOptions = {}): Promise
           const head = round(far('head'));
           const hands = round(Math.max(far('leftHand'), far('rightHand')));
           const faceInSecond = fs.map((i) => cards[i]!.performers[p]!.face).filter((b): b is [number, number, number, number] => Boolean(b)).map((b) => b[3] - b[1]);
-          travel.push({ from, head, hands, still: head < STILL_PX && hands < STILL_PX, faceDevicePx: faceInSecond.length ? round(median(faceInSecond) * pr) : null });
+          travel.push({ from, head, hands, still: head < STILL_PX && hands < STILL_PX, faceDevicePx: faceInSecond.length ? round(median(faceInSecond) * pr) : null, faceAway: isFaceAway(from + 0.5, awayOf(p)) });
         }
         const med = median(faces);
+        const perFrame = cards.map((c, i) => { const b = c.performers[p]!.face; return { t: times[i]!, px: b ? (b[3] - b[1]) * pr : null }; });
         return {
           name: perf.name,
           faceCssPx: { min: round(Math.min(...faces)), median: round(med), max: round(Math.max(...faces)) },
           faceDevicePx: round(med * pr),
+          faceSplitDevicePx: splitFace(perFrame, awayOf(p)),
+          faceAway: awayOf(p),
           faceMmOnPhone: round(med * MM_PER_CSS_PX, 100),
           bodyCssPx: round(median(bodiesPx)),
           faceCheck: faceCheck[p]!,
@@ -525,7 +537,8 @@ async function main(): Promise<void> {
   console.log(summarize(acting));
   for (const p of r.onScreen.performers) {
     const still = p.travelPerSecond.filter((s) => s.still).map((s) => `${s.from}-${s.from + 1} s`);
-    console.log(`  ${p.name} on the card: face ${p.faceCssPx.median} CSS px tall (${p.faceDevicePx} device px, ${p.faceMmOnPhone} mm on a phone), body ${p.bodyCssPx} CSS px` +
+    const away = p.faceAway.length ? `; outside the marks ${p.faceSplitDevicePx.unmarked ?? 'no face'} device px, inside ${p.faceSplitDevicePx.marked ?? 'no face'} (marked ${p.faceAway.map((a) => `${a.from}–${a.to} s ${a.why}`).join(', ')})` : '';
+    console.log(`  ${p.name} on the card: face ${p.faceCssPx.median} CSS px tall (${p.faceDevicePx} device px${away}, ${p.faceMmOnPhone} mm on a phone), body ${p.bodyCssPx} CSS px` +
       (still.length ? `; still at card size (head and hands < ${STILL_PX} px): ${still.join(', ')}` : '; never still at card size'));
   }
   console.log(`review pack: ${r.out}\n  give a fresh reader only ${join(r.out, 'reader')}; fill ${join(r.out, 'comparison.json')} from their account`);
