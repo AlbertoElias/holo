@@ -710,28 +710,37 @@ function clearArms(cast: Cast[], c: Cast, t: number): void {
       if (worst.depth <= CLEAR.slack || pass === CLEAR.passes) break;
       const push = worst.normal.clone().multiplyScalar(worst.depth + CLEAR.margin);
       const shoulder = ch.upperArm.getWorldPosition(new THREE.Vector3());
-      const elbow = ch.foreArm.getWorldPosition(new THREE.Vector3());
-      const wrist = ch.hand.getWorldPosition(new THREE.Vector3());
+      const elbowAt = ch.foreArm.getWorldPosition(new THREE.Vector3());
+      const wristAt = ch.hand.getWorldPosition(new THREE.Vector3());
+      // How far the wrist and the elbow move for the whole push.
+      const dWrist = new THREE.Vector3();
+      const dElbow = new THREE.Vector3();
       if (worst.upper) {
         // A point on the upper arm moves its share of the elbow's move: as far along the upper arm as it is.
-        const bone = elbow.clone().sub(shoulder);
+        const bone = elbowAt.clone().sub(shoulder);
         const k = THREE.MathUtils.clamp(worst.upper.clone().sub(shoulder).dot(bone) / Math.max(1e-6, bone.lengthSq()), 0.3, 1);
-        elbow.addScaledVector(push, 1 / k);
+        dElbow.addScaledVector(push, 1 / k);
         // The elbow alone did not get it out (the hand is held in place): move the whole arm.
-        if (worst.depth > 0.7 * last) wrist.add(push);
-      } else if (worst.along >= 0.75) { wrist.add(push); elbow.addScaledVector(push, 0.5); } else elbow.addScaledVector(push, 1 / Math.max(0.3, 1 - worst.along));
-      const line = wrist.clone().sub(shoulder).normalize();
-      const out = elbow.sub(shoulder);
-      out.addScaledVector(line, -out.dot(line));
-      if (out.lengthSq() < 1e-8) break;
-      const hint = out.normalize().applyQuaternion(a.frame.getWorldQuaternion(new THREE.Quaternion()).invert());
+        if (worst.depth > 0.7 * last) dWrist.add(push);
+      } else if (worst.along >= 0.75) { dWrist.add(push); dElbow.addScaledVector(push, 0.5); } else dElbow.addScaledVector(push, 1 / Math.max(0.3, 1 - worst.along));
+      // A push that takes the arm too far from where it started is tried at a half and a quarter before the pass gives up:
+      // a part of the way out is better than none.
       const before = pose();
-      keepingTwist(a, s, () => solveArm(a, s, wrist, { elbowHint: hint }));
-      a.frame.updateMatrixWorld(true);
-      if (ch.hand.getWorldPosition(new THREE.Vector3()).distanceTo(from) > most || ch.foreArm.getWorldPosition(new THREE.Vector3()).distanceTo(fromElbow) > most) {
+      let moved = false;
+      for (const share of [1, 0.5, 0.25]) {
+        const wrist = wristAt.clone().addScaledVector(dWrist, share);
+        const elbow = elbowAt.clone().addScaledVector(dElbow, share);
+        const line = wrist.clone().sub(shoulder).normalize();
+        const out = elbow.sub(shoulder);
+        out.addScaledVector(line, -out.dot(line));
+        if (out.lengthSq() < 1e-8) break;
+        const hint = out.normalize().applyQuaternion(a.frame.getWorldQuaternion(new THREE.Quaternion()).invert());
+        keepingTwist(a, s, () => solveArm(a, s, wrist, { elbowHint: hint }));
+        a.frame.updateMatrixWorld(true);
+        if (ch.hand.getWorldPosition(new THREE.Vector3()).distanceTo(from) <= most && ch.foreArm.getWorldPosition(new THREE.Vector3()).distanceTo(fromElbow) <= most) { moved = true; break; }
         load(before);
-        break;
       }
+      if (!moved) break;
       moveHeld(cast, c, t);
       last = worst.depth;
     }
