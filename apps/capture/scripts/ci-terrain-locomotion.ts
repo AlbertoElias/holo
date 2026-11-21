@@ -175,7 +175,7 @@ async function runMode(page: Page, mode: 'desktop' | 'xr'): Promise<void> {
   if (meanSpeed(crouchWalk) < meanSpeed(walk) * 0.85) {
     assert(meanCadence(crouchWalk) < meanCadence(walk) * 0.85, `${mode}: crouch cadence fails to follow slower travel`);
   }
-  // Every input walks one avatar height per second (1.8 m/s).
+  // Every input walks one avatar height per second on the stock avatar's legs (1.8 m/s); a shorter leg walks slower, to 0.8 of it (`walkHeightsPerSec`).
   assert(meanSpeed(walk) > 1.8 * 0.75, `${mode}: unobstructed standing walk stuck on ramp`);
   assert(Math.abs(meanCadence(crouchWalk) - meanCadence(walk)) > 0.1, `${mode}: fixed cadence despite distinct measured speeds`);
   await screenshot(page, `${mode}-crouch-walk.png`);

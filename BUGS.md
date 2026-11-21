@@ -40,6 +40,21 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Cause (suspected):** the physics of the take diverges (one fall>idle is missing), so the hand
   error follows from a different state, not from the arm solve.
 
+### B-086 — The house avatar sinks to the floor on a floor reach
+
+- **Area:** apps/capture (floor reach, house base avatar)
+- **Severity:** P2
+- **Observed:** 2026-11-20
+- **Evidence:** the capture `object` suite on the house base (the default avatar): in
+  put-down, a still release, a still touch lift and desktop-floor-reach the hips go down
+  to 0.08–0.18 m above the floor (limit 0.27 m), a knee drops to 0.07–0.19 m below its
+  ankle (limit 0.02 m above) and a thigh turns 11.3–11.6° in one step (limit 10°). The
+  stock avatar in the same runs: hips 0.24–0.25 m, no knee or thigh failure (its own
+  failures are B-069). The crouch depth is in metres tuned on the stock avatar's legs;
+  the base's legs are shorter.
+- **Expected:** the reach crouch fits the avatar's leg length; the hips stay above the limit.
+- **Reproduction:** `cd apps/capture && OBJECT_ONLY=desktop,mouse,phone,reach,resizeIwer node --import tsx scripts/run-xr-checks.ts object`
+
 ### B-069 — Desktop and phone object checks fail on `main` (outside `verify:pr`)
 
 - **Area:** apps/capture (objects)

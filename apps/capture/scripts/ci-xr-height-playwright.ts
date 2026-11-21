@@ -1,6 +1,7 @@
 import type {} from 'three';
 import { CONTROL_NAMES } from '@holoim/xr-ui-core';
 import type {} from '../src/runtime/automationHooks';
+import { DEFAULT_AVATAR_URL } from '../src/config/runtimeConfig';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -43,7 +44,7 @@ const browser = await launchXrBrowser(chromium);
 // A real GLB fixture variant changes the rig's eye proportions and asset origin
 // before GLTFLoader, rather than bypassing the runtime with synthetic metrics.
 async function proportionVariant(): Promise<Buffer> {
-  const source = await readFile(new URL('../public/gltf/models/avatar.glb', import.meta.url));
+  const source = await readFile(new URL(`../public${DEFAULT_AVATAR_URL}`, import.meta.url));
   const length = source.readUInt32LE(12);
   const gltf = JSON.parse(source.toString('utf8', 20, 20 + length)) as {
     scene?: number; scenes: Array<{ nodes: number[] }>;
@@ -143,7 +144,7 @@ try {
     await attachXrEnvironment(page, { mode: 'iwer', cacheClearState: true });
     if (label === 'seated') {
       const body = await proportionVariant();
-      await page.route('**/gltf/models/avatar.glb', (route) => route.fulfill({ body, contentType: 'model/gltf-binary' }));
+      await page.route(`**${DEFAULT_AVATAR_URL}`, (route) => route.fulfill({ body, contentType: 'model/gltf-binary' }));
     }
     await page.route('**/__holoim/input-recordings**', (route) => route.fulfill({ json: { path: 'height-test-input.json' } }));
     const url = new URL(process.env.BASE_URL ?? 'https://127.0.0.1:5274/');

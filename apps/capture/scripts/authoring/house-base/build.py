@@ -776,6 +776,33 @@ top.head = (head_bone.head.x, head_bone.head.y, head_top[2])
 top.tail = (top.head.x, top.head.y, head_top[2] + 0.05)
 top.parent = head_bone
 top.use_deform = False
+# The thumb's base joint, set where a tracked hand has it (`rig.thumbBase`, in hand lengths from the wrist: along
+# the wrist-to-middle-knuckle line, toward the index side, and out of the palm's plane on the thumb's side).
+# MPFB's mixamo rig has it almost in the palm's plane, which capture's hand replay reads as 20 to 27 degrees of
+# thumb curl that the tracked hand does not have. The mesh and its weights do not move.
+for side in ("Left", "Right"):
+    wrist, t1 = eb[f"{side}Hand"].head.copy(), eb[f"{side}HandThumb1"]
+    middle, index, pinky = (eb[f"{side}Hand{f}1"].head - wrist for f in ("Middle", "Index", "Pinky"))
+    x = middle.normalized()
+    z = index.cross(pinky).normalized()
+    z = z if (eb[f"{side}HandThumb2"].head - wrist).dot(z) > 0 else -z  # the base joint itself is in the plane
+    y = z.cross(x)
+    y = y if index.dot(y) > 0 else -y
+    along, toIndex, outOfPalm = P["rig"]["thumbBase"]
+    t1.use_connect = False
+    t1.head = wrist + (x * along + y * toIndex + z * outOfPalm) * middle.length
+# Fingertip end sites, named as the stock avatar's (`LeftHandIndex4`): capture reads a finger's tip from the
+# first child of its last joint (HumanoidSkeleton.tip), for the pinch and the hand replay's measures.
+for side in ("Left", "Right"):
+    for finger in ("Thumb", "Index", "Middle", "Ring", "Pinky"):
+        last = eb[f"{side}Hand{finger}3"]
+        tip = eb.new(f"{side}Hand{finger}4")
+        tip.head = last.tail
+        tip.tail = last.tail + (last.tail - last.head).normalized() * 0.01
+        tip.roll = last.roll
+        tip.parent = last
+        tip.use_connect = False
+        tip.use_deform = False
 bpy.ops.object.mode_set(mode="OBJECT")
 
 # --- Join the parts to the body (carried by the head), and the face shapes --------------------------------
