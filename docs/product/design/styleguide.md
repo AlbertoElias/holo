@@ -389,11 +389,13 @@ enter.
   no back wall, no fog.
 - **Framing.** Follow frames the whole dome in the card's viewing box (the
   space between the title and the controls) at 78% of its size, from 18°
-  right of front and 16° above. Return frames it again. A recorded object far
-  from the performer widens the dome and would shrink her; the camera stops
-  pulling back when she would fall below 75% of her size without objects
-  (`edge.cloche.performerFloor`) and centres between her and the dome, so the
-  far object may sit partly off the card.
+  right of front and 16° above. Return frames it again. The performer comes
+  first: a recorded object far from her, or a recorded set wider than her
+  reach (a phone take's scene), widens the dome and would shrink her. The
+  camera stops pulling back when she would fall below 75% of her own size, as
+  a dome fitted to her and her reach alone frames her
+  (`edge.cloche.performerFloor`), and centres between her and the dome, so the
+  far object or the set's edge may sit partly or wholly off the card.
 - **Never exported.** The GLB never holds the cloche; every renderer fits it
   from the same rules (`fitCloche`, `@holoim/xr-ui-core`).
 
