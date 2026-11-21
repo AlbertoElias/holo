@@ -74,6 +74,7 @@ type Sample = { phase: string; body: BodySample; t: number };
 declare global {
   interface Window {
     __walkHead?: () => void;
+    __carryHands?: () => void;
     __lastFrameMs?: number;
     __walkPhase?: string | undefined;
   }
@@ -102,8 +103,8 @@ async function walk(spec: Walk, view: 'side' | 'front' | null): Promise<{ sample
       window.__respawnCharacter();
     }, !!view);
     await waitForIwerRuntime(page);
-    // A programmatic headset moves where the script sets it.
-    if (spec.name === 'head') await page.evaluate(() => { window.IWER_DEVICE!.controlMode = 'programmatic' as never; });
+    // A programmatic headset and controllers move where the script sets them.
+    await page.evaluate(() => { window.IWER_DEVICE!.controlMode = 'programmatic' as never; });
     await enterIwerSessionFromButton(page, '#VRButton', { readyCheck: () => JSON.parse(window.render_game_to_text()).mode === 'vr' });
     if (view) {
       await page.evaluate((side) => {
@@ -126,6 +127,7 @@ async function walk(spec: Walk, view: 'side' | 'front' | null): Promise<{ sample
         if (time !== last) {
           last = time;
           window.__walkHead?.();
+          window.__carryHands?.();
           window.__lastFrameMs = performance.now();
         }
         callback(time);
@@ -174,6 +176,34 @@ async function walk(spec: Walk, view: 'side' | 'front' | null): Promise<{ sample
         };
       }, { phases: spec.phases as unknown as Phase[], speed: spec.speed, bob: spec.bob, start });
     }
+    // The controllers ride with the head at a relaxed carry and swing against the steps, as a walker's hands do: left in
+    // place, they stay behind in the world while the head walks on, and the arms trail half a metre behind the shoulders.
+    await page.evaluate(() => {
+      const device = window.IWER_DEVICE!;
+      const at = { last: performance.now(), walked: 0, root: null as [number, number, number] | null, amp: 0 };
+      // The grip points forward and down, the way a hanging hand holds a controller.
+      const pitch = (-55 * Math.PI) / 180;
+      window.__carryHands = () => {
+        const now = performance.now();
+        const dt = Math.max(1e-3, (now - at.last) / 1000);
+        at.last = now;
+        const root = window.__sampleBody().root;
+        const moved = at.root ? Math.hypot(root[0] - at.root[0], root[2] - at.root[2]) : 0;
+        at.root = root;
+        at.walked += moved;
+        // The swing grows with the walk's speed (full at 1.2 m/s) and settles over about a quarter second.
+        at.amp += (Math.min(1, moved / dt / 1.2) - at.amp) * Math.min(1, dt / 0.25);
+        // One full swing each stride of two steps (about 1.4 m).
+        const swing = Math.sin((at.walked / 1.4) * Math.PI * 2) * at.amp;
+        const head = device.position;
+        for (const [side, sign] of [['left', -1], ['right', 1]] as const) {
+          const controller = device.controllers[side]!;
+          const fore = 0.12 * swing * sign;
+          controller.position.set(head.x + sign * 0.2, head.y - 0.78 + 0.03 * Math.abs(swing), head.z - 0.05 - fore);
+          controller.quaternion.set(Math.sin(pitch / 2), 0, 0, Math.cos(pitch / 2));
+        }
+      };
+    });
     const samples: Sample[] = [];
     let frame = 0;
     for (const phase of spec.phases) {
