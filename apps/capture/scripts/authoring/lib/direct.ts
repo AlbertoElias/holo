@@ -696,20 +696,21 @@ function heldIn(performer: string, side: Side, t: number): PropState | undefined
   return undefined;
 }
 
-/** How far a finger is into what the hand holds, metres: its tip, and the point the arm meter samples (0.4 of the way to the palm). */
-function fingerDepth(rig: HandRig, finger: FingerName, prop: Prop): number {
+/** How far a finger is into the objects it must rest on, metres: its tip, and the point the arm meter samples (0.4 of the way to the palm). */
+function fingerDepth(rig: HandRig, finger: FingerName, props: readonly Prop[]): number {
   const tip = rig.tip(finger, new THREE.Vector3());
   if (!tip) return -Infinity;
   const mid = tip.clone().lerp(rig.palmCenter(new THREE.Vector3()), 0.4);
   let worst = -Infinity;
-  for (const part of propParts(prop)) worst = Math.max(worst, partDepth(prop, part, tip, GRIP_FINGER_RADIUS), partDepth(prop, part, mid, GRIP_FINGER_RADIUS));
+  for (const prop of props) for (const part of propParts(prop)) worst = Math.max(worst, partDepth(prop, part, tip, GRIP_FINGER_RADIUS), partDepth(prop, part, mid, GRIP_FINGER_RADIUS));
   return worst;
 }
 
 /**
  * A hand closes round what it holds only until each finger rests on it: a
  * fist's grip curl suits a handle, and would sink into a ball. Each finger
- * that would go in opens (a binary search on its curl) until it touches.
+ * that would go in (or into an object the hand may not touch) opens, by a
+ * binary search on its curl, until it touches.
  */
 function fitGrip(c: Cast, t: number, posed: Partial<Record<Side, HandPose>>): void {
   for (const s of SIDES) {
@@ -718,18 +719,35 @@ function fitGrip(c: Cast, t: number, posed: Partial<Record<Side, HandPose>>): vo
     const held = gripOf(c.spec.id, s, t);
     if (!rig || !pose || !held) continue;
     rig.hand.updateMatrixWorld(true);
+    // What it holds, and what it may not touch: a hand closing on a ball that sits on a crate stops at the crate too.
+    const props = [...stage.props.values()].map((st) => st.prop).filter((p) => p === held.prop || !mayTouch(c, s, p, t));
     const curl = { ...pose.curl } as Record<FingerName, number>;
     let changed = false;
     for (const finger of FINGERS) {
-      if (fingerDepth(rig, finger, held.prop) <= GRIP_REST) continue;
-      let lo = Math.min(0, curl[finger]); let hi = curl[finger];
-      for (let i = 0; i < 10; i++) {
-        const mid = (lo + hi) / 2;
-        rig.apply({ curl: { ...curl, [finger]: mid }, spread: pose.spread });
+      if (fingerDepth(rig, finger, props) <= GRIP_REST) continue;
+      // The nearest curl that rests on the objects, within the rig's range (it may bend back a little).
+      // Opening is not always the way out: a straight finger under a ball points into what the ball sits on.
+      const depthAt = (v: number): number => {
+        rig.apply({ curl: { ...curl, [finger]: v }, spread: pose.spread });
         rig.hand.updateMatrixWorld(true);
-        if (fingerDepth(rig, finger, held.prop) <= GRIP_REST) lo = mid; else hi = mid;
+        return fingerDepth(rig, finger, props);
+      };
+      let best = { curl: curl[finger], depth: Infinity, off: Infinity };
+      for (let v = -0.1; v <= 1 + 1e-9; v += 0.05) {
+        const depth = Math.max(GRIP_REST, depthAt(v));
+        const off = Math.abs(v - curl[finger]);
+        if (depth < best.depth || (depth === best.depth && off < best.off)) best = { curl: v, depth, off };
       }
-      curl[finger] = lo;
+      // Then the edge of the free range nearest the asked curl.
+      if (best.depth <= GRIP_REST) {
+        let free = best.curl; let inside = curl[finger];
+        for (let i = 0; i < 8; i++) {
+          const mid = (free + inside) / 2;
+          if (depthAt(mid) <= GRIP_REST) free = mid; else inside = mid;
+        }
+        best.curl = free;
+      }
+      curl[finger] = best.curl;
       changed = true;
     }
     if (changed) {
