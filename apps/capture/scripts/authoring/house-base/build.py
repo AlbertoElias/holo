@@ -411,7 +411,9 @@ def outside(E, side, x, z):
     p = np.array((dx, -math.sqrt(R * R - q2), dz))
     u = float(p @ out) / R
     a = math.degrees(math.atan2(dz, float(p @ fwd)))
-    over = max(a - lid_edge("upper", u, ld["upper"]["open"]), lid_edge("lower", u, ld["lower"]["open"]) - a, 0.0)
+    # Above the opening the distance counts `above` times: the upper lid stands well off the eye, and a view from
+    # below sees in under its edge, so the skin there stays behind the eye for further.
+    over = max(so["above"] * (a - lid_edge("upper", u, ld["upper"]["open"])), lid_edge("lower", u, ld["lower"]["open"]) - a, 0.0)
     return R * (so["past"] * max(abs(u) - UC, 0.0) + math.sqrt(max(0.0, 1 - u * u)) * math.radians(over))
 
 
@@ -475,6 +477,7 @@ def lid_grid(E, r, side, which, opening):
     return np.array([lid_surface(E, r, side, u, a, rows_[0]) for u in us for rows_ in [lid_rows(which, u, opening)] for a in rows_])
 
 
+lid_mix_short = 0.0  # how far (m) the worst sampled lid mix is still inside `clear`
 for side, E in eyes.items():
     us = np.linspace(-UMAX, UMAX, ld["columns"])
     for which in ("upper", "lower"):
@@ -501,6 +504,25 @@ for side, E in eyes.items():
                     q = (-b + math.sqrt(b * b - (a2 - need))) if b * b - (a2 - need) >= 0 else np.linalg.norm(t1)
                     target[k] = E + t1 / np.linalg.norm(t1) * max(q, np.linalg.norm(t1))
             offs[shape + side] = target - verts
+        # A mix only adds the shapes' straight moves, and the sum of two closing shapes cuts inside the eye
+        # (a squint with a raised cheek put the lower lid behind the pupil, which showed through the skin as a
+        # dark dot). For every mix of the `mixShapes` at the `mixWeights`, a vertex that would lie nearer the
+        # eye's centre than `clear` goes out along its radius, the push shared between the mix's shapes by weight.
+        mixed = [c + side for c in ld["mixShapes"] if c + side in offs]
+        v0 = verts - E
+        for _ in range(ld["mixPasses"]):
+            for ws in itertools.product(ld["mixWeights"], repeat=len(mixed)):
+                if sum(1 for w_ in ws if w_ > 0) < 2:
+                    continue
+                at_mix = v0 + sum(offs[c] * w_ for c, w_ in zip(mixed, ws))
+                dist = np.linalg.norm(at_mix, axis=1)
+                short = np.maximum(ld["clear"] * R - dist, 0.0)
+                if short.max() <= 0:
+                    continue
+                step = (at_mix / dist[:, None]) * (short / sum(w_ * w_ for w_ in ws))[:, None]
+                for c, w_ in zip(mixed, ws):
+                    offs[c] = offs[c] + step * w_
+        lid_mix_short = max(lid_mix_short, max((float((ld["clear"] * R - np.linalg.norm(v0 + sum(offs[c] * w_ for c, w_ in zip(mixed, ws)), axis=1)).max()) for ws in itertools.product(ld["mixWeights"], repeat=len(mixed))), default=0.0))
         add_part(verts, faces, mats, offs, lambda p, E=E: p - E)
 
 # The brows: a thick ribbon riding the skin above each eye, in eye radii from the eye centre: x from the inner
@@ -547,16 +569,18 @@ up_h = lp["upper"] * mid ** lp["upperPower"] * (1 - lp["bow"] * np.exp(-(S_ / lp
 lo_h = lp["lower"] * mid ** lp["lowerPower"]
 # The inside (the teeth and the dark) has its own rows, apart from the lips', so its shading is not the lips';
 # its `roof` row, hidden under the upper lip, keeps the teeth facing forward while they are closed to nothing.
-ROWS = ("lipTop", "lipUp", "lipIn", "roof", "upper", "teeth", "lower", "lipUnder", "lipLow", "lipBottom")
-BETWEEN = ("lips", "lips", None, "teeth", "teeth", "mouth", None, "lips", "lips")
-FOLLOW = {"lipTop": "upper", "lipUp": "upper", "lipIn": "upper", "roof": "upper", "lipUnder": "lower", "lipLow": "lower", "lipBottom": "lower"}
+# The `tongue` row lies on the lower edge and rises from it only when the jaw opens, so an open mouth shows the
+# upper teeth, the dark and a tongue, not one black hole.
+ROWS = ("lipTop", "lipUp", "lipIn", "roof", "upper", "teeth", "tongue", "lower", "lipUnder", "lipLow", "lipBottom")
+BETWEEN = ("lips", "lips", None, "teeth", "teeth", "mouth", "tongue", None, "lips", "lips")
+FOLLOW = {"lipTop": "upper", "lipUp": "upper", "lipIn": "upper", "roof": "upper", "tongue": "lower", "lipUnder": "lower", "lipLow": "lower", "lipBottom": "lower"}
 plan = {
     "lipTop": line + thick / 2 + up_h, "lipUp": line + thick / 2 + lp["peak"] * up_h, "lipIn": line + thick / 2, "roof": line + thick / 2 + lp["roof"] * up_h,
-    "upper": line + thick / 2, "teeth": line + thick / 2, "lower": line - thick / 2, "lipUnder": line - thick / 2, "lipLow": line - thick / 2 - lp["peak"] * lo_h, "lipBottom": line - thick / 2 - lo_h,
+    "upper": line + thick / 2, "teeth": line + thick / 2, "tongue": line - thick / 2, "lower": line - thick / 2, "lipUnder": line - thick / 2, "lipLow": line - thick / 2 - lp["peak"] * lo_h, "lipBottom": line - thick / 2 - lo_h,
 }
 swell = np.sqrt(mid)
 LIFT = {
-    "lipTop": lp["edge"] + 0 * swell, "lipUp": lp["edge"] + (lp["upperOut"] - lp["edge"]) * swell, "lipIn": mo["lift"] + 0 * swell, "roof": mo["lift"] + 0 * swell, "upper": mo["lift"] + 0 * swell, "teeth": mo["lift"] + 0 * swell,
+    "lipTop": lp["edge"] + 0 * swell, "lipUp": lp["edge"] + (lp["upperOut"] - lp["edge"]) * swell, "lipIn": mo["lift"] + 0 * swell, "roof": mo["lift"] + 0 * swell, "upper": mo["lift"] + 0 * swell, "teeth": mo["lift"] + 0 * swell, "tongue": mo["lift"] + 0 * swell,
     "lower": mo["lift"] + 0 * swell, "lipUnder": mo["lift"] + 0 * swell, "lipLow": lp["edge"] + (lp["lowerOut"] - lp["edge"]) * swell, "lipBottom": lp["edge"] + 0 * swell,
 }
 
@@ -566,7 +590,7 @@ def mouth_at(d):
     pts = []
     for i, s_ in enumerate(S_):
         for row in ROWS:
-            m = d.get(FOLLOW.get(row, row), (0, 0, 0))
+            m = d[row] if row in d else d.get(FOLLOW.get(row, row), (0, 0, 0))
             dx, dz, dy = (m[k][i] if np.ndim(m[k]) else m[k] for k in range(3))
             tuck = d.get("tuck", {}).get(row, 0.0)
             tuck = float(tuck[i]) if np.ndim(tuck) else tuck  # the share of this lip row's height it rolls in toward the line
@@ -604,7 +628,19 @@ for side in SIDES:
     mouth_shapes[f"mouthUpperUp{side}"] = {"upper": (Z, up * bump, Z), "teeth": (Z, up * bump, Z)}
     mouth_shapes[f"mouthDimple{side}"] = every(sg * di * on, 0.3 * di * on)
 fu, pu, ro, sh = ms["funnel"], ms["pucker"], ms["roll"], ms["shrug"]
-mouth_shapes["jawOpen"] = {"lower": (Z, -ms["jawOpen"] * mid, Z)}
+# The open jaw: the lower edge down, the corners in and a little down (an open mouth is narrower and rounder),
+# the upper teeth showing over `teeth` of the opening and the tongue over `tongue` of it at the middle, across
+# `tongueWide` of the mouth's half-width.
+jm = ms["jawMouth"]
+jaw_x, jaw_z = -jm["in"] * S_, -jm["down"] * S_ ** 2
+jaw_mid = mid ** jm["round"]  # below 1 the open mouth keeps its height toward the corners
+tongue_up = jm["tongue"] * np.clip(1 - (S_ / jm["tongueWide"]) ** 2, 0, 1) ** jm["tongueRound"]
+mouth_shapes["jawOpen"] = {
+    "upper": (jaw_x, jaw_z, Z),
+    "teeth": (jaw_x, jaw_z - ms["jawOpen"] * jm["teeth"] * jaw_mid, Z),
+    "tongue": (jaw_x, jaw_z - ms["jawOpen"] * jaw_mid * (1 - tongue_up), Z),
+    "lower": (jaw_x, jaw_z - ms["jawOpen"] * jaw_mid, Z),
+}
 mouth_shapes["mouthClose"] = {"lower": (Z, thick, Z)}
 mouth_shapes["mouthFunnel"] = {"upper": (-fu["in"] * S_, fu["up"] * mid, Z), "teeth": (-fu["in"] * S_, fu["up"] * mid, Z), "lower": (-fu["in"] * S_, -fu["down"] * mid, Z)}
 mouth_shapes["mouthPucker"] = every(-pu["in"] * S_, Z, -pu["forward"] * mid)
@@ -740,6 +776,33 @@ top.head = (head_bone.head.x, head_bone.head.y, head_top[2])
 top.tail = (top.head.x, top.head.y, head_top[2] + 0.05)
 top.parent = head_bone
 top.use_deform = False
+# The thumb's base joint, set where a tracked hand has it (`rig.thumbBase`, in hand lengths from the wrist: along
+# the wrist-to-middle-knuckle line, toward the index side, and out of the palm's plane on the thumb's side).
+# MPFB's mixamo rig has it almost in the palm's plane, which capture's hand replay reads as 20 to 27 degrees of
+# thumb curl that the tracked hand does not have. The mesh and its weights do not move.
+for side in ("Left", "Right"):
+    wrist, t1 = eb[f"{side}Hand"].head.copy(), eb[f"{side}HandThumb1"]
+    middle, index, pinky = (eb[f"{side}Hand{f}1"].head - wrist for f in ("Middle", "Index", "Pinky"))
+    x = middle.normalized()
+    z = index.cross(pinky).normalized()
+    z = z if (eb[f"{side}HandThumb2"].head - wrist).dot(z) > 0 else -z  # the base joint itself is in the plane
+    y = z.cross(x)
+    y = y if index.dot(y) > 0 else -y
+    along, toIndex, outOfPalm = P["rig"]["thumbBase"]
+    t1.use_connect = False
+    t1.head = wrist + (x * along + y * toIndex + z * outOfPalm) * middle.length
+# Fingertip end sites, named as the stock avatar's (`LeftHandIndex4`): capture reads a finger's tip from the
+# first child of its last joint (HumanoidSkeleton.tip), for the pinch and the hand replay's measures.
+for side in ("Left", "Right"):
+    for finger in ("Thumb", "Index", "Middle", "Ring", "Pinky"):
+        last = eb[f"{side}Hand{finger}3"]
+        tip = eb.new(f"{side}Hand{finger}4")
+        tip.head = last.tail
+        tip.tail = last.tail + (last.tail - last.head).normalized() * 0.01
+        tip.roll = last.roll
+        tip.parent = last
+        tip.use_connect = False
+        tip.use_deform = False
 bpy.ops.object.mode_set(mode="OBJECT")
 
 # --- Join the parts to the body (carried by the head), and the face shapes --------------------------------
@@ -779,7 +842,7 @@ def material(name, rgb):
 
 
 col = P["colours"]
-slots = ["skin", "top", "trousers", "shoes", "brow", "mouth", "teeth", "lash", "lips"]
+slots = ["skin", "top", "trousers", "shoes", "brow", "mouth", "teeth", "tongue", "lash", "lips"]
 human.data.materials.clear()
 for n in slots:
     human.data.materials.append(material(f"HouseBase_{n}", col[n]))
@@ -973,7 +1036,7 @@ report = {
     "bones": [b.name for b in rig.data.bones],
     "materials": {n: sum(1 for p in human.data.polygons if p.material_index == i) for i, n in enumerate(slots)},
     "credits": credits, "build": BUILD, "landmarks": {k: round(v, 4) for k, v in land.items()},
-    "garments": garment_report, "mouthMixes": mouth_mix_report, "hair": hair_report, "glasses": glasses_report, "fit": fit_report,
+    "garments": garment_report, "mouthMixes": mouth_mix_report, "lidMixShortMm": round(lid_mix_short * 1000, 3), "hair": hair_report, "glasses": glasses_report, "fit": fit_report,
 }
 json.dump(report, open(REPORT, "w"), indent=2)
 print("HOUSE_BASE_DONE", OUT)

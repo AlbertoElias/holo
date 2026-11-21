@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
-import type { ArmIkChain, AvatarRig, HandFingerRetargetChain } from '../avatar/AvatarRig';
+import { ARM_LENGTH_FIT_MAX, type ArmIkChain, type AvatarRig, type HandFingerRetargetChain } from '../avatar/AvatarRig';
 import type { RuntimeConfig } from '../config/runtimeConfig';
 import { ArmIkSolver } from '../ik/ArmIkSolver';
 import { isFiniteVector3Like } from '../shared/math';
@@ -18,6 +18,10 @@ const FOREARM_TWIST_SHARE = 0.5;
 // The camera tracker's tracked hands may stretch an arm up to 8% past full
 // reach (ArmIkSolver); its controllers keep the unstretched arm.
 const ARM_REACH_STRETCH = 0.08;
+// The stretch was set on the stock avatar, whose arm (upper arm plus forearm) is this share of its eye height.
+// An avatar with a shorter arm at the same eye height stretches further, to the same reach in metres: the
+// house base's arm is 0.276 of its eye height, and at 8% its wrist stopped 2 to 7 cm short of a long reach.
+const REFERENCE_ARM_PER_EYE_HEIGHT = 0.3222;
 // In VR the arm has a constant human length (ArmIkChain.armLengthFit) and the
 // recorded arm model; past full reach it may stretch by this small reserve,
 // for both sources (under AvatarColliders' 2% rebuild step, and not visible).
@@ -130,6 +134,32 @@ export class HandEmbodiment {
     }
   }
 
+  /**
+   * How far past full reach this arm may stretch (a share of its length). `past`: the share a tracked hand adds
+   * (a controller adds none). An arm shorter than the stock avatar's for its eye height also stretches to that
+   * arm's reach: the user's reach is fitted by height, so a short arm went straight while the hand still moved,
+   * and a prop thrown from it left at the stopped hand's speed.
+   */
+  private reachStretch(chain: ArmIkChain, past: number): number {
+    const arm = chain.upperLength + chain.lowerLength;
+    const eyeHeight = this.avatar.avatarEyeLocalY - this.avatar.avatarMinLocalY;
+    if (!(arm > 0) || !(eyeHeight > 0)) return past;
+    return Math.max(past, ((1 + past) * REFERENCE_ARM_PER_EYE_HEIGHT * eyeHeight) / arm - 1);
+  }
+
+  /**
+   * The constant length ratio of this arm in VR. The human fit has a limit (ARM_LENGTH_FIT_MAX), set on the stock
+   * avatar, whose arm reaches it. An arm shorter than the stock avatar's for its eye height grows to that arm's
+   * VR length: at the limit the house base's wrist stopped 7 cm short of a long reach, and its open hand missed
+   * a prop it should bat away.
+   */
+  private vrArmFit(chain: ArmIkChain): number {
+    const arm = chain.upperLength + chain.lowerLength;
+    const eyeHeight = this.avatar.avatarEyeLocalY - this.avatar.avatarMinLocalY;
+    if (!(arm > 0) || !(eyeHeight > 0)) return chain.armLengthFit;
+    return Math.max(chain.armLengthFit, (ARM_LENGTH_FIT_MAX * REFERENCE_ARM_PER_EYE_HEIGHT * eyeHeight) / arm);
+  }
+
   /** Arm lengths are cached in world units; refitting the avatar rescales them. */
   rescale(ratio: number): void {
     for (const side of SIDES) {
@@ -167,7 +197,9 @@ export class HandEmbodiment {
       // A held pose keeps the reach of the source it holds, so a lost hand's arm does not snap.
       const source = this.tracking.getHandPoseSource(side);
       if (source !== 'held') this.handReach[side] = source === 'xr-hand';
-      const maxStretch = vr ? VR_REACH_RESERVE : this.handReach[side] ? ARM_REACH_STRETCH : 0;
+      // In VR the arm has a constant length: the fit grows it, never a reach stretch past the small reserve.
+      const fit = vr ? this.vrArmFit(chain) : 1;
+      const maxStretch = vr ? VR_REACH_RESERVE : this.reachStretch(chain, this.handReach[side] ? ARM_REACH_STRETCH : 0);
       // Nothing else poses the clavicle in VR, so it still holds the last
       // solve's swing. Start from bind: the protraction reads the reach from
       // the resting shoulder, not from last frame's swing (that feedback made
@@ -179,7 +211,7 @@ export class HandEmbodiment {
         maxStretch,
         forearmTwistShare: FOREARM_TWIST_SHARE,
         armModel: vr,
-        armLengthRatio: vr ? chain.armLengthFit : 1
+        armLengthRatio: fit
       })) {
         if (!this.ikWarningLogged) {
           console.warn('VR arm IK solve produced invalid output; skipping frame write.');

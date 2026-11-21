@@ -44,8 +44,8 @@ export const LIGHT = { pale: 0.4, tint: [255, 240, 214] as SRGB, opacity: 0.86, 
 export const LIGHT_GARMENT_LIFT = 0.25;
 const LIGHT_GARMENT = /^HouseBase_(top|trousers|shoes)$/;
 
-/** Materials a finish leaves exactly as they are: the eyes, lashes, mouth and teeth carry the face's reading. */
-const FACE_PARTS = /^HouseBase_(eye_|lash|mouth|teeth)/;
+/** Materials a finish leaves exactly as they are: the eyes, lashes, mouth, teeth and tongue carry the face's reading. */
+const FACE_PARTS = /^HouseBase_(eye_|lash|mouth|teeth|tongue)/;
 /**
  * Materials that stay opaque in the light finish: the brows and frames are
  * lines on a lit body, and the skin glows but is not see-through, because a

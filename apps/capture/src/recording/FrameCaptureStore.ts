@@ -28,7 +28,10 @@ export class FrameCaptureStore {
   captureFrame(timeSec: number, avatar: THREE.Object3D, avatarRoot: THREE.Object3D, handSources?: Record<VrHandSide, HandPoseSource>): void {
     this.refreshMorphCaptureBindings(avatar);
 
-    avatarRoot.getWorldPosition(this.tmpPos);
+    // The export places the avatar model at the take root, so the root is the model's own position: the model
+    // stands off the avatar root by its centring offset, and a take that dropped it showed the body that far
+    // from the scene, the props and the pointing rays it was recorded with.
+    avatar.getWorldPosition(this.tmpPos);
     avatarRoot.getWorldQuaternion(this.tmpQuat);
     const rootPosition = { x: this.tmpPos.x, y: this.tmpPos.y, z: this.tmpPos.z };
     const rootQuaternion = { x: this.tmpQuat.x, y: this.tmpQuat.y, z: this.tmpQuat.z, w: this.tmpQuat.w };

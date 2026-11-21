@@ -815,7 +815,8 @@ test.describe("slice 2a: a take recorded inside a scanned place on the desktop",
     const lying = withLyingHeader(take.glb, 50_000_000);
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
-    await page.route(`**${new URL(honest.url, "https://x").pathname}`, (route) => route.fulfill({ status: 200, body: lying, contentType: "model/gltf-binary" }));
+    // The feed loads `<id>.glb`, or `<id>-light.glb` once the API has processed the upload; a take without textures is processed at once.
+    await page.route(`**${new URL(honest.url, "https://x").pathname.replace(/\.glb$/, "")}{,-light}.glb`, (route) => route.fulfill({ status: 200, body: lying, contentType: "model/gltf-binary" }));
     await openCard(page, honest);
     await expect.poll(async () => (await storedPlace(page))?.status, { timeout: 30_000 }).toBe("failed");
     const report = (await storedPlace(page))!;

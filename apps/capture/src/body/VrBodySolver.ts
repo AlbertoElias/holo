@@ -169,6 +169,9 @@ const GAIT_OFF_SPEED = 0.15;
 const STATIC_STEP_DISTANCE = 0.12;
 const STATIC_STEP_YAW_RAD = THREE.MathUtils.degToRad(25);
 const STATIC_STEP_DURATION_SEC = 0.32;
+// A standing step moves at this mean speed at least (m/s), down to the shortest duration.
+const STATIC_STEP_MEAN_SPEED = 0.45;
+const STATIC_STEP_MIN_DURATION_SEC = 0.16;
 const MIN_STANCE_SEC = 0.08;
 const MAX_STEP_LENGTH = 1.0;
 // A recorded stride may reach further: the clip's feet stand about 1.04 legs
@@ -216,7 +219,7 @@ function spineChain(spine: BindBone, chest: BindBone | undefined, upperChest: Bi
   return chain;
 }
 const NECK_HEAD_SHARE = 0.4;
-const PELVIS_PASSES = 3;
+const PELVIS_PASSES = 5;
 const SPINE_LEAN_PASSES = 3;
 const MAX_PELVIS_REACH_DROP = 0.05;
 const PELVIS_REACH_DROP_TIME_SEC = 0.06;
@@ -368,6 +371,8 @@ export class VrBodySolver {
   private readonly root = new THREE.Vector3();
   private readonly prevRoot = new THREE.Vector3();
   private readonly rootVelocity = new THREE.Vector3();
+  /** The root's speed over the last frame alone (m/s). */
+  private rootSpeedNow = 0;
   private readonly targetVelocity = new THREE.Vector3();
   private readonly gaitVelocity = new THREE.Vector3();
   private readonly rootOvershootVelocity = new THREE.Vector3();
@@ -809,6 +814,7 @@ export class VrBodySolver {
     const velocityStep = this.planA.subVectors(rootPosition, this.prevRoot).setY(0).multiplyScalar(1 / dt);
     this.prevRoot.copy(rootPosition);
     this.rootVelocity.lerp(velocityStep, 1 - Math.exp(-dt / ROOT_SPEED_TIME_SEC));
+    this.rootSpeedNow = velocityStep.length();
     const landed = this.airborne && grounded;
     this.airborne = !grounded;
     if (this.airborne || landed) this.placeFeetUnderRoot(rootPosition, ground, this.airborne, dt);
@@ -968,11 +974,20 @@ export class VrBodySolver {
     }
     if (this.faults.has('feet-glued-to-root')) return;
     this.recordedLifts(rootPosition, ground);
-    if (this.feet.left.swinging || this.feet.right.swinging) return;
-
     // Walking follows the head's motion; otherwise the root's own motion
     // (dragged by a lean or a small step) drives the feet.
     const gaitVelocity = this.translating ? this.targetVelocity : this.rootVelocity;
+    if (this.feet.left.swinging || this.feet.right.swinging) {
+      // A swing re-aims with the velocity of now, and with the root's speed of this frame where the root slows (the
+      // smoothed speed trails a stop by 0.15 s). A step begun while the body slowed to a stop led its landing by the
+      // speed at its start, landed 10 cm past its slot and took a second, low step back, which reads as a sliding
+      // foot (the house base in small-steps-and-sway: 5 cm of foot skate).
+      if (!this.recordedMode) {
+        this.gaitVelocity.copy(gaitVelocity);
+        if (!this.translating && this.rootSpeedNow < gaitVelocity.length()) this.gaitVelocity.setLength(this.rootSpeedNow);
+      }
+      return;
+    }
     this.gaitVelocity.copy(gaitVelocity);
     const speed = gaitVelocity.length();
     if (!this.gaitActive && speed > GAIT_ON_SPEED) {
@@ -999,11 +1014,13 @@ export class VrBodySolver {
       let mostBehind = -Infinity;
       // Urgent only for a foot left behind, never one planted ahead. With both left behind the further one goes
       // first: taking the last one checked, the right foot took every step and the left stayed planted (B-041).
+      // A strained foot counts only when it is behind too: a short leg lands strained ahead of the hip, and
+      // stepping it again left the other foot behind until its leg locked straight.
       for (const candidate of ['left', 'right'] as const) {
         const slot = this.slotWorld(candidate, rootPosition, this.bodyYawValue, this.stepSlot);
         const planted = this.feet[candidate].planted;
         const behind = ((slot.x - planted.x) * gaitVelocity.x + (slot.z - planted.z) * gaitVelocity.z) / Math.max(speed, 1e-6);
-        if ((behind > URGENT_STEP_DISTANCE * leg || this.feet[candidate].strain >= 1) && behind > mostBehind) {
+        if ((behind > URGENT_STEP_DISTANCE * leg || (behind > 0 && this.feet[candidate].strain >= 1)) && behind > mostBehind) {
           side = candidate;
           urgent = true;
           mostBehind = behind;
@@ -1195,10 +1212,11 @@ export class VrBodySolver {
       foot.toYaw = this.bodyYawValue;
     }
     const clipPhase = lift + foot.t * swingLength;
-    const s = foot.t >= 1 ? 1 : clamp(sampleWalkTrajectory(walk.legs[side].progress, clipPhase), 0, 1);
     // The clip's sole already rises at its lift-off (its heel rose in
-    // stance); a flat stance foot eases into that rise instead.
+    // stance); a flat stance foot eases into that rise instead, and into the
+    // clip's travel with it, or the sole slides before it is off the ground.
     const liftEase = THREE.MathUtils.smoothstep(foot.t, 0, LIFT_EASE);
+    const s = foot.t >= 1 ? 1 : liftEase * clamp(sampleWalkTrajectory(walk.legs[side].progress, clipPhase), 0, 1);
     const clearance = foot.t >= 1 ? 0 : liftEase * sampleWalkTrajectory(walk.legs[side].clearance, clipPhase) * this.hipsHeight();
     foot.current.lerpVectors(foot.from, foot.to, s);
     foot.currentNormal.lerpVectors(foot.normal, foot.toNormal, s).normalize();
@@ -1334,7 +1352,10 @@ export class VrBodySolver {
     foot.toYaw = this.bodyYawValue;
     foot.t = 0;
     const maxSwingSpeed = walking ? Math.max(MAX_MEAN_SWING_SPEED, WALK_SWING_SPEED_RATIO * this.gaitVelocity.length()) : MAX_MEAN_SWING_SPEED;
-    foot.duration = Math.max(duration, distance / maxSwingSpeed);
+    // A short standing step is a quick one: over the full duration an 8 cm step moved at 0.27 m/s with the sole
+    // 2 cm up, which is a foot that slides (the house base's sidestep in small-steps-and-sway: 5 cm of skate).
+    const stepDuration = walking ? duration : clamp(distance / STATIC_STEP_MEAN_SPEED, STATIC_STEP_MIN_DURATION_SEC, duration);
+    foot.duration = Math.max(stepDuration, distance / maxSwingSpeed);
     foot.lift = clamp(0.02 + 0.12 * distance, 0.02, 0.08 * leg);
     this.sinceLastStepStart = 0;
     this.stepCount += 1;
