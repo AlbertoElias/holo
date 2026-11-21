@@ -105,6 +105,8 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   - The sphere's soft fade in the feed: it faded the ground under the performer on another old take.
   - The owner kept the card as it is.
 - **Next:** a take whose spawn keeps the mountain more than 6 m away removes the strip at its source (B-082).
+  On 2026-11-21, B-082 option C (spawn off the statue) exported no mountain triangles, and option E (statue moved,
+  spawn at the centre) exported 113. So only C removes the strip, and C fails the rim bar (see B-082).
 - **Reproduction:** post a phone take on the default scene, then view its card from behind the performer.
 
 ### B-082 — A take on the default scene starts on the statue
@@ -117,36 +119,19 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   - The fix 3400acffe803 (branch `bug/spawn-off-statue`) skips a pedestal.
   - With that fix, `bubble-capture.pipeline.spec.ts` failed twice with "start: bins off the ground". At bin 12 the rim is at 18.67 and the raycast ground at 17.91, edge (7.95, 2.99).
   - So the fix is not on `main`.
+  - 2026-11-21, both options merged with `main` 22f48373262f, `bubble-capture.pipeline.spec.ts` ×3 under `CI_EMULATE_LOAD=2`:
+    - Option E (branch `bug/statue-off-centre`, only `scene.glb` changed: the statue stands off the centre): 3 of 3 pass.
+      In the last run's rim report, the bins that pass only at the lift cap are none at the start, 32 in the middle (119–150) and 36 at the end (117–152).
+      The export keeps 113 mountain triangles, so the B-081 strip stays.
+    - Option C (branch `bug/spawn-off-statue-2`, commit 1ec5fdc574d6: the spawn takes a level spot off the pedestal): 3 of 3 fail at the start with 10 bins off the ground.
+      The worst is bin 26: rim 17.04, ground 16.23, slope 30°, edge (−1.55, 13.04). The middle and the end each have 4 bins off the ground and 30–33 capped passes (26 at the start).
+      The export has no mountain triangles.
 - **Expected:** the performer starts on the grass beside the statue, and the rim stays on the ground.
 - **Reproduction:** record any take on the default scene in capture.
 - **Next:**
   - Find what the rim stands on at bin 12 with the spawn fix: geometry that the test's ground list (grass and mountain) leaves out, or an export fault.
   - A spawn spot off the statue with flat ground at the rim, and with the mountain more than 6 m away, is also acceptable.
-
-### B-083 — The performer floor on the card makes the AR route miss its 20 s load on a slow runner
-
-- **Area:** apps/viewer-web (`HologramCardCanvas` fit, `motionPoints`)
-- **Severity:** P1 (`main` red on runs 44815715770 and 44826449489)
-- **Observed:** 2026-11-20, hosted pipeline shard 1
-- **Evidence:**
-  - `bubble-capture.pipeline.spec.ts:142`: `.xr-view-container` does not mount within 20 s after "View in your room"; the page shows "Loading hologram…" later.
-  - CI emulator, bubble-capture ×3: 0af7fc10cc under `CI_EMULATE_LOAD=2` passes 3/3; caf7cad fails at :142; caf7cad without 85ee704b62ba passes 3/3; caf7cad at plain load passes 3/3.
-  - 85ee704b62ba adds a third `drawnPoints` + `motionPoints` pass over the whole take for each card, in `fitClocheNow`, which runs again when the bubble or the place gate changes.
-- **Expected:** the performer floor costs no more than one fit pass, and the AR route mounts in time on a loaded runner.
-- **Reproduction:** `CI_EMULATE_LOAD=2 scripts/ci-emulate.sh bash -c "cd apps/viewer-web && RUN_E2E_PIPELINE=1 XR_TEST_MODE=iwer npx playwright test e2e/bubble-capture.pipeline.spec.ts --workers=1 --repeat-each=3"` on caf7cad.
-- **Next:** 85ee704b62ba is reverted on `main`. Bring the floor back with the performer's points taken from the same sampling pass, and pass the reproduction above before the merge.
-
-### B-084 — The feed take does not start in bubble-capture after the VR arm change
-
-- **Area:** apps/capture (arm IK, 12b0a45c2d1a) or apps/viewer-web feed playback
-- **Severity:** P2
-- **Observed:** 2026-11-20, CI emulator
-- **Evidence:**
-  - `bubble-capture.pipeline.spec.ts:98`: "feed sphere follows recorded motion (clip time 0 → 0 s, running false)".
-  - 12b0a45 without 85ee704b62ba: 1 of 3 at plain load, and with :126 ("the rim's largest change in a frame") in 3 of 3 under `CI_EMULATE_LOAD=2`.
-  - 0af7fc10cc and caf7cad without 85ee704b62ba never failed at :98 or :126 (6 runs).
-- **Expected:** the take plays in the feed on every run.
-- **Reproduction:** the B-083 command on `main` after the revert, at plain load and at load 2.
+  - Owner decision: merge option E (passes the bar, fixes the statue start, keeps the B-081 strip), or keep working on C (removes the strip, fails the rim on a 30° slope).
 
 ### B-085 — Deep zoom: the camera mode is "follow", not "free", when the wheel stops (hosted, once)
 

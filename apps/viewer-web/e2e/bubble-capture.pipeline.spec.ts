@@ -48,8 +48,14 @@ test("real capture bubble exports, uploads and draws in feed and immersive AR", 
   test.setTimeout(360_000);
 
   await page.addInitScript(() => {
-    const hooks = window as unknown as { __feedProbe?: Probe; __bubbleProbe?: Probe; __HOLOIM_FEED_TEST_OBSERVER__?: (probe: Probe) => void; __HOLOIM_AR_TEST_OBSERVER__?: (probe: Probe) => void };
-    hooks.__HOLOIM_FEED_TEST_OBSERVER__ = (probe) => { hooks.__feedProbe = probe; };
+    const hooks = window as unknown as { __feedProbe?: Probe; __feedProbes?: Record<string, Probe>; __feedUrl?: string; __bubbleProbe?: Probe; __HOLOIM_FEED_TEST_OBSERVER__?: (probe: Probe) => void; __HOLOIM_AR_TEST_OBSERVER__?: (probe: Probe) => void };
+    // The feed also loads the cards next to the focused one, paused; each reports its own probe (B-084).
+    hooks.__feedProbes = {};
+    hooks.__HOLOIM_FEED_TEST_OBSERVER__ = (probe) => {
+      const url = (probe as unknown as { url: string }).url;
+      hooks.__feedProbes![url] = probe;
+      if (hooks.__feedUrl && url.endsWith(hooks.__feedUrl)) hooks.__feedProbe = probe;
+    };
     hooks.__HOLOIM_AR_TEST_OBSERVER__ = (probe) => { hooks.__bubbleProbe = probe; };
   });
   const take = await recordWalkTake(browser, testInfo);
@@ -68,7 +74,7 @@ test("real capture bubble exports, uploads and draws in feed and immersive AR", 
     response.request().method() === "POST" && new URL(response.url()).pathname === "/api/holograms"
   ));
   await page.getByRole("button", { name: "Upload", exact: true }).click();
-  const uploaded = (await (await uploadResponse).json()) as { id: string; sizeBytes: number };
+  const uploaded = (await (await uploadResponse).json()) as { id: string; sizeBytes: number; url: string };
   expect(uploaded.sizeBytes, "stored size matches the export").toBe(glbBytes.length);
 
   const card = page.locator(`.feed-card[data-card-id="${uploaded.id}"]`);
@@ -81,6 +87,13 @@ test("real capture bubble exports, uploads and draws in feed and immersive AR", 
   const artifactDir = resolve("../../output/bubble-rendering/capture");
   await mkdir(artifactDir, { recursive: true });
   await writeFile(resolve(artifactDir, "capture-export.glb"), glbBytes);
+  // Read the uploaded card's probe, not the last card to report one.
+  await page.evaluate((target) => {
+    const hooks = window as unknown as { __feedProbe?: Probe; __feedProbes: Record<string, Probe>; __feedUrl?: string };
+    hooks.__feedUrl = target;
+    const found = Object.entries(hooks.__feedProbes).find(([url]) => url.endsWith(target));
+    if (found) hooks.__feedProbe = found[1];
+  }, uploaded.url);
   await page.waitForFunction(() => Boolean((window as unknown as { __feedProbe?: Probe }).__feedProbe));
   await freezePageClock(page);
   // The author walks for the take's first 70% and stands for the rest, and the feed has played it for however long
