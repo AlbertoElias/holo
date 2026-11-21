@@ -17,6 +17,10 @@ const BACK_UP_EXIT_RAD = THREE.MathUtils.degToRad(105);
 // How quickly the body turns toward its travel (s), and back to the look once it stops.
 const TRAVEL_TURN_SEC = 0.1;
 const SETTLE_TURN_SEC = 0.25;
+// A VR stick strafe goes at this share of the walk speed, eased toward the forward and backward directions (which
+// keep full speed): feet that cannot pass each other sideways keep up to about 1.2 m/s, and a 1.8 m/s strafe left
+// them half a metre behind the pelvis (B-079; pending owner confirmation).
+const STICK_STRAFE_SHARE = 0.65;
 
 /**
  * Crouch, then the character motor: input movement, gravity, jumps and the
@@ -47,7 +51,7 @@ export class MovementSystem extends createSystem() {
     const reachStep = frame.vrActive ? null : taken;
     c.crouch.update(deltaSec, frame.vrActive, input.isCrouchHeld(), c.tracking.getCurrentHeadLocalY(), c.objects.reachDemand(), c.objects.reachDeep());
     const crouchAmount = c.crouch.amount;
-    const stick = frame.vrActive ? c.locomotion.moveVector(this.stickMove) : { x: 0, z: 0 };
+    const stick = frame.vrActive ? strafeEased(c.locomotion.moveVector(this.stickMove)) : { x: 0, z: 0 };
     motor.update(deltaSec, c.camera.lookYaw, input.moveState, input.consumeJumpQueued(), {
       moveSpeedMultiplier: (1 - (1 - CROUCH_MOVE_SPEED_AT_FULL) * crouchAmount) * WALK_HEIGHTS_PER_SEC / WALK_SPEED_HEIGHTS_PER_SEC,
       allowJump: true,
@@ -67,6 +71,7 @@ export class MovementSystem extends createSystem() {
       motor.getLastInputMovement(this.inputMovement);
       rig.position.x += this.inputMovement.x;
       rig.position.z += this.inputMovement.z;
+      body.carried.set(this.inputMovement.x, 0, this.inputMovement.z);
       // Tracking space's floor is the avatar's visual base, as the height fit
       // maps it, so slopes, steps and jumps carry the view along.
       rig.position.y = this.bodyPosition.y + motor.getAvatarVisualOffsetY() + avatar.heightVisualOffsetY + avatar.avatarMinLocalY + config.embodyOffset;
@@ -103,4 +108,14 @@ export class MovementSystem extends createSystem() {
     this.travelTurn += delta * (1 - Math.exp(-Math.max(0, deltaSec) / sec));
     return this.travelTurn;
   }
+}
+
+/** Slows the stick's sideways travel (STICK_STRAFE_SHARE) without turning it: the direction stays the stick's. */
+function strafeEased(move: { x: number; z: number }): { x: number; z: number } {
+  const magnitude = Math.hypot(move.x, move.z);
+  if (magnitude === 0) return move;
+  const scale = 1 - (1 - STICK_STRAFE_SHARE) * (Math.abs(move.x) / magnitude);
+  move.x *= scale;
+  move.z *= scale;
+  return move;
 }

@@ -59,7 +59,7 @@ const SIGH_BACK = 1.5;
 const SIGH_REST = 3;
 
 /** A hanging hand's fidget at its peak: extra finger curl, the hand lifted (metres) and the forearm rolled (degrees). */
-export const LIFE_FIDGET = { curl: 0.22, lift: 0.04, rollDeg: 25, stagger: 0.05 } as const;
+export const LIFE_FIDGET = { curl: 0.1, lift: 0.04, rollDeg: 10, stagger: 0.05 } as const;
 const FIDGET_EVERY: Range = [3, 6];
 const FIDGET_FIRST: Range = [1.2, 3.5];
 const FIDGET_IN = 0.6;
@@ -284,6 +284,15 @@ type FaceWeights = Partial<Record<FaceChannel, number>>;
 function add(out: FaceWeights, shape: Readonly<Partial<Record<FaceChannel, number>>>, k: number): void {
   if (k <= 0) return;
   for (const [ch, v] of Object.entries(shape) as [FaceChannel, number][]) out[ch] = (out[ch] ?? 0) + v * k;
+}
+
+/**
+ * The schedule for a take that ends at `end` seconds: a sigh whose breath (in and out) cannot
+ * finish by then is left out, so the take does not end, and its card loop does not seam, on a
+ * parted or rounded mouth.
+ */
+export function finishedBy(s: LifeSchedule, end: number): LifeSchedule {
+  return { ...s, sighs: s.sighs.filter((p) => p.at + SIGH_IN + SIGH_OUT <= end) };
 }
 
 /**

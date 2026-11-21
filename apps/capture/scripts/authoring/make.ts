@@ -6,7 +6,7 @@
  *   make.ts new <name>              copy sheets/starter.jsonc to output/authoring/pieces/<name>/sheet.jsonc
  *   make.ts words                   every choice a sheet can name: finishes, traits, expressions, gestures, …
  *   make.ts <sheet> [--quick]       build the next version (v1, v2, …) beside the sheet, check it, review it
- *   make.ts verdict <version dir>   the bars again, with the reader's comparison.json as filled in
+ *   make.ts verdict <version dir>   the bars again, with the reader's comparison.json and the visual verdict as filled in
  *
  * A `sheet.jsonc` under output/ keeps its versions beside it (`<its dir>/v<N>/`),
  * another sheet under output/ in `<its dir>/<sheet name>/v<N>/`, and any other
@@ -23,8 +23,11 @@
  * each performer's dressed avatar file is at most 1.8 MB (`BAR.sizeBytes`);
  * the take is within the Quick Look budget (`validateTake`); each performer's
  * face is at least 40 device px brow to chin on the phone card
- * (`BAR.faceBoxDevicePx`); and a fresh reader reads every beat
- * (`comparison.json`, filled from their account). Exits 1 when a bar fails.
+ * (`BAR.faceBoxDevicePx`); no arm or hand goes into the body, the head or a
+ * prop, and every forearm twist, wrist bend and elbow is in a human range
+ * (`ARM_LIMITS`); a visual reviewer passes the arm motion, the clipping and
+ * the face from the stills (`review/visual/`); and a fresh reader reads every
+ * beat (`comparison.json`, filled from their account). Exits 1 when a bar fails.
  */
 import { spawnSync } from 'node:child_process';
 import { copyFile, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
@@ -40,6 +43,7 @@ import { faceBarPasses, FACE_AWAY_MAX_SHARE } from './lib/face-bar.ts';
 import { FACE_CHANNELS } from '@holoim/avatar-face';
 import { DEFAULT_TIMING, FACE_MIXES, GESTURES, houseFinish, parseSheetText, resolveTiming, STATES, STORY_PARTS, storyEventProblem, validateSheet, type BeatSheet, type ObjectSpec, type Place, type Point } from './lib/beats.ts';
 import { solveTake } from './lib/direct.ts';
+import { ARM_LIMITS, type ArmReport } from './lib/arm-quality.ts';
 import { parseGlb } from './lib/gltf-read.ts';
 import { HAND_SHAPES } from './lib/hands.ts';
 import { LANDMARKS, MEASURES } from './lib/stage.ts';
@@ -347,6 +351,71 @@ export function faceBoxRow(p: OnScreen['performers'][number]): Row {
     ...(pass ? {} : { fix: `${smallFace(p)}${FACE_FIX}` }) };
 }
 
+/** The degrees the review swings a second camera about the cast, so an arm in the body shows from the side. */
+const SIDE_ORBIT = 70;
+
+/** The visual review bar from `review/visual/verdict.json`; pending until a reviewer writes it. */
+async function visualRow(reviewDir: string): Promise<Row> {
+  const dir = join(reviewDir, 'visual');
+  const bar = 'a visual reviewer passes the arm motion, the clipping and the face';
+  const fix = `give ${rel(join(dir, 'BRIEF.md'))} to the design-reviewer subagent (model opus; its paths are relative to apps/capture), save its JSON answer as ${rel(join(dir, 'verdict.json'))}, then run make.ts verdict ${rel(dirname(reviewDir))}`;
+  let v: { reviewer?: string; pass?: unknown; findings?: { t?: number; what?: string; fix?: string }[] };
+  try { v = JSON.parse(await readFile(join(dir, 'verdict.json'), 'utf8')); } catch {
+    try { await stat(join(dir, 'BRIEF.md')); } catch { return { id: 'visual', bar, value: 'no review', pass: null, fix: 'run without --quick to make the review pack' }; }
+    return { id: 'visual', bar, value: 'not reviewed', pass: null, fix };
+  }
+  if (typeof v.pass !== 'boolean') return { id: 'visual', bar, value: 'verdict.json has no true or false "pass"', pass: null, fix };
+  const findings = Array.isArray(v.findings) ? v.findings : [];
+  const said = findings.map((f) => `${typeof f.t === 'number' ? `${f.t.toFixed(1)} s ` : ''}${f.what ?? ''}${f.fix ? ` (fix: ${f.fix})` : ''}`).join('; ');
+  return { id: 'visual', bar, value: `${v.pass ? 'passed' : 'failed'} by ${v.reviewer ?? 'a reviewer'}${findings.length ? `, ${findings.length} finding${findings.length > 1 ? 's' : ''}` : ''}`,
+    pass: v.pass, ...(v.pass ? {} : { fix: said || 'the reviewer gave no finding: ask it again for what it saw' }) };
+}
+
+/** The brief a visual reviewer reads: the stills to look at, the worst measured arm moments, what to judge, the answer's form. */
+async function writeVisualBrief(reviewDir: string, tracks: readonly { spec: { id: string }; arms?: ArmReport }[]): Promise<void> {
+  const dir = join(reviewDir, 'visual');
+  await mkdir(dir, { recursive: true });
+  const reader = join(reviewDir, 'reader');
+  const files = (await readdir(reader).catch(() => [] as string[])).filter((f) => f.startsWith('sheet-') && f.endsWith('.jpg')).sort();
+  const at = (w: { value: number; t: number; where: string }, unit: string, k = 1): string => `${(Math.max(0, w.value) * k).toFixed(unit === 'cm' ? 1 : 0)} ${unit} at ${w.t.toFixed(2)} s${w.where ? ` (${w.where})` : ''}`;
+  const measured = tracks.filter((t) => t.arms).map((t) => {
+    const r = t.arms!;
+    return `- ${t.spec.id}: deepest into the body ${at(r.bodyDepth, 'cm', 100)}; into a prop ${at(r.propDepth, 'cm', 100)}; forearm twist ${at(r.twist, '°')}; wrist bend ${at(r.wristBend, '°')}; elbow past straight ${at(r.hyperextension, '°')}, off its hinge ${at(r.elbowSideways, '°')}`;
+  });
+  const root = (f: string): string => rel(f);
+  const brief = [
+    '# Visual review: arm motion, clipping and face',
+    '',
+    'You review one hologram take: a recorded avatar that acts a short scene. A viewer sees it on a phone card. The numbers below come from a measure of the solved take; you judge what the eye sees. Be strict. A fault that an owner sees once in a video is a fail.',
+    '',
+    '## Look at these stills (each tile shows its take time)',
+    '',
+    ...files.map((f) => `- ${root(join(reader, f))}${f.startsWith('sheet-orbit') ? ` (the card's moments from ${SIDE_ORBIT}° to the side, where an arm in the body shows)` : ''}`),
+    '',
+    '## The worst measured moments (look at the tiles nearest these times)',
+    '',
+    ...(measured.length ? measured : ['- no arm measure for this take']),
+    '',
+    '## Judge each of these',
+    '',
+    '1. Arm motion: does each arm move like a person\'s arm? Fail an elbow that points the wrong way, a forearm or wrist turned past what a person can turn, a hand that faces an odd way for what it does, a jerk or a snap.',
+    '2. Clipping: fail any hand, forearm or upper arm that goes into the torso, the legs, the head, or an object it does not hold (an oven, a table).',
+    '3. Face: fail a face that is broken, stretched, frozen in a strange look, or hidden for the whole take.',
+    '',
+    '## Answer',
+    '',
+    'End your reply with one JSON block and nothing after it:',
+    '',
+    '```json',
+    '{ "reviewer": "<your model name>", "pass": true, "findings": [ { "t": 2.4, "what": "the right forearm goes into the chest", "fix": "what to change" } ] }',
+    '```',
+    '',
+    '"pass" is false when any finding is a fault from the list above. Give the take time of each finding.',
+    ''
+  ].join('\n');
+  await writeFile(join(dir, 'BRIEF.md'), brief);
+}
+
 /** The card names performers by their GLB node (the first is `RecordedAvatar`); the sheet's ids are in the same order. */
 function faceRows(onScreen: OnScreen, ids: readonly string[]): Row[] {
   const rows: Row[] = [];
@@ -450,6 +519,23 @@ async function make(sheetFile: string, quick: boolean): Promise<boolean> {
     rows.push({ id: `body.${t.spec.id}`, bar: 'feet planted, joints in range, no pops', value: line.split(';')[0]!, pass: !line.startsWith('FAIL'), advisory: true, ...(line.startsWith('FAIL') ? { fix: 'a step or a bend is too big or too quick: make it smaller or give it more attack time' } : {}) });
   }
 
+  // Arms: nothing through the body or a prop, every joint in a human range.
+  for (const t of built.take.tracks) {
+    const r = t.arms;
+    if (!r) continue;
+    const A = ARM_LIMITS;
+    const at = (w: { t: number; where: string }): string => `at ${w.t.toFixed(2)} s, ${w.where}`;
+    const cm = (v: number): string => `${(Math.max(0, v) * 100).toFixed(1)} cm`;
+    const arm = (id: string, bar: string, value: string, over: number, fix: string): void => {
+      rows.push({ id: `arms.${id}.${t.spec.id}`, bar, value: `${value}; ${over} of ${r.frames} frames over`, pass: over === 0, ...(over ? { fix } : {}) });
+    };
+    arm('body', `no arm or hand more than ${A.bodyDepth * 100} cm into the body or the head`, `deepest ${cm(r.bodyDepth.value)} ${at(r.bodyDepth)}`, r.over.bodyDepth, 'move the point out from the body (in front of the chest, out from the thighs), or give the hand a stopShort');
+    arm('prop', `no arm or hand more than ${A.propDepth * 100} cm into an object it does not touch`, `deepest ${cm(r.propDepth.value)} ${at(r.propDepth)}`, r.over.propDepth, `the arm goes through an object (${r.propDepth.where} at ${r.propDepth.t.toFixed(2)} s): give the performer room (an arm at rest in it means they stand in it: move them about 10 cm away or turn them), raise or move the point, or reach from the open side`);
+    arm('twist', `forearm twist within ${A.twist}° of neutral`, `worst ${r.twist.value.toFixed(0)}° ${at(r.twist)}`, r.over.twist, 'ask for a palm the forearm can turn to (palm up and palm down are each a quarter turn), or turn the body toward the point');
+    arm('wrist', `wrist bend within ${A.wristBend}°`, `worst ${r.wristBend.value.toFixed(0)}° ${at(r.wristBend)}`, r.over.wristBend, 'the palm faces a way the wrist cannot bend: change the palm, or bring the point in front of the shoulder');
+    arm('elbow', `elbow straight at most ${A.hyperextension}° past straight and at most ${A.elbowSideways}° off its hinge`, `past straight ${Math.max(0, r.hyperextension.value).toFixed(0)}° ${at(r.hyperextension)}, sideways ${r.elbowSideways.value.toFixed(0)}° ${at(r.elbowSideways)}`, r.over.hyperextension + r.over.elbowSideways, 'the elbow bends the wrong way: this is a solver fault, report it with the sheet');
+  }
+
   // 4. Size per avatar file, and the Quick Look budget.
   for (const p of built.take.sheet.performers) {
     const file = await resolveAvatar(p.avatar, sheetFile, p.look);
@@ -480,15 +566,16 @@ async function make(sheetFile: string, quick: boolean): Promise<boolean> {
       notes.push(`twelve stills: ${rel(frames)}-sheet.jpg (look at it before the full review)`);
     } else notes.push(`stills failed: ${(r.stderr || r.stdout).split('\n').slice(-3).join(' ')}`);
     rows.push({ id: 'faceBox', bar: `face ≥ ${BAR.faceBoxDevicePx} device px on the card`, value: 'not measured', pass: null, fix: 'run without --quick (the review measures it)' });
-    rows.push(await storyRow(join(dir, 'review'), sheet), await readingRow(join(dir, 'review')));
+    rows.push(await storyRow(join(dir, 'review'), sheet), await visualRow(join(dir, 'review')), await readingRow(join(dir, 'review')));
   } else {
     console.log('  reviewing (real time, a few minutes)…');
-    const { onScreen } = await review(take, { sheet: join(dir, 'take.beats.json'), out: join(dir, 'review') });
+    const { onScreen } = await review(take, { sheet: join(dir, 'take.beats.json'), out: join(dir, 'review'), orbit: SIDE_ORBIT });
     rows.push(...faceRows(onScreen, built.take.sheet.performers.map((p) => p.id)));
     const reviewDir = join(dir, 'review');
     spawnSync('node', ['packages/tooling-testing/src/preview.mjs', join(reviewDir, 'reader')], { cwd: ROOT, encoding: 'utf8' });
     notes.push(`watch: ${rel(join(reviewDir, 'reader', 'review.mp4'))}; card stills: ${rel(join(reviewDir, 'reader'))}/sheet-card-NN.jpg (preview with node packages/tooling-testing/src/preview.mjs <file>)`);
-    rows.push(await storyRow(reviewDir, sheet), await readingRow(reviewDir));
+    await writeVisualBrief(reviewDir, built.take.tracks);
+    rows.push(await storyRow(reviewDir, sheet), await visualRow(reviewDir), await readingRow(reviewDir));
   }
 
   const verdict = await writeReport(dir, sheetFile, rows, notes);
@@ -503,7 +590,7 @@ async function verdict(dir: string): Promise<boolean> {
   // The sheet as it was built (its copy in the version), else the sheet file.
   const built = await readFile(join(dir, 'sheet.jsonc'), 'utf8').then((t) => parseSheetText(t, join(dir, 'sheet.jsonc')), () => undefined)
     ?? await readFile(report.sheet, 'utf8').then((t) => parseSheetText(t, report.sheet), () => undefined);
-  const rows = [...report.rows.filter((r) => r.id !== 'reading' && r.id !== 'story'), await storyRow(join(dir, 'review'), built), await readingRow(join(dir, 'review'))];
+  const rows = [...report.rows.filter((r) => r.id !== 'reading' && r.id !== 'story' && r.id !== 'visual'), await storyRow(join(dir, 'review'), built), await visualRow(join(dir, 'review')), await readingRow(join(dir, 'review'))];
   const text = await writeReport(dir, report.sheet, rows, report.notes);
   console.log(`${formatRows(rows)}\n\n${text}`);
   return !verdictLine(rows).failed;

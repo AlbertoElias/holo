@@ -21,7 +21,7 @@ export interface HandPose {
 }
 
 export const HAND_SHAPES = {
-  relaxed: { curl: { thumb: 0.2, index: 0.18, middle: 0.24, ring: 0.3, little: 0.36 }, spread: 0.15 },
+  relaxed: { curl: { thumb: 0.2, index: 0.18, middle: 0.24, ring: 0.3, little: 0.36 }, spread: 0.04 },
   open: { curl: { thumb: 0.02, index: 0.02, middle: 0.02, ring: 0.03, little: 0.04 }, spread: 0.7 },
   reach: { curl: { thumb: 0.12, index: 0.08, middle: 0.12, ring: 0.16, little: 0.2 }, spread: 0.35 },
   fist: { curl: { thumb: 0.85, index: 1, middle: 1, ring: 1, little: 1 }, spread: 0 },

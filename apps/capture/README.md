@@ -185,6 +185,14 @@ the tracked head path in cyan and the avatar's eyes in pink, and
 `BODY_REPLAY_FAULTS=1` breaks each behavior in turn and requires its metric to
 fail.
 
+`npm run test:xr:walk-direction` walks the body in six directions (forward, left,
+back, right, front-right, back-left), once by moving the IWER headset at 1.2 m/s
+and once on the full thumbstick. Each step must land along the travel, the
+recorded walk must play only within 45° of the body's facing, the pelvis must stay
+over the feet, and the torso must keep its standing posture. The report goes to
+`output/ci-walk-direction/`; `WALK_DIRECTION_VIDEO=1` also films each walk from
+the side and the front.
+
 `npm run test:xr:face` drives the avatar's face through the real VR path on an
 emulated Quest Pro (the runner starts a second dev server with
 `CAPTURE_IWER_DEVICE=metaQuestPro`, the one IWER device with eye gaze). It plays
