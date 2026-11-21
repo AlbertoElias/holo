@@ -7,24 +7,17 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
-### B-077 — VR stick/head walk start: the body jumps from rest to full speed in one frame (arms pop)
+### B-087 — VR head walk: the pelvis drops in one frame at each foot landing
 
-- **Area:** apps/capture (`VrBodySolver` root translation at the first recorded step)
-- **Severity:** P2 (the owner saw it as a pop at the end of the controller arm video)
-- **Observed:** 2026-11-20, on `main` (`55f421598851`) and on `bug/vr-arm-natural`
-- **Evidence:** `arms` check, controller run, walk segment (`output/arm-after2/controller-samples.json`).
-  The tracked head moves 4.4 cm ahead while the avatar root holds still; at the first recorded step
-  (27.17 s) the root goes from 0 to about 1.1 m/s in one frame (3.7 cm per frame). World acceleration
-  at that frame: hips 33.7 m/s², chest 20.8 m/s², wrist 1.7 m/s² (the hand stays on the controller), so
-  the elbow folds against the torso (22 m/s² relative to the chest). Before the arm change: shoulders
-  26.7 m/s² at the same frame.
-- **Expected:** the body eases into the walk; no frame of the walk start above the walk's own
-  acceleration (about 7 m/s² on the hips here).
-- **Reproduction:** `cd apps/capture && ARM_REACH_INPUTS=controller node --import tsx scripts/run-xr-checks.ts arms`,
-  then the hips' world acceleration in the walk segment of `controller-samples.json`.
-- **Decision (pending owner confirmation):** fixed by the walk owner, not in the arm change: the arm
-  brief kept `VrBodySolver` out of scope. It is the walk-start transition gap of
-  `docs/features/archive/vr-recorded-walk.md` in `TODOS.md`.
+- **Area:** apps/capture (`VrBodySolver` pelvis height in the gait)
+- **Severity:** P3 (found by measurement, not yet seen by the owner)
+- **Observed:** 2026-11-20, on `bug/vr-legs-direction`
+- **Evidence:** `test:xr:walk-direction`, head rows, with the head moved on every XR frame. In the steady walk the hips'
+  vertical acceleration averages 1.8–4.1 m/s², but single frames at a foot landing reach 12.8 (forward), 20.7 (left),
+  16.8 (back), 20.2 (right), 18.8 and 18.6 m/s² (diagonals). The head bobs smoothly (2 cm).
+- **Expected:** the pelvis rises and falls smoothly with the stride, with no single-frame drop.
+- **Reproduction:** `pnpm --filter @holoim/capture run test:xr:walk-direction`, then the hips' vertical second
+  difference against the sample time `t` in `output/ci-walk-direction/head-samples.json`.
 
 ### B-076 — No-fingers avatar's desktop take diverges from the shipped avatar on `main`
 
@@ -114,6 +107,42 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Next:**
   - Find what the rim stands on at bin 12 with the spawn fix: geometry that the test's ground list (grass and mountain) leaves out, or an export fault.
   - A spawn spot off the statue with flat ground at the rim, and with the mountain more than 6 m away, is also acceptable.
+
+### B-083 — The performer floor on the card makes the AR route miss its 20 s load on a slow runner
+
+- **Area:** apps/viewer-web (`HologramCardCanvas` fit, `motionPoints`)
+- **Severity:** P1 (`main` red on runs 44815715770 and 44826449489)
+- **Observed:** 2026-11-20, hosted pipeline shard 1
+- **Evidence:**
+  - `bubble-capture.pipeline.spec.ts:142`: `.xr-view-container` does not mount within 20 s after "View in your room"; the page shows "Loading hologram…" later.
+  - CI emulator, bubble-capture ×3: 0af7fc10cc under `CI_EMULATE_LOAD=2` passes 3/3; caf7cad fails at :142; caf7cad without 85ee704b62ba passes 3/3; caf7cad at plain load passes 3/3.
+  - 85ee704b62ba adds a third `drawnPoints` + `motionPoints` pass over the whole take for each card, in `fitClocheNow`, which runs again when the bubble or the place gate changes.
+- **Expected:** the performer floor costs no more than one fit pass, and the AR route mounts in time on a loaded runner.
+- **Reproduction:** `CI_EMULATE_LOAD=2 scripts/ci-emulate.sh bash -c "cd apps/viewer-web && RUN_E2E_PIPELINE=1 XR_TEST_MODE=iwer npx playwright test e2e/bubble-capture.pipeline.spec.ts --workers=1 --repeat-each=3"` on caf7cad.
+- **Next:** 85ee704b62ba is reverted on `main`. Bring the floor back with the performer's points taken from the same sampling pass, and pass the reproduction above before the merge.
+
+### B-084 — The feed take does not start in bubble-capture after the VR arm change
+
+- **Area:** apps/capture (arm IK, 12b0a45c2d1a) or apps/viewer-web feed playback
+- **Severity:** P2
+- **Observed:** 2026-11-20, CI emulator
+- **Evidence:**
+  - `bubble-capture.pipeline.spec.ts:98`: "feed sphere follows recorded motion (clip time 0 → 0 s, running false)".
+  - 12b0a45 without 85ee704b62ba: 1 of 3 at plain load, and with :126 ("the rim's largest change in a frame") in 3 of 3 under `CI_EMULATE_LOAD=2`.
+  - 0af7fc10cc and caf7cad without 85ee704b62ba never failed at :98 or :126 (6 runs).
+- **Expected:** the take plays in the feed on every run.
+- **Reproduction:** the B-083 command on `main` after the revert, at plain load and at load 2.
+
+### B-085 — Deep zoom: the camera mode is "follow", not "free", when the wheel stops (hosted, once)
+
+- **Area:** apps/viewer-web (`e2e/deep-zoom.spec.ts`, portal wheel gesture)
+- **Severity:** P3 (test flake; no person has seen a wrong camera)
+- **Observed:** 2026-11-20, hosted run 44815715770 (caf7cad), job "Portal view end-to-end"
+- **Evidence:** `deep-zoom.spec.ts:241`: `expect(stopped.mode).toBe("free")` received `"follow"`. The next run on `main`
+  (44826449489, 12b0a45) passed the same job. caf7cad holds the performer floor (85ee704b62ba, B-083), which
+  changes the card's camera fit, so a slow fit is a suspect.
+- **Expected:** the wheel gesture that stops at the inside end leaves the camera in free mode on every run.
+- **Reproduction:** not tried yet. Try `CI_EMULATE_LOAD=2 scripts/ci-emulate.sh bash -c "cd apps/viewer-web && VITE_IWER_SEM_SCENE=office_small RUN_E2E_PIPELINE=1 XR_TEST_MODE=iwer npx playwright test e2e/deep-zoom.spec.ts --workers=1 --repeat-each=5"` on caf7cad.
 
 ## Entry template
 
