@@ -120,11 +120,17 @@ hosted CI is still a defect to explain, not something to rerun.
   differs from the merge-base (commits, uncommitted and untracked), and maps
   them with `scripts/ci-changed-areas.sh`, the mapping hosted CI uses. Doctor
   and `check:ci-areas` always run; quality (lint, typecheck, unit, build,
-  shard check), knowledge, pipeline, portal, capture XR and viewer XR follow
-  their areas. The mapping fails closed (lockfile, unclassified file, no
+  shard check), knowledge, pipeline, portal, the Quick Look tool check,
+  capture XR and viewer XR follow their areas. The Quick Look tool check
+  (`pnpm run test:usdz-tools`: it records the walk take, then runs
+  `apps/viewer-api/tools/check_usdz_tools.sh` on it) needs Python with the
+  packages in `apps/viewer-api/tools/requirements.txt`; `USDZ_PYTHON` picks
+  the interpreter (default `python3`). When they are missing the step prints
+  `SKIPPED` with the install commands and passes, so read the log: hosted CI
+  is then the first run of that check, and a failure there skips the deploys. The mapping fails closed (lockfile, unclassified file, no
   merge-base: everything runs). `pnpm run verify:pr -- --dry-run` prints the
   plan; `pnpm run verify:full` (or `verify:pr -- --full`) runs every suite
-  (capture XR flows, viewer AR checks, pipeline, portal). Keep `STEPS` in
+  (capture XR flows, viewer AR checks, pipeline, portal, Quick Look tool check). Keep `STEPS` in
   `scripts/verify-pr.ts` in step with the CI jobs. Only one `verify:pr` (or
   `ci-emulate.sh`) runs at a time on the machine: a second waits, printing the
   holder's PID, branch and worktree, and takes the lock the moment the holder
