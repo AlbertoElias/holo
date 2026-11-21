@@ -3,6 +3,27 @@
 Closed entries moved from `BUGS.md` so the live tracker stays scannable.
 `BUGS.md` remains the authority for open, verified defects.
 
+### B-089 — Phone portal checks: the feed rests 1 px past the last card
+
+- **Area:** `apps/viewer-web/src/styles/global.css` (`.feed-sentinel`), `apps/viewer-web/e2e/portal-helpers.ts` (`settleScroll`)
+- **Severity:** P2 (red `main` run)
+- **Observed:** 2026-11-21, hosted run 44880742510 attempt 1 (a0ad1998), job "Portal view end-to-end":
+  `portal.spec.ts:246` threw "feed scroll did not settle: 845, 845, 845, 845, 845". Attempt 2 passed.
+- **Cause:** the product. The load-more sentinel (1 px) sat below the last card, so a two-card feed was
+  1689 px tall on an 844 px phone and could scroll to 845. Scrolling to the last card sometimes came to
+  rest at that end, 1 px past the card's snap point, and the check waits for a card boundary. A viewer
+  on a short feed saw the same 1 px offset.
+- **Fix:** the sentinel takes a `-1px` top margin, so it overlaps the last card's bottom pixel and adds no
+  scroll room; it still meets the viewport at the end of the feed, so the next page still loads.
+  `settleScroll` now prints each child's offset and height, the scroll height and the snap type when it
+  throws.
+- **Proof:** before the fix, the phone checks failed 25 of 64 under `CI_EMULATE_LOAD=2` (one worker), 16
+  of them "did not settle" in the tilt-permission checks. After it, 0 settle failures in 4 runs of the
+  whole `portal.spec.ts` (5–6 repeats each) under the same load. A temporary probe that
+  pages a two-card feed passed 44 of 44 at 390×844 and 1280×800: no scroll room past the last card, and
+  scrolling to it loads the next page. The tilt check at line 213 fails under that load with or without
+  the fix; it is B-090.
+
 ### B-001 — XR locomotion runner lacks an observable final result
 
 - **Area:** `apps/capture` test tooling
