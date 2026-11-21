@@ -140,8 +140,8 @@ export class HandEmbodiment {
    * arm's reach: the user's reach is fitted by height, so a short arm went straight while the hand still moved,
    * and a prop thrown from it left at the stopped hand's speed.
    */
-  private reachStretch(chain: ArmIkChain, past: number): number {
-    const arm = chain.upperLength + chain.lowerLength;
+  private reachStretch(chain: ArmIkChain, past: number, fit = 1): number {
+    const arm = (chain.upperLength + chain.lowerLength) * fit;
     const eyeHeight = this.avatar.avatarEyeLocalY - this.avatar.avatarMinLocalY;
     if (!(arm > 0) || !(eyeHeight > 0)) return past;
     return Math.max(past, ((1 + past) * REFERENCE_ARM_PER_EYE_HEIGHT * eyeHeight) / arm - 1);
@@ -184,7 +184,12 @@ export class HandEmbodiment {
       // A held pose keeps the reach of the source it holds, so a lost hand's arm does not snap.
       const source = this.tracking.getHandPoseSource(side);
       if (source !== 'held') this.handReach[side] = source === 'xr-hand';
-      const maxStretch = vr ? VR_REACH_RESERVE : this.reachStretch(chain, this.handReach[side] ? ARM_REACH_STRETCH : 0);
+      // In VR the arm is already grown by its fit, which has a limit (ARM_LENGTH_FIT_MAX): an arm still short
+      // of the stock avatar's after it stretches the rest of the way (the house base's wrist stopped short of
+      // a swing, so its open hand missed a prop it should bat away).
+      const maxStretch = vr
+        ? this.reachStretch(chain, VR_REACH_RESERVE, chain.armLengthFit)
+        : this.reachStretch(chain, this.handReach[side] ? ARM_REACH_STRETCH : 0);
       // Nothing else poses the clavicle in VR, so it still holds the last
       // solve's swing. Start from bind: the protraction reads the reach from
       // the resting shoulder, not from last frame's swing (that feedback made
