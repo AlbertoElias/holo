@@ -11,6 +11,9 @@ import type { VrmHumanoidBone } from '@holoim/meaning';
 import type { HumanoidSkeleton } from '../../../src/avatar/HumanoidSkeleton.ts';
 import { palmFrameQuaternion } from '../../../src/xr/palmFrame.ts';
 
+/** How far a held object's surface stays from the palm's center. */
+const PALM_REST = 0.013;
+
 export const FINGERS = ['thumb', 'index', 'middle', 'ring', 'little'] as const;
 export type FingerName = (typeof FINGERS)[number];
 
@@ -188,7 +191,19 @@ export class HandRig {
     const wrist = this.hand.getWorldPosition(v1);
     const knuckle = this.knuckles.middle.getWorldPosition(v2);
     out.lerpVectors(wrist, knuckle, 0.95);
-    return out.addScaledVector(this.palmNormal(v2), 0.08 * this.length + radius);
+    const normal = this.palmNormal(new THREE.Vector3());
+    out.addScaledVector(normal, 0.08 * this.length + radius);
+    // A big object rests on the palm, not in it: keep its surface 1.3 cm from the palm's center
+    // (the arm meter's palm is a 1.5 cm sphere, and 2 mm of that is skin that may press).
+    const palm = this.palmCenter(new THREE.Vector3());
+    const gap = out.distanceTo(palm) - radius;
+    if (gap < PALM_REST) {
+      const along = out.clone().sub(palm).dot(normal);
+      const side = Math.sqrt(Math.max(0, out.distanceToSquared(palm) - along * along));
+      const need = Math.sqrt(Math.max(0, (radius + PALM_REST) ** 2 - side * side));
+      out.addScaledVector(normal, need - along);
+    }
+    return out;
   }
 
   palmNormal(out: THREE.Vector3): THREE.Vector3 {
