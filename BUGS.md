@@ -7,6 +7,23 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
+### B-091 — verify:pr: the pipeline Playwright run does not exit after test timeouts
+
+- **Area:** `test:smoke:pipeline` (`@holoim/web` `test:e2e:pipeline`, Playwright teardown), `verify:pr` lock
+- **Severity:** P2 (a stuck run holds the machine-wide check lock, so every other `verify:pr` waits)
+- **Observed:** 2026-11-22, two runs: `verify:pr` on `bug/statue-off-centre` (pid 79871) and one in the
+  story session.
+- **Evidence (`bug/statue-off-centre`):** the machine was overloaded (CPU 2% idle, 88 MB unused; `build`
+  took 3183 s). Pipeline tests failed on their timeouts after 12 to 18 min each: `avatar-formats` unreal-cm
+  (16.1 min), vrm0-minus-z (17.0 min), pointing take (15.2 min), `bubble-capture` (12.0 min),
+  `capture-to-viewer` (15.9 min), `hand-traces` ×4 (15.1 to 17.9 min), `hologram-budgets` 3 M splat
+  (15.0 min). Then "Worker teardown timeout of 30000ms exceeded". After that, the Playwright runner stayed for
+  about 3 h with no worker and no browser. Only its web servers stayed (vite preview on 3174 and 5175, the API,
+  the registry fixture server), all at 0% CPU. The run ended only when it was stopped by hand.
+- **Expected:** after test timeouts and a teardown timeout, the runner exits with a failure and `verify:pr`
+  releases the lock.
+- **Reproduction:** run `verify:pr` on a machine with no free CPU or memory, so the pipeline tests time out.
+
 ### B-088 — Feed card: R3F events connect to a null div (seen once, not reproduced)
 
 - **Area:** apps/viewer-web (`HologramCardCanvas`, R3F 8.18 `Canvas`)
