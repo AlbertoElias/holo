@@ -26,6 +26,8 @@ export interface LocomotionUpdateInput {
   travelLocalYaw?: number | null;
   /** A point, aim, carry, reach or plant holds the upper body: the idle's sway eases out (IDLE_SWAY_HOLD_SEC). */
   holdStill?: boolean;
+  /** With holdStill, a point or aim is held: its ray starts at the eye, so the sway leaves within IDLE_SWAY_AIM_SEC. */
+  aimHeld?: boolean;
   /** The crouch pose's amount (0..1): the desktop walk blends toward the crouch walk clips by it. */
   crouch?: number;
 }
@@ -159,6 +161,8 @@ const ROOT_MOTION_TARGETS = ['hips', 'armature', 'root'];
 /** The desktop idle's sway bones; IDLE_SWAY_HOLD_SEC: how long the sway takes to ease out (and back in) around a reach. */
 const SWAY_BONES = ['spine', 'chest', 'upperChest', 'neck', 'head'] as const;
 const IDLE_SWAY_HOLD_SEC = 0.25;
+// A point's ray starts at the eye, and the stored link end is the mean of its hits: the sway must not move it.
+const IDLE_SWAY_AIM_SEC = 0.05;
 const smoothShare = (t: number) => t * t * (3 - 2 * t);
 const LOWER_BODY_TARGETS = ['hips', 'leftupleg', 'leftleg', 'leftfoot', 'lefttoebase', 'rightupleg', 'rightleg', 'rightfoot', 'righttoebase'];
 const LOWER_BODY_BONES: readonly VrmHumanoidBone[] = [
@@ -425,8 +429,9 @@ export class LocomotionAnimator {
   private playSway(input: LocomotionUpdateInput): void {
     const sway = this.sway;
     if (!sway) return;
-    const step = Math.max(0, input.deltaSec) / IDLE_SWAY_HOLD_SEC;
-    this.swayShare = THREE.MathUtils.clamp(this.swayShare + (input.holdStill ? -step : step), 0, 1);
+    const dt = Math.max(0, input.deltaSec);
+    const change = input.holdStill ? -dt / (input.aimHeld ? IDLE_SWAY_AIM_SEC : IDLE_SWAY_HOLD_SEC) : dt / IDLE_SWAY_HOLD_SEC;
+    this.swayShare = THREE.MathUtils.clamp(this.swayShare + change, 0, 1);
     const idle = this.actionsByProfile['desktop-full'].idle;
     const idleWeight = this.activeProfile === 'desktop-full' && idle?.isScheduled() ? idle.getEffectiveWeight() : 0;
     sway.weight = idleWeight * smoothShare(this.swayShare);
