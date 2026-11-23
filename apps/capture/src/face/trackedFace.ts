@@ -19,6 +19,7 @@ const EYE_WIDE_GAIN = 3;
 const BROW_UP_GAIN = 1.5;
 const BROW_DOWN_GAIN = 1.3;
 const ROUND_GAIN = 1.4;
+const ROUND_FUNNEL_OFF = 0.5;
 const ROUND_JAW_OFF = 0.7; // pursed lips (oo) stay a small ring: the jaw's share falls as the pucker rises
 const STRETCH_GAIN = 4;
 // A sad face: the lower lip pushed up, a trace of frown and raised inner brows, with no smile and a closed jaw.
@@ -86,7 +87,7 @@ export class TrackedFace {
       out[`mouthStretch${side}`] = clamp(at(`mouthStretch${side}`) * STRETCH_GAIN);
     }
     out.mouthPucker = pucker;
-    out.mouthFunnel = clamp(at('mouthFunnel') * ROUND_GAIN);
+    out.mouthFunnel = clamp(at('mouthFunnel') * ROUND_GAIN) * (1 - ROUND_FUNNEL_OFF * pucker);
     return out;
   }
 }

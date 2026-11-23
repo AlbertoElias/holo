@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { chromium, type Route } from 'playwright';
 
@@ -40,8 +41,11 @@ const track: FaceTrack = process.env.LIVE_FACE_TRACK ? JSON.parse(await readFile
 const only = process.env.LIVE_FACE_ONLY?.split(',');
 if (only) track.sets = track.sets.filter((set) => only.includes(set.name));
 const stepMs = 1000 / track.fps;
-const t0 = Date.now();
-const stage = (name: string) => { if (process.env.LIVE_FACE_TRACE) console.error(`[trace] ${((Date.now() - t0) / 1000).toFixed(1)}s ${name}`); };
+// LIVE_FACE_TRACE=1 prints the time of each stage, to find where a run stalls on a loaded machine.
+const startedAt = Date.now();
+const stage = (name: string) => {
+  if (process.env.LIVE_FACE_TRACE) console.error(`[trace] ${((Date.now() - startedAt) / 1000).toFixed(1)}s ${name}`);
+};
 // [set, measure, bound]: what each expression must (EXPECT_MIN) and must not (EXPECT_MAX) move on the avatar.
 // The scores applied one to one fail most of these: a smile's cheeks reach 0.05 and a sad face's frown 0.03.
 const EXPECT_MIN: Array<[string, string, number]> = [
@@ -126,6 +130,7 @@ try {
       }
     }
   };
+  let lastPicture = '';
   for (const set of track.sets) {
     if (wantFrames) await mkdir(path.join(artifactDir, 'frames', set.name), { recursive: true });
     // The face settles on the set's first frame before the set plays: a source change crossfades, and the sad
@@ -146,7 +151,21 @@ try {
         if (mesh === headMesh) head[name!] = Math.round(value * 1000) / 1000;
       }
       rows.push({ set: set.name, frame: index, head });
-      if (wantFrames) await framePicture(path.join(artifactDir, 'frames', set.name, `${String(index).padStart(5, '0')}.png`));
+      if (wantFrames) {
+        const file = path.join(artifactDir, 'frames', set.name, `${String(index).padStart(5, '0')}.png`);
+        await framePicture(file);
+        // A recording made on a busy host must not pass with a stammer: a picture equal to the one before, while
+        // the face moved, is a repeated frame.
+        const picture = createHash('sha256').update(await readFile(file)).digest('hex');
+        const before = rows.at(-2);
+        const moved = before?.set === set.name && Object.keys(head).some((name) => Math.abs(head[name]! - (before.head[name] ?? 0)) > 0.05);
+        if (moved && picture === lastPicture) failures.push(`${set.name} frame ${index} repeats the frame before`);
+        lastPicture = picture;
+      }
+    }
+    if (wantFrames) {
+      const written = (await readdir(path.join(artifactDir, 'frames', set.name))).filter((name) => name.endsWith('.png')).length;
+      if (written !== set.frames.length) failures.push(`${set.name} has ${written} pictures for ${set.frames.length} frames`);
     }
   }
   await setInput(null);

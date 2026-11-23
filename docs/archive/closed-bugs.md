@@ -1678,3 +1678,16 @@ bug above.)
 - **Cause:** not the arm change or the gate (1 of 5 on `main` and on the gate branch alike). The feed also loads the neighbour cards, paused, and each reports its own probe; the spec kept whichever card reported last, so it sometimes read a paused neighbour (clip time 0, running false).
 - **Fix:** the spec keeps each card's probe by URL and reads the uploaded card's. Bubble-capture at load 2 passed 11 of 11.
 - **Closed:** 2026-11-21.
+
+### B-092 — The live face of the house avatar looks wrong: a smile, a laugh and a sad face do not read, and speech does not move the mouth like a mouth
+
+- **Area:** apps/capture (camera face path, `src/face`), the house base (`scripts/authoring/house-base`)
+- **Severity:** P1
+- **Observed:** 2026-11-21, by the owner on the live avatar: "this is me smiling, laughing and putting on a sad face. they all look wrong and not real. also, when talking, the mouth doesnt really move in a realistic way", and "the mouth also needs to be far more realistic on all of them".
+- **Evidence:** the `live-face` XR check with `LIVE_FACE_RAW=1` (the scores applied one to one, as before): in a smile the cheeks reach 0.05, in a sad face the frown reaches 0.03, and wide eyes reach 0.18.
+- **Expected:** each expression moves the whole face (eyes and cheeks with a smile, brows and mouth corners with a sad face), and the mouth is built and moves like a mouth: lips with volume, teeth, a tongue, lips that close for m, round for o and u, and widen for e.
+- **Reproduction:** `LIVE_FACE_RAW=1 LIVE_FACE_FRAMES=1 pnpm --filter @holoim/capture exec node --import tsx scripts/run-xr-checks.ts live-face`, then look at the frames under `output/ci-live-face/frames`.
+- **Cause:** two faults. (1) The camera face tracker gives weak scores for the parts of an expression that make it read (almost no cheek raise, almost no frown on a sad face, a small share of the range for wide eyes, a resting eye squint of 0.3), and the scores went to the face one to one. (2) The house mouth was a flat patch: thin lips, one teeth row, no tongue, and a raised upper lip that hid the teeth.
+- **Fix:** `src/face/trackedFace.ts` shapes the scores before they reach the face (gains, a resting level taken off, cheeks and lower lids that follow the mouth corners, a sad face read from the lower lip, the frown and the inner brows, a scowl that wrinkles the nose and presses the lips, a small ring for "oo"). The house mouth is rebuilt in `house-base/build.py`: each lip is a rounded roll, there are two teeth rows and a tongue, the lips move off the teeth, and the smile moves the cheeks and the fold from the nose to the mouth corner. The `live-face` XR check replays hand-made score sets (neutral, smile, laugh, sad, surprise, anger, a spoken sentence) through the camera's own path and asserts what each must and must not move.
+- **Not covered:** the headset path has no expression tracking (the camera is released in VR; the face there shows blinks, gaze and a jaw that follows the microphone). The check uses hand-made scores, not a person.
+- **Closed:** 2026-11-23.

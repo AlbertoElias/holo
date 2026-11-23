@@ -323,7 +323,7 @@
       }
     },
     "mouthShapes": {
-      "$comment": "Moves (m) of the mouth's edges in the face's plane unless named. smile: the corners up and out, the upper edge's middle up by midUp, the middle open, the teeth row dropping `teeth` (a fraction) of the way, the opening keeping its height toward the corners as `round` falls below 1, the mouth `lift` forward (depth) halfway out so the cheek's curve stays behind it; frown: the corners down and out; stretch: the corners out and a little down; press: the corners out, the lips thinner, the corners down; lowerDown / upperUp: the lower lip down, the upper up; dimple: the corners back into the cheek; funnel: the corners in, the lips apart up and down; pucker: the corners in, the mouth forward (depth) and the lips `open` apart; smile.thin: the share of their height the lips lose in a smile; upperUp / lowerDown move only the lip's edge, so the teeth show; jawMouth: with the jaw open the upper teeth stay level, dropping `teeth` (`teethRound` in a round mouth) of the opening, and the lower teeth row rises `lowTeeth` of it; roll: corners in, the rolled lip thinner and down; shrug: the lower lip up; side: mouthLeft/Right across; jawSide, jawForward (depth) and jawOpen: the mouth following the jaw units. jawMouth: with the open jaw the corners come `in` and `down`, the upper teeth show over `teeth` of the opening and the tongue over `tongue` of it at the middle, across `tongueWide` of the half-width (rounded by tongueRound); the opening keeps its height toward the corners as `round` falls below 1.",
+      "$comment": "Moves (m) of the mouth's edges in the face's plane unless named. smile: the corners up and out, the upper edge's middle up by midUp, the middle open, the teeth row dropping `teeth` (a fraction) of the way, the opening keeping its height toward the corners as `round` falls below 1, the mouth `lift` forward (depth) halfway out so the cheek's curve stays behind it; frown: the corners down and out; stretch: the corners out and a little down; press: the corners out, the lips thinner, the corners down; lowerDown / upperUp: the lower lip down, the upper up (lowerDownTeeth: the share of that move the lower teeth row follows, so the lip does not bare the row); dimple: the corners back into the cheek; funnel: the corners in, the lips apart up and down; pucker: the corners in, the mouth forward (depth) and the lips `open` apart; smile.thin: the share of their height the lips lose in a smile; upperUp / lowerDown move only the lip's edge, so the teeth show; jawMouth: with the jaw open the upper teeth stay level, dropping `teeth` (`teethRound` in a round mouth) of the opening, and the lower teeth row rises `lowTeeth` of it; roll: corners in, the rolled lip thinner and down; shrug: the lower lip up; side: mouthLeft/Right across; jawSide, jawForward (depth) and jawOpen: the mouth following the jaw units. jawMouth: with the open jaw the corners come `in` and `down`, the upper teeth show over `teeth` of the opening and the tongue over `tongue` of it at the middle, across `tongueWide` of the half-width (rounded by tongueRound); the opening keeps its height toward the corners as `round` falls below 1.",
       "smile": {
         "thin": 0.2,
         "up": 0.014,
@@ -358,7 +358,7 @@
         "down": 0.018
       },
       "pucker": {
-        "open": 0.001,
+        "open": 0.002,
         "in": 0.012,
         "forward": 0.007
       },
