@@ -117,6 +117,18 @@ export interface ArmOptions {
 
 /** Forearm twist from neutral (bind: thumb forward), at most: pronation and supination are each about 80-90°; 85° keeps inside the 90° bar in `arm-quality.ts`, as the wrist roll in `WRIST_LIMITS` does. */
 export const FOREARM_TWIST_LIMIT = 85 * DEG;
+
+/**
+ * Limits `x` to ±`limit` with a soft knee: it is unchanged up to 60% of the
+ * limit, then comes to the limit gradually. A hard stop changes the turning
+ * speed in one frame when a roll arrives at it (a snap about the forearm).
+ */
+export function softLimit(x: number, limit: number): number {
+  const knee = 0.6 * limit;
+  const size = Math.abs(x);
+  if (size <= knee) return x;
+  return Math.sign(x) * (knee + (limit - knee) * Math.tanh((size - knee) / (limit - knee)));
+}
 /** The forearm's own share of a palm roll; the hand takes the rest, as the radius turns over the ulna. */
 const FOREARM_TWIST_SHARE = 0.5;
 /** The elbow's flexion range: at most a little past straight, and about 150° bent. */
@@ -241,7 +253,13 @@ export function easeTwist(a: LoadedAvatar, side: Side, k: number): void {
 
 /** How fast the forearm turns over at most (radians a second): a quick, deliberate turn of the palm. */
 export const TWIST_SPEED = 540 * DEG;
-const lastTwist = new WeakMap<LoadedAvatar, Partial<Record<Side, { t: number; twist: number }>>>();
+/**
+ * How fast the forearm's turning speed changes at most (radians a second, a
+ * second): 6000°/s² is 200°/s between two frames at 30 fps, under the 250°/s
+ * `turn` bar in `smoothness.ts`.
+ */
+export const TWIST_ACCEL = 6000 * DEG;
+const lastTwist = new WeakMap<LoadedAvatar, Partial<Record<Side, { t: number; twist: number; speed: number }>>>();
 
 /**
  * Keeps the forearm's twist continuous from frame to frame: within its range,
@@ -257,12 +275,20 @@ export function steadyTwist(a: LoadedAvatar, side: Side, t: number, dt: number):
   lastTwist.set(a, rec);
   const prev = rec[side];
   const tw = forearmTwist(a, side);
-  let target = THREE.MathUtils.clamp(tw, -FOREARM_TWIST_LIMIT, FOREARM_TWIST_LIMIT);
+  let target = softLimit(tw, FOREARM_TWIST_LIMIT);
+  let speed = 0;
   if (prev && t > prev.t && t - prev.t <= 2.5 * dt) {
     const d = THREE.MathUtils.euclideanModulo(tw - prev.twist + Math.PI, 2 * Math.PI) - Math.PI;
-    const goal = THREE.MathUtils.clamp(prev.twist + d, -FOREARM_TWIST_LIMIT, FOREARM_TWIST_LIMIT);
-    const step = TWIST_SPEED * (t - prev.t);
-    target = prev.twist + THREE.MathUtils.clamp(goal - prev.twist, -step, step);
+    const goal = softLimit(prev.twist + d, FOREARM_TWIST_LIMIT);
+    // At most TWIST_SPEED, the speed changed by at most TWIST_ACCEL, and
+    // slow enough to stop at the goal: a palm that turns back does not
+    // start or stop at full speed in one frame.
+    const span = t - prev.t;
+    const err = goal - prev.twist;
+    const most = Math.min(TWIST_SPEED, Math.sqrt(2 * TWIST_ACCEL * Math.abs(err)), Math.abs(err) / span);
+    const give = TWIST_ACCEL * span;
+    speed = THREE.MathUtils.clamp(Math.sign(err) * most, prev.speed - give, prev.speed + give);
+    target = prev.twist + speed * span;
   }
   for (let k = 0; k < 3; k += 1) {
     const now = forearmTwist(a, side);
@@ -271,7 +297,34 @@ export function steadyTwist(a: LoadedAvatar, side: Side, t: number, dt: number):
     const axis = ch.hand.getWorldPosition(new THREE.Vector3()).sub(ch.foreArm.getWorldPosition(new THREE.Vector3())).normalize();
     rotateBoneWorld(ch.hand, tmpQ.setFromAxisAngle(axis, turn));
   }
-  rec[side] = { t, twist: forearmTwist(a, side) };
+  rec[side] = { t, twist: forearmTwist(a, side), speed };
+}
+
+/** The forearm bone's own twist about its line, radians (the part of `forearmTwist` it carries, not the hand). */
+function foreBoneTwist(a: LoadedAvatar, side: Side): number {
+  const ch = a.arms[side];
+  const hg = hingeOf(a, side);
+  const T = new THREE.Quaternion().setFromAxisAngle(hg.h, elbowFlex(a, side)).invert().multiply(ch.foreArm.quaternion).multiply(ch.foreBindQuaternion.clone().invert());
+  const sign = T.w < 0 ? -1 : 1;
+  return 2 * Math.atan2(sign * (T.x * hg.d0.x + T.y * hg.d0.y + T.z * hg.d0.z), sign * T.w);
+}
+
+/**
+ * Gives the forearm bone a fixed share of the forearm's whole twist and the
+ * hand the rest, with the hand's world pose kept. The palm roll in `solveArm`
+ * splits a turn that can wrap past half a turn (B-097): from one frame to the
+ * next its forearm half jumped from +42.5° to -42.5°, and `steadyTwist`
+ * mended only the sum. Call once a frame, after `steadyTwist`.
+ */
+export function shareTwist(a: LoadedAvatar, side: Side): void {
+  const ch = a.arms[side];
+  const turn = FOREARM_TWIST_SHARE * forearmTwist(a, side) - foreBoneTwist(a, side);
+  if (Math.abs(turn) < 1e-5) return;
+  const axis = ch.hand.getWorldPosition(new THREE.Vector3()).sub(ch.foreArm.getWorldPosition(new THREE.Vector3())).normalize();
+  const handWorld = ch.hand.getWorldQuaternion(new THREE.Quaternion());
+  rotateBoneWorld(ch.foreArm, tmpQ.setFromAxisAngle(axis, turn));
+  ch.hand.quaternion.copy(ch.foreArm.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(handWorld));
+  ch.hand.updateMatrixWorld(true);
 }
 
 /**
@@ -318,7 +371,7 @@ export function solveArm(a: LoadedAvatar, side: Side, wristWorld: THREE.Vector3,
     const w = want.clone().addScaledVector(axis, -want.dot(axis));
     if (p.lengthSq() > 1e-6 && w.lengthSq() > 1e-6) {
       p.normalize(); w.normalize();
-      const angle = THREE.MathUtils.clamp(Math.atan2(tmpV.crossVectors(p, w).dot(axis), p.dot(w)), -FOREARM_TWIST_LIMIT, FOREARM_TWIST_LIMIT);
+      const angle = softLimit(Math.atan2(tmpV.crossVectors(p, w).dot(axis), p.dot(w)), FOREARM_TWIST_LIMIT);
       rotateBoneWorld(chain.foreArm, tmpQ.setFromAxisAngle(axis, angle * FOREARM_TWIST_SHARE));
       rotateBoneWorld(chain.hand, tmpQ.setFromAxisAngle(axis, angle * (1 - FOREARM_TWIST_SHARE)));
     }

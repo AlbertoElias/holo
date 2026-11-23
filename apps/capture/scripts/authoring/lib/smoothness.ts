@@ -18,7 +18,14 @@ export const SMOOTH_LIMITS = {
    * target that changes inside one frame snaps the arm (crouch v42: 6.0 m/s at 2.17 s). Fast human hand moves
    * stay near 1 m/s (crouch before B-092: 1.5; pinch v9: 0.5).
    */
-  jump: 2
+  jump: 2,
+  /**
+   * The most an arm joint's angular velocity (its local rotation) may change between two frames, degrees a second.
+   * A position bar does not see a bone that turns about its own line: the pinch forearm turned 85° in one frame
+   * (2551°/s) and the crouch shoulder, upper arm and forearm 25° and back (804°/s), with every hand under 1 m/s.
+   * Good motion stays under 170 (crouch v47 left arm in the crouch: 170; expressions: 130; pinch left arm: 77).
+   */
+  turn: 250
 } as const;
 
 export interface Jump { t: number; joint: string; change: number }
@@ -61,6 +68,40 @@ export function measurePropJumps(times: ArrayLike<number>, props: readonly { id:
       const jump = { t: times[i - 1]!, joint: p.id, change };
       if (!worst || change > worst.change) worst = jump;
       if (change > SMOOTH_LIMITS.jump) jumps.push(jump);
+    }
+  }
+  return { worst, over: new Set(jumps.map((x) => x.t)).size, jumps: jumps.sort((x, y) => y.change - x.change) };
+}
+
+/**
+ * Arm joint angular velocity changes between two frames over `SMOOTH_LIMITS.turn`, and the largest. `bones`
+ * hold each joint's local rotation per frame (x, y, z, w), as the take writes it.
+ */
+export function measureTurnJumps(times: ArrayLike<number>, bones: readonly { joint: string; rotation: ArrayLike<number> }[]): JumpReport {
+  const jumps: Jump[] = [];
+  let worst: Jump | undefined;
+  const DEG = 180 / Math.PI;
+  for (const b of bones) {
+    // The turn from frame i - 1 to frame i as a rotation vector (degrees a second), in the earlier frame's axes.
+    const omega = (i: number): number[] => {
+      const r = b.rotation; const p = 4 * (i - 1); const q = 4 * i;
+      const [ax, ay, az, aw] = [-r[p]!, -r[p + 1]!, -r[p + 2]!, r[p + 3]!];
+      const [bx, by, bz, bw] = [r[q]!, r[q + 1]!, r[q + 2]!, r[q + 3]!];
+      let x = aw * bx + ax * bw + ay * bz - az * by; let y = aw * by - ax * bz + ay * bw + az * bx;
+      let z = aw * bz + ax * by - ay * bx + az * bw; let w = aw * bw - ax * bx - ay * by - az * bz;
+      if (w < 0) { x = -x; y = -y; z = -z; w = -w; }
+      const sin = Math.hypot(x, y, z);
+      const dt = times[i]! - times[i - 1]!;
+      if (sin < 1e-9 || dt <= 0) return [0, 0, 0];
+      const k = (2 * Math.atan2(sin, w) * DEG) / (sin * dt);
+      return [x * k, y * k, z * k];
+    };
+    for (let i = 2; i < times.length; i += 1) {
+      const w1 = omega(i - 1); const w2 = omega(i);
+      const change = Math.hypot(w2[0]! - w1[0]!, w2[1]! - w1[1]!, w2[2]! - w1[2]!);
+      const jump = { t: times[i - 1]!, joint: b.joint, change };
+      if (!worst || change > worst.change) worst = jump;
+      if (change > SMOOTH_LIMITS.turn) jumps.push(jump);
     }
   }
   return { worst, over: new Set(jumps.map((x) => x.t)).size, jumps: jumps.sort((x, y) => y.change - x.change) };

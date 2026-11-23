@@ -39,7 +39,7 @@ import { BUILDS, CLOTHING, EYES, FINISHES, GLASSES, HAIR_COLOUR, HAIR_STYLES, SK
 
 import { actingReport, diffTakes, summarize } from './acting-report.ts';
 import { bodyLine, build, loadSheet, OBJECT_LIMITS, resolveAvatar } from './direct.ts';
-import { measureJumps, measurePropJumps, measureSmoothness, SMOOTH_LIMITS } from './lib/smoothness.ts';
+import { measureJumps, measurePropJumps, measureSmoothness, measureTurnJumps, SMOOTH_LIMITS } from './lib/smoothness.ts';
 import { BAR } from './lib/audition-bar.ts';
 import { faceBarPasses, faceBarPx, FACE_AWAY_MAX_SHARE, PAIR_FACE_BAR_PX } from './lib/face-bar.ts';
 import { FACE_CHANNELS } from '@holoim/avatar-face';
@@ -528,6 +528,14 @@ async function make(sheetFile: string, quick: boolean): Promise<boolean> {
     const jm = measureJumps(t.motion);
     const jw = jm.worst;
     rows.push({ id: `jump.${t.spec.id}`, bar: `no hand or elbow changes its velocity by more than ${S.jump} m/s between two frames (a snap)`, value: jw ? `worst ${jw.change.toFixed(2)} m/s at ${jw.t.toFixed(2)} s, ${jw.joint}; ${jm.over} frames over` : 'no hand or elbow tracked', pass: jm.over === 0, ...(jm.over ? { fix: `the arm snaps at ${jw!.t.toFixed(2)} s: a reach target or a clearing changes inside one frame; give the beat a longer attack, or move the point so the arm does not pass through the body` } : {}) });
+    const turnBones = (['left', 'right'] as const).flatMap((side) => {
+      const ch = t.avatar.arms[side];
+      return ([['shoulder', ch.shoulder], ['upper arm', ch.upperArm], ['forearm', ch.foreArm], ['hand', ch.hand]] as const)
+        .flatMap(([name, bone]) => { const rotation = t.rotations.get(bone); return rotation ? [{ joint: `${side} ${name}`, rotation }] : []; });
+    });
+    const tj = measureTurnJumps(built.take.times, turnBones);
+    const tw = tj.worst;
+    rows.push({ id: `turn.${t.spec.id}`, bar: `no arm joint changes its turning speed by more than ${S.turn}°/s between two frames (a snap about its own line)`, value: tw ? `worst ${tw.change.toFixed(0)}°/s at ${tw.t.toFixed(2)} s, ${tw.joint}; ${tj.over} frames over` : 'no arm joint tracked', pass: tj.over === 0, ...(tj.over ? { fix: `the ${tw!.joint} snaps at ${tw!.t.toFixed(2)} s: a palm or a grip turn starts or flips inside one frame; give the beat that turns the palm a longer attack or start it earlier, or report it with the sheet (a solver fault)` } : {}) });
     await writeFile(join(dir, `smooth.${t.spec.id}.json`), `${JSON.stringify(sm.stalls.map((x) => ({ t: x.t, joint: x.joint, share: Math.round(x.share * 1000) / 1000, speed: Math.round(x.speed * 100) / 100, around: Math.round(x.around * 100) / 100 })))}\n`);
   }
   if (built.take.props.length) {
