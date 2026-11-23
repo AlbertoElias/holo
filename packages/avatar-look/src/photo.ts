@@ -41,32 +41,34 @@ export function toSrgb(c: Linear): SRGB {
 export const luminance = (c: Linear): number => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
 
 /**
- * The OKLab lightness the eye whites are scaled to. A phone exposes for the
- * face, so a darker face is shot brighter; scaling toward the same eye-white
- * lightness undoes part of that. An eye white is small and often in the
- * lids' shade, so the change is capped at `EXPOSURE_RANGE`.
+ * The lightness of a typical eye white (OKLab L). The skin is read against the
+ * photo's own eye whites; when they are not usable, against this value.
  */
 export const SCLERA_L = 0.88;
 
 /**
- * The most and least the eye whites change the exposure (×). Calibrated by
- * the agent on 2026-11-23 on 42 public-domain portraits: without a cap, a
- * shaded eye white made 12 of them read whiter than any real skin (slice 5a
- * evidence in docs/features/directed-performance.md).
+ * The least an eye-white sample must show to be used: its OKLab lightness, and
+ * its greyness (its lowest channel over its highest). A darker or more coloured
+ * sample is not an eye white: dark glasses, or lids and skin in narrow eyes.
+ * Calibrated by the agent on 2026-11-23 on 66 online photos of 10 people and 42
+ * public-domain portraits (slice 5a evidence in
+ * docs/features/directed-performance.md).
  */
-export const EXPOSURE_RANGE = { min: 0.8, max: 1.25 } as const;
+export const WHITE_MIN = { lightness: 0.55, greyness: 0.45 } as const;
+
+/** True when a measured eye white can set the white balance and the skin's scale. */
+export function usableWhite(white: Linear): boolean {
+  return oklab(white)[0] >= WHITE_MIN.lightness && Math.min(...white) / Math.max(1e-4, ...white) >= WHITE_MIN.greyness;
+}
 
 /**
- * The per-channel gains that turn the measured eye white into a neutral grey
- * (a von Kries white balance), and move its lightness toward `SCLERA_L`
- * within `EXPOSURE_RANGE`.
+ * The per-channel gains that turn the measured eye white into a neutral grey of
+ * the same luminance (a von Kries white balance). The lightness is not changed:
+ * the skin is read as a ratio to the eye whites (`pickSkin`).
  */
 export function whiteGains(white: Linear): Linear {
-  const grey = SCLERA_L ** 3; // OKLab L of a neutral grey is the cube root of its luminance
-  const exposure = Math.min(EXPOSURE_RANGE.max, Math.max(EXPOSURE_RANGE.min, grey / Math.max(luminance(white), 1e-4)));
   // The colour correction is capped: an eye white is a little warm and never far from grey, so a large cast is a bad sample.
-  const tint = white.map((v) => Math.min(WHITE_CAST, Math.max(1 / WHITE_CAST, luminance(white) / Math.max(v, 1e-4))));
-  return [exposure * tint[0]!, exposure * tint[1]!, exposure * tint[2]!];
+  return white.map((v) => Math.min(WHITE_CAST, Math.max(1 / WHITE_CAST, luminance(white) / Math.max(v, 1e-4)))) as unknown as Linear;
 }
 
 /** The most a white balance changes one channel against the luminance (×). */
@@ -75,16 +77,23 @@ export const WHITE_CAST = 1.25;
 export const applyGains = (c: Linear, g: Linear): Linear => [c[0] * g[0], c[1] * g[1], c[2] * g[2]];
 
 /**
- * The span of skin lightness (OKLab L, after white balance) in photos that the
- * eight `SKIN` swatches are spread over: `lightest` takes porcelain, `darkest`
- * espresso. The swatches are the clay sheet's warm colours, not real skin
- * colours, so a photo's skin is placed by its lightness on this span and takes
- * the swatch of the same rank, not the nearest colour. A lit face in a photo
- * reads lighter than its colour on a chart (the Monk Skin Tone scale runs from
- * L 0.95 to 0.27), so the span is the photos' own. Calibrated by the agent on
- * 2026-11-23 on 42 public-domain portraits; darker skin is under-sampled there.
+ * The span of skin lightness over eye-white lightness (both OKLab L, after
+ * white balance) that the eight `SKIN` swatches are spread over: `lightest`
+ * takes porcelain, `darkest` espresso. The ratio cancels the photo's exposure,
+ * which a camera sets for the face (a darker face is shot brighter). The
+ * swatches are the clay sheet's warm colours, not real skin colours, so a
+ * photo's skin takes the swatch of the same rank, not the nearest colour.
+ * Calibrated by the agent on 2026-11-23 on 66 online photos of 10 people and 42
+ * public-domain portraits; darker skin is under-sampled there.
  */
-export const REAL_SKIN_L = { lightest: 0.92, darkest: 0.52 } as const;
+export const SKIN_RATIO = { lightest: 1.2, darkest: 0.6 } as const;
+
+/**
+ * The largest lightness difference (OKLab L) between the lightest and darkest
+ * skin areas of one face before the light is called uneven: a hat brim, a side
+ * light or a hand's shadow. Calibrated with `SKIN_RATIO`.
+ */
+export const SKIN_SPREAD_MAX = 0.3;
 
 /** The skin swatches from lightest to darkest: the order `SKIN` names them in. */
 export const SKIN_ORDER = Object.keys(SKIN) as Skin[];
@@ -94,14 +103,17 @@ export interface SkinPick {
   /** 0 (lightest swatch) to 7 (darkest), unrounded: how near the pick is to the next swatch. */
   readonly rank: number;
   readonly lightness: number;
+  /** The skin's lightness over the eye whites' lightness. */
+  readonly ratio: number;
 }
 
-/** The skin swatch for a white-balanced skin colour, by lightness rank. */
-export function pickSkin(skin: Linear): SkinPick {
+/** The skin swatch for a white-balanced skin colour, by its lightness over the eye whites' lightness (`whiteL`). */
+export function pickSkin(skin: Linear, whiteL: number): SkinPick {
   const L = oklab(skin)[0];
-  const t = (REAL_SKIN_L.lightest - L) / (REAL_SKIN_L.lightest - REAL_SKIN_L.darkest);
+  const ratio = L / Math.max(whiteL, 1e-4);
+  const t = (SKIN_RATIO.lightest - ratio) / (SKIN_RATIO.lightest - SKIN_RATIO.darkest);
   const rank = Math.min(SKIN_ORDER.length - 1, Math.max(0, t * (SKIN_ORDER.length - 1)));
-  return { value: SKIN_ORDER[Math.round(rank)]!, rank, lightness: L };
+  return { value: SKIN_ORDER[Math.round(rank)]!, rank, lightness: L, ratio };
 }
 
 export interface NearestPick<T extends string> {

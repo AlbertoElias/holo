@@ -4532,13 +4532,19 @@ clause, so no question went to the owner and the fallback was not needed.
 
 - Skin: five discs (the forehead's middle and sides and both cheeks, each
   0.05 face widths), only the segmenter's face-skin pixels. The middle
-  fifth by luminance of each disc, then the middle disc. The white balance
-  is from the eye whites: the whitest third of each eye outside the iris,
-  drawn in by a fifth from the lids. The tint per channel is capped at
-  1.25×, and the exposure change at 0.8× to 1.25× (`EXPOSURE_RANGE`). With
-  too little eye white, the brightest 1% of the photo is used. The OKLab
-  lightness is placed on a span of 0.92 (porcelain) to 0.52 (espresso)
-  (`REAL_SKIN_L`), and takes the swatch of the same rank.
+  fifth by luminance of each disc, then the middle disc. The eye whites
+  are the whitest third of each eye outside the iris, drawn in by a fifth
+  from the lids. They are used only when they are light and grey enough
+  (OKLab L 0.55 or more, lowest channel over highest 0.45 or more:
+  `WHITE_MIN`). They set the tint (each channel capped at 1.25×) and the
+  skin's scale: the skin's OKLab lightness over the eye whites' lightness.
+  This ratio cancels the exposure. It is placed on a span of 1.2
+  (porcelain) to 0.6 (espresso) (`SKIN_RATIO`) and takes the swatch of the
+  same rank. When the eye whites are not usable (dark glasses, lids, shade)
+  or the skin areas differ by more than 0.3 in lightness (`SKIN_SPREAD_MAX`:
+  a hat brim, side light), the read is reported and the card keeps the
+  default skin, with a note to use a photo with open eyes in even, front
+  light.
 - Hair colour: the segmenter's hair class, eroded by 1.2% of the face width
   from its edges. The 60–85% band by luminance (the lit body of the hair,
   above the shade between strands and below the shine). The nearest
@@ -4557,15 +4563,17 @@ clause, so no question went to the owner and the fallback was not needed.
   (`HAIR_STYLE_MIN_CONFIDENCE`) the card keeps the default style.
 
 **Calibration (by the agent, in the owner's absence).** The first version
-scaled every photo's eye whites to the same lightness with no cap. On the
-portraits below, a shaded eye white then made 12 of the faces read
-whiter than any real skin (OKLab L above 0.95). Studio portraits are already
-exposed well, so the exposure change is now capped. The span was first
-the Monk Skin Tone scale's (L 0.95 to 0.27), and every face read
-porcelain to honey on it, because a lit face reads lighter than its chart
-colour. The span is now the photos' own. For hair, the middle band read
-the shade between strands: blonde hair read ash brown or silver, and at
-full lightness weight grey-brown hair read chestnut.
+scaled every photo's eye whites to the same lightness with no cap: a shaded
+eye white made 12 of the portraits below read whiter than any real skin.
+The second capped the exposure change at 0.8× to 1.25× and placed the
+absolute skin lightness on a span of 0.92 to 0.52; check 1 showed that it
+is not stable between photos of one person (see below). The third, now in
+the code, reads the skin as a ratio to the eye whites and refuses eye
+whites that are dark or coloured. The thresholds and the span were set on
+the saved reads of check 1 and check 2 before the code changed, then all
+photos were read again. For hair, the middle band read the shade between
+strands: blonde hair read ash brown or silver, and at full lightness
+weight grey-brown hair read chestnut.
 
 **Check 2, spread.** 48 official portraits of members of the US Congress
 (`unitedstates.github.io/images/congress/original/`, about 450 × 550 px;
@@ -4575,25 +4583,25 @@ wide, under the 200 px minimum). Before any read was seen, the agent put
 ten of them into lightness groups by eye (1 lightest to 7 darkest), and
 nine of those were read.
 
-| Portrait | Group by eye | Skin pick | Rank (0–7) |
-|---|---|---|---|
-| G000555 | 1 | goldenSand | 2.04 |
-| B001315 | 1 | goldenSand | 2.16 |
-| B001243 | 2 | porcelain | 0.27 |
-| K000397 | 2 | linen | 1.04 |
-| B001287 | 3 | honey | 3.01 |
-| W000788 | 5 | goldenSand | 1.68 |
-| M001229 | 5 | honey | 2.51 |
-| C000537 | 6 | copper | 5.36 |
-| D000096 | 7 | copper | 5.44 |
+| Portrait | Group by eye | Skin read | Rank (0–7) | Card |
+|---|---|---|---|---|
+| G000555 | 1 | porcelain | 0.00 | porcelain |
+| B001315 | 1 | honey | 3.30 | default (no eye white, uneven light) |
+| B001243 | 2 | linen | 0.90 | linen |
+| K000397 | 2 | goldenSand | 1.97 | default |
+| B001287 | 3 | copper | 4.66 | default |
+| W000788 | 5 | honey | 3.08 | honey |
+| M001229 | 5 | caramel | 4.43 | default |
+| C000537 | 6 | umber | 6.36 | default |
+| D000096 | 7 | umber | 5.93 | umber |
 
-25 of the 33 pairs in different groups are in order (76%). The misses are
-the two lightest faces, which read a group darker (their photos are
-exposed low), and W000788, a medium-brown face under bright studio light,
-which reads three groups lighter. The light-to-dark ends are in order, the
-middle is not reliable to one swatch, and darker skin is under-sampled
-here (no portrait read darker than copper). Picks over all 42 read portraits: linen 14,
-goldenSand 9, honey 9, porcelain 6, copper 3, caramel 1. Hair: ashBrown
+By rank, 27 of the 33 pairs in different groups are in order (82%; 25 of
+33 with the second version). B001315 is the main miss: its eye whites were
+not usable and its light is uneven, so the card keeps the default. Of the
+four with a trusted read, all are in order. Darker skin is still
+under-sampled (no portrait reads espresso). Cards over all 42 read
+portraits: honey 10, goldenSand 10, linen 4, porcelain 3, umber 1, and 14
+keep the default skin. Hair: ashBrown
 16, espresso 12, silver 7, black 6, wheat 1 (grey hair reads silver).
 Eyes: 28 read (darkBrown 19, blue 4, coolGrey 2, mossGreen 2, hazel 1),
 14 kept the default for a confidence under 0.5. Hair style proposals
@@ -4601,8 +4609,8 @@ Eyes: 28 read (darkBrown 19, blue 4, coolGrey 2, mossGreen 2, hazel 1),
 (0.48, 0.13), and D000096, very short hair, with every overlap under 0.13,
 so the default style stays.
 
-**Check 1, stability: fails on online photos (2026-11-23).** The owner
-asked for this check on online photos before their own. The agent took
+**Check 1, stability on online photos (2026-11-23).** The owner asked
+for this check on online photos before their own. The agent took
 public-domain photos (US federal works on Wikimedia Commons) of ten
 people: 25 by name search, then 25 portrait-shaped ones per person. None
 is in the repository.
@@ -4614,31 +4622,32 @@ is in the repository.
   (the wrong person in 5, one black-and-white). A face-crop hash found
   that most of the rest are copies of a few official portraits: all six
   Schumer files are one portrait, Harris's ten are two.
-- Copies of one photo stay within one skin swatch (Schumer 6 of 6,
-  Watkins 8 of 8), so re-encoding and cropping are stable.
-- Distinct photos are not. Only Koch has five: skin 4 of 5 and hair 3 of
-  5 within one swatch of the most common pick, which fails the bar.
-  Across people, the skin pick moves by two to five swatches between
-  photos of one person: Blackburn porcelain to umber, Glover linen to
-  umber, Harris porcelain to honey.
 
-The causes, from each read's white and skin values:
+With the second version (absolute lightness, capped exposure), copies of
+one photo were stable but distinct photos were not: Koch's five distinct
+photos gave skin 4 of 5 within one swatch, and across people the pick
+moved by two to five swatches (Blackburn porcelain to umber, Glover linen
+to umber, Harris porcelain to honey). The causes, from each read's
+values: sunglasses gave "eye whites" of RGB 24, 26, 16; a hard hat's
+shadow put the skin at RGB 60, 36, 29 under lit eye whites; and the
+exposure cap left dim photos dark and bright ones light. Many "eye white"
+samples were skin (lowest channel under a third of the highest: lids in
+narrow eyes).
 
-- Sunglasses: the "eye whites" are the lenses (RGB 24, 26, 16), and the
-  capped gains push the skin light (Glover: linen). The read does not
-  check that the eye whites are bright.
-- A hat's shadow: the skin areas are in shadow (RGB 60, 36, 29) while the
-  eye whites are lit (Koch in a hard hat: espresso). Nothing flags the
-  spread between the areas.
-- A dim or high-key photo: dim eye whites with the exposure cap of 1.25
-  leave a dim photo dark (Blackburn: caramel, umber), and a bright
-  portrait reads light (Harris: porcelain against honey). Without the cap,
-  the spread check over-exposed many faces.
+With the ratio to the eye whites (the code now), on the same 64 photos:
 
-So the skin read by lightness rank after eye-white balance is not stable
-enough between photos of one person. This waits for the owner's
-decision on the method. The owner's own photos are still the final
-check.
+- 38 are read, and all 38 are within one skin swatch of their person's
+  most common read (Harris 10 of 10 over two portraits, Blackburn 5 of 5,
+  Glover 4 of 4, Koch 4 of 4).
+- 26 keep the default skin, with the note: 21 for eye whites that are
+  not usable (all six Schumer copies and 7 of Biden's 10), 5 for uneven
+  light (Koch's hard hat among them).
+- Hair colour and eyes were not compared again: where the eye whites are
+  refused, the tint now comes from the brightest pixels, which can move them.
+
+So the skin read is now stable when it reads, and says so when it cannot.
+The cost is that about a third of these online photos keep the default
+skin. The owner's own photos are still the final check (check 4).
 
 **Check 3, the dressed result.** Five read cards (B001243 in clay, ink
 and light; M001229 and D000096 in clay) went through `dressedFile` and
@@ -4649,8 +4658,8 @@ evidence"), and the informational `other.tongueOut`. The read adds no
 failing row, because a card holds only values the audition already
 covers.
 
-**Check 4, the owner's verdict on `compare.jpg`.** Waits for check 1's
-method and for the owner's photos.
+**Check 4, the owner's verdict on `compare.jpg`.** Waits for the owner's
+photos.
 
 **Check 5, proof video.** Recorded in real time in the ignored
 `apps/capture/output/proof/`: a public-domain portrait goes in,

@@ -17,7 +17,7 @@ import { FaceLandmarker, ImageSegmenter } from '@mediapipe/tasks-vision';
 
 import { HAIR_COLOUR, EYES, SKIN, linear, type Eyes, type HairColour, type Skin, type SRGB } from './traits.js';
 import {
-  applyGains, EYES_MIN_CONFIDENCE, GRID, HAIR_LIGHTNESS_WEIGHT, HAIR_MIN_AREA, HAIR_OUTSIDE, luminance, nearest, pickEyes, pickSkin, toSrgb, whiteGains,
+  applyGains, EYES_MIN_CONFIDENCE, oklab, GRID, HAIR_LIGHTNESS_WEIGHT, HAIR_MIN_AREA, HAIR_OUTSIDE, luminance, nearest, pickEyes, pickSkin, SCLERA_L, SKIN_SPREAD_MAX, toSrgb, usableWhite, whiteGains,
   type HairGrid, type IrisMeasure, type Linear, type TraitRead
 } from './photo.js';
 
@@ -50,12 +50,24 @@ export interface SkinRead extends TraitRead<Skin> {
   readonly areas: readonly { readonly name: string; readonly pixels: number; readonly measured?: SRGB; /** Before white balance. */ readonly photo?: SRGB }[];
   readonly rank?: number;
   readonly lightness?: number;
+  /** The skin's lightness over the eye whites' lightness. */
+  readonly ratio?: number;
+  /** The lightness difference between the lightest and darkest skin areas. */
+  readonly spread?: number;
 }
 
 export interface PhotoRead {
   readonly size: { readonly width: number; readonly height: number };
   readonly frame: FaceFrame;
-  readonly white: { readonly method: 'eye whites' | 'brightest pixels'; readonly measured: SRGB; readonly pixels: number };
+  readonly white: {
+    readonly method: 'eye whites' | 'brightest pixels';
+    /** True when the eye whites set the skin's scale; false when the skin read is not trusted. */
+    readonly usable: boolean;
+    readonly measured: SRGB;
+    readonly pixels: number;
+    /** The eye-white sample that was too dark or coloured to use (`WHITE_MIN`). */
+    readonly rejected?: SRGB;
+  };
   readonly skin: SkinRead;
   readonly hairColour: TraitRead<HairColour> & { readonly area: number };
   readonly eyes: TraitRead<Eyes>;
@@ -203,7 +215,7 @@ export async function createLookReader(assets: ReaderAssets): Promise<LookReader
       mask.close();
       seg.close();
 
-      // White balance and exposure from the eye whites: inside each eye's outline, outside its iris, the brighter half.
+      // White balance and the skin's scale from the eye whites: inside each eye's outline, outside its iris, the brighter half.
       const irisDiscs = IRISES.map((ids) => {
         const centre = points[ids[0]]!;
         const radius = ids.slice(1).reduce((s, i) => s + Math.hypot(points[i]![0] - centre[0], points[i]![1] - centre[1]), 0) / 4;
@@ -229,16 +241,20 @@ export async function createLookReader(assets: ReaderAssets): Promise<LookReader
       const whites = sclera.slice(0, Math.floor(sclera.length / 3));
       let white: PhotoRead['white'];
       let whiteLinear: Linear;
-      if (whites.length >= 15) {
-        whiteLinear = middleColour(whites);
-        white = { method: 'eye whites', measured: toSrgb(whiteLinear), pixels: whites.length };
+      const eyeWhite = whites.length >= 15 ? middleColour(whites) : null;
+      if (eyeWhite && usableWhite(eyeWhite)) {
+        whiteLinear = eyeWhite;
+        white = { method: 'eye whites', usable: true, measured: toSrgb(whiteLinear), pixels: whites.length };
       } else {
-        // Too little eye white (closed eyes, dark glasses): the photo's brightest 1% instead.
+        // Too little eye white, or too dark or coloured to be one (closed eyes, dark glasses, lids): the photo's brightest 1% sets the tint only.
         const all: Linear[] = [];
         for (let y = 0; y < px.height; y += 4) for (let x = 0; x < px.width; x += 4) all.push(px.at(x, y));
         all.sort((a, b) => luminance(b) - luminance(a));
         whiteLinear = middleColour(all.slice(0, Math.max(1, Math.floor(all.length / 100))));
-        white = { method: 'brightest pixels', measured: toSrgb(whiteLinear), pixels: Math.floor(all.length / 100) };
+        white = {
+          method: 'brightest pixels', usable: false, measured: toSrgb(whiteLinear), pixels: Math.floor(all.length / 100),
+          ...(eyeWhite ? { rejected: toSrgb(eyeWhite) } : {})
+        };
       }
       const gains = whiteGains(whiteLinear);
       const balanced = (x: number, y: number): Linear => applyGains(px.at(x, y), gains);
@@ -261,13 +277,22 @@ export async function createLookReader(assets: ReaderAssets): Promise<LookReader
       const areaReport = areas.map((a) => ({ name: a.name, pixels: a.pixels, ...(a.colour ? { measured: toSrgb(a.colour), photo: toSrgb(a.raw!) } : {}) }));
       if (usableAreas.length >= 2) {
         const mid = usableAreas[Math.floor((usableAreas.length - 1) / 2)]!.colour!;
-        const pick = pickSkin(mid);
+        const whiteL = white.usable ? oklab(applyGains(whiteLinear, gains))[0] : SCLERA_L;
+        const pick = pickSkin(mid, whiteL);
+        const lights = usableAreas.map((a) => oklab(a.colour!)[0]);
+        const spread = Math.max(...lights) - Math.min(...lights);
+        const why = [
+          ...(white.usable ? [] : [white.rejected ? 'the eye whites are too dark or coloured to measure against (dark glasses, lids or shade)' : 'too little eye white showed (closed eyes or dark glasses)']),
+          ...(spread > SKIN_SPREAD_MAX ? [`the light is uneven: the skin areas differ by ${spread.toFixed(2)} in lightness (over ${SKIN_SPREAD_MAX}; a hat brim, side light or shadow)`] : [])
+        ];
+        const ok = why.length === 0;
         skin = {
-          value: pick.value, read: true, measured: toSrgb(mid), swatch: SKIN[pick.value], rank: pick.rank, lightness: pick.lightness,
-          confidence: 1 - Math.abs(pick.rank - Math.round(pick.rank)) * 2 * 0.5,
+          value: ok ? pick.value : defaults.skin, read: ok, measured: toSrgb(mid), swatch: SKIN[pick.value], rank: pick.rank, lightness: pick.lightness, ratio: pick.ratio, spread,
+          confidence: ok ? 1 - Math.abs(pick.rank - Math.round(pick.rank)) : 0,
           notes: [
-            `lightness ${pick.lightness.toFixed(3)} is rank ${pick.rank.toFixed(2)} of 0 (porcelain) to 7 (espresso)`,
-            ...(usableAreas.length < areas.length ? [`${areas.length - usableAreas.length} skin area(s) showed too little face skin (hair, glasses or the frame's edge)`] : [])
+            `lightness ${pick.lightness.toFixed(3)} over the eye whites' ${whiteL.toFixed(3)}${white.usable ? '' : ' (a typical eye white)'} is ${pick.ratio.toFixed(3)}: rank ${pick.rank.toFixed(2)} of 0 (porcelain) to 7 (espresso)`,
+            ...(usableAreas.length < areas.length ? [`${areas.length - usableAreas.length} skin area(s) showed too little face skin (hair, glasses or the frame's edge)`] : []),
+            ...(ok ? [] : [`${why.join('; ')}: the read says ${pick.value}, the card keeps the default ${defaults.skin}. Use a photo with open eyes in even, front light`])
           ],
           areas: areaReport
         };

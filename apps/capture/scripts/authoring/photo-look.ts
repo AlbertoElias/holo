@@ -396,6 +396,7 @@ async function main(): Promise<void> {
     const line = (t: string, r: TraitRead<string>) => `  ${t.padEnd(11)} ${r.value.padEnd(12)} ${r.read ? '' : '(default) '}${r.confidence !== undefined ? `confidence ${r.confidence.toFixed(2)}` : ''}`;
     console.log(`${basename(photoPath)}: white balance from ${read.white.method}`);
     console.log(line('skin', read.skin));
+    if (!read.skin.read) console.log(`    ${read.skin.notes.at(-1)}`);
     console.log(line('hair colour', read.hairColour));
     console.log(line('eyes', read.eyes));
     console.log(line('hair style', hairStyle));
