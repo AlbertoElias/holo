@@ -37,6 +37,10 @@ const FINGER_ORDER: Readonly<Record<FingerName, number>> = { index: 0, middle: 1
 // sighs, fidgets), which carry what a viewer sees. Sway and drift are kept to
 // a standing person's postural noise: as the only life, at 22 mm and 3.5°,
 // two fresh readers and the owner still called a held ending frozen.
+/** The most each eye turns in toward the nose for a near target, radians (about 4°). */
+const EYE_VERGE = 0.07;
+/** A held reach's slow drift once the hand is there: metres at most, and the seconds it eases in over. */
+const HOLD_DRIFT = { m: 0.012, ease: 0.6 } as const;
 /** Hips sway, metres: side to side and front to back. */
 const SWAY = { x: 0.006, z: 0.004 } as const;
 /** Breath, degrees of pitch per spine bone at full inhale. */
@@ -685,6 +689,8 @@ function swivelClear(cast: Cast[], c: Cast, t: number, s: Side, props: readonly 
 
 /** How far an arm may sink before the clearance moves it, and how far clear it lands, metres. */
 const CLEAR = { slack: 0.004, margin: 0.008, passes: 14, deep: 0.015 } as const;
+/** The least outward share (of a unit push) with which an arm leaves its own side's thigh or shin. */
+const LEG_CLEAR_OUT = 0.5;
 
 /**
  * Keeps each arm out of the body, the head and the objects it is not
@@ -730,7 +736,16 @@ function clearArms(cast: Cast[], c: Cast, t: number): void {
       let worst: { depth: number; normal: THREE.Vector3; along: number; upper: THREE.Vector3 | null } = { depth: slack, normal: new THREE.Vector3(), along: 1, upper: null };
       for (const q of armSkin(a, c.armBody, s)) {
         const d = c.skin.depth(q.p, q.x.part.endsWith('upper arm') ? (p) => p === 'torso' : undefined);
-        if (d.depth > worst.depth) worst = { depth: d.depth, normal: d.away, along: q.along, upper: q.x.part.endsWith('upper arm') ? q.p : null };
+        if (d.depth <= worst.depth) continue;
+        // Out of its own side's leg, an arm goes out to the side: the nearest way out of the front of a bent thigh
+        // can point in, between the legs, and a hand that goes in in one frame and out in the next snaps.
+        const away = d.away.clone();
+        if (d.part === `${s} thigh` || d.part === `${s} shin`) {
+          const outward = new THREE.Vector3(s === 'left' ? 1 : -1, 0, 0).applyQuaternion(a.body.getWorldQuaternion(new THREE.Quaternion()));
+          const lateral = away.dot(outward);
+          if (lateral < LEG_CLEAR_OUT) away.addScaledVector(outward, LEG_CLEAR_OUT - lateral).normalize();
+        }
+        worst = { depth: d.depth, normal: away, along: q.along, upper: q.x.part.endsWith('upper arm') ? q.p : null };
       }
       const pts = armPoints(a, c.armBody, s);
       for (const prop of props) {
@@ -1266,6 +1281,19 @@ const lerp = (a: number, b: number, f: number): number => a + (b - a) * f;
  * turns it backwards (into the thigh in a crouch), so the hand starts from
  * rest at `at`; the body's moves keep their anticipation.
  */
+/**
+ * How far a later hand goal (envelope `later`) takes over from the goals
+ * before it (their weight `before`): its envelope while they are at full
+ * weight, and all of it as they fade out. A share by `later` alone snaps the
+ * hand when an earlier goal ends while the later one still eases in.
+ */
+function overK(before: number, later: number): number {
+  const b = clamp01(before);
+  const l = clamp01(later);
+  const sum = l + b * (1 - l);
+  return sum > 1e-9 ? l / sum : 1;
+}
+
 function handEnv(r: Resolved, t: number, flat: boolean): number {
   return flat ? env(r, t, flat) : envelope(t, { ...r, anticipation: 0, start: r.at });
 }
@@ -1755,6 +1783,19 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
       if (d.kind === 'reach') {
         target = pointOf(cast, c.spec, d.at);
         g = target.clone().addScaledVector(target.clone().sub(shoulder).normalize(), -d.stopShort);
+        // A hand held out does not stand still: once it arrives it drifts a little, slowly, as a held arm does.
+        if (life && !flat) {
+          const k = smootherStep(clamp01((t - r.at - r.attack) / HOLD_DRIFT.ease));
+          if (k > 0) {
+            const ph = c.seed * 1.7 + (s === 'left' ? 2.1 : 0);
+            const drift = new THREE.Vector3(
+              HOLD_DRIFT.m * Math.sin((2 * Math.PI * t) / 3.7 + ph),
+              HOLD_DRIFT.m * 0.8 * Math.sin((2 * Math.PI * t) / 5.3 + ph * 1.3),
+              HOLD_DRIFT.m * 0.7 * Math.sin((2 * Math.PI * t) / 4.4 + ph * 0.7)
+            ).applyQuaternion(bodyQ);
+            g.addScaledVector(drift, k);
+          }
+        }
         effector = (out) => (a.hands[s] ? a.hands[s]!.palmCenter(out) : a.arms[s].hand.getWorldPosition(out));
       } else if (d.kind === 'take') {
         target = takeGoal(r).point;
@@ -1774,18 +1815,20 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
         }
         palmKind = 'in';
       }
-      goal = goal ? goal.lerp(g, clamp01(e)) : g;
+      const k = goal ? overK(w, e) : 1;
+      goal = goal ? goal.lerp(g, k) : g;
       w = goal === g ? e : Math.max(w, e);
       const up = bodyUp(a);
       const towards = target.clone().sub(shoulder).normalize();
       const p = palmKind === 'up' ? up : palmKind === 'down' ? up.clone().negate() : palmKind === 'in' ? new THREE.Vector3(s === 'left' ? -1 : 1, 0, 0).applyQuaternion(bodyQ) : towards;
-      palm = palm ? palm.lerp(p, clamp01(e)).normalize() : p.clone();
+      palm = palm ? palm.lerp(p, k).normalize() : p.clone();
     }
     // Gestures (and attending's hands together), blended in the same way.
     const add = (g: THREE.Vector3, e: number, p: THREE.Vector3, elbow: number): void => {
-      goal = goal ? goal.lerp(g, clamp01(e)) : g;
+      const k = goal ? overK(w, e) : 1;
+      goal = goal ? goal.lerp(g, k) : g;
       w = goal === g ? e : Math.max(w, e);
-      palm = palm ? palm.lerp(p, clamp01(e)).normalize() : p.clone();
+      palm = palm ? palm.lerp(p, k).normalize() : p.clone();
       elbowOut = Math.min(elbowOut, lerp(1, elbow, clamp01(e)));
     };
     const out = s === 'left' ? 1 : -1;
@@ -2050,6 +2093,19 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
     pitch: Math.max(-MAX_PITCH, Math.min(MAX_PITCH, g.pitch + l.pitch * free))
   });
   gaze = { left: turn(gaze.left, looked.left), right: turn(gaze.right, looked.right) };
+  // Both eyes look at one point: one shared turn (their mean), and only a little convergence for a near target,
+  // never divergence. Each eye on its own (a saccade, a clamp at the edge of its range) looks wall-eyed.
+  {
+    const yaw = (gaze.left.yaw + gaze.right.yaw) / 2;
+    const pitch = (gaze.left.pitch + gaze.right.pitch) / 2;
+    const verge = Math.max(0, Math.min(EYE_VERGE, (gaze.right.yaw - gaze.left.yaw) / 2));
+    gaze = { left: { yaw: yaw - verge, pitch }, right: { yaw: yaw + verge, pitch } };
+  }
+  // Both lids blink and squint together: one lid alone reads as a wink or a fault.
+  for (const [l, r] of [['eyeBlinkLeft', 'eyeBlinkRight'], ['eyeSquintLeft', 'eyeSquintRight'], ['eyeWideLeft', 'eyeWideRight']] as [FaceChannel, FaceChannel][]) {
+    const v = Math.max(weights[l] ?? 0, weights[r] ?? 0);
+    if (v > 0) { weights[l] = v; weights[r] = v; }
+  }
   a.face.apply(weights, gaze);
   a.frame.updateMatrixWorld(true);
 }

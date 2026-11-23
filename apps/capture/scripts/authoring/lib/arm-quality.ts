@@ -38,6 +38,15 @@ export const ARM_LIMITS = {
   wristBend: 80,
   /** The elbow's flexion: past straight by at most this (hyperextension), degrees. */
   hyperextension: 10,
+  /**
+   * The share of a carried object's lower half (the cap below half-way down) that the fingers or the palm
+   * hold up: a skin point within `supportGap` of the surface. A hand that carries a ball from above (crouch
+   * v42: 2% to 37% from 4.1 s on) shows the ball stuck to the palm; a hand that took it from the side and
+   * carries it on the palm (crouch v43: 41% at least, about 80% held out) cups it.
+   */
+  support: 0.4,
+  /** How near the skin must come to a point of the surface to hold it up, metres. */
+  supportGap: 0.012,
   /** The forearm off the elbow's hinge plane, degrees. */
   elbowSideways: 15
 } as const;
@@ -380,6 +389,42 @@ export function propSurface(prop: Prop): THREE.Vector3[] {
   return out;
 }
 
+/**
+ * Points spread over an object's surface below its middle (world height), the
+ * half that must rest on something: a box face by face on a grid, a round
+ * part on an even spiral.
+ */
+/** How far below the middle the carried cap starts, as a share of the depth from the middle to the bottom. */
+const LOWER_CAP = 0.5;
+export function propLowerHalf(prop: Prop): THREE.Vector3[] {
+  const all: THREE.Vector3[] = [];
+  for (const part of propParts(prop)) {
+    const h = new THREE.Vector3(part.size.x / 2, part.size.y / 2, part.size.z / 2);
+    const local: THREE.Vector3[] = [];
+    if (part.shape === 'box') {
+      const n = 6;
+      for (let axis = 0; axis < 3; axis += 1) for (const side of [-1, 1]) for (let i = 0; i < n; i += 1) for (let j = 0; j < n; j += 1) {
+        const u = ((i + 0.5) / n) * 2 - 1; const v = ((j + 0.5) / n) * 2 - 1;
+        const c = [u, v]; c.splice(axis, 0, side);
+        local.push(new THREE.Vector3(c[0]! * h.x, c[1]! * h.y, c[2]! * h.z));
+      }
+    } else {
+      const n = 240;
+      for (let i = 0; i < n; i += 1) {
+        const y = 1 - (2 * (i + 0.5)) / n; const r = Math.sqrt(1 - y * y); const phi = i * Math.PI * (3 - Math.sqrt(5));
+        local.push(new THREE.Vector3(Math.cos(phi) * r * h.x, y * h.y, Math.sin(phi) * r * h.z));
+      }
+    }
+    for (const v of local) all.push(v.setY(v.y + h.y).applyQuaternion(part.rotation).add(part.at).applyQuaternion(prop.quaternion).add(prop.position));
+  }
+  if (!all.length) return all;
+  const mid = all.reduce((m, v) => m + v.y, 0) / all.length;
+  const low = all.reduce((m, v) => Math.min(m, v.y), Infinity);
+  // The cap below half-way down: fingers that only curl round the sides of a ball held from above reach the equator, not this.
+  const under = mid - LOWER_CAP * (mid - low);
+  return all.filter((v) => v.y < under);
+}
+
 /** A sourced model is its bounds; a built one is its parts. */
 export function propParts(prop: Prop): readonly Part[] {
   if (prop.parts.length) return prop.parts;
@@ -493,6 +538,8 @@ export interface ArmReport {
   readonly heldDepth: { value: number; t: number; where: string };
   /** Per held frame, the deepest skin point into the held object, metres. */
   readonly held: readonly { t: number; depth: number; where: string }[];
+  /** Per held frame, the share of the held object's lower cap that the hand holds up (0 to 1). */
+  readonly support: readonly { t: number; share: number; where: string }[];
   readonly twist: { value: number; t: number; where: string };
   readonly wristBend: { value: number; t: number; where: string };
   readonly hyperextension: { value: number; t: number; where: string };
@@ -510,6 +557,7 @@ export class ArmMeter {
   private readonly over = { bodyDepth: 0, propDepth: 0, heldDepth: 0, twist: 0, wristBend: 0, hyperextension: 0, elbowSideways: 0 };
   private frames = 0;
   private readonly held: { t: number; depth: number; where: string }[] = [];
+  private readonly support: { t: number; share: number; where: string }[] = [];
   private readonly skin: BodySkin;
   constructor(private readonly a: LoadedAvatar, readonly body: ArmBody) { this.skin = new BodySkin(body.body); }
 
@@ -547,6 +595,16 @@ export class ArmMeter {
         }
       }
     }
+    // A held object's lower half: how much of it the fingers and the palm hold up.
+    for (const s of SIDES) {
+      const prop = heldBy(s);
+      if (!prop) continue;
+      const skin = this.body.hand[s].map((x) => skinned(x, new THREE.Vector3()));
+      const lower = propLowerHalf(prop);
+      const gap2 = ARM_LIMITS.supportGap ** 2;
+      const held = lower.filter((q) => skin.some((p) => p.distanceToSquared(q) <= gap2)).length;
+      this.support.push({ t, share: lower.length ? held / lower.length : 0, where: `${s} hand under ${prop.id}` });
+    }
     if (heldD.depth > -Infinity) {
       this.held.push({ t, depth: heldD.depth, where: heldD.where });
       note('heldDepth', heldD.depth, heldD.where, ARM_LIMITS.heldDepth);
@@ -557,7 +615,7 @@ export class ArmMeter {
   }
 
   report(): ArmReport {
-    return { ...this.worst, held: [...this.held], over: { ...this.over }, frames: this.frames };
+    return { ...this.worst, held: [...this.held], support: [...this.support], over: { ...this.over }, frames: this.frames };
   }
 }
 

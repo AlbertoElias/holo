@@ -1801,3 +1801,30 @@ bug above.)
   1.67 s), 84 of 211 frames over 3 cm. The goodbye sheet, where her hand rests on his chest, goes 2.2 cm in at
   1.97 s and passes. The head centres confirm it: 25 cm apart where the bar reads 4.2 cm, 37–39 cm apart where it reads 0.
 - **Closed:** 2026-11-23.
+
+### B-095 — Authored takes: the crouch pick clips the ball and the right arm snaps, and no bar sees it
+
+- **Area:** `apps/capture/scripts/authoring` (`make.ts`, `lib/arm-quality.ts`, `lib/smoothness.ts`, `lib/direct.ts`)
+- **Severity:** P2 (a draft that passes the held-depth bar shows fingers in the ball and an arm that snaps)
+- **Observed:** 2026-11-23, the crouch draft v42 passed the held-depth bar at 2.0 mm, while the reviewer saw the ball
+  sit on the fingertips, and the right arm snapped between 2.13 s and 2.17 s.
+- **Cause:** two measures were missing. The held-depth bar measures how deep the hand goes into what it holds, not
+  whether the hand holds it up. The smooth bar finds a stammer, not a snap in one frame, and no bar measured a held
+  object: in v45 the ball moved 14.8 cm in one frame at 2.40 s, because the clearing moved the hand out of the shin and
+  the crate after the take had fixed the ball's offset. In the solver, two faults made
+  snaps: the push out of the arm's own thigh could turn inward (between the legs) from one frame to the next, and the
+  goal blend of two overlapping reach beats used only the later envelope, so the end of the earlier beat moved the
+  target in one frame.
+- **Fix:** two new bars. `arms.support.<id>`: the share of the lower half of a carried object that the fingers or the
+  palm hold up, limit 40%, written to `support.<id>.json`. `jump.<id>`: no hand or elbow changes its velocity by more
+  than 2 m/s between two frames. `jump.props`: the same limit for each object. In the solver, the push out of the arm's own thigh or shin has an outward share of at
+  least 0.5, and overlapping reach, take and put goals blend by their combined envelopes. The eyes share one look target
+  (with a small clamped convergence), both lids blink together, and the reach holds get a slow drift.
+- **Proof:** v42 fails both arm bars, and v45 fails `jump.props` (4.85 m/s at 2.40 s). The crouch sheet (v46: crate
+  0.40 m forward and 0.29 m right, take attack 0.7 s) passes smooth (43%), jump (1.42 m/s), jump.props (1.91 m/s), body
+  (1.5 cm), prop (0.7 cm), held (2.5 mm) and support (61%). The rest elbows stay within 2 cm of v41.
+- **Not covered:** the grip angle stays at 15° (bar 5°): the wrist limits stop the side grip. A visual review of v46
+  still sees the pick come from above, with a fingertip in the ball at 1.97 s, and a fast wrist turn at 3.63 s to
+  3.73 s. The committed `sheets/tallest-bar.json` fails `jump.props` (pointer, 3.43 m/s at 6.63 s). The size bar fails at
+  2.70 MB (bar 1.80 MB) for the house base: 84% of its sparse morph normal rows are under 0.002.
+- **Closed:** 2026-11-23.
