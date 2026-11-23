@@ -281,9 +281,20 @@ export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, 
   if (![...record.values()].some((moves) => moves.some((m) => turned(m) > 1e-5))) return first;
   clearing.plan = smoothClearing(record, first.times.length);
   try {
-    return solveOnce(sheet, avatars, sources, speech);
+    // Where the smoothed plan leaves an arm more than CLEAR.deep in, the solve clears that rest frame by frame, and
+    // those passes stop at a different depth in each frame (a snap). So the solve records the rest too, adds it
+    // to the plan smoothed, and solves again, until no frame needs it or after CLEAR_ROUNDS.
+    for (let round = 1; ; round += 1) {
+      clearing.rest = new Map();
+      const take = solveOnce(sheet, avatars, sources, speech);
+      const rest = clearing.rest;
+      clearing.rest = undefined;
+      if (round >= CLEAR_ROUNDS || ![...rest.values()].some((moves) => moves.some((m) => m && turned(m) > 1e-5))) return take;
+      clearing.plan = addClearing(clearing.plan, smoothClearing(rest, take.times.length), take.times.length);
+    }
   } finally {
     clearing.plan = undefined;
+    clearing.rest = undefined;
   }
 }
 
@@ -720,6 +731,10 @@ function clearArms(cast: Cast[], c: Cast, t: number): void {
         moveHeld(cast, c, t);
       }
     }
+    const afterPlan = armBones(ch).map((b) => b.quaternion.clone());
+    const wristPlanned = ch.hand.getWorldPosition(new THREE.Vector3());
+    const elbowPlanned = ch.foreArm.getWorldPosition(new THREE.Vector3());
+    let pushed = false;
     // The second solve clears only what the smoothed plan left deeper than CLEAR.deep: a short, deep move
     // loses some of its depth to the smoothing, and a full pass in every frame shakes (each picks its push and its best pose afresh).
     const slack = clearing.plan ? CLEAR.deep : CLEAR.slack;
@@ -770,7 +785,7 @@ function clearArms(cast: Cast[], c: Cast, t: number): void {
         }
       }
       if (worst.depth < best.depth) best = { depth: worst.depth, pose: pose() };
-      if (worst.depth <= slack || pass === CLEAR.passes) break;
+        if (worst.depth <= slack || pass === CLEAR.passes) break;
       // A leftover goes back to CLEAR.deep only: a full clear in a few frames pops.
       const push = worst.normal.clone().multiplyScalar(clearing.plan ? worst.depth - CLEAR.deep + CLEAR.slack : worst.depth + CLEAR.margin);
       const shoulder = ch.upperArm.getWorldPosition(new THREE.Vector3());
@@ -793,6 +808,7 @@ function clearArms(cast: Cast[], c: Cast, t: number): void {
       out.addScaledVector(line, -out.dot(line));
       if (out.lengthSq() < 1e-8) break;
       const hint = out.normalize().applyQuaternion(a.frame.getWorldQuaternion(new THREE.Quaternion()).invert());
+      pushed = true;
       keepingTwist(a, s, () => solveArm(a, s, wrist, { elbowHint: hint }));
       a.frame.updateMatrixWorld(true);
       moveHeld(cast, c, t);
@@ -821,6 +837,17 @@ function clearArms(cast: Cast[], c: Cast, t: number): void {
       }
       moveHeld(cast, c, t);
     }
+    if (clearing.rest && pushed && solving.f >= 0) {
+      // What this solve cleared past the plan: each bone's turn after the planned pose.
+      const inv = frameQ.clone().invert();
+      const moves = clearing.rest.get(key) ?? [];
+      moves[solving.f] = {
+        wrist: ch.hand.getWorldPosition(new THREE.Vector3()).sub(wristPlanned).applyQuaternion(inv),
+        elbow: ch.foreArm.getWorldPosition(new THREE.Vector3()).sub(elbowPlanned).applyQuaternion(inv),
+        turns: armBones(ch).map((b, i) => b.quaternion.clone().multiply(afterPlan[i]!.clone().invert()))
+      };
+      clearing.rest.set(key, moves);
+    }
     if (clearing.record && solving.f >= 0) {
       const inv = frameQ.clone().invert();
       const moves = clearing.record.get(key) ?? [];
@@ -842,7 +869,9 @@ interface ClearMove { readonly wrist: THREE.Vector3; readonly elbow: THREE.Vecto
 /** How far a clearing move turned the arm: its bones' turn angles added, radians. */
 const turned = (m: ClearMove): number => m.turns.reduce((sum, q) => sum + 2 * Math.acos(Math.min(1, Math.abs(q.w))), 0);
 /** The first solve records each arm's clearing moves; the second applies them smoothed. Keyed `performer/side`. */
-const clearing: { record: Map<string, ClearMove[]> | undefined; plan: Map<string, ClearMove[]> | undefined } = { record: undefined, plan: undefined };
+const clearing: { record: Map<string, ClearMove[]> | undefined; plan: Map<string, ClearMove[]> | undefined; rest: Map<string, ClearMove[]> | undefined } = { record: undefined, plan: undefined, rest: undefined };
+/** How many solves at most apply a plan: each one after the first adds, smoothed, what the one before it still had to clear frame by frame. */
+const CLEAR_ROUNDS = 3;
 /** The way out of each surface while a contact lasts, by arm and prop part, with the last frame that used it: the nearest face of a deep overlap changes from frame to frame, and a push that changes direction makes the elbow pop. */
 const clearWays = new Map<string, { way: THREE.Vector3; f: number }>();
 /** Frames on each side over which a clearing move holds (widen) and then blends (Gaussian sigma), at 30 fps. */
@@ -887,6 +916,22 @@ function smoothClearing(record: ReadonlyMap<string, ClearMove[]>, frames: number
     }));
   }
   return plan;
+}
+
+/** A plan with `more` applied after it: each frame's turns are `more`'s turn after the plan's, per bone. */
+function addClearing(plan: ReadonlyMap<string, ClearMove[]>, more: ReadonlyMap<string, ClearMove[]>, frames: number): Map<string, ClearMove[]> {
+  const zero = (): ClearMove => ({ wrist: new THREE.Vector3(), elbow: new THREE.Vector3(), turns: [0, 1, 2, 3].map(() => new THREE.Quaternion()) });
+  const out = new Map<string, ClearMove[]>();
+  for (const key of new Set([...plan.keys(), ...more.keys()])) {
+    const p = plan.get(key) ?? [];
+    const m = more.get(key) ?? [];
+    out.set(key, Array.from({ length: frames }, (_, f) => {
+      const a = p[f] ?? zero();
+      const b = m[f] ?? zero();
+      return { wrist: a.wrist.clone().add(b.wrist), elbow: a.elbow.clone().add(b.elbow), turns: a.turns.map((q, i) => b.turns[i]!.clone().multiply(q)) };
+    }));
+  }
+  return out;
 }
 
 /** The object in a performer's hand at `t`, if any. */
@@ -1354,6 +1399,9 @@ function holdingRun(r: Resolved): { offset?: THREE.Matrix4; released?: boolean }
  * aim's tool axis at its target (the tip moves as the hand turns, so a few
  * passes). Each by its envelope, within the wrist's limits.
  */
+/** The sign each take's grip axis took in its first frame, per arm (see `turnHand`). */
+const gripSigns = new WeakMap<Resolved, Partial<Record<Side, number>>>();
+
 function turnHand(cast: Cast[], c: Cast, s: Side, turns: readonly { r: Resolved; e: number }[]): void {
   const a = c.a;
   const hand = a.arms[s].hand;
@@ -1366,7 +1414,12 @@ function turnHand(cast: Cast[], c: Cast, s: Side, turns: readonly { r: Resolved;
     if (d.kind === 'take' && rig) {
       const across = new THREE.Vector3(1, 0, 0).applyQuaternion(rig.palmFrame(new THREE.Quaternion()));
       const g = takeGoal(r).axis!.clone();
-      if (g.dot(across) < 0) g.negate();
+      // The grip axis keeps the sign the take chose in its first frame (per arm): a hand that turns on past 90° while
+      // the take settles (palm in, then up) would flip the wanted turn by 180° in one frame.
+      const signs = gripSigns.get(r) ?? {};
+      signs[s] ??= g.dot(across) < 0 ? -1 : 1;
+      gripSigns.set(r, signs);
+      if (signs[s] < 0) g.negate();
       wanted = new THREE.Quaternion().setFromUnitVectors(across, g).multiply(Hc);
     } else if (d.kind === 'put') {
       const offset = holdingRun(r)?.offset;
@@ -1770,9 +1823,15 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
     let elbowOut = 1;
     let effector: (out: THREE.Vector3) => THREE.Vector3 = (out) => (a.hands[s] ? a.hands[s]!.palmCenter(out) : a.arms[s].hand.getWorldPosition(out));
     const turns: { r: Resolved; e: number }[] = [];
+    // The hand directions before each one: a direction that starts while an earlier one still holds the hand takes
+    // the hand over from there. Without it the weight dips between the two (the earlier settles as the later attacks),
+    // the hand sinks toward hanging and stops, and its palm turn waits and then flips.
+    const before: Resolved[] = [];
     for (const r of c.dirs) {
       const d = r.direction;
       if ((d.kind !== 'reach' && d.kind !== 'take' && d.kind !== 'put' && d.kind !== 'aim') || d.side !== s) continue;
+      const held = d.kind === 'aim' ? 0 : before.reduce((most, p) => Math.max(most, handEnv(p, r.at, flat)), 0);
+      if (d.kind !== 'aim') before.push(r);
       const e = handEnv(r, t, flat);
       if (e === 0) continue;
       if (d.kind === 'aim') { turns.push({ r, e }); continue; }
@@ -1815,9 +1874,13 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
         }
         palmKind = 'in';
       }
-      const k = goal ? overK(w, e) : 1;
+      // A takeover moves the goal and the palm over the earlier direction's whole settle (0 where the later starts, 1 where
+      // the earlier ends): the usual share (the later against the earlier's settle) waits while the earlier holds and then
+      // rushes, and the later's own curve is still short of 1 when the earlier ends, so the goal jumps there.
+      const k = goal ? (held > 0 ? clamp01(1 - w / held) : overK(w, e)) : 1;
       goal = goal ? goal.lerp(g, k) : g;
       w = goal === g ? e : Math.max(w, e);
+      if (held > 0) w = Math.max(w, e + clamp01(held) * (1 - e));
       const up = bodyUp(a);
       const towards = target.clone().sub(shoulder).normalize();
       const p = palmKind === 'up' ? up : palmKind === 'down' ? up.clone().negate() : palmKind === 'in' ? new THREE.Vector3(s === 'left' ? -1 : 1, 0, 0).applyQuaternion(bodyQ) : towards;

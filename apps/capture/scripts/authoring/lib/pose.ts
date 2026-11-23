@@ -345,6 +345,9 @@ export function keepingTwist(a: LoadedAvatar, side: Side, move: () => void): voi
   ch.foreArm.updateMatrixWorld(true);
 }
 
+/** How far off the forearm axis (sine of the angle) a wanted palm direction must be for no roll (from) and the full roll (to). */
+const PALM_ROLL_SURE = { from: 0.1, to: 0.4 } as const;
+
 /**
  * Puts the wrist at a world point with capture's arm solver, the elbow a
  * hinge; the hand keeps its bind wrist unless rolled. A roll toward
@@ -369,9 +372,12 @@ export function solveArm(a: LoadedAvatar, side: Side, wristWorld: THREE.Vector3,
     const want = options.palmToward.clone().normalize();
     const p = now.clone().addScaledVector(axis, -now.dot(axis));
     const w = want.clone().addScaledVector(axis, -want.dot(axis));
-    if (p.lengthSq() > 1e-6 && w.lengthSq() > 1e-6) {
+    // A wanted direction near the forearm axis gives no roll: its part off the axis is short, and its angle
+    // swings by tens of degrees in one frame as that part passes near zero. So the roll fades out there.
+    const sure = THREE.MathUtils.smoothstep(Math.sqrt(w.lengthSq()), PALM_ROLL_SURE.from, PALM_ROLL_SURE.to);
+    if (p.lengthSq() > 1e-6 && sure > 0) {
       p.normalize(); w.normalize();
-      const angle = softLimit(Math.atan2(tmpV.crossVectors(p, w).dot(axis), p.dot(w)), FOREARM_TWIST_LIMIT);
+      const angle = sure * softLimit(Math.atan2(tmpV.crossVectors(p, w).dot(axis), p.dot(w)), FOREARM_TWIST_LIMIT);
       rotateBoneWorld(chain.foreArm, tmpQ.setFromAxisAngle(axis, angle * FOREARM_TWIST_SHARE));
       rotateBoneWorld(chain.hand, tmpQ.setFromAxisAngle(axis, angle * (1 - FOREARM_TWIST_SHARE)));
     }
