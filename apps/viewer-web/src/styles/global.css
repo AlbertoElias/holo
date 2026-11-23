@@ -61,8 +61,11 @@ body::before {
   scroll-behavior: auto;
 }
 
+/* Overlaps the last card's bottom pixel: a sentinel below the cards adds scroll
+   room, and the feed can then rest that 1px past the last card's snap (B-089). */
 .feed-sentinel {
   height: 1px;
+  margin-top: -1px;
 }
 
 /* IWSDK immersive routes: the flat ground from tokens.json until the session starts. */
