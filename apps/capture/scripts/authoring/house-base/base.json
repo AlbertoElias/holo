@@ -126,10 +126,10 @@
   "face": {
     "$comment": "The stylised face (decided by the agent on 2026-11-18, the owner away, for the owner to review; decision 7 of docs/features/directed-performance.md), drawn from the clay sheets: lengths in metres, angles in degrees unless named.",
     "skinUnits": {
-      "cheekSquintRight": 0.7,
+      "cheekSquintRight": 0.45,
       "mouthSmileLeft": 1.0,
       "mouthSmileRight": 1.0,
-      "cheekSquintLeft": 0.7,
+      "cheekSquintLeft": 0.45,
       "$comment": "The faceunits01 units kept on the skin, with their gains (mouthSmile moves only the skin round the authored mouth: see mouth.smileSkin); every other face shape is authored on the parts below.",
       "jawOpen": 1.0,
       "jawForward": 1.0,
@@ -284,7 +284,7 @@
       "smileSkin": {
         "$comment": "The smile unit on the skin (cheeks, the fold from nose to mouth corner) fades in from `from` to `to` of an ellipse round the mouth: the half width across, `tall` (m) up and down.",
         "from": 1.0,
-        "to": 2.2,
+        "to": 1.9,
         "tall": 0.014
       },
       "toothGaps": {
@@ -295,7 +295,7 @@
         "lift": 0.0004
       },
       "halfWidth": 0.03,
-      "openReach": 0.9,
+      "openReach": 0.85,
       "thick": 0.0016,
       "corner": 0.3,
       "lift": 0.001,
@@ -304,7 +304,7 @@
       "lips": {
         "profile": [[0.3, 0.75], [0.6, 1.0], [0.85, 0.65], [1.0, 0.0]],
         "reach": 0.96,
-        "floor": 0.02,
+        "floor": 0.06,
         "upper": 0.0085,
         "upperPower": 0.55,
         "bow": 0.22,
@@ -328,7 +328,7 @@
     "mouthShapes": {
       "$comment": "Moves (m) of the mouth's edges in the face's plane unless named. smile: the corners up and out, the upper edge's middle up by midUp, the middle open, the teeth row dropping `teeth` (a fraction) of the way, the opening keeping its height toward the corners as `round` falls below 1, the mouth `lift` forward (depth) halfway out so the cheek's curve stays behind it; frown: the corners down and out; stretch: the corners out and a little down; press: the corners out, the lips thinner, the corners down; lowerDown / upperUp: the lower lip down, the upper up (lowerDownTeeth: the share of that move the lower teeth row follows, so the lip does not bare the row; lipRound: below 1 the lifted lip keeps its height toward the corners); dimple: the corners back into the cheek; funnel: the corners in, the lips apart up and down; pucker: the corners in, the mouth forward (depth) and the lips `open` apart; smile.thin: the share of their height the lips lose in a smile; upperUp / lowerDown move only the lip's edge, so the teeth show; jawMouth: with the jaw open the upper teeth stay level, dropping `teeth` (`teethRound` in a round mouth) of the opening, and the lower teeth row rises `lowTeeth` of it; roll: corners in, the rolled lip thinner and down; shrug: the lower lip up; side: mouthLeft/Right across; jawSide, jawForward (depth) and jawOpen: the mouth following the jaw units. jawMouth: with the open jaw the corners come `in` and `down`, the upper teeth show over `teeth` of the opening and the tongue over `tongue` of it at the middle, across `tongueWide` of the half-width (rounded by tongueRound); the opening keeps its height toward the corners as `round` falls below 1.",
       "smile": {
-        "thin": 0.35,
+        "thin": 0.15,
         "up": 0.017,
         "out": 0.014,
         "midUp": -0.002,
@@ -358,12 +358,12 @@
       "dimple": 0.004,
       "funnel": {
         "in": 0.012,
-        "up": 0.01,
+        "up": 0.014,
         "down": 0.018
       },
       "pucker": {
-        "open": 0.003,
-        "in": 0.012,
+        "open": 0.005,
+        "in": 0.016,
         "forward": 0.007
       },
       "roll": {
@@ -379,7 +379,7 @@
       "jawOpen": 0.038,
       "jawMouth": {
         "lowTeeth": 0.0,
-        "teethRound": 0.25,
+        "teethRound": 0.45,
         "in": 0.006,
         "down": 0.004,
         "teeth": 0.24,
