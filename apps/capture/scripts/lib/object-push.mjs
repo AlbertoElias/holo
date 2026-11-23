@@ -303,8 +303,9 @@ export async function runDesktopFetch({ browser, baseUrl, consoleErrors }) {
     await advance(0.3);
     const afterLock = await s.item();
     row('the lock-acquiring click took the lock and grabbed nothing', !afterLock.heldBy && (await page.evaluate(() => document.pointerLockElement === document.querySelector('canvas'))), { heldBy: afterLock.heldBy });
+    // First person walks back at 0.6 of the walk (MovementSystem BACK_SPEED_SHARE): 2.5 s goes about 2.7 m.
     await page.keyboard.down('KeyS');
-    await advance(1.5);
+    await advance(2.5);
     await page.keyboard.up('KeyS');
     await advance(0.3);
     aimer.reset();

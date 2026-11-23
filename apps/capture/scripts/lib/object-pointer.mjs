@@ -144,8 +144,9 @@ export async function runDesktopMouseObject({ browser, baseUrl, consoleErrors })
 
     // Out of reach: walk back, look at the prop from there, and press. Slice 2: a prop within 8 m and in sight is fetched into the hand
     // (it was a press that grabbed nothing before). Beyond 8 m and behind a wall nothing happens: see lib/object-push.mjs.
+    // First person walks back at 0.6 of the walk (MovementSystem BACK_SPEED_SHARE): 2.5 s goes about 2.7 m.
     await page.keyboard.down('KeyS');
-    await advance(1.5);
+    await advance(2.5);
     await page.keyboard.up('KeyS');
     await advance(0.3);
     const farAimPx = await aim();

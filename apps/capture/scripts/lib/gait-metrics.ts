@@ -37,13 +37,13 @@ type Target = { min?: number; max?: number };
 // textbook's: they read mid-stance knee 16-37°, swing knee 68-73°, stance share
 // (speed-based contact) 0.38-0.52, arm swing 31-59 cm. The bent-kneed FBX
 // conversion of the same takes reads 53° at mid-stance.
-// Swing knee allows 80°: the shipped walk (CMU 07_12) on its own stride reads 79°
-// (77° when its stride was laid 1.1× longer); mid-stance allows 40°. A locked knee (under
-// 10°) fails.
+// Swing knee allows 76°: the original AMC 07_12 swing knee reads 72.6-74.2° with this
+// code; the extra swing lift that read 79° on the fixtures is gone (slice 2). Mid-stance
+// allows 40°. A locked knee (under 10°) fails.
 export const GAIT_TARGETS: Partial<Record<keyof GaitMetrics, Target>> = {
   armSwingCm: { min: 30, max: 55 },
   armLegCorrelation: { max: -0.5 },
-  kneeSwingFlexDeg: { min: 45, max: 80 },
+  kneeSwingFlexDeg: { min: 45, max: 76 },
   kneeMidStanceFlexDeg: { min: 10, max: 40 },
   stanceShareLeft: { min: 0.38, max: 0.55 },
   stanceShareRight: { min: 0.38, max: 0.55 },

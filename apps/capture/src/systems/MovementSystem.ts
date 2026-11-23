@@ -21,6 +21,12 @@ const SETTLE_TURN_SEC = 0.25;
 // keep full speed): feet that cannot pass each other sideways keep up to about 1.2 m/s, and a 1.8 m/s strafe left
 // them half a metre behind the pelvis (B-079; pending owner confirmation).
 const STICK_STRAFE_SHARE = 0.65;
+// The desktop keys walk backward and sideways slower than forward, the way people do and the recorded clips go
+// (docs/features/realistic-avatar-motion.md, slice 2; pending owner confirmation).
+const BACK_SPEED_SHARE = 0.6;
+const SIDE_SPEED_SHARE = 0.65;
+// Below this eased speed (m/s) the body-frame travel keeps its last direction: a stop has none.
+const TRAVEL_DIRECTION_MIN_SPEED = 0.1;
 
 /**
  * Crouch, then the character motor: input movement, gravity, jumps and the
@@ -35,6 +41,8 @@ export class MovementSystem extends createSystem() {
   /** The desktop body's turn from the look yaw toward its travel (rad). */
   private travelTurn = 0;
   private backingUp = false;
+  private readonly planarVelocity = new THREE.Vector3();
+  private travelLocalYaw: number | null = null;
 
   init(): void {
     this.capture = captureContext(this.world);
@@ -53,7 +61,8 @@ export class MovementSystem extends createSystem() {
     const crouchAmount = c.crouch.amount;
     const stick = frame.vrActive ? strafeEased(c.locomotion.moveVector(this.stickMove)) : { x: 0, z: 0 };
     motor.update(deltaSec, c.camera.lookYaw, input.moveState, input.consumeJumpQueued(), {
-      moveSpeedMultiplier: (1 - (1 - CROUCH_MOVE_SPEED_AT_FULL) * crouchAmount) * WALK_HEIGHTS_PER_SEC / WALK_SPEED_HEIGHTS_PER_SEC,
+      moveSpeedMultiplier: (1 - (1 - CROUCH_MOVE_SPEED_AT_FULL) * crouchAmount) * WALK_HEIGHTS_PER_SEC / WALK_SPEED_HEIGHTS_PER_SEC *
+        (frame.vrActive ? 1 : this.keySpeedShare(c.camera.desktopViewMode === 'first' || c.objects.reachDemand() > 0)),
       allowJump: true,
       ...(frame.vrActive ? {} : { maxAccelerationMS2: KEYBOARD_ACCELERATION_MS2, jumpWindupSec: JUMP_WINDUP_SEC }),
       stickToTerrain: crouchAmount >= CROUCH_MIN_EFFECT_THRESHOLD,
@@ -84,7 +93,38 @@ export class MovementSystem extends createSystem() {
     // First person, XR and a reach keep the body on the look: the view and the reach are aimed from it.
     const turn = tracked || frame.vrActive ? 0 : this.desktopTravelTurn(deltaSec, c.camera.desktopViewMode === 'first' || c.objects.reachDemand() > 0);
     const yaw = tracked ? body.solver.bodyYaw : c.camera.lookYaw + turn;
+    frame.travelLocalYaw = tracked || frame.vrActive ? null : this.bodyTravel(yaw, c.camera.desktopViewMode === 'first' || c.objects.reachDemand() > 0);
     avatar.syncAvatarPoseFromCharacter(this.bodyPosition, yaw, motor.getAvatarVisualOffsetY(), config.avatarForwardOffset);
+  }
+
+  /**
+   * The keys' speed share: forward 1, backward BACK_SPEED_SHARE, sideways SIDE_SPEED_SHARE, blended by direction.
+   * The third-person body turns to walk sideways forward, so only backing up there is slower.
+   */
+  private keySpeedShare(onLook: boolean): number {
+    const move = this.capture.input.moveState;
+    const across = (move.left ? 1 : 0) - (move.right ? 1 : 0);
+    const along = (move.forward ? 1 : 0) - (move.back ? 1 : 0);
+    if (across === 0 && along === 0) return 1;
+    if (!onLook) return this.backingUp ? BACK_SPEED_SHARE : 1;
+    const sum = Math.abs(across) + Math.abs(along);
+    return (Math.max(0, along) + Math.max(0, -along) * BACK_SPEED_SHARE + Math.abs(across) * SIDE_SPEED_SHARE) / sum;
+  }
+
+  /**
+   * The eased velocity in the body's frame (rad, 0 forward, +π/2 to its left): the walk blends its directional clips
+   * on how the body moves, not on the keys, so a reversal plays the clip of the way it still goes. The third-person
+   * body faces its travel, so there it is forward or back only.
+   */
+  private bodyTravel(yaw: number, onLook: boolean): number | null {
+    const v = this.capture.motor.getPlanarVelocity(this.planarVelocity);
+    if (Math.hypot(v.x, v.z) >= TRAVEL_DIRECTION_MIN_SPEED) {
+      // Body forward is (-sin yaw, 0, -cos yaw) and its left (-cos yaw, 0, sin yaw), as the motor lays the keys.
+      const forward = -v.x * Math.sin(yaw) - v.z * Math.cos(yaw);
+      const left = -v.x * Math.cos(yaw) + v.z * Math.sin(yaw);
+      this.travelLocalYaw = onLook ? Math.atan2(left, forward) : forward >= 0 ? 0 : Math.PI;
+    }
+    return this.travelLocalYaw;
   }
 
   /**

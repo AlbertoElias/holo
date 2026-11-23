@@ -21,6 +21,13 @@ export interface LocomotionUpdateInput {
   /** The body's world position on the ground plane: the walk is chosen on its net travel, since a body pushed
    * against a rock rattles back and forth each step and reports speed without going anywhere. */
   position?: { x: number; z: number };
+  /** The desktop body's travel in its own frame (rad: 0 forward, +π/2 to its left), from the eased velocity; null
+   * plays the forward walk alone (VR, the stick, or no directional clips). */
+  travelLocalYaw?: number | null;
+  /** A point, aim, carry, reach or plant holds the upper body: the idle's sway eases out (IDLE_SWAY_HOLD_SEC). */
+  holdStill?: boolean;
+  /** The crouch pose's amount (0..1): the desktop walk blends toward the crouch walk clips by it. */
+  crouch?: number;
 }
 
 export type GaitLeg = 'left' | 'right';
@@ -72,9 +79,49 @@ export interface GaitState {
   readonly walking: boolean;
   /** Current clip phase, 0..1. */
   readonly phase: number;
-  /** How much longer than the clip's own each stride is laid down (the leg solver scales the feet's fore-aft offset). */
+  /** How much longer than the clip's own each stride is laid down (the leg solver scales the feet's offset along the clip's travel). */
   readonly stride: number;
+  /** The blended clips' own travel in the body frame (unit): the leg solver turns the feet's offsets from it to the body's travel. */
+  readonly clipForward: number;
+  readonly clipLeft: number;
 }
+
+/**
+ * The desktop walk's directional and crouch clips, by exact name (the walk matcher skips them). Each plays on the
+ * walk's shared phase, weighted by the body-frame travel and the crouch (docs/features/realistic-avatar-motion.md, slice 2).
+ */
+type Direction = 'walk' | 'back' | 'left' | 'right' | 'crouch' | 'crouchBack';
+const DIRECTIONAL_CLIPS: Readonly<Record<Exclude<Direction, 'walk'>, { name: string; travel: GaitTravel }>> = {
+  back: { name: 'walkbackward', travel: 'back' },
+  left: { name: 'strafeleft', travel: 'left' },
+  right: { name: 'straferight', travel: 'right' },
+  crouch: { name: 'crouchwalk', travel: 'forward' },
+  crouchBack: { name: 'crouchwalkbackward', travel: 'back' }
+};
+const DIRECTIONAL_NAMES = new Set(Object.values(DIRECTIONAL_CLIPS).map((d) => d.name));
+const isDirectionalClip = (name: string) => DIRECTIONAL_NAMES.has(name.toLowerCase());
+type GaitTravel = 'forward' | 'back' | 'left' | 'right';
+const TRAVEL_VECTORS: Readonly<Record<GaitTravel, { forward: number; left: number }>> = {
+  forward: { forward: 1, left: 0 }, back: { forward: -1, left: 0 }, left: { forward: 0, left: 1 }, right: { forward: 0, left: -1 }
+};
+/** Time constant of the directional weights (s). */
+const DIRECTION_EASE_SEC = 0.1;
+/** Another clip leads the leg solver's footfalls once its weight passes the leading one's by this much. */
+const LEAD_HYSTERESIS = 0.1;
+interface DirectionalPlay {
+  readonly direction: Direction;
+  readonly action: THREE.AnimationAction;
+  readonly gait: WalkGait;
+  readonly duration: number;
+  readonly forward: number;
+  readonly left: number;
+  /** Only the forward clips take the avatar's longer stride (fitStrideScale): a side step laid longer overreaches. */
+  readonly strideScaled: boolean;
+  /** Added to the shared phase, so every clip's left footfall falls on the walk's. */
+  readonly offset: number;
+  weight: number;
+}
+type MutableGaitState = { -readonly [K in keyof GaitState]: GaitState[K] };
 
 /**
  * The shipped walk (CMU 07_12) plays on its own stride: at 1.8 m/s that is ~130 steps/min of 0.84 m steps. A longer
@@ -109,6 +156,10 @@ const CLIP_FALLBACK_ORDER: Readonly<Record<LocomotionState, readonly LocomotionS
   idle: ['idle']
 };
 const ROOT_MOTION_TARGETS = ['hips', 'armature', 'root'];
+/** The desktop idle's sway bones; IDLE_SWAY_HOLD_SEC: how long the sway takes to ease out (and back in) around a reach. */
+const SWAY_BONES = ['spine', 'chest', 'upperChest', 'neck', 'head'] as const;
+const IDLE_SWAY_HOLD_SEC = 0.25;
+const smoothShare = (t: number) => t * t * (3 - 2 * t);
 const LOWER_BODY_TARGETS = ['hips', 'leftupleg', 'leftleg', 'leftfoot', 'lefttoebase', 'rightupleg', 'rightleg', 'rightfoot', 'righttoebase'];
 const LOWER_BODY_BONES: readonly VrmHumanoidBone[] = [
   'hips', 'leftUpperLeg', 'leftLowerLeg', 'leftFoot', 'leftToes', 'rightUpperLeg', 'rightLowerLeg', 'rightFoot', 'rightToes'
@@ -167,6 +218,11 @@ export class LocomotionAnimator {
   private mixer: THREE.AnimationMixer | null = null;
   private lowerBodyNames: ReadonlySet<string> | undefined;
   private armNames: ReadonlySet<string> | undefined;
+  private swayNames: ReadonlySet<string> | undefined;
+  /** The desktop idle's upper-body sway (spine to head), layered on the idle while it plays; none without an idle clip. */
+  private sway: THREE.AnimationAction | undefined;
+  /** 1 while the body may sway, easing to 0 while it is held still. */
+  private swayShare = 1;
   private rootMotionNames: ReadonlySet<string> | undefined;
   private readonly actionsByProfile: Record<LocomotionProfile, Partial<Record<LocomotionState, THREE.AnimationAction>>> = {
     'desktop-full': {},
@@ -192,6 +248,20 @@ export class LocomotionAnimator {
   private walkTrajectory: WalkTrajectory | undefined;
   /** The one-shot Leap (a recorded jump) bound to this avatar, whose arms the desktop jump follows (JumpArms). */
   private leap: THREE.AnimationClip | undefined;
+  /** The desktop walk's directional plays (the walk first); empty without directional clips. */
+  private directions: DirectionalPlay[] = [];
+  /** The play whose footfalls the leg solver follows (the heaviest, with hysteresis). */
+  private lead: DirectionalPlay | undefined;
+  /** The shared walk phase (0..1) of the directional plays, the walk's own clip phase. */
+  private phase = 0;
+  private walkRate = 1;
+  private walkFade = 0;
+  private walkWasActive = false;
+  private blendStrideScale = 1;
+  private blendCycleSec = 1;
+  private blendStanceSpeed = 0;
+  private readonly clipTravel = { forward: 1, left: 0 };
+  private readonly gaitState: MutableGaitState = { gait: { stance: { left: { land: 0, lift: 0 }, right: { land: 0, lift: 0 } }, stanceSpeed: 0 }, walking: false, phase: 0, stride: 1, clipForward: 1, clipLeft: 0 };
 
   /**
    * The avatar plays its own clips when it has a usable Idle and Walk (a clip
@@ -205,7 +275,7 @@ export class LocomotionAnimator {
   }
 
   private static ownClip(clips: readonly THREE.AnimationClip[], state: LocomotionState, humanoid?: HumanoidSkeleton): THREE.AnimationClip | undefined {
-    return clips.find((clip) => CLIP_MATCHERS[state].test(clip.name) && LocomotionAnimator.turnsBones(clip, humanoid));
+    return clips.find((clip) => CLIP_MATCHERS[state].test(clip.name) && !isDirectionalClip(clip.name) && LocomotionAnimator.turnsBones(clip, humanoid));
   }
 
   /** Whether a clip rotates one of this rig's canonical bones (any clip, without a humanoid). */
@@ -248,11 +318,15 @@ export class LocomotionAnimator {
   attachClips(root: THREE.Object3D, ownClips: THREE.AnimationClip[], humanoid?: HumanoidSkeleton, retargeted: readonly THREE.AnimationClip[] = []): void {
     this.lowerBodyNames = undefined;
     this.armNames = undefined;
+    this.swayNames = undefined;
+    this.sway = undefined;
+    this.swayShare = 1;
     this.rootMotionNames = undefined;
     if (humanoid) {
       this.lowerBodyNames = LocomotionAnimator.boneKeys(humanoid, LOWER_BODY_BONES);
       this.armNames = LocomotionAnimator.boneKeys(humanoid, VRM_HUMANOID_BONES.filter((b) => /Shoulder|Arm|Hand|Thumb|Index|Middle|Ring|Little/.test(b)));
       this.rootMotionNames = new Set([...LocomotionAnimator.boneKeys(humanoid, ['hips']), 'armature', 'root']);
+      this.swayNames = LocomotionAnimator.boneKeys(humanoid, SWAY_BONES);
     }
     const own = !humanoid || LocomotionAnimator.usesOwnClips(ownClips, humanoid);
     // A clip that moves only a prop must not win a state from the body clip that qualified.
@@ -287,6 +361,8 @@ export class LocomotionAnimator {
     }
     this.bindProfileActions('desktop-full', desktopClips);
     this.bindProfileActions('vr-lower-body', vrClips);
+    this.bindDirections(root, desktopClips, humanoid);
+    this.bindSway(clips);
     // Leap plays in no state; an avatar with its own clips still gets the library's (retargeted) one.
     this.leap = clips.find((clip) => /^leap$/i.test(clip.name)) ?? retargeted.find((clip) => /^leap$/i.test(clip.name));
     for (const state of LOCOMOTION_STATES) {
@@ -307,11 +383,188 @@ export class LocomotionAnimator {
             ? nextProfile === 'desktop-full' ? DESKTOP_WALK_IN_SEC : WALK_FADE_SEC
             : 0.18;
     this.playState(nextState, nextProfile, fadeSec);
+    const directional = this.directions.length > 0;
+    if (directional) this.playDirections(input);
     this.applyPlaybackSpeedCalibration(input);
+    if (directional) this.stepDirections(input.deltaSec);
+    this.playSway(input);
 
     if (this.mixer) {
       this.mixer.update(input.deltaSec);
     }
+    if (directional) this.readWalkFade();
+  }
+
+  /**
+   * The desktop idle's sway: its spine, chest, neck and head keys, played as their own action. Not its hips or legs
+   * (they stand on the terrain IK) and not its arms (held at the first key). The builder already plays the take at
+   * 40 % of its sway (scripts/build-mocap-clips.ts), so it plays at full weight here.
+   */
+  private bindSway(clips: readonly THREE.AnimationClip[]): void {
+    const idle = this.resolveClip(clips, 'idle');
+    if (!this.mixer || !idle || !CLIP_MATCHERS.idle.test(idle.name)) return;
+    const tracks = idle.tracks
+      .filter((track) => {
+        const parts = parseTrackName(track.name);
+        return parts?.property === 'quaternion' && this.isSwayTarget(parts.nodeName);
+      })
+      .map((track) => track.clone());
+    if (tracks.length === 0) return;
+    const clip = new THREE.AnimationClip(`${idle.name}Sway`, -1, tracks);
+    clip.resetDuration();
+    if (!(clip.duration > 0)) return;
+    this.sway = this.mixer.clipAction(clip);
+    this.sway.setLoop(THREE.LoopRepeat, Infinity);
+    this.sway.enabled = true;
+    this.sway.weight = 0;
+    this.sway.play();
+  }
+
+  /** The sway follows the desktop idle's weight, eased out while a point, aim, carry or reach holds the body still. */
+  private playSway(input: LocomotionUpdateInput): void {
+    const sway = this.sway;
+    if (!sway) return;
+    const step = Math.max(0, input.deltaSec) / IDLE_SWAY_HOLD_SEC;
+    this.swayShare = THREE.MathUtils.clamp(this.swayShare + (input.holdStill ? -step : step), 0, 1);
+    const idle = this.actionsByProfile['desktop-full'].idle;
+    const idleWeight = this.activeProfile === 'desktop-full' && idle?.isScheduled() ? idle.getEffectiveWeight() : 0;
+    sway.weight = idleWeight * smoothShare(this.swayShare);
+  }
+
+  /** How much of the idle's sway plays (0..1), for the motion checks. */
+  getSwayWeight(): number { return this.sway?.weight ?? 0; }
+
+  /**
+   * The desktop walk's directional and crouch clips, each with its hips bob and its own gait measured along its travel,
+   * phased so their left footfalls fall on the walk's. None without a measured walk gait.
+   */
+  private bindDirections(root: THREE.Object3D, desktopClips: readonly THREE.AnimationClip[], humanoid: HumanoidSkeleton | undefined): void {
+    this.directions = [];
+    this.lead = undefined;
+    const walk = this.actionsByProfile['desktop-full'].walk;
+    if (!this.mixer || !humanoid || !this.gait || !walk) return;
+    const walkDuration = walk.getClip().duration;
+    const walkPlay: DirectionalPlay = { direction: 'walk', action: walk, gait: this.gait, duration: walkDuration, forward: 1, left: 0, strideScaled: true, offset: 0, weight: 1 };
+    const plays: DirectionalPlay[] = [walkPlay];
+    for (const [direction, spec] of Object.entries(DIRECTIONAL_CLIPS) as Array<[Exclude<Direction, 'walk'>, { name: string; travel: GaitTravel }]>) {
+      const clip = desktopClips.find((c) => c.name.toLowerCase() === spec.name);
+      if (!clip || !(clip.duration > 0)) continue;
+      const bobbed = LocomotionAnimator.withHipsBob(root, clip, humanoid) ?? clip;
+      const gait = LocomotionAnimator.measureGait(root, bobbed, humanoid, spec.travel)?.gait;
+      if (!gait) continue;
+      const action = this.mixer.clipAction(bobbed);
+      action.enabled = true;
+      action.setLoop(THREE.LoopRepeat, Infinity);
+      action.setEffectiveTimeScale(0);
+      action.weight = 0;
+      const vector = TRAVEL_VECTORS[spec.travel];
+      const offset = (((gait.stance.left.land - this.gait.stance.left.land) % 1) + 1) % 1;
+      plays.push({ direction, action, gait, duration: clip.duration, forward: vector.forward, left: vector.left, strideScaled: spec.travel === 'forward', offset, weight: 0 });
+    }
+    if (plays.length > 1) {
+      this.directions = plays;
+      this.lead = walkPlay;
+    }
+  }
+
+  /** This frame's target weight of each directional clip, from the body-frame travel and the crouch; a missing clip's goes to the walk. */
+  private directionTarget(direction: Direction, travelLocalYaw: number | null, crouch: number): number {
+    const yaw = travelLocalYaw ?? 0;
+    const cos = Math.cos(yaw), sin = Math.sin(yaw);
+    const sum = Math.abs(cos) + Math.abs(sin) || 1;
+    const f = Math.max(0, cos) / sum, b = Math.max(0, -cos) / sum, l = Math.max(0, sin) / sum, r = Math.max(0, -sin) / sum;
+    const c = THREE.MathUtils.clamp(crouch, 0, 1);
+    switch (direction) {
+      case 'walk': return f * (1 - c);
+      case 'crouch': return f * c;
+      case 'back': return b * (1 - c);
+      case 'crouchBack': return b * c;
+      case 'left': return l;
+      case 'right': return r;
+    }
+  }
+
+  /**
+   * Weights and plays the directional clips on one shared phase: the phase advances by the travel over the blended
+   * cycle's ground length (each clip's stance speed times its length), so a blend of clips of different lengths keeps
+   * the planted foot still. The walk action keeps its fades; the others follow its fade.
+   */
+  private playDirections(input: LocomotionUpdateInput): void {
+    const walk = this.directions[0]!;
+    const desktop = this.activeProfile === 'desktop-full';
+    const walking = desktop && this.state === 'walk' && this.activeAction === walk.action;
+    // Entering the walk starts the phase where the walk's entry put its clip.
+    if (walking && !this.walkWasActive) this.phase = walk.action.time / walk.duration;
+    this.walkWasActive = walking;
+    const yaw = input.travelLocalYaw ?? null;
+    const k = 1 - Math.exp(-Math.max(0, input.deltaSec) / DIRECTION_EASE_SEC);
+    let total = 0;
+    for (const play of this.directions) {
+      let target = this.directionTarget(play.direction, yaw, input.crouch ?? 0);
+      if (play.direction === 'walk') {
+        // A missing clip's share plays on the walk (its stride turned toward travel, as before).
+        for (const d of ['back', 'left', 'right', 'crouch', 'crouchBack'] as const) {
+          if (!this.directions.some((p) => p.direction === d)) target += this.directionTarget(d, yaw, input.crouch ?? 0);
+        }
+      }
+      // The first walking frame takes the weights at once: no forward stride before a backward walk.
+      play.weight = walking && this.walkFade > 0.01 ? play.weight + (target - play.weight) * k : target;
+      total += play.weight;
+    }
+    let lead = this.lead ?? walk;
+    let forward = 0, left = 0, scale = 0, cycle = 0, ground = 0;
+    for (const play of this.directions) {
+      play.weight /= total || 1;
+      if (play.weight > lead.weight + LEAD_HYSTERESIS) lead = play;
+      forward += play.weight * play.forward;
+      left += play.weight * play.left;
+      const strideScale = play.strideScaled ? this.strideScale : 1;
+      scale += play.weight * strideScale;
+      cycle += play.weight * play.duration;
+      ground += play.weight * play.gait.stanceSpeed * strideScale * play.duration;
+    }
+    this.lead = lead;
+    const length = Math.hypot(forward, left);
+    this.clipTravel.forward = length > 0.2 ? forward / length : lead.forward;
+    this.clipTravel.left = length > 0.2 ? left / length : lead.left;
+    this.blendStrideScale = scale;
+    this.blendCycleSec = cycle;
+    this.blendStanceSpeed = cycle > 0 ? ground / cycle : walk.gait.stanceSpeed;
+    // The walk action's own fade (crossfades from and to the idle) carries the whole blend.
+    walk.action.weight = Math.max(1e-3, walk.weight);
+    for (const play of this.directions) {
+      if (play !== walk) {
+        if (!play.action.isScheduled()) play.action.play();
+        play.action.weight = desktop ? play.weight * this.walkFade : 0;
+      }
+    }
+  }
+
+  /** After the mixer's fades: how far the walk is faded in, for the other directional clips to follow next frame. */
+  private readWalkFade(): void {
+    const walk = this.directions[0]?.action;
+    this.walkFade = walk && walk.enabled && walk.isScheduled() && this.activeProfile === 'desktop-full' ? THREE.MathUtils.clamp(walk.getEffectiveWeight() / Math.max(1e-3, walk.weight), 0, 1) : 0;
+  }
+
+  /** Sets every directional clip to its time on the shared phase (they play at time scale 0). */
+  private stepDirections(deltaSec: number): void {
+    if (this.walkFade > 0 || this.walkWasActive) this.phase = (this.phase + (this.walkRate * Math.max(0, deltaSec)) / Math.max(1e-3, this.blendCycleSec)) % 1;
+    for (const play of this.directions) {
+      play.action.setEffectiveTimeScale(0);
+      play.action.time = (((this.phase + play.offset) % 1) * play.duration);
+    }
+  }
+
+  /** How much of the body the crouch walk clips crouch this frame (0..1): the crouch pose leaves that much to them. */
+  getClipCrouch(): number {
+    let crouch = 0;
+    for (const play of this.directions) if (play.direction === 'crouch' || play.direction === 'crouchBack') crouch += play.weight;
+    return crouch * this.walkFade;
+  }
+
+  /** The directional clips' weights this frame (automation). */
+  getDirectionWeights(): Partial<Record<Direction, number>> {
+    return Object.fromEntries(this.directions.map((p) => [p.direction, Math.round(p.weight * this.walkFade * 1000) / 1000]));
   }
 
   getState(): LocomotionState {
@@ -383,17 +636,33 @@ export class LocomotionAnimator {
     // The gait is measured on the desktop clip; the VR clips keep their own speed-scaled cadence (gap 3).
     if (!this.gait || this.activeProfile !== 'desktop-full') return undefined;
     const walk = this.actionsByProfile[this.activeProfile].walk;
-    const walking = this.state === 'walk' && walk !== undefined && this.activeAction === walk;
+    const out = this.gaitState;
+    out.walking = this.state === 'walk' && walk !== undefined && this.activeAction === walk;
+    const lead = this.lead;
+    if (lead) {
+      // The heaviest clip's footfalls on its own phase; the feet turn from the blend's travel.
+      out.gait = lead.gait;
+      out.phase = (this.phase + lead.offset) % 1;
+      out.stride = this.blendStrideScale * this.strideShare;
+      out.clipForward = this.clipTravel.forward;
+      out.clipLeft = this.clipTravel.left;
+      return out;
+    }
     const duration = walk?.getClip().duration ?? 0;
-    const phase = walk && duration > 0 ? (((walk.time / duration) % 1) + 1) % 1 : 0;
-    return { gait: this.gait, walking, phase, stride: this.strideScale * this.strideShare };
+    out.gait = this.gait;
+    out.phase = walk && duration > 0 ? (((walk.time / duration) % 1) + 1) % 1 : 0;
+    out.stride = this.strideScale * this.strideShare;
+    out.clipForward = 1;
+    out.clipLeft = 0;
+    return out;
   }
 
   /** The planted foot's speed at time scale 1, in world metres per second (the avatar's scale applied). */
   stanceSpeedWorld(): number | undefined {
     if (!this.gait || !this.root || this.activeProfile !== 'desktop-full') return undefined;
-    const scale = this.root.getWorldScale(new THREE.Vector3()).z;
-    return this.gait.stanceSpeed * this.strideScale * Math.abs(scale);
+    const scale = Math.abs(this.root.getWorldScale(this.tmpScale).z);
+    // With directional clips, the blend's stance speed (each clip's own, by its weight and cycle) sets the cadence.
+    return (this.directions.length > 0 ? this.blendStanceSpeed : this.gait.stanceSpeed * this.strideScale) * scale;
   }
 
   /**
@@ -438,7 +707,7 @@ export class LocomotionAnimator {
    * kinematics: when each foot is planted (lowest, moving backwards) and how
    * fast it moves then. The pose is restored afterwards.
    */
-  private static measureGait(root: THREE.Object3D, clip: THREE.AnimationClip, humanoid: HumanoidSkeleton): { gait: WalkGait | undefined; soles: number[]; restSole: number; trajectory?: WalkTrajectory | undefined } | undefined {
+  private static measureGait(root: THREE.Object3D, clip: THREE.AnimationClip, humanoid: HumanoidSkeleton, travel: GaitTravel = 'forward'): { gait: WalkGait | undefined; soles: number[]; restSole: number; trajectory?: WalkTrajectory | undefined } | undefined {
     const feet = { left: humanoid.bone('leftFoot'), right: humanoid.bone('rightFoot') };
     const toes = { left: humanoid.bone('leftToes'), right: humanoid.bone('rightToes') };
     const hips = humanoid.bone('hips');
@@ -454,6 +723,12 @@ export class LocomotionAnimator {
       if (toes[side]) restForward.add(toes[side]!.getWorldPosition(new THREE.Vector3()).sub(feet[side]!.getWorldPosition(new THREE.Vector3())));
     }
     if (restForward.x ** 2 + restForward.z ** 2 < 1e-10) return undefined;
+    // The way the clip travels at rest: a planted foot slides opposite to it under the in-place clip.
+    const upperLegs = { left: humanoid.bone('leftUpperLeg'), right: humanoid.bone('rightUpperLeg') };
+    const restLeft = upperLegs.left && upperLegs.right
+      ? upperLegs.left.getWorldPosition(new THREE.Vector3()).sub(upperLegs.right.getWorldPosition(new THREE.Vector3()))
+      : new THREE.Vector3(restForward.z, 0, -restForward.x);
+    const travelDirection = travel === 'forward' ? restForward.clone() : travel === 'back' ? restForward.clone().negate() : travel === 'left' ? restLeft : restLeft.clone().negate();
     const pitchOf = (side: GaitLeg) => {
       const toe = toes[side];
       if (!toe) return 0;
@@ -502,16 +777,21 @@ export class LocomotionAnimator {
     const result = (gait: WalkGait | undefined) => ({ gait, soles, restSole });
     const dt = clip.duration / GAIT_SAMPLES;
     const tolerance = Math.abs(hipsHeight) * 0.03;
-    // The stride runs along the feet's main horizontal axis (principal component of their swing).
-    let xx = 0, xz = 0, zz = 0, mx = 0, mz = 0;
-    const all = [...track.left, ...track.right];
-    for (const p of all) { mx += p.x / all.length; mz += p.z / all.length; }
-    for (const p of all) { xx += (p.x - mx) ** 2; xz += (p.x - mx) * (p.z - mz); zz += (p.z - mz) ** 2; }
+    // The stride runs along the feet's main horizontal axis (principal component of their swing). Each foot is
+    // centred on its own mean: pooled, the gap between the feet outweighs a short stride (the back walk's) and the
+    // axis turns sideways.
+    let xx = 0, xz = 0, zz = 0;
+    for (const side of ['left', 'right'] as const) {
+      const points = track[side];
+      let mx = 0, mz = 0;
+      for (const p of points) { mx += p.x / points.length; mz += p.z / points.length; }
+      for (const p of points) { xx += (p.x - mx) ** 2; xz += (p.x - mx) * (p.z - mz); zz += (p.z - mz) ** 2; }
+    }
     const angle = 0.5 * Math.atan2(2 * xz, xx - zz);
     const axis = { x: Math.cos(angle), z: Math.sin(angle) };
-    // Oriented forward, the way the toes point at rest: a planted foot slides back along it under an in-place walk.
+    // Oriented along the clip's travel (for the walk, the way the toes point at rest): a planted foot slides back along it under an in-place clip.
     const along = (side: GaitLeg) => track[side].map((p) => p.x * axis.x + p.z * axis.z);
-    const sign = restForward.x * axis.x + restForward.z * axis.z < 0 ? -1 : 1;
+    const sign = travelDirection.x * axis.x + travelDirection.z * axis.z < 0 ? -1 : 1;
     const stance = {} as Record<GaitLeg, { land: number; lift: number }>;
     const speeds: number[] = [];
     for (const side of ['left', 'right'] as const) {
@@ -540,7 +820,7 @@ export class LocomotionAnimator {
     const scale = Math.abs(root.getWorldScale(new THREE.Vector3()).z) || 1;
     if (!(stanceSpeed > 1e-4)) return result(undefined);
     const gait: WalkGait = { stance, stanceSpeed: stanceSpeed / scale };
-    const trajectory = restHips > 1e-4 ? LocomotionAnimator.buildTrajectory(gait, clip.duration, track, hipsYs, axis, sign, restHips) : undefined;
+    const trajectory = restHips > 1e-4 && travel === 'forward' ? LocomotionAnimator.buildTrajectory(gait, clip.duration, track, hipsYs, axis, sign, restHips) : undefined;
     return { ...result(gait), trajectory };
   }
 
@@ -738,6 +1018,7 @@ export class LocomotionAnimator {
     nextTimeScale = THREE.MathUtils.lerp(this.currentTimeScale, nextTimeScale, ease);
     this.currentTimeScale = nextTimeScale;
     this.strideShare = THREE.MathUtils.lerp(this.strideShare, nextShare, ease);
+    if (usingWalkAction) this.walkRate = nextTimeScale;
     this.activeAction?.setEffectiveTimeScale(nextTimeScale);
   }
 
@@ -754,7 +1035,7 @@ export class LocomotionAnimator {
   private resolveClip(clips: readonly THREE.AnimationClip[], state: LocomotionState): THREE.AnimationClip | undefined {
     for (const fallbackState of CLIP_FALLBACK_ORDER[state]) {
       const matcher = CLIP_MATCHERS[fallbackState];
-      const match = clips.find((clip) => matcher.test(clip.name));
+      const match = clips.find((clip) => matcher.test(clip.name) && !isDirectionalClip(clip.name));
       if (match) return match;
     }
     return undefined;
@@ -763,7 +1044,7 @@ export class LocomotionAnimator {
   private preprocessClip(clip: THREE.AnimationClip, profile: LocomotionProfile): THREE.AnimationClip | undefined {
     // "Standing Jump" or "Stand To Fall" is not an idle.
     const isIdleClip = CLIP_MATCHERS.idle.test(clip.name) && !LOCOMOTION_STATES.some((state) => state !== 'idle' && CLIP_MATCHERS[state].test(clip.name));
-    const isWalkClip = CLIP_MATCHERS.walk.test(clip.name);
+    const isWalkClip = CLIP_MATCHERS.walk.test(clip.name) || isDirectionalClip(clip.name);
     const tracks = clip.tracks
       .filter((track) => this.shouldKeepTrack(track.name, profile, isIdleClip))
       .map((track) => track.clone())
@@ -923,6 +1204,11 @@ export class LocomotionAnimator {
   private isArmTarget(nodeName: string): boolean {
     if (this.armNames) return this.armNames.has(nodeName);
     return /(shoulder|arm|hand)/i.test(nodeName) && !/armature/i.test(nodeName);
+  }
+
+  private isSwayTarget(nodeName: string): boolean {
+    if (this.swayNames) return this.swayNames.has(nodeName);
+    return /(spine|chest|neck|head)/i.test(nodeName) && !/headtop|end$/i.test(nodeName);
   }
 
   private isLowerBodyTarget(nodeName: string): boolean {

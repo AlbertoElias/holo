@@ -192,6 +192,8 @@ const CROUCH_WALK_HIPS_POSE_WEIGHT = 0.85;
 const CROUCH_WALK_LEG_POSE_WEIGHT = 0.6;
 const CROUCH_WALK_FOOT_POSE_WEIGHT = 0.25;
 const CROUCH_WALK_EXTRA_GROUND_CLEARANCE_RATIO = 0.02;
+// The crouch walk clip leans the torso less than the crouch pose: the pose keeps this share of its spine bend under it.
+const CROUCH_CLIP_SPINE_SHARE = 0.5;
 const CROUCH_GROUND_SAMPLE_RADIUS_RATIO = 0.045;
 const CROUCH_GROUND_SAMPLE_OFFSETS: readonly Readonly<[number, number]>[] = [
   [0, 0],
@@ -397,7 +399,8 @@ export class AvatarRig {
 
   /** `plant`: a reach is driving the pose, so the feet stay where they stood when it began. */
   /** `airborne` tucks the legs under hips that stay put (a jump), rather than lowering the hips onto the ground. */
-  applyCrouchPose(amount: number, horizontalSpeed = 0, squat = 0, plant = false, deepExtra = 0, airborne = false): void {
+  /** `clipCrouch` (0..1): how much of the crouch the walk's crouch clips already carry; the pose leaves them that much. */
+  applyCrouchPose(amount: number, horizontalSpeed = 0, squat = 0, plant = false, deepExtra = 0, airborne = false, clipCrouch = 0): void {
     const clampedAmount = clamp(amount, 0, CROUCH_MAX_POSE_AMOUNT);
     if (!this.crouchRigReady || !this.crouchHips) return;
     if (!plant) this.feetPlanted = false;
@@ -430,10 +433,12 @@ export class AvatarRig {
     const legPoseWeight = THREE.MathUtils.lerp(1, CROUCH_WALK_LEG_POSE_WEIGHT, walkBlend);
     const footPoseWeight = THREE.MathUtils.lerp(1, CROUCH_WALK_FOOT_POSE_WEIGHT, walkBlend);
     const lean = 1;
-    const hipsAmount = Math.pow(clampedAmount, 0.9) * hipsPoseWeight;
-    const legAmount = Math.pow(clampedAmount, 0.72) * legPoseWeight * (1 - SQUAT_LEG_RELAX * squatAmount);
-    const spineAmount = Math.pow(clampedAmount, 0.78) * lean;
-    const footAmount = Math.pow(clampedAmount, 0.9) * footPoseWeight * (1 - squatAmount);
+    // A crouch walk clip bends the legs and drops the hips itself (its own hips bob); the pose adds only what it leaves.
+    const clipShare = 1 - clamp(clipCrouch, 0, 1);
+    const hipsAmount = Math.pow(clampedAmount, 0.9) * hipsPoseWeight * clipShare;
+    const legAmount = Math.pow(clampedAmount, 0.72) * legPoseWeight * (1 - SQUAT_LEG_RELAX * squatAmount) * clipShare;
+    const spineAmount = Math.pow(clampedAmount, 0.78) * lean * (1 - CROUCH_CLIP_SPINE_SHARE * (1 - clipShare));
+    const footAmount = Math.pow(clampedAmount, 0.9) * footPoseWeight * (1 - squatAmount) * clipShare;
 
     for (const binding of [this.crouchHips, ...this.crouchSpine, ...this.crouchUpperLegs, ...this.crouchLowerLegs, ...this.crouchFeet]) {
       this.preCrouchPose.set(binding.bone, {
@@ -468,7 +473,7 @@ export class AvatarRig {
     }
 
     // Planted feet are pinned by the leg solver, so lifting the hips to clear the unplanted feet would only make the hips jump with the terrain probe.
-    if (!plant && !airborne) this.applyCrouchFootGroundCompensation(clampedAmount, walkBlend, squatAmount);
+    if (!plant && !airborne) this.applyCrouchFootGroundCompensation(clampedAmount * clipShare, walkBlend, squatAmount);
   }
 
   /**
