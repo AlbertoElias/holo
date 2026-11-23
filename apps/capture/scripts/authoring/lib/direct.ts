@@ -14,6 +14,7 @@ import { LivenessFace } from '../../../src/face/LivenessFace.ts';
 import type { JointName, MotionFrame, Vec3 } from '../../lib/motion-quality.ts';
 import type { FaceGaze, FaceWeights } from '../../../src/face/faceTypes.ts';
 import { resetPose, type LoadedAvatar } from './avatar.ts';
+import { bothEyes, clampGaze, EyeMeter, eyeView, type EyeReport, type EyeView } from './eye-view.ts';
 import { armAngles, ArmMeter, PairMeter, armPoints, armSkin, BodySkin, measureArmBody, partDepth, skinned, propNormal, propParts, propSurface, type ArmBody, type ArmReport, type PairReport } from './arm-quality.ts';
 import { FACE_MIXES, GESTURES, cueTime, STATE_FACES, envelope, gestureCycle, holdingsOf, pointObjects, resolveTiming, validateSheet, type BeatSheet, type Direction, type Holding, type ObjectSpec, type PerformerSpec, type Place, type Point, type Resolved, type Side } from './beats.ts';
 import { FINGERS, HAND_SHAPES, blendPose, shapePose, type FingerName, type HandPose } from './hands.ts';
@@ -169,6 +170,8 @@ export interface PerformerTrack {
   readonly motion: MotionFrame[];
   /** Arm quality over the take (`arm-quality.ts`): overlaps with the body and props, joint ranges. */
   arms?: ArmReport;
+  /** Whether each iris stayed in view (`eye-view.ts`). */
+  eyes?: EyeReport;
   /** The performer's life events (`life.ts`); undefined when the take has no life. */
   readonly life?: LifeSchedule;
   /** Attending life (`life.ts`), drawn when the take has life; plays only while facing someone. */
@@ -250,6 +253,8 @@ interface Cast {
   readonly speech: readonly Speech[];
   /** The body's skin and the arms' bind frames (`arm-quality.ts`), so the arms keep out of the body. */
   readonly armBody: ArmBody;
+  /** Each eye's opening and how far it turns with the pupil in view (`eye-view.ts`). */
+  readonly eyeView: EyeView;
   readonly skin: BodySkin;
 }
 
@@ -336,6 +341,7 @@ function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources
     })).sort((x, y) => x.start - y.start);
     const ankles0 = { left: toWorld(a, a.legs.left.foot.rootPosition), right: toWorld(a, a.legs.right.foot.rootPosition) };
     const armBody = measureArmBody(a);
+    const eyes = eyeView(a);
     const morphing: Cast['morphing'] = [];
     const seenNodes = new Set<THREE.Object3D>();
     a.scene.traverse((o) => {
@@ -353,7 +359,7 @@ function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources
       turnDeg: new Map(), stepWorld: new Map(), fixed: { next: 0, yaw: spec.facing }, ankles0,
       feetMid0: ankles0.left.clone().add(ankles0.right).multiplyScalar(0.5),
       seen: new Map(), seenBefore: new Map(), seenAt: { t: -Infinity, before: -Infinity }, shortfall: new Map(), morphing, speech: speech.get(spec.id) ?? [],
-      armBody, skin: new BodySkin(armBody.body)
+      armBody, skin: new BodySkin(armBody.body), eyeView: eyes
     };
   });
   // A hand someone reaches to keeps still while they do (its fidget would move what they touch).
@@ -407,6 +413,7 @@ function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources
   }));
 
   const meters = cast.map((c) => new ArmMeter(c.a, c.armBody));
+  const eyeMeters = cast.map((c) => new EyeMeter(c.a, c.eyeView));
   const pairMeter = new PairMeter(cast.map((c) => c.spec.id), cast.map((c) => c.armBody));
   for (let f = 0; f < frames; f += 1) {
     const t = times[f]!;
@@ -426,6 +433,7 @@ function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources
       // A hand is measured against what it holds by its skin (the held bar): fingers may rest on it, not sink into it.
       // The prop bar's few hand points do not count against it: a finger that lies on a ball has its middle point in the ball's chord.
       meters[ci]!.sample(t, [...stage.props.values()].map((st) => st.prop), (s, prop) => mayTouch(c, s, prop, t), (s) => gripOf(c.spec.id, s, t)?.prop);
+      eyeMeters[ci]!.sample(t);
       see(c, t);
     });
     // Performer against performer, once every performer stands at this frame.
@@ -457,7 +465,7 @@ function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources
     }
     props.forEach((pt) => { pt.prop.position.toArray(pt.position, f * 3); pt.prop.quaternion.toArray(pt.rotation, f * 4); });
   }
-  tracks.forEach((tr, ci) => { tr.arms = meters[ci]!.report(); });
+  tracks.forEach((tr, ci) => { tr.arms = meters[ci]!.report(); tr.eyes = eyeMeters[ci]!.report(); });
   return { sheet, fps, times, tracks, props, objects: stage.report, pairs: pairMeter.report() };
 }
 
@@ -1699,8 +1707,18 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
     const local = point.clone().sub(from).applyQuaternion(bodyQ.clone().invert());
     // Relative to where the twisted upper body already faces.
     const faced = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), twist + chestYaw);
-    const yaw = THREE.MathUtils.clamp(Math.atan2(local.x, local.z) - Math.atan2(faced.x, faced.z), -70 * DEG, 70 * DEG) * share * weight;
-    const pitch = THREE.MathUtils.clamp(Math.atan2(local.y, Math.hypot(local.x, local.z)), -35 * DEG, 35 * DEG) * share * weight;
+    // The head takes its share, and more when the eyes could not turn the rest with the pupil in view.
+    const eyeLim = bothEyes(c.eyeView.limits.left, c.eyeView.limits.right);
+    const part = (total: number, lim: number | undefined): number => {
+      const mine = total * share;
+      if (lim === undefined) return mine;
+      const room = 0.9 * lim;
+      return Math.abs(total - mine) > room ? total - Math.sign(total) * room : mine;
+    };
+    const yawAll = Math.atan2(local.x, local.z) - Math.atan2(faced.x, faced.z);
+    const pitchAll = Math.atan2(local.y, Math.hypot(local.x, local.z));
+    const yaw = THREE.MathUtils.clamp(part(yawAll, eyeLim && (yawAll >= 0 ? eyeLim.left : eyeLim.right)), -70 * DEG, 70 * DEG) * weight;
+    const pitch = THREE.MathUtils.clamp(part(pitchAll, eyeLim && (pitchAll >= 0 ? eyeLim.up : eyeLim.down)), -35 * DEG, 35 * DEG) * weight;
     const up = bodyUp(a);
     const parts: [THREE.Object3D | undefined, number][] = [[neck, 0.4], [head, neck ? 0.6 : 1]];
     for (const [bone, k] of parts) {
@@ -2149,7 +2167,8 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
     gaze = { left: { yaw: gaze.left.yaw + liveSample.gaze.left.yaw * k, pitch: gaze.left.pitch + liveSample.gaze.left.pitch * k }, right: { yaw: gaze.right.yaw + liveSample.gaze.right.yaw * k, pitch: gaze.right.pitch + liveSample.gaze.right.pitch * k } };
   }
   // An expression's eyeLook channels (looking down) turn the eyes on top of the gaze, since FaceRig.apply leaves them out of the morphs;
-  // a look target the eyes hold wins over them, and the sum stays within the eyes' range (eye bones are not clamped).
+  // a look target the eyes hold wins over them, and the sum stays within the eyes' range (eye bones are not clamped):
+  // the house range here, and below the range in which this avatar's pupil shows between its lids (`eye-view.ts`).
   const looked = gazeFromArkit(weights);
   const free = eyeTarget ? 1 - clamp01(eyeTarget.weight) : 1;
   const turn = (g: { yaw: number; pitch: number }, l: { yaw: number; pitch: number }) => ({
@@ -2164,6 +2183,17 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
     const pitch = (gaze.left.pitch + gaze.right.pitch) / 2;
     const verge = Math.max(0, Math.min(EYE_VERGE, (gaze.right.yaw - gaze.left.yaw) / 2));
     gaze = { left: { yaw: yaw - verge, pitch }, right: { yaw: yaw + verge, pitch } };
+    // Each pupil stays in view: the shared turn pulls back until both eyes are within their lids (the head took the rest).
+    const lims = c.eyeView.limits;
+    if (lims.left || lims.right) {
+      const k = Math.min(...(['left', 'right'] as const).map((side) => {
+        const g = gaze[side], lim = lims[side];
+        if (!lim) return 1;
+        const cl = clampGaze(g, lim);
+        return Math.hypot(g.yaw, g.pitch) > 1e-9 ? Math.hypot(cl.yaw, cl.pitch) / Math.hypot(g.yaw, g.pitch) : 1;
+      }));
+      if (k < 1) gaze = { left: { yaw: gaze.left.yaw * k, pitch: gaze.left.pitch * k }, right: { yaw: gaze.right.yaw * k, pitch: gaze.right.pitch * k } };
+    }
   }
   // Both lids blink and squint together: one lid alone reads as a wink or a fault.
   for (const [l, r] of [['eyeBlinkLeft', 'eyeBlinkRight'], ['eyeSquintLeft', 'eyeSquintRight'], ['eyeWideLeft', 'eyeWideRight']] as [FaceChannel, FaceChannel][]) {

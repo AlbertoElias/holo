@@ -107,9 +107,9 @@ function cardCamera(head: THREE.Vector3, hips: THREE.Vector3): THREE.Vector3 {
 interface Posed { readonly positions: Float32Array[] }
 
 /** Triangles of a mesh from posed positions, 9 floats each, with their boxes. */
-interface Soup { readonly mesh: number; readonly tri: Float32Array; readonly box: Float32Array }
+export interface Soup { readonly mesh: number; readonly tri: Float32Array; readonly box: Float32Array }
 
-function triangles(mesh: THREE.Mesh, positions: Float32Array, m: number): Soup {
+export function triangles(mesh: THREE.Mesh, positions: Float32Array, m: number): Soup {
   const index = mesh.geometry.index;
   const n = index ? index.count / 3 : positions.length / 9;
   const tri = new Float32Array(n * 9);
@@ -423,7 +423,7 @@ function eyeRun(meshes: THREE.Mesh[], posed: Posed, isEye: Uint8Array[], centre:
 }
 
 /** As `hit`, with the barycentrics of the hit. */
-function hitUv(tri: Float32Array, t: number, o: ArrayLike<number>, d: ArrayLike<number>): [number, number, number] | null {
+export function hitUv(tri: Float32Array, t: number, o: ArrayLike<number>, d: ArrayLike<number>): [number, number, number] | null {
   const b = t * 9;
   const e1x = tri[b + 3]! - tri[b]!, e1y = tri[b + 4]! - tri[b + 1]!, e1z = tri[b + 5]! - tri[b + 2]!;
   const e2x = tri[b + 6]! - tri[b]!, e2y = tri[b + 7]! - tri[b + 1]!, e2z = tri[b + 8]! - tri[b + 2]!;
