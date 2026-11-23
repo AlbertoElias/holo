@@ -14,7 +14,7 @@ import { LivenessFace } from '../../../src/face/LivenessFace.ts';
 import type { JointName, MotionFrame, Vec3 } from '../../lib/motion-quality.ts';
 import type { FaceGaze, FaceWeights } from '../../../src/face/faceTypes.ts';
 import { resetPose, type LoadedAvatar } from './avatar.ts';
-import { armAngles, ArmMeter, armPoints, armSkin, BodySkin, measureArmBody, partDepth, skinned, propNormal, propParts, propSurface, type ArmBody, type ArmReport } from './arm-quality.ts';
+import { armAngles, ArmMeter, PairMeter, armPoints, armSkin, BodySkin, measureArmBody, partDepth, skinned, propNormal, propParts, propSurface, type ArmBody, type ArmReport, type PairReport } from './arm-quality.ts';
 import { FACE_MIXES, GESTURES, cueTime, STATE_FACES, envelope, gestureCycle, holdingsOf, pointObjects, resolveTiming, validateSheet, type BeatSheet, type Direction, type Holding, type ObjectSpec, type PerformerSpec, type Place, type Point, type Resolved, type Side } from './beats.ts';
 import { FINGERS, HAND_SHAPES, blendPose, shapePose, type FingerName, type HandPose } from './hands.ts';
 import { elbowPole } from '../../../src/ik/armPoseModel.ts';
@@ -212,6 +212,8 @@ export interface SolvedTake {
   readonly tracks: PerformerTrack[];
   readonly props: PropTrack[];
   readonly objects: ObjectReport;
+  /** Each pair of performers: how far one goes into the other. */
+  readonly pairs: readonly PairReport[];
 }
 
 interface Cast {
@@ -390,6 +392,7 @@ function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources
   }));
 
   const meters = cast.map((c) => new ArmMeter(c.a, c.armBody));
+  const pairMeter = new PairMeter(cast.map((c) => c.spec.id), cast.map((c) => c.armBody));
   for (let f = 0; f < frames; f += 1) {
     const t = times[f]!;
     solving.t = t;
@@ -410,6 +413,8 @@ function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources
       meters[ci]!.sample(t, [...stage.props.values()].map((st) => st.prop), (s, prop) => mayTouch(c, s, prop, t), (s) => gripOf(c.spec.id, s, t)?.prop);
       see(c, t);
     });
+    // Performer against performer, once every performer stands at this frame.
+    pairMeter.sample(t, cast.map((c) => (['left', 'right'] as const).map((sd) => gripOf(c.spec.id, sd, t)?.prop).filter((p): p is Prop => p !== undefined)));
     // Measured as the file plays: every performer at this frame. (A performer
     // solved earlier in the cast aims at the others' previous frame.)
     for (const { c, r } of reachChecks.get(f) ?? []) {
@@ -438,7 +443,7 @@ function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources
     props.forEach((pt) => { pt.prop.position.toArray(pt.position, f * 3); pt.prop.quaternion.toArray(pt.rotation, f * 4); });
   }
   tracks.forEach((tr, ci) => { tr.arms = meters[ci]!.report(); });
-  return { sheet, fps, times, tracks, props, objects: stage.report };
+  return { sheet, fps, times, tracks, props, objects: stage.report, pairs: pairMeter.report() };
 }
 
 const round = (v: number, k: number): number => Math.round(v * k) / k;

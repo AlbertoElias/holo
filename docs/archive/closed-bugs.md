@@ -1773,3 +1773,19 @@ bug above.)
   grip still looks sunk into the ball, the eyes stray, and the take goes still, then fast, then still. Those need a new
   bug or a sheet change, not this fix.
 - **Closed:** 2026-11-23.
+
+### B-093 — Authored takes: two performers go into each other, and no bar sees it
+
+- **Area:** `apps/capture/scripts/authoring` (`make.ts`, `lib/arm-quality.ts`, `lib/direct.ts`)
+- **Severity:** P2 (a draft that passes every bar shows two bodies in each other)
+- **Observed:** 2026-11-23, the goodbye draft v25 passed every bar in `make.ts`, while her head went into his and her hand
+  went through his torso.
+- **Cause:** the arm bars measure each performer against their own body and the props only. Nothing measured one
+  performer against another.
+- **Fix:** a new bar, `bodies.<a>-<b>`: on every frame, each skin sample of one performer (torso, head, legs, arms, hands)
+  and the surface of what they hold, against the other performer's skin. The limit is 3 cm. `make.ts` writes the depth of
+  each frame to `bodies.<a>-<b>.json`.
+- **Proof:** the v25 sheet goes 6.3 cm in (her right fingers in his torso at 3.37 s; her head 4.6 cm into his at
+  1.67 s), 84 of 211 frames over 3 cm. The goodbye sheet, where her hand rests on his chest, goes 2.2 cm in at
+  1.97 s and passes. The head centres confirm it: 25 cm apart where the bar reads 4.2 cm, 37–39 cm apart where it reads 0.
+- **Closed:** 2026-11-23.

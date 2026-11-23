@@ -171,5 +171,5 @@ export function recastTake(take: Take, a: LoadedAvatar, options: RecastOptions =
     beats: []
   };
   const track: PerformerTrack = { spec: sheet.performers[0]!, avatar: a, rotations, translations, weights, root, reaches: [], motion };
-  return { solved: { sheet, fps, times, tracks: [track], props: [], objects: { grips: [], puts: [], aims: [] } }, correctionDeg, missing, scale: Number(scale.toFixed(4)) };
+  return { solved: { sheet, fps, times, tracks: [track], props: [], objects: { grips: [], puts: [], aims: [] }, pairs: [] }, correctionDeg, missing, scale: Number(scale.toFixed(4)) };
 }

@@ -560,3 +560,71 @@ export class ArmMeter {
     return { ...this.worst, held: [...this.held], over: { ...this.over }, frames: this.frames };
   }
 }
+
+/** Performer against performer: the deepest skin of one under the other's skin (evidence: B-093). */
+export const PAIR_LIMITS = {
+  /**
+   * Any skin (torso, head, legs, arms, hands) or held object of one performer into another's skin, metres.
+   * A hand that rests on the other's chest presses in up to about 2 cm (goodbye: 2.2 cm for one frame);
+   * the goodbye draft v25, with one head in the other and a hand through his torso, goes 6.3 cm in.
+   */
+  bodyDepth: 0.03
+} as const;
+
+export interface PairReport {
+  readonly a: string;
+  readonly b: string;
+  readonly worst: { value: number; t: number; where: string };
+  /** Frames over the limit. */
+  readonly over: number;
+  readonly frames: number;
+  /** The deepest overlap on each frame, metres (0 or less is apart). */
+  readonly perFrame: readonly { t: number; depth: number; where: string }[];
+}
+
+/**
+ * Two performers who stand or move into each other: each one's skin samples
+ * (and the surface of what each one holds) against the other's skin, on
+ * every frame. Touching is allowed; going in is not.
+ */
+export class PairMeter {
+  private readonly skins: BodySkin[];
+  private readonly pairs: { i: number; j: number; worst: { value: number; t: number; where: string }; over: number; perFrame: { t: number; depth: number; where: string }[] }[] = [];
+  private frames = 0;
+  constructor(private readonly ids: readonly string[], bodies: readonly ArmBody[]) {
+    this.skins = bodies.map((b) => new BodySkin([...b.body, ...b.arm.left, ...b.arm.right]));
+    for (let i = 0; i < ids.length; i += 1) for (let j = i + 1; j < ids.length; j += 1) this.pairs.push({ i, j, worst: { value: -Infinity, t: 0, where: '' }, over: 0, perFrame: [] });
+  }
+
+  /** Measures every performer as posed now; `held[k]` is what performer k holds. */
+  sample(t: number, held: readonly (readonly Prop[])[]): void {
+    if (this.pairs.length === 0) return;
+    this.frames += 1;
+    this.skins.forEach((sk) => sk.pose());
+    const boxes = this.skins.map((sk) => new THREE.Box3().setFromPoints(sk.p).expandByScalar(0.03));
+    for (const pair of this.pairs) {
+      let best = { depth: -Infinity, where: '' };
+      const into = (from: number, to: number): void => {
+        const skin = this.skins[to]!; const box = boxes[to]!;
+        const test = (q: THREE.Vector3, what: string): void => {
+          if (!box.containsPoint(q)) return;
+          const d = skin.depth(q);
+          if (d.depth > best.depth) best = { depth: d.depth, where: `${what} of ${this.ids[from]} in the ${d.part} of ${this.ids[to]}` };
+        };
+        const own = this.skins[from]!;
+        own.p.forEach((q, k) => test(q, own.samples[k]!.part));
+        for (const prop of held[from] ?? []) for (const q of propSurface(prop)) test(q, prop.id);
+      };
+      into(pair.i, pair.j);
+      into(pair.j, pair.i);
+      const depth = Math.max(best.depth, 0);
+      pair.perFrame.push({ t, depth, where: best.depth > 0 ? best.where : '' });
+      if (best.depth > pair.worst.value) pair.worst = { value: best.depth, t, where: best.where };
+      if (best.depth > PAIR_LIMITS.bodyDepth) pair.over += 1;
+    }
+  }
+
+  report(): PairReport[] {
+    return this.pairs.map((p) => ({ a: this.ids[p.i]!, b: this.ids[p.j]!, worst: { ...p.worst, value: Math.max(p.worst.value, 0) }, over: p.over, frames: this.frames, perFrame: [...p.perFrame] }));
+  }
+}
