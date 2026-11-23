@@ -7,6 +7,24 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
+### B-104 — Authored takes: held grips drift since B-092 (stone sD snap, goodbye grip turn, held and support)
+
+- **Area:** apps/capture (`scripts/authoring/lib/direct.ts`: the arm solve and the clearing plan), the sheets
+- **Severity:** P2 (stone sD and goodbye v35 still fail after B-103; pinned in `sheets/regression/pins.json`)
+- **Observed:** 2026-11-23, quick builds at each merge from 1f881a29c2d2 (both pieces pass every arm bar) to main.
+- **Evidence:** stone sD: arms.held 107.6 mm appears at B-092 (7fcd584ec27f, the bar is new there: the 9 cm fist grip
+  on a 24 cm stone is in the sheet); jump.props 5.76 m/s at 4.77 s appears at B-095 (322f09c806e7) and stays after
+  B-103 (5.73 m/s; jump.me 4.69 m/s, turn.me 1008°/s at 5.07 s). Without the clearing the stone jump falls to
+  3.04 m/s, but the forearm goes 5.3 cm into the torso. Goodbye v35: grip.h-bag 1.0 mm 6.4° and arms.held at B-092,
+  jump.props 2.18 m/s at B-095, 3.66 m/s at B-096 (68558995a9e2); after B-103 0.4 mm 8.1°, turn.him 515°/s,
+  jump.props 2.55 m/s at 1.70 s, held 9.3 mm, support 0 %. Baker: jump.b 3.71 m/s and jump.props 4.80 m/s at 4.53 s,
+  held 78 mm, support 3 %.
+- **Expected:** stone sD and goodbye v35 pass their arm bars again with no bar change.
+- **Next fix:** trace the stone at 4.6 to 5.1 s (`HB_TRACE`-style per-frame logs, as in B-103) and find which B-095
+  change moves the left hand off the stone after its grip; for the goodbye, find why the bag fist stays 8° off and
+  under the bag (support 0 %). Run `pnpm --filter @holoim/capture run test:authoring:solver` and lower the pins with
+  `--write-pins` as each piece improves.
+
 ### B-091 — verify:pr: the pipeline Playwright run does not exit after test timeouts
 
 - **Area:** `test:smoke:pipeline` (`@holoim/web` `test:e2e:pipeline`, Playwright teardown), `verify:pr` lock

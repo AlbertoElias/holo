@@ -1966,3 +1966,33 @@ bug above.)
   expression sheet; they disagreed on the eye squint (0.75, then 0.60), and the value is between them.
 - **Not covered:** no person was in the loop; the sets are hand-made scores.
 - **Closed:** 2026-11-23.
+
+### B-103 — Authored takes: a held grip breaks in other pieces after B-099 (stone sD, goodbye v35, baker)
+
+- **Area:** apps/capture (`scripts/authoring/lib/direct.ts`: `solveFrame`'s directions loop, `turnHand`'s take)
+- **Severity:** P1 (pieces that passed fail their grip, held and jump bars; a fit search after the miss ran 1 h 16 min)
+- **Observed:** 2026-11-23, by the story session (round 4): stone sD fails held 109 mm, support 5 %, jump, turn and
+  jump.props; goodbye v35 fails grip.h-bag 14.3 mm 43.3°, held, support and jump.props 15.39 m/s; the baker take
+  misses by 56.7 mm 60°.
+- **Cause, two faults:**
+  1. B-099 (7fb4ffa9ee5c) lets a later reach lead with its palm before it starts. The leading branch ran after the
+     line that sets the point that meets the goal, so the later reach's palm center (9 cm from the fist) replaced
+     the held take's fist point while the goal stayed the take's. The hand jumped about 10 cm in one frame, and the
+     clearing plan made the jump wider. This is the stone 15.3 m/s snap and the baker reach.open miss.
+  2. The take's grip axis kept the sign of its first frame. A hand that comes from a palm-down reach (the baker's
+     oven door) or a held turn takes the far way round, and the fist then turns about 180° to the grip (the baker
+     60°, the goodbye 43.3°).
+- **Fix:** a leading later reach keeps the earlier direction's point. Until the take arrives, the grip axis takes
+  the nearer sign; from its arrival it keeps that sign, as before. No bar changes. A blend of the two points while
+  the later reach takes over also cut the stone snap, but it raised the crouch turn.me to 264°/s, so it is not in.
+- **Proof (quick builds, `MAKE_NO_FIT=1`):** baker grip.take 56.7 mm 60° → 4.0 mm 2.8° (pass), reach.open 37 →
+  12 mm (pass). Goodbye v35 grip.h-bag 14.2 mm 43.3° → 0.4 mm 8.1°, turn.him 2581 → 515°/s, jump.him 2.87 → 1.93 m/s
+  (pass), jump.props 15.28 → 2.55 m/s. Stone sD jump.me 11.63 → 4.69 m/s, turn.me 1845 → 1008°/s, jump.props 15.29
+  → 5.73 m/s. Crouch v43 keeps its numbers (turn.me 231°/s, jump.me 1.25 → 1.09 m/s, jump.props 1.37 → 1.17 m/s, grip
+  0.3 mm 2.7°, held 2.0 mm, support 57 %). Pinch v14 keeps turn.me 129°/s and every motion bar. The rest of the
+  stone, goodbye and baker faults is older than B-098: B-104.
+- **Guard:** `scripts/authoring/solver-regression.ts` quick-builds the pieces in `sheets/regression/` (stone sD,
+  goodbye v35, the baker, crouch v43, pinch v14, slip sO) and fails when a grip, reach, motion or arm row gets worse
+  than its pin. `verify:pr` runs it when a change touches the arm solve. `MAKE_NO_FIT=1` skips the fit search.
+- **Slip sO (the 10.5 m/s snap at 4.47 s):** the story branch had no B-099. On main the later reach takes the hand
+  while the earlier one settles: jump.me 1.73 m/s, no snap at 4.47 s.

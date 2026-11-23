@@ -1,0 +1,127 @@
+{
+  "title": "Pinch",
+  "intent": "Someone holds up their hand and pinches thumb and finger together, looking at it.",
+  "story": {
+    "request": "Someone holds up their hand and pinches thumb and finger together, looking at it.",
+    "setup": {
+      "says": "Someone stands relaxed in front of us, hands down.",
+      "see": [
+        "a person standing, arms at the sides",
+        "they look ahead"
+      ]
+    },
+    "event": {
+      "says": "They raise the right hand beside the face and close thumb and index finger into a small pinch.",
+      "see": [
+        "the right hand rises beside the face, palm toward us",
+        "the thumb and the index finger close until they almost touch"
+      ]
+    },
+    "reaction": {
+      "says": "They look closely at the pinch, then look up again.",
+      "see": [
+        "their eyes go to the pinched fingers and stay there",
+        "the head turns back to the front at the end"
+      ]
+    }
+  },
+  "duration": 6.0,
+  "marks": {
+    "viewer": [
+      0,
+      1.55,
+      2.5
+    ],
+    "floor": {
+      "of": "me",
+      "forward": 0.45,
+      "height": 0.02
+    }
+  },
+  "performers": [
+    {
+      "id": "me",
+      "avatar": "house:clay",
+      "at": [
+        0,
+        0
+      ],
+      "facing": 0,
+      "seed": 7
+    }
+  ],
+  "beats": [
+    {
+      "id": "lift",
+      "performer": "me",
+      "at": 0.5,
+      "hold": 3.2,
+      "intent": "They raise a hand beside the face, palm toward me.",
+      "directions": [
+        {
+          "kind": "reach",
+          "side": "right",
+          "at": {
+            "of": "me",
+            "forward": 0.3,
+            "right": 0.22,
+            "height": "chin"
+          },
+          "stopShort": 0,
+          "palmAt": "viewer",
+          "hold": 2.5,
+          "settle": 1.0
+        },
+        {
+          "kind": "hand",
+          "side": "right",
+          "shape": "open",
+          "hold": 2.5,
+          "settle": 1.0
+        }
+      ]
+    },
+    {
+      "id": "pinch",
+      "performer": "me",
+      "at": 1.9,
+      "hold": 1.6,
+      "intent": "They pinch thumb and index finger together and look at it: just a tiny bit.",
+      "directions": [
+        {
+          "kind": "hand",
+          "side": "right",
+          "shape": "pinch"
+        },
+        {
+          "kind": "look",
+          "at": {
+            "of": "me",
+            "forward": 0.3,
+            "right": 0.22,
+            "height": "chin"
+          },
+          "head": 0.9
+        }
+      ]
+    },
+    {
+      "id": "ahead",
+      "performer": "me",
+      "at": 4.0,
+      "hold": 1.6,
+      "intent": "They look up again.",
+      "directions": [
+        {
+          "kind": "look",
+          "at": {
+            "of": "me",
+            "forward": 3,
+            "height": "eye"
+          },
+          "head": 0.8
+        }
+      ]
+    }
+  ]
+}
