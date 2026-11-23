@@ -1879,3 +1879,31 @@ bug above.)
   What is left in the crouch is at 1.77 s, where the right hand lifts past the right shin and the clearing passes stop
   at a different depth in each frame; that is a sheet and clearing fault, not a solver loop.
 - **Closed:** 2026-11-23 (the crouch `turn.me` stays open as a draft fault).
+
+### B-098 — Authored takes: the crouch hand stops to flip at the lift, and the clearing turns the arm in one frame
+
+- **Area:** `apps/capture/scripts/authoring` (`lib/direct.ts`, `lib/pose.ts`)
+- **Severity:** P2 (the opus review of the B-097 crouch saw the hand stop and turn over at the lift)
+- **Observed:** 2026-11-23, after B-097. The crouch right hand stopped on the crate and turned its palm over before
+  the lift. The right shoulder turned at 382°/s at 1.77 s, where the hand lifts past the right shin. The pinch right
+  hand turned at 276°/s at 1.00 s (2 frames over the 250°/s bar).
+- **Cause:** four faults. (1) The clearing out of the shins and thighs was found again in each frame, after the
+  plan, and it stopped at a different depth in each frame. (2) When a later reach took over the hand from a take,
+  the solver went from the take's goal to the reach's goal by the reach's own attack, and waited at the take. (3)
+  `turnHand` chose the sign of the take's grip axis in each frame from the hand's direction, so it changed sign
+  inside the takeover and turned the hand 180°. (4) The palm roll in `solveArm` used its full angle also when the
+  wanted palm was nearly along the forearm, where that angle is not sure.
+- **Fix:** `solveTake` runs up to three clearing rounds: each round records the turns that the clearing adds after
+  the plan, smooths them over time and adds them to the plan (`addClearing`). A reach that takes the hand over from
+  a take moves the goal by the take's envelope (`1 - w / held`) and keeps the weight at least at the take's weight.
+  The grip-axis sign of a take is fixed at its first frame, per side. The palm roll is multiplied by a smoothstep of
+  the sideways part of the wanted palm (`PALM_ROLL_SURE`, 0.1 to 0.4). No bar changed.
+- **Proof:** crouch v27 (sheet v47): the hand flip is gone (right hand 227°/s at 3.67 s, was 890 in v26), the
+  shoulder at 1.77 s is 119°/s (was 382), and the left arm stays at 124°/s. grip 0.3 mm 2.7°, reach.show 12 mm,
+  jump.me 0.98 m/s, jump.props 1.04 m/s, arms.body 1.4 cm, held 2.0 mm, support 57 %, size 1.58 MB, Quick Look pass;
+  the rest elbows and wrists stay within 1.7 cm. Pinch v8: right hand 211°/s (was 276), all motion bars pass.
+- **Closed:** 2026-11-23. Two crouch bars stay open as draft faults at the takeover from the pick to the show:
+  `turn.me` 333°/s (right forearm, 3.60 s, 1 frame) and `smooth.me` 0 % (right wrist, 3.93 s). The take's grip turn
+  still pulls against the show's palm turn while the show takes over, and the show's goal arrives with no speed when
+  the take ends while the target still moves. Next fix: fade the take's hand turn by the takeover progress, and keep
+  the take's goal moving until the show's attack ends.
