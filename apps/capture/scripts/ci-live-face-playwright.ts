@@ -50,8 +50,8 @@ const stage = (name: string) => {
 // The scores applied one to one fail most of these: a smile's cheeks reach 0.05 and a sad face's frown 0.03.
 const EXPECT_MIN: Array<[string, string, number]> = [
   ['smile', 'smile', 0.6], ['smile', 'cheekSquint', 0.4], ['smile', 'eyeSquint', 0.3],
-  ['laugh', 'smile', 0.6], ['laugh', 'cheekSquint', 0.4], ['laugh', 'upperUp', 0.5], ['laugh', 'jawOpen', 0.4],
-  ['sad', 'frown', 0.6], ['sad', 'browInnerUp', 0.5],
+  ['laugh', 'smile', 0.6], ['laugh', 'cheekSquint', 0.4], ['laugh', 'upperUp', 0.5], ['laugh', 'jawOpen', 0.3],
+  ['sad', 'frown', 0.5], ['sad', 'browInnerUp', 0.5],
   ['surprise', 'browInnerUp', 0.5], ['surprise', 'browOuterUp', 0.4], ['surprise', 'eyeWide', 0.35], ['surprise', 'jawOpen', 0.3],
   ['anger', 'browDown', 0.7], ['anger', 'noseSneer', 0.3], ['anger', 'eyeSquint', 0.3],
   ['speech', 'jawOpen', 0.3], ['speech', 'round', 0.6], ['speech', 'wide', 0.3]
@@ -59,6 +59,8 @@ const EXPECT_MIN: Array<[string, string, number]> = [
 const EXPECT_MAX: Array<[string, string, number]> = [
   ['neutral', 'smile', 0.1], ['neutral', 'frown', 0.1], ['neutral', 'eyeSquint', 0.15], ['neutral', 'jawOpen', 0.05],
   ['smile', 'frown', 0.1], ['laugh', 'frown', 0.1],
+  // A laugh and a sad face stay moderate: the cheeks, eyes and brows carry them, not a wide jaw or a hard frown (B-099).
+  ['laugh', 'jawOpen', 0.5], ['sad', 'frown', 0.7],
   ['sad', 'smile', 0.1], ['sad', 'jawOpen', 0.05],
   ['surprise', 'frown', 0.1], ['surprise', 'smile', 0.1],
   ['anger', 'frown', 0.15],

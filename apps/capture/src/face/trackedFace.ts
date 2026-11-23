@@ -23,7 +23,11 @@ const ROUND_FUNNEL_OFF = 0.5;
 const ROUND_JAW_OFF = 0.7; // pursed lips (oo) stay a small ring: the jaw's share falls as the pucker rises
 const STRETCH_GAIN = 4;
 // A sad face: the lower lip pushed up, a trace of frown and raised inner brows, with no smile and a closed jaw.
-const SAD = { shrug: 4, frown: 6, brow: 1.2, floor: 0.2, mouthFull: 0.4, smileOff: 5, jawOff: 2.5, riseSec: 0.35, fallSec: 0.5 };
+// The mouth corners take `corners` of the sad level: the brows carry the feeling, the mouth a small frown (B-099).
+const SAD = { shrug: 4, frown: 6, brow: 1.2, floor: 0.2, mouthFull: 0.4, smileOff: 5, jawOff: 2.5, riseSec: 0.35, fallSec: 0.5, corners: 0.64, brows: 0.9, lowerLip: 0.4 };
+// A laugh (a wide smile with an open jaw): the cheeks and eyes carry it (they rise and narrow more), so the jaw
+// opens less far and the lips stay nearer the teeth. Below `smileFrom` or `jawFrom` nothing changes: a smile and speech are as before (B-099).
+const LAUGH = { smileFrom: 0.5, smileSpan: 0.3, jawFrom: 0.15, jawSpan: 0.2, jawEase: 0.33, upperEase: 0.25, lowerEase: 0.6, cheek: 0.15, squint: 0.15 };
 // A scowl (brows hard down) wrinkles the nose and narrows the eyes.
 const SCOWL = { from: 0.35, span: 0.4, sneer: 0.6, squint: 0.3, press: 0.4 };
 
@@ -56,7 +60,8 @@ export class TrackedFace {
     const smile = (at('mouthSmileLeft') + at('mouthSmileRight')) / 2;
     const jaw = at('jawOpen');
     const pucker = clamp(at('mouthPucker') * ROUND_GAIN);
-    out.jawOpen = clamp((jaw - JAW_REST) * JAW_GAIN) * (1 - ROUND_JAW_OFF * pucker);
+    const laugh = clamp((smile - LAUGH.smileFrom) / LAUGH.smileSpan) * clamp((jaw - LAUGH.jawFrom) / LAUGH.jawSpan);
+    out.jawOpen = clamp((jaw - JAW_REST) * JAW_GAIN) * (1 - ROUND_JAW_OFF * pucker) * (1 - LAUGH.jawEase * laugh);
 
     const frown = (at('mouthFrownLeft') + at('mouthFrownRight')) / 2;
     // Raised inner brows count only with a sign at the mouth: alone they are surprise, not a sad face.
@@ -68,22 +73,25 @@ export class TrackedFace {
     const tau = sadNow > this.sad ? SAD.riseSec : SAD.fallSec;
     this.sad += (sadNow - this.sad) * (dtSec > 0 ? 1 - Math.exp(-dtSec / tau) : 1);
     const sad = this.sad;
-    out.browInnerUp = clamp(Math.max(at('browInnerUp') * BROW_UP_GAIN, 0.8 * sad));
+    out.browInnerUp = clamp(Math.max(at('browInnerUp') * BROW_UP_GAIN, SAD.brows * sad));
+    out.mouthShrugLower = clamp(Math.max(at('mouthShrugLower'), SAD.lowerLip * sad));
 
     for (const side of ['Left', 'Right'] as const) {
       const sideSmile = at(`mouthSmile${side}`);
       const scowl = clamp((at(`browDown${side}`) - SCOWL.from) / SCOWL.span);
-      out[`cheekSquint${side}`] = clamp(Math.max(at(`cheekSquint${side}`), SMILE_TO_CHEEK * sideSmile));
+      out[`cheekSquint${side}`] = clamp(Math.max(at(`cheekSquint${side}`), SMILE_TO_CHEEK * sideSmile) + LAUGH.cheek * laugh);
       // The eyes narrow by the same amount on both sides: an uneven mouth score must not read as a wink.
       const squint = Math.max(0, at(`eyeSquint${side}`) - SQUINT_REST) / (1 - SQUINT_REST);
-      out[`eyeSquint${side}`] = clamp(Math.max(Math.min(squint + SMILE_TO_SQUINT * smile, Math.max(squint, SMILE_SQUINT_MAX)), squint + SCOWL.squint * scowl));
+      out[`eyeSquint${side}`] = clamp(Math.max(Math.min(squint + SMILE_TO_SQUINT * smile, Math.max(squint, SMILE_SQUINT_MAX)), squint + SCOWL.squint * scowl) + LAUGH.squint * laugh);
       out[`mouthDimple${side}`] = clamp(Math.max(at(`mouthDimple${side}`), SMILE_TO_DIMPLE * sideSmile));
       out[`eyeWide${side}`] = clamp(at(`eyeWide${side}`) * EYE_WIDE_GAIN);
       out[`browOuterUp${side}`] = clamp(at(`browOuterUp${side}`) * BROW_UP_GAIN + SMILE_TO_BROW * smile);
       out[`browDown${side}`] = clamp(at(`browDown${side}`) * BROW_DOWN_GAIN);
       out[`mouthPress${side}`] = clamp(Math.max(at(`mouthPress${side}`), SCOWL.press * scowl));
       out[`noseSneer${side}`] = clamp(Math.max(at(`noseSneer${side}`), SCOWL.sneer * scowl));
-      out[`mouthFrown${side}`] = clamp(Math.max(at(`mouthFrown${side}`), sad));
+      out[`mouthFrown${side}`] = clamp(Math.max(at(`mouthFrown${side}`), SAD.corners * sad));
+      out[`mouthUpperUp${side}`] = at(`mouthUpperUp${side}`) * (1 - LAUGH.upperEase * laugh);
+      out[`mouthLowerDown${side}`] = at(`mouthLowerDown${side}`) * (1 - LAUGH.lowerEase * laugh);
       out[`mouthStretch${side}`] = clamp(at(`mouthStretch${side}`) * STRETCH_GAIN);
     }
     out.mouthPucker = pucker;
