@@ -28,6 +28,7 @@ import { fileURLToPath } from 'node:url';
 import { NodeIO } from '@gltf-transform/core';
 import { dressAvatar, lookKey, parseLook, type Build } from '@holoim/avatar-look';
 import { wardrobeFile } from './lib/house-look.ts';
+import { quietMorphNormals } from './lib/quiet-normals.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '../../../..');
@@ -109,6 +110,11 @@ async function make(build: string, out: string): Promise<void> {
   const tmp = join(CACHE, `${basename(out, '.glb')}.blender.glb`);
   const log = execFileSync(blender, ['-b', '--python', join(HERE, 'house-base/build.py'), '--', params, faceunits, tmp, report, build], { encoding: 'utf8', maxBuffer: 64 << 20 });
   if (!log.includes('HOUSE_BASE_DONE')) throw new Error(`build.py did not finish:\n${log.slice(-4000)}`);
+  // Blender's morph normals carry float noise around each shape; the floor drops it (B-096).
+  const io = new NodeIO();
+  const raw = await io.read(tmp);
+  quietMorphNormals(raw);
+  await io.write(tmp, raw);
 
   // Credits into asset.copyright; the scene's holoimAvatar extras already carry them (build.py).
   const glb = new Uint8Array(await readFile(tmp));

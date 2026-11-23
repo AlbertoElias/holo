@@ -1828,3 +1828,26 @@ bug above.)
   3.73 s. The committed `sheets/tallest-bar.json` fails `jump.props` (pointer, 3.43 m/s at 6.63 s). The size bar fails at
   2.70 MB (bar 1.80 MB) for the house base: 84% of its sparse morph normal rows are under 0.002.
 - **Closed:** 2026-11-23.
+
+### B-096 — Authored takes: the house avatar is over the size bar, and the crouch pick turns the hand 15° from its grip
+
+- **Area:** `apps/capture/scripts/authoring` (`house-base.ts`, `lib/quiet-normals.ts`), `apps/capture/assets/house-base`,
+  `apps/capture/public/gltf/models/house-base.glb`
+- **Severity:** P2 (every take with the house avatar fails `size.me`; the crouch draft fails `grip.pick`)
+- **Observed:** 2026-11-23, the crouch draft v46 failed `size.me` (2.70 MB against 1.80 MB) and `grip.pick` (15.0°
+  against 5°).
+- **Cause:** size: the morph normals from B-093. In the 2,695,104-byte house base, the sparse morph NORMAL values take
+  1,267,704 bytes and their indices 211,652 bytes (the mesh attributes take 743,600, the indices 187,836, the morph
+  positions 126,588 and the JSON 149,048). Of the 92,558 normal rows, 84% have no component above 0.002: this is
+  Blender noise, at most 0.1°, under one 8-bit shading step. The grip: the ball's grip axis `[0, 2, -1]` pointed where
+  the wrist cannot turn, so the solver stopped 15° short and the hand came onto the ball from above.
+- **Fix:** `quietMorphNormals` (`lib/quiet-normals.ts`, run by `house-base.ts`) sets each morph normal row under 0.002
+  to zero, so the sparse accessors keep only the rows that change the shading. The house base goes from 2.70 MB to
+  1.58 MB and each wardrobe from 3.15 MB to 1.99 MB. The crouch sheet uses the grip axis `[-1.5, 2, 0]` and the crate
+  at 0.27 m right (was 0.29 m).
+- **Proof:** over the 421 frames of the expressions take (avatar `house:clay`), the largest change of a shaded normal
+  between the old and the new base is 0.00238 (0.137°); N·L changes by at most 0.61 of one 8-bit step. The crouch v47
+  passes grip (0.4 mm, 2.6°), smooth (47%), jump (1.00 m/s), jump.props (1.91 m/s), body (1.5 cm), prop (0.0 cm),
+  held (2.1 mm), support (56%) and size (1.58 MB); the rest elbows stay within 2 cm of v41. The pinch passes jump
+  (0.63 m/s), body (1.5 cm), twist, wrist, elbow and size (1.58 MB); it holds no object.
+- **Closed:** 2026-11-23.
