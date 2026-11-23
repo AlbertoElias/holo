@@ -12,8 +12,38 @@ import type { MotionFrame } from '../../lib/motion-quality.ts';
 
 export const SMOOTH_LIMITS = {
   /** The smallest share of the speeds around it that a joint's speed may fall to while it goes on the same way. */
-  stallShare: 0.25
+  stallShare: 0.25,
+  /**
+   * The most a hand's or an elbow's velocity may change between two frames, m/s (at 30 fps, 60 m/s²): a reach
+   * target that changes inside one frame snaps the arm (crouch v42: 6.0 m/s at 2.17 s). Fast human hand moves
+   * stay near 1 m/s (crouch before B-092: 1.5; pinch v9: 0.5).
+   */
+  jump: 2
 } as const;
+
+export interface Jump { t: number; joint: string; change: number }
+/** `over`: frames where a hand or an elbow jumps over the limit. */
+export interface JumpReport { worst: Jump | undefined; over: number; jumps: Jump[] }
+
+/** Hand and elbow velocity changes between two frames over `SMOOTH_LIMITS.jump`, and the largest. */
+export function measureJumps(frames: readonly MotionFrame[]): JumpReport {
+  const jumps: Jump[] = [];
+  let worst: Jump | undefined;
+  for (const j of ['leftWrist', 'rightWrist', 'leftElbow', 'rightElbow'] as const) {
+    for (let i = 2; i < frames.length; i += 1) {
+      const [a, b, c] = [frames[i - 2]!, frames[i - 1]!, frames[i]!];
+      const pa = a.joints[j]; const pb = b.joints[j]; const pc = c.joints[j];
+      if (!pa || !pb || !pc) continue;
+      const d1 = b.timeSec - a.timeSec; const d2 = c.timeSec - b.timeSec;
+      if (d1 <= 0 || d2 <= 0) continue;
+      const change = Math.hypot(...[0, 1, 2].map((k) => (pc[k]! - pb[k]!) / d2 - (pb[k]! - pa[k]!) / d1));
+      const jump = { t: b.timeSec, joint: j, change };
+      if (!worst || change > worst.change) worst = jump;
+      if (change > SMOOTH_LIMITS.jump) jumps.push(jump);
+    }
+  }
+  return { worst, over: new Set(jumps.map((x) => x.t)).size, jumps: jumps.sort((x, y) => y.change - x.change) };
+}
 
 /** Seconds each side of a slow frame in which the speeds around it are looked for. */
 const STALL_WINDOW = 0.3;
