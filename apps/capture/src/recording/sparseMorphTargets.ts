@@ -25,7 +25,8 @@ interface Gltf {
 const pad4 = (length: number) => (length + 3) & ~3;
 
 /**
- * Rewrites a binary glTF so that each morph target's POSITION deltas are a sparse accessor, where that is smaller.
+ * Rewrites a binary glTF so that each morph target's POSITION and NORMAL deltas are sparse accessors, where that is
+ * smaller.
  * Returns the input when it is not a one-buffer GLB or when no target gets smaller.
  */
 export function sparseMorphTargets(glb: ArrayBuffer): ArrayBuffer {
@@ -48,7 +49,9 @@ export function sparseMorphTargets(glb: ArrayBuffer): ArrayBuffer {
   const targets = new Set<number>();
   for (const mesh of gltf.meshes ?? []) {
     for (const primitive of mesh.primitives) {
-      for (const target of primitive.targets ?? []) if (target.POSITION !== undefined) targets.add(target.POSITION);
+      for (const target of primitive.targets ?? []) {
+        for (const delta of [target.POSITION, target.NORMAL]) if (delta !== undefined) targets.add(delta);
+      }
     }
   }
 
