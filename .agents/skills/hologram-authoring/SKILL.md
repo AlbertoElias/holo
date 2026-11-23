@@ -320,6 +320,7 @@ production and needs the owner's word.
 | `jump.*` | no wrist or elbow changes its velocity by more than 2 m/s between two frames: that is a snap. A reach target or a clearing that changes inside one frame causes it. Give the beat a longer attack, or move the point so the arm does not pass through the body |
 | `jump.props` | no object changes its velocity by more than 2 m/s between two frames. A held object jumps when the solver moves the hand off it after the grip (a clearing out of the body or out of the object's support). Give the hand room (move the object or the performer) or a longer attack |
 | `turn.<id>` | no arm joint (shoulder, upper arm, forearm, hand) changes its turning speed by more than 250°/s between two frames. It sees a bone that turns about its own line, which the position bars cannot see: a palm turn that starts or flips inside one frame. Start the beat that turns the palm earlier or give it a longer attack; a turn with no beat behind it is a solver fault, so report it with the sheet |
+| `eyes.<id>` | each pupil shows between the lids (neutral lids, seen from in front) on all but at most 2 frames. An eye turned past its lids shows only white, and a reader sees the eyes roll. The look solve keeps each eye within the turn its pupil shows at (measured per avatar from its mesh; about 18° down on the house avatar) and gives the rest of the look to the head, so a fail is a solver fault: report it with the sheet |
 | `story` | the main bar: a fresh reader, told nothing, gets the setup (who and where), the event and the reaction. Fails at once when the sheet has no `story` |
 | `visual` | the `design-reviewer` (opus) passes the arm motion, the clipping and the face |
 | `reading` | a fresh reader reads every beat (each beat needs an `intent`), and the piece as a whole |
@@ -333,6 +334,10 @@ production and needs the owner's word.
   face that tips down or away is shorter on the screen. So:
   - Look at an object mostly with the eyes: `"head": 0.3` or less. A look
     with `"head": 0.8` at a thing on a table cost about 3 px in a test.
+    The eyes turn only as far as the pupil shows between the lids (about
+    18° down on the house avatar); the head takes the rest of the look
+    whatever `head` says, so a low point tips the head down anyway. Put
+    the object higher (chest height) to keep the face up.
   - Look at the viewer (`"at": "viewer"`) for more than half the take. The
     reaction is the best time for this.
   - Keep a forward lean (a reach far forward, a bow) short. A `nod` tips
