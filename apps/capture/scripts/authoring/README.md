@@ -135,7 +135,9 @@ Each beat belongs to a performer, starts `at` a time and holds `directions`:
   `concerned`; `FACE_MIXES` in `lib/beats.ts`) or face channels, with a `strength`. On the stock avatar only mouth-led shapes
   (`smile`, `sad`) read at feed-card size; brow and lip-press shapes move
   the mesh under 5 mm and do not (`face-legibility.ts`);
-- `reach` with a hand toward a point, stopping `stopShort` metres from it;
+- `reach` with a hand toward a point, stopping `stopShort` metres from it; the palm
+  faces `palm` (`up`, `down`, `in`, `toward`) or, with `palmAt`, a point (for example
+  the `viewer` mark);
 - `hand` shape (`relaxed`, `open`, `reach`, `fist`, `point`, `grip`, `withheld`,
   `pinch`, thumb tip to index tip with the other fingers open);
 - `weight` shift, `turn` (`upper` twists and returns, `whole` stays), `step`;

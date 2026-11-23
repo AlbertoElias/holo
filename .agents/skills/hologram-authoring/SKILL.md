@@ -404,7 +404,8 @@ production and needs the owner's word.
   open) reads in the close view only: at card size the hand is about 25 px
   and a reader sees a flat hand. Stage it beside the face, not in front of
   the mouth: a `reach` to `{ "of": "<performer>", "forward": 0.3, "right":
-  0.32, "height": "chin" }` with `"palm": "toward"` and the hand `open`, then
+  0.32, "height": "chin" }` with `"palmAt": "viewer"` (the palm, and so the
+  thumb-index ring, faces the card camera) and the hand `open`, then
   a later beat that changes the hand to `pinch`. The close from open is what
   a reader sees. Palm down or the back of the hand to the camera reads as a
   watch check or a flat hand. The gap is 3 to 4 mm on the house base and

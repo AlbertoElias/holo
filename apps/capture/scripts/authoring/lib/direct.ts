@@ -82,6 +82,13 @@ const RUB_ROLL_DEG = 15;
 /** Where a gesture's hand goes, from its shoulder per arm length (out, up, forward in the body frame). */
 /** A hanging hand: fingers this far forward of straight down (radians), the wrist turned at most `most` to get there. */
 const REST_WRIST = { forward: 12 * DEG, most: 45 * DEG } as const;
+/**
+ * The wrist goal moves by this share of the hand's error per step. Near full stretch a whole step overshoots and
+ * the goal swings between two arm lengths (3 mm apart); the pose then depends on which step ends the loop, and
+ * the wrist steps when the loop starts to converge (B-099, B-100: the crouch at 1.73 s).
+ */
+const EFFECTOR_GAIN = 0.5;
+const EFFECTOR_STEPS = 16;
 /** The elbow reaches its working direction by this fraction of a lift (1 / ELBOW_LEAD). */
 const ELBOW_LEAD = 2;
 /**
@@ -1845,13 +1852,38 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
     // the hand over from there. Without it the weight dips between the two (the earlier settles as the later attacks),
     // the hand sinks toward hanging and stops, and its palm turn waits and then flips.
     const before: Resolved[] = [];
+    // Each takeover's progress, 0 in the middle of the earlier direction's hold and 1 where the later one
+    // arrives: the later's palm comes in over it and the earlier's hand turn goes out, so the palm turns across the
+    // whole move (a lift) and not in the later's attack alone; and the earlier's goal stays in the blend until the
+    // later arrives, so the goal does not stop where the earlier ends.
+    const takeover = new Map<Resolved, { q: number; to: number }>();
+    for (const r of c.dirs) {
+      const d = r.direction;
+      if ((d.kind !== 'reach' && d.kind !== 'take' && d.kind !== 'put') || d.side !== s) continue;
+      let earlier: Resolved | undefined;
+      let most = 0;
+      for (const p of before) { const h = handEnv(p, r.at, flat); if (h > most) { most = h; earlier = p; } }
+      before.push(r);
+      if (!earlier) continue;
+      const to = r.at + r.attack;
+      // From the middle of the earlier's hold: a take has its grip settled by then, and the body has started to rise.
+      const from = Math.min(earlier.at + earlier.attack + earlier.hold / 2, r.at);
+      const q = smootherStep(clamp01((t - from) / Math.max(1e-6, to - from)));
+      takeover.set(r, { q, to });
+      takeover.set(earlier, { q: Math.max(q, takeover.get(earlier)?.q ?? 0), to: Math.max(to, takeover.get(earlier)?.to ?? 0) });
+    }
+    before.length = 0;
     for (const r of c.dirs) {
       const d = r.direction;
       if ((d.kind !== 'reach' && d.kind !== 'take' && d.kind !== 'put' && d.kind !== 'aim') || d.side !== s) continue;
       const held = d.kind === 'aim' ? 0 : before.reduce((most, p) => Math.max(most, handEnv(p, r.at, flat)), 0);
       if (d.kind !== 'aim') before.push(r);
       const e = handEnv(r, t, flat);
-      if (e === 0) continue;
+      const over = takeover.get(r);
+      // An earlier direction stays (as the goal the later moves from) until the later arrives; a later one's palm
+      // comes in from the earlier's arrival, before the later starts.
+      const leading = e === 0 && held > 0 && over !== undefined && over.q > 0 && t < r.at;
+      if (e === 0 && !leading && !(over && held === 0 && t < over.to && t > r.at)) continue;
       if (d.kind === 'aim') { turns.push({ r, e }); continue; }
       const shoulder = a.arms[s].upperArm.getWorldPosition(new THREE.Vector3());
       let g: THREE.Vector3;
@@ -1879,7 +1911,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
         g = target.clone();
         const radius = stage.props.get(d.object)!.prop.grip!.radius;
         effector = (out) => (a.hands[s] ? a.hands[s]!.fistPoint(radius, out) : a.arms[s].hand.getWorldPosition(out));
-        turns.push({ r, e });
+        turns.push({ r, e: e * (1 - (held === 0 ? over?.q ?? 0 : 0)) });
       } else {
         target = putGoal(cast, c, r).point;
         g = target.clone();
@@ -1892,17 +1924,22 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
         }
         palmKind = 'in';
       }
-      // A takeover moves the goal and the palm over the earlier direction's whole settle (0 where the later starts, 1 where
-      // the earlier ends): the usual share (the later against the earlier's settle) waits while the earlier holds and then
-      // rushes, and the later's own curve is still short of 1 when the earlier ends, so the goal jumps there.
-      const k = goal ? (held > 0 ? clamp01(1 - w / held) : overK(w, e)) : 1;
+      const up = bodyUp(a);
+      const towards = target.clone().sub(shoulder).normalize();
+      const p = d.kind === 'reach' && d.palmAt ? pointOf(cast, c.spec, d.palmAt).sub(target).normalize() : palmKind === 'up' ? up : palmKind === 'down' ? up.clone().negate() : palmKind === 'in' ? new THREE.Vector3(s === 'left' ? -1 : 1, 0, 0).applyQuaternion(bodyQ) : towards;
+      const lead = held > 0 && over ? over.q : undefined;
+      if (leading) {
+        // Before the later starts: only its palm, by the takeover's progress.
+        if (palm) palm = palm.lerp(p, lead!).normalize();
+        continue;
+      }
+      // A takeover moves the goal by the later's own curve, from the earlier's goal (kept in the blend until the later
+      // arrives), and keeps the weight at least where the earlier held it.
+      const k = goal ? (held > 0 ? e : overK(w, e)) : 1;
       goal = goal ? goal.lerp(g, k) : g;
       w = goal === g ? e : Math.max(w, e);
       if (held > 0) w = Math.max(w, e + clamp01(held) * (1 - e));
-      const up = bodyUp(a);
-      const towards = target.clone().sub(shoulder).normalize();
-      const p = palmKind === 'up' ? up : palmKind === 'down' ? up.clone().negate() : palmKind === 'in' ? new THREE.Vector3(s === 'left' ? -1 : 1, 0, 0).applyQuaternion(bodyQ) : towards;
-      palm = palm ? palm.lerp(p, k).normalize() : p.clone();
+      palm = palm ? palm.lerp(p, lead ?? k).normalize() : p.clone();
     }
     // Gestures (and attending's hands together), blended in the same way.
     const add = (g: THREE.Vector3, e: number, p: THREE.Vector3, elbow: number): void => {
@@ -1979,7 +2016,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
         const line = point.clone().sub(shoulder).normalize().applyQuaternion(a.frame.getWorldQuaternion(new THREE.Quaternion()).invert());
         const hint = elbowHint.clone().applyAxisAngle(line, swivel * DEG);
         const wr = wrist.clone();
-        for (let i = 0; i < 8; i += 1) {
+        for (let i = 0; i < EFFECTOR_STEPS; i += 1) {
           solveArm(a, s, wr, { palmToward: toward, wristBend: flat ? 0 : 0.35 * turnK, elbowHint: hint });
           easeTwist(a, s, turnK);
           a.frame.updateMatrixWorld(true);
@@ -1987,7 +2024,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
           effector(at);
           const err = point.clone().sub(at);
           if (err.length() < 5e-4) break;
-          wr.add(err);
+          wr.addScaledVector(err, EFFECTOR_GAIN);
         }
       };
       // A turn the wrist cannot make alone (an aim, a grip axis, an object set upright)

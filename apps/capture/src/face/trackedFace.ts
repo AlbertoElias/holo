@@ -23,10 +23,10 @@ const ROUND_FUNNEL_OFF = 0.5;
 const ROUND_JAW_OFF = 0.7; // pursed lips (oo) stay a small ring: the jaw's share falls as the pucker rises
 const STRETCH_GAIN = 4;
 // A sad face: the lower lip pushed up, a trace of frown and raised inner brows, with no smile and a closed jaw.
-// The mouth corners take `corners` of the sad level: the brows carry the feeling, the mouth a small frown (B-099).
+// The mouth corners take `corners` of the sad level: the brows carry the feeling, the mouth a small frown (B-102).
 const SAD = { shrug: 4, frown: 6, brow: 1.2, floor: 0.2, mouthFull: 0.4, smileOff: 5, jawOff: 2.5, riseSec: 0.35, fallSec: 0.5, corners: 0.69, brows: 0.9, lowerLip: 0.32 };
 // A laugh (a wide smile with an open jaw): the cheeks and eyes carry it (they rise and narrow more), so the jaw
-// opens less far and the lips stay nearer the teeth. Below `smileFrom` or `jawFrom` nothing changes: a smile and speech are as before (B-099).
+// opens less far and the lips stay nearer the teeth. Below `smileFrom` or `jawFrom` nothing changes: a smile and speech are as before (B-102).
 const LAUGH = { smileFrom: 0.5, smileSpan: 0.3, jawFrom: 0.15, jawSpan: 0.2, jawEase: 0.4, upperEase: 0.25, lowerEase: 0.6, cheek: 0.15, squint: 0.06 };
 // A scowl (brows hard down) wrinkles the nose and narrows the eyes.
 const SCOWL = { from: 0.35, span: 0.4, sneer: 0.6, squint: 0.3, press: 0.4 };

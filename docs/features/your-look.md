@@ -279,7 +279,7 @@ must and must not move. `LIVE_FACE_FRAMES=1` writes a picture of each frame
 and fails on a missing or repeated frame; `LIVE_FACE_VIEW=mouth` is the
 close view; `LIVE_FACE_RAW=1` shows the scores one to one, as before.
 
-**A moderate laugh and sad face (B-099).** The owner asked for less strong,
+**A moderate laugh and sad face (B-102).** The owner asked for less strong,
 "pixar-like" faces. In a laugh (a wide smile with an open jaw) the jaw opens
 less far and the cheeks and eyes carry more of it; in a sad face the mouth
 corners take 0.69 of the sad level and the brows and the lower lip carry the

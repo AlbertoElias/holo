@@ -28,6 +28,7 @@ import { fileURLToPath } from 'node:url';
 import { NodeIO } from '@gltf-transform/core';
 import { dressAvatar, lookKey, parseLook, type Build } from '@holoim/avatar-look';
 import { wardrobeFile } from './lib/house-look.ts';
+import { fitCuffs } from './lib/fit-cuffs.ts';
 import { quietMorphNormals } from './lib/quiet-normals.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -114,6 +115,8 @@ async function make(build: string, out: string): Promise<void> {
   const io = new NodeIO();
   const raw = await io.read(tmp);
   quietMorphNormals(raw);
+  // The jumper's cuff goes into the hand; it takes the hand skin's weights so that it does not come out (B-099).
+  fitCuffs(raw);
   await io.write(tmp, raw);
 
   // Credits into asset.copyright; the scene's holoimAvatar extras already carry them (build.py).

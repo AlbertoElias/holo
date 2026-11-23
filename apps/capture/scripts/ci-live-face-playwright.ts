@@ -59,7 +59,7 @@ const EXPECT_MIN: Array<[string, string, number]> = [
 const EXPECT_MAX: Array<[string, string, number]> = [
   ['neutral', 'smile', 0.1], ['neutral', 'frown', 0.1], ['neutral', 'eyeSquint', 0.15], ['neutral', 'jawOpen', 0.05],
   ['smile', 'frown', 0.1], ['laugh', 'frown', 0.1],
-  // A laugh and a sad face stay moderate: the cheeks, eyes and brows carry them, not a wide jaw or a hard frown (B-099).
+  // A laugh and a sad face stay moderate: the cheeks, eyes and brows carry them, not a wide jaw or a hard frown (B-102).
   ['laugh', 'jawOpen', 0.5], ['sad', 'frown', 0.7],
   ['sad', 'smile', 0.1], ['sad', 'jawOpen', 0.05],
   ['surprise', 'frown', 0.1], ['surprise', 'smile', 0.1],
