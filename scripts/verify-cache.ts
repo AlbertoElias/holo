@@ -26,6 +26,7 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  type Dirent,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -50,7 +51,39 @@ const MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 export const NOT_SUITE_INPUTS = ["apps/capture/scripts/authoring/"];
 
 const REFERENCE_SCAN = /\.([cm]?[jt]sx?|json|jsonc|sh|ya?ml|html|toml|py)$/;
-const COMMENT_LINE = /^\s*(\/\/|\/?\*|#)/;
+const HASH_COMMENTS = /\.(sh|ya?ml|toml|py)$/;
+const BLOCK_COMMENTS = /\.([cm]?[jt]sx?|jsonc)$/;
+
+/**
+ * The lines of a file with its whole-line comments made empty. A block
+ * comment counts only when it starts a line: "/*" is also part of a glob in a
+ * string, and a line read as code by mistake is the safe mistake.
+ */
+function codeLines(file: string, text: string): string[] {
+  const hash = HASH_COMMENTS.test(file);
+  const block = BLOCK_COMMENTS.test(file);
+  let inBlock = false;
+  return text.split("\n").map((line) => {
+    if (hash) return /^\s*#/.test(line) ? "" : line;
+    if (!block) return line;
+    let code = line;
+    if (inBlock) {
+      const end = code.indexOf("*/");
+      if (end < 0) return "";
+      code = code.slice(end + 2);
+      inBlock = false;
+    }
+    for (let open = /^\s*\/\*/.exec(code); open; open = /^\s*\/\*/.exec(code)) {
+      const end = code.indexOf("*/", open[0].length);
+      if (end < 0) {
+        inBlock = true;
+        return "";
+      }
+      code = code.slice(end + 2);
+    }
+    return /^\s*\/\//.test(code) ? "" : code;
+  });
+}
 
 /**
  * Lines outside a NOT_SUITE_INPUTS folder that name a path in it, as
@@ -62,7 +95,8 @@ const COMMENT_LINE = /^\s*(\/\/|\/?\*|#)/;
  */
 export function outsideReferences(folder: string, files: { path: string; text: string }[]): string[] {
   const segment = folder.replace(/\/$/, "").split("/").pop()!;
-  const names = new RegExp(`(?<![A-Za-z0-9_.-])${segment}/`);
+  // "authoring/" as a path segment, or "authoring" alone as one item of a list: path.join(here, "authoring", "make.ts").
+  const names = new RegExp(`(?<![A-Za-z0-9_.-])${segment}/|[,(\\[]\\s*["'\`]${segment}["'\`]\\s*[,)\\]]`);
   const owner = `${folder.split("/").slice(0, 2).join("/")}/package.json`;
   const found: string[] = [];
   const scripts: string[] = [];
@@ -78,11 +112,12 @@ export function outsideReferences(folder: string, files: { path: string; text: s
   }
   const scriptNames = scripts.map((script) => new RegExp(`(?<![A-Za-z0-9_:.-])${script}(?![A-Za-z0-9_:.-])`));
   for (const file of outside) {
-    for (const [index, line] of file.text.split("\n").entries()) {
-      if (COMMENT_LINE.test(line)) continue;
+    const shown = file.text.split("\n");
+    for (const [index, line] of codeLines(file.path, file.text).entries()) {
+      if (!line) continue;
       const namesFolder = file.path !== owner && names.test(line);
       const runsScript = file.path !== owner && scriptNames.some((script) => script.test(line));
-      if (namesFolder || runsScript) found.push(`${file.path}:${index + 1}: ${line.trim().slice(0, 120)}`);
+      if (namesFolder || runsScript) found.push(`${file.path}:${index + 1}: ${(shown[index] ?? line).trim().slice(0, 120)}`);
     }
   }
   return found;
@@ -181,7 +216,7 @@ export interface StepKeys {
 }
 
 const SPEC_FILE = /\.spec\.[cm]?[jt]sx?$/;
-const SPEC_IMPORT = /(?:from\s+|import\s*\(\s*|require\s*\(\s*)["'][^"']*\.spec(?:\.[cm]?[jt]sx?)?["']/;
+const SPEC_IMPORT = /(?:from\s+|import\s*\(?\s*|require\s*\(\s*)["'`][^"'`]*\.spec(?:\.[cm]?[jt]sx?)?["'`]/;
 
 function sha(algorithm: string, ...parts: (string | Buffer)[]): string {
   const hash = createHash(algorithm);
@@ -266,19 +301,34 @@ function readIgnoredInputs(root: string): TreeFile[] {
   const packageDirs = ["apps", "packages"].flatMap((parent) =>
     entries(parent).filter((entry) => entry.isDirectory()).map((entry) => `${parent}/${entry.name}`)
   );
+  // A symbolic link counts as what it points to: the suites read through it.
+  const kind = (file: string, entry: Dirent): "dir" | "file" | "other" => {
+    let stat: { isDirectory(): boolean; isFile(): boolean } | undefined = entry;
+    if (entry.isSymbolicLink()) {
+      try {
+        stat = statSync(path.join(root, file), { throwIfNoEntry: false });
+      } catch {
+        stat = undefined; // a link that points to itself
+      }
+    }
+    return stat?.isFile() ? "file" : stat?.isDirectory() ? "dir" : "other";
+  };
   for (const dir of [".", ...packageDirs]) {
     for (const entry of entries(dir)) {
-      if (entry.isFile() && IGNORED_ENV_FILE.test(entry.name)) add(path.posix.join(dir, entry.name));
+      const file = path.posix.join(dir, entry.name);
+      if (IGNORED_ENV_FILE.test(entry.name) && kind(file, entry) === "file") add(file);
     }
   }
-  const walk = (dir: string) => {
+  const walk = (dir: string, depth: number) => {
+    if (depth > 12) throw new CacheOff(`${dir} is nested too deep to read (a link that points to its own parent?)`);
     for (const entry of entries(dir)) {
       const child = `${dir}/${entry.name}`;
-      if (entry.isDirectory()) walk(child);
-      else if (entry.isFile()) add(child);
+      const type = kind(child, entry);
+      if (type === "dir") walk(child, depth + 1);
+      else if (type === "file") add(child);
     }
   };
-  for (const dir of IGNORED_INPUT_DIRS) walk(dir);
+  for (const dir of IGNORED_INPUT_DIRS) walk(dir, 0);
   return found;
 }
 
@@ -313,6 +363,25 @@ function withoutLocalPort(value: string): string {
   }
 }
 
+/**
+ * The Python that the pipeline specs and the API's USDZ tools run
+ * (USDZ_PYTHON, else python3 on PATH): its version and each installed
+ * package's version. Read one time for each interpreter in a process.
+ */
+const pythonSeen = new Map<string, string>();
+function pythonTools(env: NodeJS.ProcessEnv): string {
+  const python = env.USDZ_PYTHON || "python3";
+  const key = `${python}\0${env.PATH ?? ""}`;
+  let tools = pythonSeen.get(key);
+  if (tools === undefined) {
+    const probe = "import sys, importlib.metadata as m; print(sys.version); print(sorted(str(d.metadata['Name']) + '==' + d.version for d in m.distributions()))";
+    const result = spawnSync(python, ["-c", probe], { encoding: "utf8", env, timeout: 20_000 });
+    tools = result.status === 0 ? `python-${sha("sha256", result.stdout).slice(0, 16)}` : "python-none";
+    pythonSeen.set(key, tools);
+  }
+  return tools;
+}
+
 export function takeSnapshot(root: string, env: NodeJS.ProcessEnv = process.env): Snapshot {
   // A pass with packages that do not match the lockfile says nothing about the lockfile's tree.
   const installed = path.join(root, "node_modules/.pnpm/lock.yaml");
@@ -324,15 +393,18 @@ export function takeSnapshot(root: string, env: NodeJS.ProcessEnv = process.env)
   const files: TreeFile[] = [...tree.keys()].sort().map((file) => ({ ...tree.get(file)!, path: file }));
   const tracked = new Set(tree.keys());
   for (const file of readIgnoredInputs(root)) if (!tracked.has(file.path)) files.push(file);
+  // A spec file, or a helper beside the spec files, that imports a spec file.
+  const specDirs = new Set(files.filter((file) => SPEC_FILE.test(file.path)).map((file) => `${path.posix.dirname(file.path)}/`));
   const specsShareCode = files.some((file) => {
-    if (!SPEC_FILE.test(file.path) || file.id === "deleted" || file.mode === "120000") return false;
+    if (!CODE_FILE.test(file.path) || file.id === "deleted" || file.mode === "120000") return false;
+    if (![...specDirs].some((dir) => file.path.startsWith(dir))) return false;
     return SPEC_IMPORT.test(readFileSync(path.join(root, file.path), "utf8"));
   });
   return {
     env: readEnv(root, files, env),
     files,
     specsShareCode,
-    toolchain: `${process.platform}-${process.arch}-node${process.version}`
+    toolchain: `${process.platform}-${process.arch}-node${process.version}-${pythonTools(env)}`
   };
 }
 

@@ -91,25 +91,40 @@ cache cannot decide, it is off and the step runs.
 ### Key
 
 `sha256` of: a cache version, the step label, the step command, OS, CPU
-architecture and Node version, the environment (below), and the sorted list
-of `(path, mode, content id)` of the input files.
+architecture, Node version and Python tools (below), the environment
+(below), and the sorted list of `(path, mode, content id)` of the input
+files.
 
 - **Content id.** A clean tracked file takes its blob id from
   `git ls-files -s`. A modified or untracked file is hashed with
   `git hash-object`, so the same content has the same id before and after a
   commit. A file missing from disk is recorded as deleted. An unmerged index
   or a file that is not a regular file or a symlink turns the cache off.
+- **Files that git is told not to look at.** `git update-index
+  --assume-unchanged` and `--skip-worktree` hide an edit from `git ls-files
+  -m`. Those files (`git ls-files -v`) are always hashed from disk.
 - **Git-ignored inputs.** `.env` and `.env.*` in the root and in each app and
   package, and every file under `apps/viewer-web/public/local-places/` (a
-  place-capture test runs only when a downloaded scan is there).
+  place-capture test runs only when a downloaded scan is there). A symbolic
+  link there counts as the file or folder it points to, because the suites
+  read through it. A link to its own parent turns the cache off.
+- **Python tools.** The unit tests, the pipeline specs and the test API start
+  `USDZ_PYTHON` (or `python3`) with packages from outside the repository. The
+  key holds a hash of that interpreter's version and of the version of each
+  installed package (one 0.05 s call for each run).
 - **Environment.** The value of every set variable that the repository's code
   reads (a scan for `env.NAME` in `apps/`, `packages/`, `scripts/` and the
   root), and of the tools' variables (`CI`, `DEBUG`, `NODE_ENV`, and the
   `VITE_`, `PLAYWRIGHT_`, `XR_`, `E2E_`, `HOLOIM_`, `CAPTURE_` prefixes). Port
   variables and `VERIFY_PR_*` are left out, and a local URL counts without its
   port, so a run on moved ports shares its results. A normal session sets none
-  of them. A run with `XR_REPLAY_ONLY` or `REUSE_DEV_SERVER` set has its own
-  keys and cannot pass for a standard run.
+  of them. A run with `XR_REPLAY_ONLY` set has its own keys and cannot pass
+  for a standard run.
+- **Servers that the run did not start.** `REUSE_DEV_SERVER` lets the capture
+  checks use a dev server that is already up, with code that the key does not
+  describe. The cache is off when it is set. The Knowledge suite reuses a
+  server on its port (`KNOWLEDGE_E2E_PORT`, 4176) when one answers there, so
+  verify:pr stores no pass for a Knowledge run that found one.
 - **Machine state.** The cache is off when `node_modules/.pnpm/lock.yaml`
   differs from `pnpm-lock.yaml` (packages not installed from this lockfile).
   The lockfile is in every key, so the Playwright and Chromium versions are
@@ -126,8 +141,10 @@ For pipeline, portal and viewer XR the base key leaves out the content of
 every spec file under `apps/viewer-web/e2e/` and holds only their names. A
 spec key is `sha256(base key, spec path, mode, content id)`. Helpers and
 fixtures in `e2e/` stay in the base key, so a helper edit reruns every spec,
-and a new, removed or renamed spec makes a full run. When a spec imports
-another spec, the step falls back to one key (none does today).
+and a new, removed or renamed spec makes a full run. When a code file in a
+folder that holds spec files imports a spec file (a named import, an import
+for its effect, a dynamic import, a `require`), the step falls back to one
+key (none does today).
 
 - After a run, the Playwright JSON report gives each test's verdict. A spec
   file passed when the report has no top-level error and every test in the
@@ -152,10 +169,19 @@ another spec, the step falls back to one key (none does today).
   only for keys that did not change, so an edit during a run stores nothing
   for what it touched.
 
-No dependency between spec files was found: the test API makes a new database
-for each run, `profiles` uses a unique token, and the walk take is recorded
-again when a spec runs alone. A spec that does depend on another file's
-earlier run fails when it reruns alone, which is the safe direction.
+**The assumption: spec files are independent of each other.** The spec
+files of one run share one test API, one database and the dev servers. So an
+edit to spec file A can change what A leaves there, and spec file B, which
+ran after A, keeps its pass without a rerun. The independent verifier named
+this as the largest remaining gap. It stays, for two reasons. First, hosted
+CI already has it: the mocked suite runs as 4 shards and the pipeline suite
+as 6, each on its own runner with its own database, so a spec file there
+already runs without most of the others. Second, no dependency was found:
+the test API makes a new database for each run, `profiles` uses a unique
+token, and the walk take is recorded again when a spec runs alone. A spec
+that depends on another file's earlier run fails when it reruns alone, which
+is the safe direction. `--no-cache` or `verify:full` runs every spec file
+together when a change is about shared state.
 
 ### Store
 
@@ -186,9 +212,12 @@ test build already leaves all of `apps/capture/scripts` out of the capture
 bundle's fingerprint, and no file outside the folder imports it.
 `scripts/check-ci-areas.ts` gains a guard: it fails when a line of code
 outside the folder (apps, packages, scripts, workflows, root files) names an
-`authoring/` path. Comment lines do not count. The `test:authoring:*` script
-in `apps/capture/package.json` may name the folder, and then no other file
-may run that script.
+`authoring/` path, or has `"authoring"` as one item of a list (as in
+`path.join(here, "authoring", "make.ts")`). It reads files that are not
+committed yet too. A comment counts as one only when it starts its line; code
+after the end of a comment on the same line is read. The `test:authoring:*`
+script in `apps/capture/package.json` may name the folder, and then no other
+file may run that script.
 
 ### Selector gaps
 
@@ -201,6 +230,7 @@ and on hosted CI. Fixed in this branch, as a separate commit:
 | `packages/meaning`, `objects`, `avatar-look`, `tooling-scripts`, `config-ts` | viewer-web, capture and the API (dependencies) | `quality` only | Every package but `config-eslint` selects all browser areas and deploys |
 | `apps/capture/public/gltf/*` | 6 mocked viewer specs (`avatar.glb`) | no `web` | Also selects `web` |
 | `apps/viewer-api/*` | the portal step (it starts the test API) | no `portal` | Also selects `portal` |
+| `scripts/test-api.ts` | the pipeline and portal steps (it is the test API they start) | `quality` only | Selects `pipeline` and `portal`; `check:ci-areas` fails when a suite starts a root script that does not select it |
 
 ### Alternatives considered
 
@@ -232,6 +262,25 @@ Six findings, each checked in the code and accepted:
    record, and such a record holds only in its worktree.
 6. "Matches the hosted shards" was wrong: the shards split inside spec files
    too. The claim is now the measured one under "Spec files".
+
+### Independent verification (2026-11-23)
+
+Two fresh contexts got the brief and the diff: a code review (Sonnet) and the
+`verifier` subagent (Opus). Each finding was reproduced before it was
+accepted.
+
+| Finding | Result |
+|---|---|
+| An edit to a file under `--assume-unchanged` or `--skip-worktree` kept the key | Fixed: those files are hashed from disk; test A |
+| `REUSE_DEV_SERVER` runs the capture checks on a server with unknown code | Fixed: the cache is off |
+| The Knowledge suite reuses a server that already answers on its port | Fixed: no pass is stored for such a run |
+| `scripts/test-api.ts` did not select the suites that start it | Fixed in the selector, with a check; added to B-099 |
+| A scan or `.env` that is a symbolic link was not in the key | Fixed: links are followed; test A |
+| The Python interpreter and its packages were not in the key | Fixed: a hash of both is in the key; test C |
+| The authoring guard missed a path in parts, code after a comment on the same line, a code line that starts with `*`, and uncommitted files | Fixed: test B and `check:ci-areas` |
+| The spec-import check missed an import for its effect and a helper that imports a spec | Fixed: test E |
+| An error that was not a cache decision stopped verify:pr, or lost the final status line after a passed step | Fixed: any error from a read turns the cache off for the run, and any error from a write prints `no pass stored` |
+| A spec file keeps its pass when another spec file of the same run changes | Kept, and written down as the assumption under "Spec files" |
 
 ## Acceptance criteria
 
@@ -276,9 +325,12 @@ Six findings, each checked in the code and accepted:
 | `dist` missing or stale in a worktree that skipped `build` | `build` runs before the first later step that runs |
 | Two runs write the store at once | One file per record, temporary name then rename |
 | The store grows without limit | 14-day prune |
-| Tool or runtime change (Node, Playwright, OS) | Node version, OS, architecture and the lockfile are in the key; a cache version constant for recipe changes |
+| Tool or runtime change (Node, Playwright, OS, Python) | Node version, OS, architecture, the lockfile and a hash of the Python tools are in the key; a cache version constant for recipe changes; test C |
+| An input that git or the directory walk does not show (a file git is told not to look at, a symbolic link) | Both are read from disk; test A |
+| A suite uses a server that the run did not start | Cache off with `REUSE_DEV_SERVER`; no pass for a Knowledge run on a foreign server |
+| The cache code itself fails (a full disk, a file that goes away) | The step runs and its own result stands; nothing is stored |
 | usdz-tools passes as SKIPPED and is then skipped for good | Not cached |
-| A test proves the cache only on paper | Ten deliberate breaks of `verify-cache.ts` (one per rule above) each fail a test |
+| A test proves the cache only on paper | Ten deliberate breaks of `verify-cache.ts` (one per rule above) each fail a test, and each test added after the reviews fails on the code before its fix |
 
 ## Ownership
 

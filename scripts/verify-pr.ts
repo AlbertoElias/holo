@@ -34,7 +34,7 @@ import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { CacheOff, openCache, type Decision, type ResultCache, type StepCache } from "./verify-cache.ts";
+import { openCache, type Decision, type ResultCache, type StepCache } from "./verify-cache.ts";
 import { acquireLock, type HeldLock } from "./verify-lock.ts";
 
 type Area =
@@ -200,8 +200,8 @@ function decide(state: { cache: ResultCache | null }, step: Step): Decision {
   try {
     return state.cache.decide(step);
   } catch (error) {
-    if (!(error instanceof CacheOff)) throw error;
-    console.log(`[verify-pr] result cache off: ${error.message}`);
+    // CacheOff is a decision. Any other error (a file that went away during the read) also means: run.
+    console.log(`[verify-pr] result cache off: ${error instanceof Error ? error.message : String(error)}`);
     state.cache = null;
     return NO_DECISION;
   }
@@ -263,8 +263,8 @@ async function main(): Promise<void> {
         console.log(`[verify-pr]   ${line}`);
       }
     } catch (error) {
-      if (!(error instanceof CacheOff)) throw error;
-      console.log(`[verify-pr]   no pass stored: ${error.message}`);
+      // The step's own result stands when its pass cannot be stored.
+      console.log(`[verify-pr]   no pass stored: ${error instanceof Error ? error.message : String(error)}`);
     }
     return code;
   };

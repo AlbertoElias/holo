@@ -27,7 +27,7 @@
 // The invariant behind all of them: every result either selects an area, is
 // docs_only, or sets no_suite (docs and CI plumbing only); never none of these.
 import { execFileSync, spawn } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -246,7 +246,10 @@ async function main() {
     });
     // The files that declare the rule name the folder.
     const declares = ["scripts/ci-changed-areas.sh", "scripts/verify-cache.ts", "scripts/verify-cache.test.ts"];
-    const outside = tracked
+    // Untracked files too: a new importer counts before its first commit.
+    const untracked = execFileSync("git", ["ls-files", "-o", "--exclude-standard"], { cwd: root, encoding: "utf8", maxBuffer: 1 << 26 }).split("\n").filter(Boolean);
+    const outside = [...tracked, ...untracked]
+      .filter((f) => existsSync(path.join(root, f)))
       .filter((f) => !f.startsWith(folder) && !declares.includes(f) && /^(apps\/|packages\/|scripts\/|\.github\/|[^/]+$)/.test(f) && !isDoc(f) && !f.endsWith(".md"))
       .filter((f) => /\.([cm]?[jt]sx?|json|jsonc|sh|ya?ml|html|toml|py)$/.test(f))
       .map((f) => ({ path: f, text: readFileSync(path.join(root, f), "utf8") }));

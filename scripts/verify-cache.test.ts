@@ -5,11 +5,12 @@
 // Playwright's JSON report shape as measured for each end state:
 //
 //   A. A change is not seen: an unstaged or staged edit, a new untracked file,
-//      a deletion, a mode change, an edit in a git-ignored file a suite reads.
+//      a deletion, a mode change, an edit in a git-ignored file a suite reads
+//      (also through a link), an edit git is told not to look at.
 //   B. A file is wrongly left out of a suite's inputs (docs, authoring tools),
 //      or something outside starts to read a left-out folder.
 //   C. A pass from a different environment is used (a variable the code
-//      reads, packages that do not match the lockfile).
+//      reads, packages that do not match the lockfile, another Python).
 //   D. A Playwright run that did not prove a spec stores a pass for it: a test
 //      that never ran or was interrupted, a run that stopped, an old report,
 //      a step that failed outside the tests, a file that was to be left out.
@@ -21,12 +22,13 @@
 // The end-to-end proof (real verify:pr runs) is in the brief's test plan.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { after } from "node:test";
 
 import {
+  CacheOff,
   keysOf,
   openCache,
   outsideReferences,
@@ -197,6 +199,32 @@ test("A: a git-ignored .env file and a downloaded scan are inputs", () => {
   assert.notEqual(key(root, CODE), before, "a scan under local-places");
 });
 
+test("A: a git-ignored input that is a link counts as what it points to", () => {
+  const root = makeRepo();
+  const store = mkdtempSync(path.join(realpathSync(tmpdir()), "verify-cache-store-"));
+  after(() => rmSync(store, { force: true, recursive: true }));
+  write(store, "scan.sog", "scan 1");
+  write(store, "room/points.sog", "points 1");
+  write(store, "env", "A=1\n");
+  mkdirSync(path.join(root, "apps/viewer-web/public/local-places"), { recursive: true });
+  mkdirSync(path.join(root, "apps/viewer-api"), { recursive: true });
+  const clean = key(root, CODE);
+  symlinkSync(path.join(store, "scan.sog"), path.join(root, "apps/viewer-web/public/local-places/scan.sog"));
+  symlinkSync(path.join(store, "room"), path.join(root, "apps/viewer-web/public/local-places/room"));
+  symlinkSync(path.join(store, "env"), path.join(root, "apps/viewer-api/.env"));
+  let before = key(root, CODE);
+  assert.notEqual(before, clean, "new links");
+  for (const file of ["scan.sog", "room/points.sog", "env"]) {
+    write(store, file, "changed");
+    assert.notEqual(key(root, CODE), before, `an edit to the file behind ${file}`);
+    before = key(root, CODE);
+  }
+  symlinkSync(path.join(root, "apps/viewer-web/public/local-places/gone"), path.join(root, "apps/viewer-web/public/local-places/gone"));
+  assert.doesNotThrow(() => key(root, CODE), "a link that points to itself");
+  symlinkSync(path.join(root, "apps/viewer-web/public/local-places"), path.join(root, "apps/viewer-web/public/local-places/loop"));
+  assert.throws(() => key(root, CODE), CacheOff, "a link to its own parent turns the cache off");
+});
+
 // --- B. What a suite does not read ---
 
 test("B: docs, Markdown and the authoring tools change the tree key and not a suite's key", () => {
@@ -244,6 +272,19 @@ test("B: a reference to a left-out folder from outside is found; comments and it
   assert.equal(chained.length, 1, "a suite script that runs the folder's script reads the folder");
 });
 
+test("B: a reference is found when the path is in parts, after a comment on the same line, and after a glob", () => {
+  const folder = "apps/capture/scripts/authoring/";
+  const lines = (path_: string, text: string) => outsideReferences(folder, [{ path: path_, text }]).map((line) => Number(line.split(":")[1]));
+  assert.deepEqual(lines("apps/viewer-web/e2e/x.spec.ts", 'const make = path.join(here, "authoring", "make.ts");\n'), [1], "path.join parts");
+  assert.deepEqual(lines("apps/viewer-web/e2e/x.spec.ts", "const dir = [capture, 'scripts', `authoring`].join('/');\n"), [1], "a list of parts");
+  assert.deepEqual(lines("apps/capture/src/a.ts", '/* tools */ import { make } from "../scripts/authoring/make.ts";\n'), [1], "code after a comment that closes");
+  assert.deepEqual(lines("apps/capture/src/a.ts", '/*\n * scripts/authoring/a.ts\n */ import "../scripts/authoring/b.ts";\n'), [3], "code after the end of a block comment");
+  assert.deepEqual(lines("apps/capture/src/a.ts", 'const size = width\n  * count("../scripts/authoring/sizes.json");\n'), [2], "a code line that starts with *");
+  assert.deepEqual(lines("apps/capture/src/a.ts", 'const all = glob("src/**/*.ts");\nimport "../scripts/authoring/b.ts";\n'), [2], "a glob does not start a comment");
+  assert.deepEqual(lines("scripts/run.sh", "# tsx apps/capture/scripts/authoring/make.ts\ntsx apps/capture/scripts/authoring/make.ts\n"), [2], "a shell comment");
+  assert.deepEqual(lines("apps/capture/src/a.ts", "export type Layer = 'event' | 'authoring';\nconst a = { layer: 'authoring' };\n"), [], "the word as a value is not a path");
+});
+
 // --- C. The environment ---
 
 test("C: a variable the code reads is in the key; ports and verify:pr's own switches are not", () => {
@@ -259,6 +300,23 @@ test("C: a variable the code reads is in the key; ports and verify:pr's own swit
   const local = key(root, CODE, { E2E_BASE_URL: "https://localhost:3174" });
   assert.equal(key(root, CODE, { E2E_BASE_URL: "https://localhost:4174" }), local, "a moved local port tests the same thing");
   assert.notEqual(key(root, CODE, { E2E_BASE_URL: "https://staging.example.com" }), local, "another host does not");
+});
+
+test("C: the Python that the suites start is in the key", () => {
+  const root = makeRepo();
+  const bin = mkdtempSync(path.join(realpathSync(tmpdir()), "verify-cache-python-"));
+  after(() => rmSync(bin, { force: true, recursive: true }));
+  const python = (name: string, output: string) => {
+    write(bin, name, `#!/bin/sh\necho "${output}"\n`);
+    chmodSync(path.join(bin, name), 0o755);
+    return path.join(bin, name);
+  };
+  const one = key(root, CODE, { USDZ_PYTHON: python("py-a", "3.11.9 ['usd-core==24.5']") });
+  assert.equal(key(root, CODE, { USDZ_PYTHON: python("py-same", "3.11.9 ['usd-core==24.5']") }), one, "the same version and packages");
+  assert.notEqual(key(root, CODE, { USDZ_PYTHON: python("py-b", "3.11.9 ['usd-core==25.2']") }), one, "a different package version");
+  assert.notEqual(key(root, CODE, { USDZ_PYTHON: python("py-c", "3.12.1 ['usd-core==24.5']") }), one, "a different Python");
+  assert.notEqual(key(root, CODE, { USDZ_PYTHON: path.join(bin, "none") }), one, "no Python");
+  assert.equal(key(root, TREE, { USDZ_PYTHON: path.join(bin, "none") }), key(root, TREE, { USDZ_PYTHON: path.join(bin, "none") }));
 });
 
 test("C: the cache is off when packages do not match the lockfile, and when a run starts with E2E_PASSED_SPECS or REUSE_DEV_SERVER set", () => {
@@ -445,6 +503,20 @@ test("E: when a spec imports another spec, the step has one record", () => {
   const edited = cache.decide(SPECS);
   assert.equal(edited.action, "run");
   assert.deepEqual(edited.env, {});
+});
+
+test("E: an import of a spec for its effect, and a helper that imports a spec, give the step one record", () => {
+  for (const [file, text] of [
+    ["apps/viewer-web/e2e/b.spec.ts", "import './a.spec.ts';\n"],
+    ["apps/viewer-web/e2e/b.spec.ts", 'import "./a.spec";\n'],
+    ["apps/viewer-web/e2e/helpers/shared.ts", "export { shared } from '../a.spec.ts';\n"],
+    ["apps/viewer-web/e2e/helpers/lazy.ts", "export const load = () => import(`../a.spec.ts`);\n"]
+  ] as const) {
+    const root = makeRepo();
+    assert.notDeepEqual(keysOf(SPECS, takeSnapshot(root, {})).specs, {}, "the repo starts with one record for each spec file");
+    write(root, file, text);
+    assert.deepEqual(keysOf(SPECS, takeSnapshot(root, {})).specs, {}, `${file}: ${text.trim()}`);
+  }
 });
 
 // --- F. Skipped tests ---
