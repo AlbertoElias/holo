@@ -151,7 +151,7 @@ story against it.
 | Who | one or two house avatars; build, skin, eyes, hair, glasses; three fixed outfits; stiff worn objects on a bone (`wear`: a hat, an apron, a badge) | cloth that bends; a uniform in place of the outfit |
 | Where | objects made of boxes, spheres and cylinders in any colour; `polyhaven:<id>` models (real-world size) | a room, walls or a floor of its own; anything wider than about 1.2 m without the face falling under 40 px |
 | Event | `take`, `put` and `drop` an object; a `fall` world line (knocked over or off, under gravity); `aim` and `pour` from a held tool; `change` an object (turn, scale, lift, colour, appear or disappear); `burst`, `drift` | a roll; a break into pieces; a hand that pulls a door (time a `change` to the reach instead); walking; sitting |
-| Reaction | look; named expressions and face channels; gestures (`nod`, `head-shake`, `shrug`, `wave`, `rub`, `hand-to-chest`); `bend`; reach; show or offer in both hands | a laugh as a named expression (use face channels); speech without a sound file; a second person who takes a gift |
+| Reaction | look; named expressions and face channels; gestures (`nod`, `head-shake`, `shrug`, `wave`, `rub`, `hand-to-chest`); `bend`; one `step` (`{ "kind": "step", "foot": "right", "by": [left, forward], "follow": true }`, in metres); reach; show or offer in both hands | a laugh as a named expression (use face channels); speech without a sound file; a second person who takes a gift |
 
 An object made of parts can turn about its own origin, the bottom centre of
 its frame. Put a door's parts to one side of the origin, and a `change` with
