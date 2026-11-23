@@ -4,8 +4,21 @@
  * The 40 px face bar (`BAR.faceBoxDevicePx`) does not apply to a performer in
  * the seconds its beat sheet marks as "head down or away on purpose"
  * (`faceAway` on the performer, each span with a reason). It applies in all
- * other seconds, unchanged. No mark means the bar applies.
+ * other seconds, unchanged. No mark means the bar applies. A piece with two
+ * performers has the 36 px bar (`PAIR_FACE_BAR_PX`).
  */
+
+/**
+ * The face bar for a piece with exactly two performers (owner decision, 2026-11-21): readers read the faces of a
+ * pair at 33 px (0.75 to 0.79), so a pair has 36 px. One performer, or three and more, keeps `BAR.faceBoxDevicePx`.
+ * The readers still judge every piece; this bar does not replace them.
+ */
+export const PAIR_FACE_BAR_PX = 36;
+
+/** The face bar (device px) for a piece with `performers` performers; `soloBarPx` is `BAR.faceBoxDevicePx`. */
+export function faceBarPx(performers: number, soloBarPx: number): number {
+  return performers === 2 ? PAIR_FACE_BAR_PX : soloBarPx;
+}
 
 /** The most of the piece one performer may mark face-away. A proposal to the owner (2026-11-21); change it here only. */
 export const FACE_AWAY_MAX_SHARE = 1 / 3;

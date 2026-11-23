@@ -29,6 +29,9 @@ const DEEP_FROM_DEMAND = 0.85;
 // Standing back up with the prop lasts at least this long, so a prop taken at chest height still rises smoothly into the carry pose.
 const LIFT_MIN_SEC = 0.25;
 
+/** A set-down's squat slows over the hand's last this many metres short of its point, to this fraction of its rate. */
+const LOWER_EASE_M = 0.1;
+const LOWER_MIN_RATE = 0.2;
 /** The relax after a let-go or a cancel takes this long to reach its full rate. */
 const RELAX_EASE_SEC = 0.15;
 /** A cancel or let-go stands the body up faster than a reach bends it: a late cancel is upright within half a second, the ease-in included. */
@@ -207,12 +210,18 @@ export class DesktopReach {
     this.phase = 'lower';
   }
 
-  /** Squat further while the hand needs it (`needMore`); true once the demand is at its limit. */
-  stepLower(deltaSec: number, needMore = true): boolean {
+  /**
+   * Squat further while the hand is still `shortM` metres short of the point (0 or less: far enough); true once the
+   * demand is at its limit. The squat slows over the last LOWER_EASE_M, so it is near rest when the prop is let go:
+   * at full rate, the relax took another 0.07 m of hips to stop it (B-086).
+   */
+  stepLower(deltaSec: number, shortM = Infinity): boolean {
+    const needMore = shortM > 0;
+    const ease = THREE.MathUtils.clamp(shortM / LOWER_EASE_M, LOWER_MIN_RATE, 1);
     const deeper = needMore && this.demand >= DEEP_FROM_DEMAND && this.deepExtra < 1;
-    this.deepVel = deeper ? 2 * REACH_RATE_PER_SEC : 0;
+    this.deepVel = deeper ? 2 * REACH_RATE_PER_SEC * ease : 0;
     this.deepExtra = Math.min(1, this.deepExtra + this.deepVel * deltaSec);
-    this.demandVel = needMore && this.demand < 1 ? REACH_RATE_PER_SEC : 0;
+    this.demandVel = needMore && this.demand < 1 ? REACH_RATE_PER_SEC * ease : 0;
     this.demand = Math.min(1, this.demand + this.demandVel * deltaSec);
     return this.demand >= 1;
   }

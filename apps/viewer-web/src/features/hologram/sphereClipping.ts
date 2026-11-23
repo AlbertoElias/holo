@@ -70,6 +70,8 @@ export type SphereClipResult = {
 
 const BUBBLE_MESH_NAME = "RecordedBubbleSphere";
 const DEFAULT_BUBBLE_RADIUS = 6;
+/** After the set's see-through surfaces (0), before the bubble glass (999). */
+const AVATAR_TRANSLUCENT_RENDER_ORDER = 1;
 const CACHE_KEY = "sphere-clip-v2";
 const DOME_CACHE_KEY = "sphere-clip-v2-dome";
 
@@ -311,6 +313,17 @@ export function applySphereClipping(
       });
       // The avatar is never cut by the feed's dome: the author stands whole on their ground.
       const exempt = isInsideAvatar(mesh);
+      // The light finish's see-through parts draw after the set's see-through
+      // surfaces and write depth: three sorts blended meshes by their origins,
+      // and a lake's origin can be nearer the camera than the avatar's feet,
+      // so the water drew over a body that wrote no depth. Capture does the
+      // same in `AvatarRig.drawTranslucentPartsAfterSet`.
+      if (exempt && originals.some((material) => material.transparent && !material.depthWrite)) {
+        cloned.forEach((material) => { material.depthWrite = true; });
+        const previousOrder = mesh.renderOrder;
+        mesh.renderOrder = AVATAR_TRANSLUCENT_RENDER_ORDER;
+        restoreFns.push(() => { mesh.renderOrder = previousOrder; });
+      }
       cloned.forEach((material) => patchMaterial(material, clipUniforms, config.dome, exempt));
     });
 

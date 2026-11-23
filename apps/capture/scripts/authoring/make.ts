@@ -23,7 +23,8 @@
  * each performer's dressed avatar file is at most 1.8 MB (`BAR.sizeBytes`);
  * the take is within the Quick Look budget (`validateTake`); each performer's
  * face is at least 40 device px brow to chin on the phone card
- * (`BAR.faceBoxDevicePx`); no arm or hand goes into the body, the head or a
+ * (`BAR.faceBoxDevicePx`; 36 px, `PAIR_FACE_BAR_PX`, in a piece with two
+ * performers); no arm or hand goes into the body, the head or a
  * prop, and every forearm twist, wrist bend and elbow is in a human range
  * (`ARM_LIMITS`); a visual reviewer passes the arm motion, the clipping and
  * the face from the stills (`review/visual/`); and a fresh reader reads every
@@ -40,7 +41,7 @@ import { actingReport, diffTakes, summarize } from './acting-report.ts';
 import { bodyLine, build, loadSheet, OBJECT_LIMITS, resolveAvatar } from './direct.ts';
 import { measureSmoothness, SMOOTH_LIMITS } from './lib/smoothness.ts';
 import { BAR } from './lib/audition-bar.ts';
-import { faceBarPasses, FACE_AWAY_MAX_SHARE } from './lib/face-bar.ts';
+import { faceBarPasses, faceBarPx, FACE_AWAY_MAX_SHARE, PAIR_FACE_BAR_PX } from './lib/face-bar.ts';
 import { FACE_CHANNELS } from '@holoim/avatar-face';
 import { DEFAULT_TIMING, FACE_MIXES, GESTURES, houseFinish, parseSheetText, resolveTiming, STATES, STORY_PARTS, storyEventProblem, validateSheet, type BeatSheet, type ObjectSpec, type Place, type Point } from './lib/beats.ts';
 import { solveTake } from './lib/direct.ts';
@@ -288,9 +289,9 @@ const FACE_FIX = 'the bar reads the median face outside the sheet\'s marked face
   + 'keep forward leans short, and use one performer where the idea allows (two halve the face)';
 
 /** The seconds where the face is under the bar, so the fix names the beats to change. */
-function smallFace(p: { readonly travelPerSecond: readonly { readonly from: number; readonly faceDevicePx?: number | null; readonly faceAway?: boolean }[] }): string {
-  const small = p.travelPerSecond.filter((s) => !s.faceAway && typeof s.faceDevicePx === 'number' && s.faceDevicePx < BAR.faceBoxDevicePx);
-  return small.length ? `the face is under ${BAR.faceBoxDevicePx} px at ${small.map((s) => `${s.from}-${s.from + 1} s (${s.faceDevicePx})`).join(', ')}; ` : '';
+function smallFace(p: { readonly travelPerSecond: readonly { readonly from: number; readonly faceDevicePx?: number | null; readonly faceAway?: boolean }[] }, barPx: number): string {
+  const small = p.travelPerSecond.filter((s) => !s.faceAway && typeof s.faceDevicePx === 'number' && s.faceDevicePx < barPx);
+  return small.length ? `the face is under ${barPx} px at ${small.map((s) => `${s.from}-${s.from + 1} s (${s.faceDevicePx})`).join(', ')}; ` : '';
 }
 
 const STORY_BAR = 'a fresh reader gets the setup, the event and the reaction';
@@ -343,13 +344,14 @@ async function readingRow(reviewDir: string): Promise<Row> {
  * The face bar on the seconds the sheet does not mark face-away (owner, 2026-11-21): the median face outside the
  * marks must meet it. The marked seconds and their median are in the value, not barred.
  */
-export function faceBoxRow(p: OnScreen['performers'][number]): Row {
+export function faceBoxRow(p: OnScreen['performers'][number], performers: number): Row {
   const split = p.faceSplitDevicePx;
-  const pass = faceBarPasses(split, BAR.faceBoxDevicePx);
+  const barPx = faceBarPx(performers, BAR.faceBoxDevicePx);
+  const pass = faceBarPasses(split, barPx);
   const marks = p.faceAway.length ? `; marked away ${p.faceAway.map((a) => `${a.from}–${a.to} s (${a.why})`).join(', ')}: ${split.marked ?? 'no face'} px there` : '';
-  return { id: `faceBox.${p.name}`, bar: `face ≥ ${BAR.faceBoxDevicePx} device px brow to chin on the phone card, outside marked face-away seconds`,
+  return { id: `faceBox.${p.name}`, bar: `face ≥ ${barPx} device px brow to chin on the phone card${performers === 2 ? ' (the pair bar)' : ''}, outside marked face-away seconds`,
     value: `${split.unmarked ?? 'no face'} px${p.faceAway.length ? ' outside the marks' : ''} (${p.faceMmOnPhone} mm over the take)${marks}`, pass,
-    ...(pass ? {} : { fix: `${smallFace(p)}${FACE_FIX}` }) };
+    ...(pass ? {} : { fix: `${smallFace(p, barPx)}${FACE_FIX}` }) };
 }
 
 /** The degrees the review swings a second camera about the cast, so an arm in the body shows from the side. */
@@ -422,7 +424,7 @@ function faceRows(onScreen: OnScreen, ids: readonly string[]): Row[] {
   const rows: Row[] = [];
   for (const [i, perf] of onScreen.performers.entries()) {
     const p = { ...perf, name: onScreen.performers.length === ids.length ? ids[i]! : perf.name };
-    rows.push(faceBoxRow(p));
+    rows.push(faceBoxRow(p, onScreen.performers.length));
     const still = p.travelPerSecond.filter((s) => s.still).map((s) => `${s.from}–${s.from + 1} s`);
     if (still.length) rows.push({ id: `still.${p.name}`, bar: 'something moves every second at card size', value: `frozen ${still.join(', ')}`, pass: false, advisory: true, fix: 'give that second a direction (a look, a breath expression, a small weight shift) or shorten the hold' });
   }
@@ -576,7 +578,7 @@ async function make(sheetFile: string, quick: boolean): Promise<boolean> {
       spawnSync('node', ['packages/tooling-testing/src/preview.mjs', frames], { cwd: ROOT, encoding: 'utf8' });
       notes.push(`twelve stills: ${rel(frames)}-sheet.jpg (look at it before the full review)`);
     } else notes.push(`stills failed: ${(r.stderr || r.stdout).split('\n').slice(-3).join(' ')}`);
-    rows.push({ id: 'faceBox', bar: `face ≥ ${BAR.faceBoxDevicePx} device px on the card`, value: 'not measured', pass: null, fix: 'run without --quick (the review measures it)' });
+    rows.push({ id: 'faceBox', bar: `face ≥ ${BAR.faceBoxDevicePx} device px on the card (${PAIR_FACE_BAR_PX} px for two performers)`, value: 'not measured', pass: null, fix: 'run without --quick (the review measures it)' });
     rows.push(await storyRow(join(dir, 'review'), sheet), await visualRow(join(dir, 'review')), await readingRow(join(dir, 'review')));
   } else {
     console.log('  reviewing (real time, a few minutes)…');
@@ -601,7 +603,12 @@ async function verdict(dir: string): Promise<boolean> {
   // The sheet as it was built (its copy in the version), else the sheet file.
   const built = await readFile(join(dir, 'sheet.jsonc'), 'utf8').then((t) => parseSheetText(t, join(dir, 'sheet.jsonc')), () => undefined)
     ?? await readFile(report.sheet, 'utf8').then((t) => parseSheetText(t, report.sheet), () => undefined);
-  const rows = [...report.rows.filter((r) => r.id !== 'reading' && r.id !== 'story' && r.id !== 'visual'), await storyRow(join(dir, 'review'), built), await visualRow(join(dir, 'review')), await readingRow(join(dir, 'review'))];
+  // The face rows again from the review's measures, so a face bar changed since the build applies.
+  const onScreen = await readFile(join(dir, 'review', 'on-screen.json'), 'utf8').then((t) => JSON.parse(t) as OnScreen, () => undefined);
+  const isFace = (id: string) => /^(faceBox|still|onCard)\./.test(id);
+  const kept = report.rows.filter((r) => r.id !== 'reading' && r.id !== 'story' && r.id !== 'visual' && !(onScreen && isFace(r.id)));
+  const face = onScreen ? faceRows(onScreen, built?.performers.map((p) => p.id) ?? []) : [];
+  const rows = [...kept, ...face, await storyRow(join(dir, 'review'), built), await visualRow(join(dir, 'review')), await readingRow(join(dir, 'review'))];
   const text = await writeReport(dir, report.sheet, rows, report.notes);
   console.log(`${formatRows(rows)}\n\n${text}`);
   return !verdictLine(rows).failed;

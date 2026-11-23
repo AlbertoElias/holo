@@ -159,7 +159,7 @@ its frame. Put a door's parts to one side of the origin, and a `change` with
 
 A set widens what the card frames, so the face gets smaller. Keep the set
 within about 1.2 m across, beside and in front of the body, and the face
-over the 40 px bar.
+over the 40 px bar (36 px when two performers share the card).
 
 ### Things that happen, and things worn
 
@@ -308,7 +308,7 @@ production and needs the owner's word.
 | `reach.*` | the palm gets to its point (leaning allowed) |
 | `size.*` | each dressed avatar file is at most 1.8 MB (house avatars are about 1.1-1.5) |
 | `quickLook` | the take fits the iPhone Quick Look budget |
-| `faceBox.*` | the face is at least 40 device px brow to chin on the phone card, outside the seconds the sheet marks `faceAway` |
+| `faceBox.*` | the face is at least 40 device px brow to chin on the phone card (36 px in a piece with two performers), outside the seconds the sheet marks `faceAway`; the readers still judge the faces |
 | `arms.body.*` | no arm or hand more than 2 cm into the torso, the legs or the head (measured on the posed skin, every frame) |
 | `arms.prop.*` | no arm or hand more than 1 cm into an object it does not hold or touch |
 | `arms.twist.*`, `arms.wrist.*` | the forearm twists at most 90° from neutral (palm up and palm down are each a quarter turn), the wrist bends at most 80° |
