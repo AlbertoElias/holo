@@ -1378,7 +1378,7 @@ the phone capture mandate):
 4b changes the recording format, so it waits for both owners to agree;
 4a's loss report is the case for it.
 
-### Slice 5: likeness from a photo (5a proposed, 5b after 2e)
+### Slice 5: likeness from a photo (5a approved, 5b after 2e)
 
 The second finish moved into slice 2 (2f) on 2026-11-17. What is left is
 the deferred half of likeness: a selfie read once into the slice 2 trait
@@ -1388,7 +1388,7 @@ creator's own photo. It changes no trait and no file format: it only
 fills the card a creator can already set by hand. It starts after the
 trait card has been used in both capture flows (2e).
 
-**Split on 2026-11-23 (proposed, decision 16).** The owner asked for "a
+**Split on 2026-11-23 (5a approved, decision 16).** The owner asked for "a
 feature where the avatar configuration is based on a photo of the user".
 Most of slice 5 does not need 2e, because beat sheets and `direct.ts`
 already take a trait card. So slice 5 is now two parts:
@@ -1825,7 +1825,7 @@ each joins both owning sessions when it starts.
 
 **Included:** slices 0 to 3, with slice 2 as the avatar flow (2a to 2g);
 slice 4 once camera driving is on `main`; slice 5a (a photo read into a
-card for authoring) when the owner approves it (decision 16); slice 5b
+card for authoring), approved 2026-11-23 (decision 16); slice 5b
 after 2e.  
 **Excluded:** an avatar editor in the app beyond the trait card; more than
 one family and three finishes; facial hair and headwear; uploading an
@@ -2346,7 +2346,9 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
       a trait and a mesh change, and the 2026-11-19 "uncanny" verdict is
       against it.
 
-    Open. Nothing is built until the owner answers.
+    **Answered 2026-11-23: "Approve 5a"** (option A). This approves building
+    5a as written, not the finished build: the build is approved only by the
+    owner's word after its proof video and `compare.jpg`.
 
 ## Test plan and evidence
 
