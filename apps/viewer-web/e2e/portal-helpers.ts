@@ -132,7 +132,17 @@ export async function settleScroll(page: Page): Promise<number> {
     }
     await page.waitForTimeout(150);
   }
-  throw new Error(`feed scroll did not settle: ${readings.slice(-5).join(", ")}`);
+  const layout = await page.locator(".feed-scroll").evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+    innerHeight: window.innerHeight,
+    snap: getComputedStyle(element).scrollSnapType,
+    children: [...element.children].map((child) => {
+      const el = child as HTMLElement;
+      return `${el.className.split(" ")[0]}@${el.offsetTop}+${el.offsetHeight}(${el.getBoundingClientRect().height})`;
+    })
+  }));
+  throw new Error(`feed scroll did not settle: ${readings.slice(-5).join(", ")}; layout ${JSON.stringify(layout)}`);
 }
 
 export async function scrollFeedToTop(page: Page): Promise<void> {

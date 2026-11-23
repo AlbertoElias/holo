@@ -58,9 +58,25 @@ export function armRestOffset(a: LoadedAvatar, side: Side, out = new THREE.Vecto
  * front), which on a hanging arm reads as hands on hips.
  */
 export function restElbowHint(a: LoadedAvatar, side: Side, out = new THREE.Vector3()): THREE.Vector3 {
-  // Back and out in the body frame; the solver reads the hint in `a.frame`, so turn it by the facing correction.
-  out.set(side === 'left' ? 0.3 : -0.3, 0, -1).normalize();
+  // Back and out in the body frame, turned as far as the chest has turned from bind: a hint that stays with the
+  // feet while the chest turns sends one elbow into the side. The solver reads the hint in `a.frame`, so turn it by the facing correction.
+  out.set(side === 'left' ? 0.3 : -0.3, 0, -1).normalize().applyAxisAngle(Y, chestYaw(a));
   return a.facingCorrection ? out.applyQuaternion(a.facingCorrection) : out;
+}
+
+const Y = new THREE.Vector3(0, 1, 0);
+
+/** How far the chest has turned about the body's up axis from bind (radians), in the body frame. */
+function chestYaw(a: LoadedAvatar): number {
+  const name = a.bind.has('upperChest') ? 'upperChest' : a.bind.has('chest') ? 'chest' : 'spine';
+  const bind = a.bind.get(name);
+  if (!bind) return 0;
+  a.body.updateWorldMatrix(true, false);
+  bind.bone.updateWorldMatrix(true, false);
+  const now = a.body.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(bind.bone.getWorldQuaternion(new THREE.Quaternion()));
+  // The bind chest's forward, carried by the turn since bind, flattened onto the floor.
+  const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(now.multiply(bind.rootQuaternion.clone().invert()));
+  return Math.abs(forward.x) + Math.abs(forward.z) < 1e-9 ? 0 : Math.atan2(forward.x, forward.z);
 }
 
 /**
