@@ -22,7 +22,9 @@
  * `--out` also writes the card there. The photo is not copied: it is read
  * into memory and served to the local page only. Nothing is sent to any
  * service. The segmenter model is fetched once from Google's model store, at
- * a pinned SHA-256, into `output/authoring/photo-look/.models/`.
+ * a pinned SHA-256, into `output/authoring/photo-look/.models/`. The six
+ * hair styles do not depend on the photo: they are rendered on the first run
+ * and kept in `output/authoring/photo-look/.styles/`.
  *
  * `--read-only` skips the renders (no hair style proposal, no compare.jpg):
  * the quick form the stability and spread checks run on many photos.
@@ -57,6 +59,7 @@ import { openTake, startViewer, type ViewerServers } from './lib/viewer-session.
 const APP = fileURLToPath(new URL('../../', import.meta.url));
 const OUTPUT = join(APP, 'output/authoring/photo-look');
 const MODELS = join(OUTPUT, '.models');
+const STYLE_CACHE = join(OUTPUT, '.styles');
 const WASM = join(APP, 'node_modules/@mediapipe/tasks-vision/wasm');
 const FACE_MODEL = join(APP, 'public/mediapipe/face_landmarker.task');
 const SEGMENTER = {
@@ -254,14 +257,14 @@ async function renderHeads(servers: ViewerServers, dir: string, label: string, a
   await mkdir(dir, { recursive: true });
   const sheetFile = join(dir, 'still.json');
   const performers = avatars.map((avatar, i) => ({ id: `p${i}`, avatar, at: [i * SPACING, 0], facing: 0 }));
-  await writeFile(sheetFile, `${JSON.stringify({ title: label, intent: 'Each performer stands still, facing us, with a neutral face.', duration: 3, life: false, performers, beats: [] }, null, 2)}\n`);
+  await writeFile(sheetFile, `${JSON.stringify({ title: label, intent: 'Each performer stands still, facing us, with a neutral face.', duration: 1, life: false, performers, beats: [] }, null, 2)}\n`);
   const take = (await build(sheetFile, join(dir, 'still.glb'))).out;
   const open = await openTake(servers, take, { viewport: { width: 600, height: 600 }, title: label });
   try {
     const { page } = open;
     await page.addScriptTag({ content: REVIEW_PAGE });
     await call(page, 'init', open.url);
-    await call(page, 'seek', 1.5);
+    await call(page, 'seek', 0.5);
     const bodies = await call(page, 'bodies') as { performers: { head: [number, number, number] }[] };
     const out: Buffer[] = [];
     for (const i of avatars.keys()) {
@@ -273,6 +276,24 @@ async function renderHeads(servers: ViewerServers, dir: string, label: string, a
     }
     return out;
   } finally { await open.close(); }
+}
+
+/**
+ * The house base in the default look (its face frame) and the six hair
+ * styles keyed. They do not depend on the photo, so they are rendered once
+ * and kept in `.styles/<hash>/`, keyed by the GLB files and the view.
+ */
+async function styleShots(servers: ViewerServers, defaults: LookCard, work: string): Promise<Buffer[]> {
+  const avatars = [await dressedFile(defaults, 'clay'), ...await Promise.all(HAIR_STYLES.map((style) => keyedFile({ ...defaults, hair: { ...defaults.hair, style } }, work)))];
+  const hash = createHash('sha256').update(JSON.stringify({ VIEW, RENDER, BACKGROUND, SPACING }));
+  for (const file of avatars) hash.update(await readFile(file));
+  const cache = join(STYLE_CACHE, hash.digest('hex').slice(0, 16));
+  const names = ['plain', ...HAIR_STYLES].map((n) => join(cache, `${n}.jpg`));
+  if (names.every((n) => existsSync(n))) return Promise.all(names.map((n) => readFile(n)));
+  const shots = await renderHeads(servers, join(work, 'styles'), 'Photo look: hair styles', avatars);
+  await mkdir(cache, { recursive: true });
+  await Promise.all(shots.map((shot, i) => writeFile(names[i]!, shot)));
+  return shots;
 }
 
 export interface PhotoLookReport {
@@ -316,8 +337,7 @@ async function main(): Promise<void> {
     if (readOnly) {
       hairStyle = { value: defaults.hair.style, read: false, notes: ['--read-only: no style is proposed; the default is kept'] };
     } else if (read.hairGrid) {
-      const keyed = await Promise.all(HAIR_STYLES.map((style) => keyedFile({ ...base, hair: { ...base.hair, style } }, work)));
-      const shots = await renderHeads(servers!, join(work, 'styles'), 'Photo look: hair styles', [await dressedFile(base, 'clay'), ...keyed]);
+      const shots = await styleShots(servers!, defaults, work);
       renderFrame = await reader.look<FaceFrame | null>('frame', reader.addRender('plain', shots[0]!));
       if (!renderFrame) {
         hairStyle = { value: defaults.hair.style, read: false, notes: ['the face landmarker found no face on the house base render, so no style is proposed; the default is kept'] };
