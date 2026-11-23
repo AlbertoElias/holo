@@ -295,9 +295,13 @@ export async function measureRim(page: Page, label: string, groundNames: readonl
       const capped = lift >= 0.6 * radii.y - 1e-3;
       const belowFoot = found !== null && found < footY + 0.03;
       const error = found === null ? null : rim - found;
-      const tolerance = slopeDeg < 30 ? null : cell * Math.tan((slopeDeg * Math.PI) / 180);
+      const slope = Math.tan((slopeDeg * Math.PI) / 180);
+      const tolerance = slopeDeg < 30 ? null : cell * slope;
+      // The field reads the ground at its cells' centres and smoothing lifts a bin at most 3 cm over that: on a slope
+      // the edge can stand half a cell's diagonal from the centre, so up to that much higher or lower than it.
+      const above = Math.max(0.05, 0.03 + cell * Math.SQRT1_2 * slope);
       let pass: boolean;
-      const onGround = error !== null && (tolerance === null ? error >= -0.03 && error <= 0.05 : Math.abs(error) <= Math.max(tolerance, 0.05));
+      const onGround = error !== null && (tolerance === null ? error >= -0.03 && error <= above : Math.abs(error) <= Math.max(tolerance, 0.05));
       if (found === null) pass = lift <= 1e-3;
       // Ground higher than the dome can take: the lift stays at its cap, 0.6 × the height (the brief's failure
       // cases). A capped rim on the ground within the tolerance passes as any other.
