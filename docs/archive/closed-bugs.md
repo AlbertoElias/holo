@@ -1907,3 +1907,29 @@ bug above.)
   still pulls against the show's palm turn while the show takes over, and the show's goal arrives with no speed when
   the take ends while the target still moves. Next fix: fade the take's hand turn by the takeover progress, and keep
   the take's goal moving until the show's attack ends.
+
+### B-099 — The live face: the laugh and the sad face are too strong
+
+- **Area:** apps/capture (camera face path, `src/face/trackedFace.ts`)
+- **Severity:** P2
+- **Observed:** 2026-11-23, by the owner on the B-093 video: "live face is so much better. i would still improve sad
+  and laughter, those are a bit too exagerated. maybe the mouth is open too much? we should aim for a pixar-like
+  expression".
+- **Evidence:** the `live-face` XR check with `LIVE_FACE_FRAMES=1 LIVE_FACE_VIEW=mouth`. In the laugh the jaw
+  reached 0.65 and the lip gap at the midline was 98 px of the 640 px mouth view (the smile: 21 px). In the sad face
+  the mouth was closed (8 px, the same as neutral), but the frown reached 0.94. So the owner's guess holds for the
+  laugh only; the sad fault was the frown.
+- **Cause:** the shaper sent the full jaw score to the face in a laugh, and it sent the full sad level to the mouth
+  corners. The mouth carried each expression alone.
+- **Fix:** the shaper reads a laugh level (a wide smile together with an open jaw). In a laugh the jaw opens to 0.6
+  of its value, the upper lip rises less and the lower lip drops less, the cheeks get 0.15 more and the eye squint
+  0.06 more. The mouth corners take 0.69 of the sad level, the inner brows 0.9, and the lower lip pushes up with it. A
+  smile and speech have a laugh level of 0, so they do not change. The check holds the laugh jaw in 0.3 to 0.5 and
+  the sad frown in 0.5 to 0.7 (the bars were "at least 0.4" and "at least 0.6", which asked for the strong faces).
+- **Proof:** laugh: jaw 0.65 → 0.39, lip gap 98 → 65 px, cheek raise 0.70 → 0.85, eye squint 0.60 → 0.66, upper lip
+  0.76 → 0.57. Sad: frown 0.94 → 0.65, inner brows 0.75 → 0.85, mouth closed. Neutral, smile, anger and speech:
+  every channel is equal in every frame. Surprise: 0.01 in its first frame only (the tail of the sad face before
+  it). The avatar file does not change (1.58 MB). Two opus design reviews judged the sheets against the clay
+  expression sheet; they disagreed on the eye squint (0.75, then 0.60), and the value is between them.
+- **Not covered:** no person was in the loop; the sets are hand-made scores.
+- **Closed:** 2026-11-23.
