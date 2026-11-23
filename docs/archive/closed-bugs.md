@@ -1743,4 +1743,7 @@ bug above.)
 - **Reproduction:** record any take on the default scene in capture.
 - **Cause:** the default scene's statue stood at the scene's centre, where the spawn search starts, so every take began on it.
 - **Fix:** option E, ae06f9f1636c: `scene.glb` moves the statue off the centre, and the spawn stays at the centre on the grass. The spawn code does not change. Bubble-capture under `CI_EMULATE_LOAD=2` passed 3 of 3; `verify:pr` passed before the merge.
+  - With the statue off the centre, the card's centre can show only sky, so `portal.pipeline.spec.ts` wheeled over no hologram
+    and did not zoom (3 of 4 runs failed). The spec now wheels over a point that the card's hit test finds on the hologram
+    (`hologramPoints`, moved to `portal-helpers.ts`, and it skips controls); 6 of 6 passed.
 - **Closed:** 2026-11-21, owner decision (option E).
