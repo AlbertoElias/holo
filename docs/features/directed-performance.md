@@ -1378,7 +1378,7 @@ the phone capture mandate):
 4b changes the recording format, so it waits for both owners to agree;
 4a's loss report is the case for it.
 
-### Slice 5: likeness from a photo (5a approved, 5b after 2e)
+### Slice 5: likeness from a photo (5a built, at the owner's gate; 5b after 2e)
 
 The second finish moved into slice 2 (2f) on 2026-11-17. What is left is
 the deferred half of likeness: a selfie read once into the slice 2 trait
@@ -4501,6 +4501,119 @@ the hips to 0.08 m (B-086). The `object` suite's other failures are on
 `main` with the stock avatar too (B-069).
 
 **Emulation only.** None of this was seen on a headset or a phone.
+
+### Slice 5a evidence (2026-11-23): built, at the owner's gate
+
+`photo-look.ts` (in `apps/capture/scripts/authoring/`) and the read in
+`packages/avatar-look` (`photo.ts` for the arithmetic, `read.ts` for the
+browser part) are built. Nothing in `apps/capture/src/` changed. The read
+runs in headless Chromium through Playwright. The page loads only from a
+local origin, and the browser aborts every other request, so the photo
+cannot leave the machine. The one download is the segmenter model, once,
+from Google's storage, with a SHA-256 check. A full run (read, renders,
+`compare.jpg`) takes about 100 s, and `--read-only` (no renders, no style
+proposal) about 3 s.
+
+**Licences.** The agent read the model cards before any code used the
+models: the face mesh V2 (in `face_landmarker.task`), BlazeFace short
+range, the blendshape V2 model and the multiclass selfie segmenter. All
+four are Apache 2.0. None has a territory, non-commercial or user-count
+clause, so no question went to the owner and the fallback was not needed.
+
+**How each trait is read.**
+
+- Skin: five discs (the forehead's middle and sides and both cheeks, each
+  0.05 face widths), only the segmenter's face-skin pixels. The middle
+  fifth by luminance of each disc, then the middle disc. The white balance
+  is from the eye whites: the whitest third of each eye outside the iris,
+  drawn in by a fifth from the lids. The tint per channel is capped at
+  1.25×, and the exposure change at 0.8× to 1.25× (`EXPOSURE_RANGE`). With
+  too little eye white, the brightest 1% of the photo is used. The OKLab
+  lightness is placed on a span of 0.92 (porcelain) to 0.52 (espresso)
+  (`REAL_SKIN_L`), and takes the swatch of the same rank.
+- Hair colour: the segmenter's hair class, eroded by 1.2% of the face width
+  from its edges. The 60–85% band by luminance (the lit body of the hair,
+  above the shade between strands and below the shine). The nearest
+  `HAIR_COLOUR` in OKLab with lightness at half weight
+  (`HAIR_LIGHTNESS_WEIGHT`). Hair under 0.15 face widths squared is not
+  read.
+- Eyes: each iris disc from 0.35 to 0.85 of its radius, inside the eye
+  outline, without glints. The confidence is the product of the iris size,
+  both eyes agreeing, the margin over the next swatch and the glare. Under
+  0.5 the card keeps the default.
+- Hair style: the hair mask in the face's own frame (a 48 × 62 grid of
+  cells 0.05 face widths square), against the six styles rendered from the
+  same view with their hair keyed green. The best overlap (intersection
+  over union, as-is or mirrored) is the proposal. Its confidence is the
+  margin (full at 0.2) times the best overlap (full at 0.4). Under 0.5
+  (`HAIR_STYLE_MIN_CONFIDENCE`) the card keeps the default style.
+
+**Calibration (by the agent, in the owner's absence).** The first version
+scaled every photo's eye whites to the same lightness with no cap. On the
+portraits below, a shaded eye white then made 12 of the faces read
+whiter than any real skin (OKLab L above 0.95). Studio portraits are already
+exposed well, so the exposure change is now capped. The span was first
+the Monk Skin Tone scale's (L 0.95 to 0.27), and every face read
+porcelain to honey on it, because a lit face reads lighter than its chart
+colour. The span is now the photos' own. For hair, the middle band read
+the shade between strands: blonde hair read ash brown or silver, and at
+full lightness weight grey-brown hair read chestnut.
+
+**Check 2, spread.** 48 official portraits of members of the US Congress
+(`unitedstates.github.io/images/congress/original/`, about 450 × 550 px;
+the GPO states that they are in the public domain). They are not in the
+repository. Six were refused by name as too small (a face 99 to 166 px
+wide, under the 200 px minimum). Before any read was seen, the agent put
+ten of them into lightness groups by eye (1 lightest to 7 darkest), and
+nine of those were read.
+
+| Portrait | Group by eye | Skin pick | Rank (0–7) |
+|---|---|---|---|
+| G000555 | 1 | goldenSand | 2.04 |
+| B001315 | 1 | goldenSand | 2.16 |
+| B001243 | 2 | porcelain | 0.27 |
+| K000397 | 2 | linen | 1.04 |
+| B001287 | 3 | honey | 3.01 |
+| W000788 | 5 | goldenSand | 1.68 |
+| M001229 | 5 | honey | 2.51 |
+| C000537 | 6 | copper | 5.36 |
+| D000096 | 7 | copper | 5.44 |
+
+25 of the 33 pairs in different groups are in order (76%). The misses are
+the two lightest faces, which read a group darker (their photos are
+exposed low), and W000788, a medium-brown face under bright studio light,
+which reads three groups lighter. The light-to-dark ends are in order, the
+middle is not reliable to one swatch, and darker skin is under-sampled
+here (no portrait read darker than copper). Picks over all 42 read portraits: linen 14,
+goldenSand 9, honey 9, porcelain 6, copper 3, caramel 1. Hair: ashBrown
+16, espresso 12, silver 7, black 6, wheat 1 (grey hair reads silver).
+Eyes: 28 read (darkBrown 19, blue 4, coolGrey 2, mossGreen 2, hazel 1),
+14 kept the default for a confidence under 0.5. Hair style proposals
+(full runs): B001243 wavyBob (overlap 0.56, margin 0.21), M001229 wavyBob
+(0.48, 0.13), and D000096, very short hair, with every overlap under 0.13,
+so the default style stays.
+
+**Check 1, stability.** Waits for at least five photos of the owner. They
+were asked for on 2026-11-23 through the session that started this work.
+No photo of the owner is in the repository or will be.
+
+**Check 3, the dressed result.** Five read cards (B001243 in clay, ink
+and light; M001229 and D000096 in clay) went through `dressedFile` and
+`avatar-audition.ts`, beside the default look in clay. All six give the
+same rows: everything passes except `turn.armR-in-torso` (11 vertices,
+up to 28.4 mm), the house base's known turn-row failure (see "Slice 2d
+evidence"), and the informational `other.tongueOut`. The read adds no
+failing row, because a card holds only values the audition already
+covers.
+
+**Check 4, the owner's verdict on `compare.jpg`.** Waits for the owner's
+photos.
+
+**Check 5, proof video.** Recorded in real time in the ignored
+`apps/capture/output/proof/`: a public-domain portrait goes in,
+`photo-look.ts` runs, the card and `compare.jpg` come out, `direct.ts`
+builds `sheets/expressions.json` with its performer in that card, and the
+take plays. It is not linked from here.
 
 ## Physical-device limits
 
