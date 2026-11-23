@@ -39,6 +39,7 @@ import { BUILDS, CLOTHING, EYES, FINISHES, GLASSES, HAIR_COLOUR, HAIR_STYLES, SK
 
 import { actingReport, diffTakes, summarize } from './acting-report.ts';
 import { bodyLine, build, loadSheet, OBJECT_LIMITS, resolveAvatar } from './direct.ts';
+import { measureSmoothness, SMOOTH_LIMITS } from './lib/smoothness.ts';
 import { BAR } from './lib/audition-bar.ts';
 import { faceBarPasses, faceBarPx, FACE_AWAY_MAX_SHARE, PAIR_FACE_BAR_PX } from './lib/face-bar.ts';
 import { FACE_CHANNELS } from '@holoim/avatar-face';
@@ -518,7 +519,13 @@ async function make(sheetFile: string, quick: boolean): Promise<boolean> {
   }
   for (const t of built.take.tracks) {
     const line = bodyLine(t.motion);
+    await writeFile(join(dir, `motion.${t.spec.id}.json`), `${JSON.stringify(t.motion)}\n`);
     rows.push({ id: `body.${t.spec.id}`, bar: 'feet planted, joints in range, no pops', value: line.split(';')[0]!, pass: !line.startsWith('FAIL'), advisory: true, ...(line.startsWith('FAIL') ? { fix: 'a step or a bend is too big or too quick: make it smaller or give it more attack time' } : {}) });
+    const sm = measureSmoothness(t.motion);
+    const S = SMOOTH_LIMITS;
+    const w = sm.worst;
+    rows.push({ id: `smooth.${t.spec.id}`, bar: `no joint slows under ${S.stallShare * 100}% of its speed around it and goes on the same way (a stammer)`, value: w ? `worst ${(w.share * 100).toFixed(0)}% at ${w.t.toFixed(2)} s, ${w.joint} ${w.speed.toFixed(2)} m/s between ${w.around.toFixed(2)} m/s; ${sm.over} moments over` : 'no slow moment between two moves', pass: sm.over === 0, ...(sm.over ? { fix: `the body stops between two moves that go the same way (at ${w!.t.toFixed(2)} s): overlap them (start the second before the first arrives, or give the first a longer attack), or make it one move` } : {}) });
+    await writeFile(join(dir, `smooth.${t.spec.id}.json`), `${JSON.stringify(sm.stalls.map((x) => ({ t: x.t, joint: x.joint, share: Math.round(x.share * 1000) / 1000, speed: Math.round(x.speed * 100) / 100, around: Math.round(x.around * 100) / 100 })))}\n`);
   }
 
   // Arms: nothing through the body or a prop, every joint in a human range.
@@ -536,6 +543,10 @@ async function make(sheetFile: string, quick: boolean): Promise<boolean> {
     arm('twist', `forearm twist within ${A.twist}° of neutral`, `worst ${r.twist.value.toFixed(0)}° ${at(r.twist)}`, r.over.twist, 'ask for a palm the forearm can turn to (palm up and palm down are each a quarter turn), or turn the body toward the point');
     arm('wrist', `wrist bend within ${A.wristBend}°`, `worst ${r.wristBend.value.toFixed(0)}° ${at(r.wristBend)}`, r.over.wristBend, 'the palm faces a way the wrist cannot bend: change the palm, or bring the point in front of the shoulder');
     arm('elbow', `elbow straight at most ${A.hyperextension}° past straight and at most ${A.elbowSideways}° off its hinge`, `past straight ${Math.max(0, r.hyperextension.value).toFixed(0)}° ${at(r.hyperextension)}, sideways ${r.elbowSideways.value.toFixed(0)}° ${at(r.elbowSideways)}`, r.over.hyperextension + r.over.elbowSideways, 'the elbow bends the wrong way: this is a solver fault, report it with the sheet');
+    if (r.held.length) {
+      arm('held', `no finger or palm more than ${A.heldDepth * 1000} mm into what the hand holds`, `deepest ${(Math.max(0, r.heldDepth.value) * 1000).toFixed(1)} mm ${at(r.heldDepth)}`, r.over.heldDepth, 'the hand sinks into what it holds: this is a solver fault (the fingers must close on its surface), report it with the sheet');
+      await writeFile(join(dir, `held-depth.${t.spec.id}.json`), `${JSON.stringify(r.held.map((h) => ({ t: h.t, mm: Math.round(h.depth * 10000) / 10, where: h.where })))}\n`);
+    }
   }
 
   // 4. Size per avatar file, and the Quick Look budget.

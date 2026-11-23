@@ -13,6 +13,10 @@ import { palmFrameQuaternion } from '../../../src/xr/palmFrame.ts';
 
 /** How far a held object's surface stays from the palm's center. */
 const PALM_REST = 0.013;
+/** The palm-side skin under a knuckle, from the knuckle's joint, as a share of the hand's length. */
+const KNUCKLE_PAD = 0.1;
+/** The gap a held object keeps from that skin, metres. */
+const KNUCKLE_REST = 0.002;
 
 export const FINGERS = ['thumb', 'index', 'middle', 'ring', 'little'] as const;
 export type FingerName = (typeof FINGERS)[number];
@@ -159,6 +163,19 @@ export class HandRig {
     }
   }
 
+  /** Sets one finger joint by joint: `ks[i]` is joint i's curl (0 straight, 1 at its max), with the hand's `spread`. */
+  applyFinger(finger: FingerName, ks: readonly number[], spread: number): void {
+    this.joints[finger].forEach((j, i) => {
+      j.bone.quaternion.copy(j.bindLocal).multiply(q1.setFromAxisAngle(j.curlAxis, (ks[i] ?? 0) * j.max));
+      if (i === 0 && finger !== 'thumb') j.bone.quaternion.multiply(q2.setFromAxisAngle(j.spreadAxis, spread * SPREAD_MAX * SPREAD_SIGN[finger] * (this.side === 'right' ? 1 : -1)));
+    });
+  }
+
+  /** A finger's bones, from the knuckle out. */
+  fingerBones(finger: FingerName): THREE.Bone[] {
+    return this.joints[finger].map((j) => j.bone);
+  }
+
   fingerJointCount(): number {
     return FINGERS.reduce((n, f) => n + this.joints[f].length, 0);
   }
@@ -202,6 +219,15 @@ export class HandRig {
       const side = Math.sqrt(Math.max(0, out.distanceToSquared(palm) - along * along));
       const need = Math.sqrt(Math.max(0, (radius + PALM_REST) ** 2 - side * side));
       out.addScaledVector(normal, need - along);
+    }
+    // And off the knuckles: the skin under each knuckle is on the palm's side of the bone, and a big
+    // object that clears the palm's center can still sink into it (the base of the fingers).
+    for (const k of [this.knuckles.index, this.knuckles.middle, this.knuckles.little]) {
+      const skin = k.getWorldPosition(new THREE.Vector3()).addScaledVector(normal, KNUCKLE_PAD * this.length);
+      const along = out.clone().sub(skin).dot(normal);
+      const side = Math.sqrt(Math.max(0, out.distanceToSquared(skin) - along * along));
+      const need = Math.sqrt(Math.max(0, (radius + KNUCKLE_REST) ** 2 - side * side));
+      if (along < need) out.addScaledVector(normal, need - along);
     }
     return out;
   }
