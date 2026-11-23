@@ -262,7 +262,10 @@ values that come from the automation hook `__setFaceInput` are not shaped.
 
 **The mouth.** `house-base/build.py` builds each lip as a rounded roll with
 a closed corner, an upper teeth row (the lower row stays behind the lip), a
-tongue and a dark cavity. A round mouth opens as an ellipse. The lips move
+tongue and a dark cavity. A round mouth opens as an ellipse. The model
+carries normals for its face shapes, so a lifted cheek and the fold beside
+the mouth change the shading (the default avatar file is 2.7 MB, from
+1.3 MB; a recorded take stores those normals sparse). The lips move
 off the teeth, and the
 smile moves the skin round the mouth (the cheek and the fold from the nose
 to the mouth corner) through the `mouthSmile` skin units, masked by base.json

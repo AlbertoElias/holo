@@ -298,6 +298,9 @@ moved = {c: np.zeros((N, 3)) for c in SHAPES}
 ss = F["mouth"]["smileSkin"]
 round_mouth = np.hypot((base[:, 0] - cx) / F["mouth"]["halfWidth"], (base[:, 2] - zm) / ss["tall"])
 keep_smile = smoothstep(ss["from"], ss["to"], round_mouth)
+# It also fades out toward the eyes: the sockets are let into the face after it, and a cheek lifted in front of a
+# socket that stayed back showed as a dark band under each eye.
+keep_smile *= 1 - smoothstep(ze - ss["eyeFrom"], ze - ss["eyeTo"], base[:, 2])
 for c in SKIN:
     moved[c] = skin_moved[c] * (keep_jaw[:, None] if c.startswith("jaw") else keep_smile[:, None] if c.startswith("mouthSmile") else 1.0)
 skin = BVHTree.FromPolygons([tuple(v) for v in base], body_polys)
@@ -1058,7 +1061,7 @@ bpy.context.scene["holoimAvatar"] = json.dumps({"name": P["name"], "finish": P["
 bpy.ops.object.select_all(action="SELECT")
 bpy.ops.export_scene.gltf(
     filepath=OUT, export_format="GLB", use_selection=False, export_yup=True, export_apply=False,
-    export_morph=True, export_morph_normal=False, export_skins=True, export_animations=False,
+    export_morph=True, export_morph_normal=True, export_skins=True, export_animations=False,
     export_materials="EXPORT", export_extras=True, export_def_bones=False, export_texcoords=False,
     export_tangents=False, export_cameras=False, export_lights=False,
 )
