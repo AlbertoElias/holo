@@ -82,6 +82,13 @@ const RUB_ROLL_DEG = 15;
 /** Where a gesture's hand goes, from its shoulder per arm length (out, up, forward in the body frame). */
 /** A hanging hand: fingers this far forward of straight down (radians), the wrist turned at most `most` to get there. */
 const REST_WRIST = { forward: 12 * DEG, most: 45 * DEG } as const;
+/**
+ * The wrist goal moves by this share of the hand's error per step. Near full stretch a whole step overshoots and
+ * the goal swings between two arm lengths (3 mm apart); the pose then depends on which step ends the loop, and
+ * the wrist steps when the loop starts to converge (B-099, B-100: the crouch at 1.73 s).
+ */
+const EFFECTOR_GAIN = 0.5;
+const EFFECTOR_STEPS = 16;
 /** The elbow reaches its working direction by this fraction of a lift (1 / ELBOW_LEAD). */
 const ELBOW_LEAD = 2;
 /**
@@ -2009,7 +2016,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
         const line = point.clone().sub(shoulder).normalize().applyQuaternion(a.frame.getWorldQuaternion(new THREE.Quaternion()).invert());
         const hint = elbowHint.clone().applyAxisAngle(line, swivel * DEG);
         const wr = wrist.clone();
-        for (let i = 0; i < 8; i += 1) {
+        for (let i = 0; i < EFFECTOR_STEPS; i += 1) {
           solveArm(a, s, wr, { palmToward: toward, wristBend: flat ? 0 : 0.35 * turnK, elbowHint: hint });
           easeTwist(a, s, turnK);
           a.frame.updateMatrixWorld(true);
@@ -2017,7 +2024,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
           effector(at);
           const err = point.clone().sub(at);
           if (err.length() < 5e-4) break;
-          wr.add(err);
+          wr.addScaledVector(err, EFFECTOR_GAIN);
         }
       };
       // A turn the wrist cannot make alone (an aim, a grip axis, an object set upright)

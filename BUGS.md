@@ -143,6 +143,25 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Expected:** the wheel gesture that stops at the inside end leaves the camera in free mode on every run.
 - **Reproduction:** not tried yet. Try `CI_EMULATE_LOAD=2 scripts/ci-emulate.sh bash -c "cd apps/viewer-web && VITE_IWER_SEM_SCENE=office_small RUN_E2E_PIPELINE=1 XR_TEST_MODE=iwer npx playwright test e2e/deep-zoom.spec.ts --workers=1 --repeat-each=5"` on caf7cad.
 
+### B-100 — Authored crouch: the right arm steps about 8 mm in one frame as the take starts (1.73 s)
+
+- **Area:** `apps/capture/scripts/authoring` (`lib/direct.ts` reach solve, `src/ik/ArmIkSolver.ts` reach stop)
+- **Severity:** P3 (a small draft fault; no bar sees it, the opus review saw a probable stammer at the shin)
+- **Observed:** 2026-11-23, crouch v27 to v43 (`output/authoring/gesture-proof/crouch.json`)
+- **Evidence:** from the shoulder, the right elbow and wrist move 13 mm in the frame at 1.73 s against 2 to 5 mm in the
+  frames around it (v36). The cause has two parts. (1) The wrist goal loop in the reach solve does not converge near
+  full stretch: with a whole step per round the goal swings between two arm lengths 3 mm apart, so the pose depends
+  on the round that ends the loop. Fixed in B-099: the goal moves by half the error, 16 rounds (`EFFECTOR_GAIN`);
+  the step is now 8 mm. (2) At 1.77 s the hand gets to the solver's hard stop 1 cm short of the arm's length and stops
+  there (424 mm from the shoulder). Easing the goal into that stop (tanh over 8 or 20 mm, v41 and v42) did not make
+  the step smaller and put a finger 7 mm into the ball (`arms.held.me` FAIL), so it was taken out.
+- **Expected:** the arm moves on with no one-frame step as the take starts.
+- **Reproduction:** `node --conditions=development --import tsx scripts/authoring/make.ts output/authoring/gesture-proof/crouch.json --quick`
+  in `apps/capture`, then the per-frame step of `rightElbow` and `rightWrist` less `rightShoulder` in `motion.me.json`.
+- **Next fix:** find what moves the elbow 8 mm at 1.73 s with the loop converged: print the solver's clavicle swing
+  (protraction grows near full reach, `ArmIkSolver.ts` line 90) and the elbow hint per frame. If the swing jumps, ease
+  it by the target's distance over a wider band. A bar for a one-frame step of a joint from its parent would catch it.
+
 ## Entry template
 
 ```md

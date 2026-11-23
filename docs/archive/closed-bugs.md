@@ -1923,16 +1923,20 @@ bug above.)
   came in only by the show's own attack, and the take left the blend when its settle ended, while the show target
   still moved. At 3.83 s the arm was also at full stretch toward a target 0.42 m forward. (3) Pinch: `palm: toward`
   faces the shoulder-to-target line, which is near the forearm line during the raise.
-- **Fix:** `fitCuffs` (in `house-base.ts`) gives each jumper vertex near the wrist the skin weights of the nearest
-  hand-skin vertex within 3 cm; the three wardrobes and the public base are redressed. A takeover (a later reach
+- **Fix:** `fitCuffs` (in `house-base.ts`) blends the skin weights into each jumper vertex near the wrist: the mean
+  weights of the hand-skin vertices within 3 cm (each counted by 1/d²), in by the cuff depth over 2.5 cm, so the
+  sleeve end has no jagged edge. The three wardrobes and the public base are redressed. A takeover (a later reach
   while an earlier take holds) has a progress from the middle of the take's hold to the later's arrival: the later's
   palm comes in by it, the take's hand turn goes out by it, the take's goal stays in the blend until the later
   arrives, and the goal moves by the later's envelope. A `reach` takes `palmAt`, a point the palm faces. Sheets:
-  the crouch show target is 0.36 m forward (was 0.42); the pinch lift has `"palmAt": "viewer"`. No bar changed.
-- **Proof:** the cuff comes out 0.0 mm in all frames of both pieces (was 9 to 10 mm). Crouch v34: all motion bars
-  pass, `turn.me` 230°/s (3.77 s), `smooth.me` 59 %, `jump.me` 1.25 m/s, `jump.props` 1.37 m/s, grip 0.3 mm 2.7°,
-  reach.show 12 mm, held 2.0 mm, support 57 %, the arms at rest identical to v27. Pinch v10: `turn.me` 129°/s
-  (was 276), all motion bars pass, the palm and ring face the camera.
-- **Closed:** 2026-11-23. Open as a draft fault: at 1.73 to 1.77 s in the crouch the right wrist steps about 1 cm in
-  one frame. It is not the clearing: the hanging arm is nearly straight (0.418 of 0.435 m) while the elbow hint turns
-  fast as the take starts, so the elbow plane swings. It was in v27 too, and no bar sees it.
+  the crouch show target is 0.36 m forward (was 0.42); the pinch lift has `"palmAt": "viewer"`. The reach solve's
+  wrist goal moves by half the hand's error per round, 16 rounds (`EFFECTOR_GAIN`): a whole step swung the goal
+  between two arm lengths near full stretch. No bar changed.
+- **Proof:** the cuff comes out 0.0 mm in all frames of both pieces (was 6 to 10 mm). The refit changes only the
+  jumper: 182 JOINTS and 200 WEIGHTS of its 2563 vertices, all within 4.7 cm of a wrist joint; every other byte,
+  the JSON and the file sizes are the same. On the approved sheets the joints move 0.000 mm in all 181 frames.
+  Crouch v43: all motion bars pass, `turn.me` 231°/s (3.80 s, was 333), `smooth.me` 66 % (was 0 %), `jump.me`
+  1.25 m/s, `jump.props` 1.37 m/s; grip 0.3 mm 2.7°, reach.show 12 mm, held 2.0 mm, support 57 % (the same as v27);
+  the arms at rest 0.0 mm from v27. Pinch v14: `turn.me` 129°/s (was 276), all motion bars pass, the arms at rest
+  0.0 mm from v8, the palm and ring face the camera.
+- **Closed:** 2026-11-23. Open: B-100, the crouch arm still steps 8 mm in one frame at 1.73 s (was 13 mm).
