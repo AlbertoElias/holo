@@ -39,6 +39,8 @@ export type ArmIkOptions = {
 const CLAVICLE_RATE_DEG_PER_SEC = 150;
 
 // The forearm roll stops here, so a twist past anatomy does not wind the elbow.
+/** Halvings of the shoulder swing share per solve: 2^-12 of the swing is under a tenth of a millimetre at the upper arm. */
+const SHOULDER_SETTLE_STEPS = 12;
 const MAX_FOREARM_ROLL = THREE.MathUtils.degToRad(90);
 
 export class ArmIkSolver {
@@ -85,13 +87,35 @@ export class ArmIkSolver {
     if (armModel) {
       if (chain.hasClavicle) this.poseClavicle(chain, targetPositionWorld, armLength, armModel.deltaSec);
     } else if (chain.shoulderBindAimInParent) {
-      const reach = chain.upperLength + chain.lowerLength;
-      const dist = this.tmpUpperWorld.distanceTo(targetPositionWorld);
-      const factor = THREE.MathUtils.smoothstep(dist / Math.max(reach, 1e-5), 0.75, 1.0);
+      // The swing grows as the target nears full reach, and the swing itself
+      // brings the upper arm nearer, which makes it smaller. Fed back one
+      // solve at a time, that loop does not settle: it goes between two
+      // shoulders, and the pose depends on how many solves ran (a jump in
+      // one frame, B-097). The share of the swing that agrees with its own
+      // result is one number with one answer: find it by halving, from the
+      // bind shoulder, so a target always gives the same shoulder.
+      const reach = Math.max(chain.upperLength + chain.lowerLength, 1e-5);
+      const most = fullReach ? 1 : 0.9;
+      chain.shoulder.quaternion.copy(chain.shoulderBindQuaternion);
+      chain.shoulder.updateMatrixWorld(true);
+      chain.upperArm.getWorldPosition(this.tmpUpperWorld);
       this.tmpVecA.subVectors(targetPositionWorld, this.tmpUpperWorld).normalize();
       if (this.aimBoneAtDirection(chain.shoulder, chain.shoulderBindQuaternion, chain.shoulderBindAimInParent, this.tmpVecA)) {
-        chain.shoulder.quaternion.slerp(chain.shoulderBindQuaternion, 1 - factor * (fullReach ? 1 : 0.9));
-        chain.shoulder.updateMatrixWorld(true);
+        this.tmpQuatB.copy(chain.shoulder.quaternion);
+        const swing = (share: number): number => {
+          chain.shoulder.quaternion.copy(chain.shoulderBindQuaternion).slerp(this.tmpQuatB, share * most);
+          chain.shoulder.updateMatrixWorld(true);
+          chain.upperArm.getWorldPosition(this.tmpUpperWorld);
+          return THREE.MathUtils.smoothstep(this.tmpUpperWorld.distanceTo(targetPositionWorld) / reach, 0.75, 1.0);
+        };
+        let low = 0;
+        let high = 1;
+        for (let i = 0; i < SHOULDER_SETTLE_STEPS; i += 1) {
+          const mid = (low + high) / 2;
+          if (swing(mid) > mid) low = mid;
+          else high = mid;
+        }
+        swing((low + high) / 2);
       }
     }
     chain.upperArm.getWorldPosition(this.tmpUpperWorld);

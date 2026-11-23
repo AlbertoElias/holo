@@ -1851,3 +1851,31 @@ bug above.)
   held (2.1 mm), support (56%) and size (1.58 MB); the rest elbows stay within 2 cm of v41. The pinch passes jump
   (0.63 m/s), body (1.5 cm), twist, wrist, elbow and size (1.58 MB); it holds no object.
 - **Closed:** 2026-11-23.
+
+### B-097 — Authored takes: arm joints turn in one frame (the pinch forearm, the crouch shoulder)
+
+- **Area:** `apps/capture/src/ik/ArmIkSolver.ts`, `apps/capture/scripts/authoring` (`lib/pose.ts`, `lib/direct.ts`,
+  `lib/smoothness.ts`, `make.ts`)
+- **Severity:** P2 (the owner saw the crouch "stammer"; no bar measured a turn about a bone's own line)
+- **Observed:** 2026-11-23. The pinch forearm turned 85° in one frame at 4.20 s (a change of 2551°/s in its turning
+  speed between two frames). The crouch hand flipped at 3.6–3.7 s, and the right shoulder, upper arm and forearm
+  jumped at 4.80 s and came back at 4.90 s (804°/s).
+- **Cause:** three faults. (1) The palm roll in `solveArm` is an `atan2` clamped to ±85°, half of it on the forearm:
+  when the wanted palm crossed behind, the roll went from +85° to −85°, and the forearm from +42.5° to −42.5°. (2)
+  The solver swings the shoulder toward a far target by a share that falls as the upper arm comes nearer. It measured
+  from the shoulder the last solve left, so each solve did one step of that loop. The loop is steeper than 1 and does
+  not settle: it went between two shoulders (share 0.95, 0.25, 0.74, 0.27 …), and the pose depended on how many
+  solves ran in that frame. (3) `steadyTwist` limits the turn speed to 540°/s but not its change, so a palm that
+  turned back started at full speed in one frame.
+- **Fix:** `shareTwist` gives the forearm bone half of the twist after `steadyTwist`, so it no longer wraps with the
+  roll. The solver finds the shoulder share that agrees with its own result by halving (12 steps, from the bind
+  shoulder): one target always gives one shoulder. `softLimit` puts a soft knee on the ±85° twist stops, and
+  `TWIST_ACCEL` (6000°/s², 200°/s between frames) limits the change of the twist speed, with braking at the goal. A
+  new bar, `turn.<id>`, fails a change of more than 250°/s between two frames in the turn of a shoulder, upper arm,
+  forearm or hand. Good motion in these takes stays at or under 170°/s (crouch left arm 170, expressions 130, pinch
+  left arm 77).
+- **Proof:** the pinch goes from 2551 to 276°/s (right hand at 1.00 s, 2 frames over; forearm 115). The crouch v19
+  (sheet v47) goes from 804 to 382°/s; all other bars pass, and the rest elbows and wrists stay within 1.7 cm of v41.
+  What is left in the crouch is at 1.77 s, where the right hand lifts past the right shin and the clearing passes stop
+  at a different depth in each frame; that is a sheet and clearing fault, not a solver loop.
+- **Closed:** 2026-11-23 (the crouch `turn.me` stays open as a draft fault).
