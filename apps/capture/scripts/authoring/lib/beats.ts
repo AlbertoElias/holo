@@ -97,7 +97,7 @@ export interface Timing {
 export type Direction = Timing & (
   | { readonly kind: 'look'; readonly at: Point; /** Share of the look the head takes (0 eyes only, 1 all head); default 0.6. */ readonly head?: number }
   | { readonly kind: 'expression'; readonly shape: FaceMixName | Partial<Record<FaceChannel, number>>; readonly strength?: number }
-  | { readonly kind: 'reach'; readonly side: Side; readonly at: Point; /** Metres the palm stops short of `at`. */ readonly stopShort: number; readonly palm?: 'up' | 'down' | 'in' | 'toward' }
+  | { readonly kind: 'reach'; readonly side: Side; readonly at: Point; /** Metres the palm stops short of `at`. */ readonly stopShort: number; readonly palm?: 'up' | 'down' | 'in' | 'toward'; /** The palm faces this point (instead of `palm`). */ readonly palmAt?: Point }
   | { readonly kind: 'hand'; readonly side: Side | 'both'; readonly shape: HandShapeName; readonly strength?: number }
   | { readonly kind: 'weight'; readonly toward: 'left' | 'right' | 'forward' | 'back'; /** 0..1, default 1 (about 6 cm). */ readonly amount?: number }
   /** Bend forward from the waist, hips back and knees soft, as over a plant or a low table; the arms and the look are solved on the bent body. */
@@ -127,7 +127,7 @@ const TIMING_FIELDS: readonly string[] = ['anticipation', 'attack', 'hold', 'set
 const DIRECTION_FIELDS = {
   look: { required: ['at'], optional: ['head'] },
   expression: { required: ['shape'], optional: ['strength'] },
-  reach: { required: ['side', 'at', 'stopShort'], optional: ['palm'] },
+  reach: { required: ['side', 'at', 'stopShort'], optional: ['palm', 'palmAt'] },
   hand: { required: ['side', 'shape'], optional: ['strength'] },
   weight: { required: ['toward'], optional: ['amount'] },
   bend: { required: [], optional: ['amount'] },
@@ -792,7 +792,8 @@ export function validateSheet(sheet: BeatSheet): string[] {
       if (d.kind === 'put' && (d.at === undefined) === (d.on === undefined)) problems.push(`${where}: give at or on`);
       if (d.kind === 'put' && d.on !== undefined && (!objects.has(d.on) || d.on === d.object)) problems.push(`${where}: on ${d.on}: no other object`);
       if (d.kind === 'put' && pointObjects(d.at, objects, sheet.marks).includes(d.object)) problems.push(`${where}: an object cannot be put down at a point on itself`);
-      for (const p of [('at' in d ? d.at : undefined), (d.kind === 'turn' ? d.toward : undefined)]) {
+      if (d.kind === 'reach' && d.palm !== undefined && d.palmAt !== undefined) problems.push(`${where}: give palm or palmAt, not both`);
+      for (const p of [('at' in d ? d.at : undefined), (d.kind === 'turn' ? d.toward : undefined), (d.kind === 'reach' ? d.palmAt : undefined)]) {
         const problem = pointProblem(p);
         if (problem) problems.push(`${where}: ${problem}`);
       }
