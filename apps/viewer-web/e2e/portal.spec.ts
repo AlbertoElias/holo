@@ -1,7 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 import { assertViewerShell, captureEvidence, expect, test, reachFor, pressReach } from "./bootstrap";
 import {
@@ -49,6 +49,22 @@ const [first, second] = items as [typeof items[number], typeof items[number]];
 // Each touch event waits for a software-rendered frame; a 2-CPU runner needs
 // about 30 s for the longest of these.
 test.describe.configure({ timeout: 60_000 });
+
+/**
+ * Presses a reach control on a card that must stay in focus. A plain click (or pressReach) on a control that folded
+ * while the runner stalled fails Playwright's hit-target check, and Playwright then scrolls the control into view
+ * again with another alignment. The feed scrolls smoothly, so that scroll glides past half a card under load, focus
+ * moves to the next card, and this card resets to Follow with tilt off. So each try brings the controls out, clicks
+ * where the control is without that scroll (force), and checks that the press took effect; a press that the folded
+ * controls took no notice of is tried again.
+ */
+async function pressShown(card: Locator, control: Locator, pressed: () => Promise<void>): Promise<void> {
+  await expect(async () => {
+    await reachFor(card);
+    await control.click({ force: true, timeout: 10_000 });
+    await pressed();
+  }).toPass({ timeout: 50_000, intervals: [0] });
+}
 
 async function openFeed(page: Page, variant: string | null): Promise<void> {
   await installProbe(page);
@@ -214,9 +230,9 @@ test.describe("phone", () => {
   test("tilt: turning the phone turns the camera, past a small deadzone", async ({ page }, testInfo) => {
     await openFeed(page, "tilt");
     const card = page.locator(`.feed-card[data-card-id="${first.id}"]`);
-    await reachFor(card);
-    await card.getByRole("button", { name: "Look around by tilting the phone" }).click();
-    await expect(card.getByRole("button", { name: "Stop looking around by tilting" })).toHaveAttribute("aria-pressed", "true");
+    await pressShown(card, card.getByRole("button", { name: "Look around by tilting the phone" }), async () => {
+      await expect(card.getByRole("button", { name: "Stop looking around by tilting" })).toHaveAttribute("aria-pressed", "true", { timeout: 5_000 });
+    });
     await dispatchOrientation(page, 10, 60);
     await dispatchOrientation(page, 12, 61);
     expect((await readPortal(page, first.url)).mode, "a small wobble stays in Follow").toBe("follow");
@@ -225,8 +241,9 @@ test.describe("phone", () => {
     expect((await readPortal(page, first.url)).tiltYaw, "yaw follows the turn, amplified").toBeCloseTo((-30 * Math.PI / 180) * 1.5, 3);
 
     // Return re-centres tilt on how the phone is held now.
-    await card.getByRole("button", { name: CONTROL_NAMES.returnToAuthorView }).click();
-    await expect(card).toHaveAttribute("data-portal-mode", "follow");
+    await pressShown(card, card.getByRole("button", { name: CONTROL_NAMES.returnToAuthorView }), async () => {
+      await expect(card).toHaveAttribute("data-portal-mode", "follow", { timeout: 5_000 });
+    });
     await dispatchOrientation(page, 41, 60);
     expect((await readPortal(page, first.url)).mode, "holding still after Return stays in Follow").toBe("follow");
     await captureEvidence(page, testInfo, "phone-tilt-variant");
