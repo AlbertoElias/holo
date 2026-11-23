@@ -339,6 +339,16 @@ closes Look; the exported take carries the chosen hair and glasses nodes
 and the card in its extras, and no mirror or panel node; after Close the
 mirror renders no more. A headset frame of the open mirror is saved.
 
+## Look in phone AR: owner decision 2026-11-21
+
+A check on 2026-11-21 found that the house avatar and Look are the
+default on phone, desktop and Quest. One place has no Look: phone AR.
+There, `flat` is false and a handheld phone has no wrist dock.
+
+**Decision (owner, option A):** keep it as it is. A person changes the
+look on the flat screen before they enter AR. Phone AR gets no hint and
+no AR control. The dock's "Look" button stays as it is.
+
 ## Test plan and evidence
 
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
