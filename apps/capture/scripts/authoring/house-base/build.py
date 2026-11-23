@@ -293,8 +293,13 @@ for v in np.where(is_body & (w_skull > 0.5) & (base[:, 1] < sm["frontOf"]))[0]:
 jm = F["jawMask"]
 keep_jaw = 1 - smoothstep(zm - jm["from"], zm - jm["to"], base[:, 2])
 moved = {c: np.zeros((N, 3)) for c in SHAPES}
+# The smile unit moves the cheeks and the fold from the nose to the mouth corner, not the skin under the authored
+# mouth: it fades in from an ellipse round the mouth (`smileSkin`, in half-widths across and `tall` up and down).
+ss = F["mouth"]["smileSkin"]
+round_mouth = np.hypot((base[:, 0] - cx) / F["mouth"]["halfWidth"], (base[:, 2] - zm) / ss["tall"])
+keep_smile = smoothstep(ss["from"], ss["to"], round_mouth)
 for c in SKIN:
-    moved[c] = skin_moved[c] * (keep_jaw[:, None] if c.startswith("jaw") else 1.0)
+    moved[c] = skin_moved[c] * (keep_jaw[:, None] if c.startswith("jaw") else keep_smile[:, None] if c.startswith("mouthSmile") else 1.0)
 skin = BVHTree.FromPolygons([tuple(v) for v in base], body_polys)
 def on_skin(x, z, lift=0.0, whole=False):
     """The skin in front at (x, z), less lift. A ray through a gap left in the face (the mouth's slit, a nostril)
@@ -636,7 +641,7 @@ for side in SIDES:
     # upper lip is a curve over the teeth, not two bumps with a dip between them. The teeth stay where they are
     # (they belong to the skull and the jaw): the lip that moves off them shows them.
     bump = np.clip(0.5 + sg * S_ * 1.5, 0, 1) * mid
-    mouth_shapes[f"mouthLowerDown{side}"] = {"lower": (Z, -lo * bump, Z), "lowTeeth": (Z, Z, Z), "tongue": (Z, Z, Z)}
+    mouth_shapes[f"mouthLowerDown{side}"] = {"lower": (Z, -lo * bump, Z), "lowTeeth": (Z, -ms["lowerDownTeeth"] * lo * bump, Z), "tongue": (Z, Z, Z)}
     mouth_shapes[f"mouthUpperUp{side}"] = {"upper": (Z, up * bump, Z)}
     mouth_shapes[f"mouthDimple{side}"] = every(sg * di * on, 0.3 * di * on)
 fu, pu, ro, sh = ms["funnel"], ms["pucker"], ms["roll"], ms["shrug"]
@@ -756,7 +761,7 @@ add_part([on_skin(cx + x * mo["halfWidth"], zm + z, -pt["behind"]) for x in pxs 
 # the teeth row, so it has no height until a shape shows the teeth (wound as the mouth's own quads, since
 # add_part cannot turn a face with no area). Each goes with the rows it lies on.
 tg = mo["toothGaps"]
-for c, (r_up, r_te) in itertools.product(tg["columns"], ((ROWS.index("upper"), ROWS.index("teeth")), (ROWS.index("lowTeeth"), ROWS.index("lower")))):
+for c, (r_up, r_te) in itertools.product(tg["columns"], ((ROWS.index("upper"), ROWS.index("teeth")),)):
     ids, w = [], []
     for nb in (c - 1, c + 1):
         for r_ in (r_up, r_te):

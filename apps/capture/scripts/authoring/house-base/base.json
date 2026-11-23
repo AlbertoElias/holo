@@ -126,9 +126,11 @@
   "face": {
     "$comment": "The stylised face (decided by the agent on 2026-11-18, the owner away, for the owner to review; decision 7 of docs/features/directed-performance.md), drawn from the clay sheets: lengths in metres, angles in degrees unless named.",
     "skinUnits": {
-      "cheekSquintRight": 0.6,
-      "cheekSquintLeft": 0.6,
-      "$comment": "The faceunits01 units kept on the skin, with their gains; every other face shape is authored on the parts below.",
+      "cheekSquintRight": 1.0,
+      "mouthSmileLeft": 0.6,
+      "mouthSmileRight": 0.6,
+      "cheekSquintLeft": 1.0,
+      "$comment": "The faceunits01 units kept on the skin, with their gains (mouthSmile moves only the skin round the authored mouth: see mouth.smileSkin); every other face shape is authored on the parts below.",
       "jawOpen": 1.0,
       "jawForward": 1.0,
       "jawLeft": 1.0,
@@ -279,10 +281,16 @@
     "mouth": {
       "$comment": "`columns` across, halfWidth across, `raise` above the mouth corners the faceunits find, the corners `droop` below the middle. The dark line: thick at the middle (the corners keep `corner` of it), lift in front of the skin. lips: the upper and lower lips' heights at the middle, falling to the corners as (1 - s^2)^power, the upper one notched at the middle by `bow` over bowWidth; each lip is a rounded roll: `profile` lists its rows from the line outward as [share of the way to the outer edge, share of upperOut / lowerOut in front of the skin], its outer edge `edge` in front; the lips end at `reach` of the half width, so a crease joins the corner to the cheek. roof: how far up under the upper lip (a share of its height) the inside's hidden top row lies.",
       "columns": 21,
+      "smileSkin": {
+        "$comment": "The smile unit on the skin (cheeks, the fold from nose to mouth corner) fades in from `from` to `to` of an ellipse round the mouth: the half width across, `tall` (m) up and down.",
+        "from": 1.0,
+        "to": 2.2,
+        "tall": 0.014
+      },
       "toothGaps": {
         "$comment": "The columns at the teeth's edges, each line's half width as a share of a column, and its lift (m) in front of the teeth.",
         "columns": [6, 8, 10, 12, 14],
-        "width": 0.05,
+        "width": 0.03,
         "lift": 0.0004
       },
       "halfWidth": 0.03,
@@ -294,7 +302,7 @@
       "lips": {
         "profile": [[0.3, 0.75], [0.6, 1.0], [0.85, 0.65], [1.0, 0.0]],
         "reach": 0.92,
-        "upper": 0.0075,
+        "upper": 0.0085,
         "upperPower": 0.55,
         "bow": 0.22,
         "bowWidth": 0.16,
@@ -341,6 +349,7 @@
         "tuck": 0.4
       },
       "lowerDown": 0.007,
+      "lowerDownTeeth": 0.6,
       "upperUp": 0.007,
       "dimple": 0.004,
       "funnel": {
@@ -365,7 +374,7 @@
       "jawForward": 0.004,
       "jawOpen": 0.038,
       "jawMouth": {
-        "lowTeeth": 0.22,
+        "lowTeeth": 0.08,
         "teethRound": 0.25,
         "in": 0.006,
         "down": 0.004,

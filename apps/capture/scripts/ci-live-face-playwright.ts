@@ -43,8 +43,24 @@ const stepMs = 1000 / track.fps;
 const t0 = Date.now();
 const stage = (name: string) => { if (process.env.LIVE_FACE_TRACE) console.error(`[trace] ${((Date.now() - t0) / 1000).toFixed(1)}s ${name}`); };
 // [set, measure, bound]: what each expression must (EXPECT_MIN) and must not (EXPECT_MAX) move on the avatar.
-const EXPECT_MIN: Array<[string, string, number]> = [];
-const EXPECT_MAX: Array<[string, string, number]> = [];
+// The scores applied one to one fail most of these: a smile's cheeks reach 0.05 and a sad face's frown 0.03.
+const EXPECT_MIN: Array<[string, string, number]> = [
+  ['smile', 'smile', 0.6], ['smile', 'cheekSquint', 0.4], ['smile', 'eyeSquint', 0.3],
+  ['laugh', 'smile', 0.6], ['laugh', 'cheekSquint', 0.4], ['laugh', 'upperUp', 0.5], ['laugh', 'jawOpen', 0.4],
+  ['sad', 'frown', 0.6], ['sad', 'browInnerUp', 0.5],
+  ['surprise', 'browInnerUp', 0.5], ['surprise', 'browOuterUp', 0.4], ['surprise', 'eyeWide', 0.35], ['surprise', 'jawOpen', 0.3],
+  ['anger', 'browDown', 0.7], ['anger', 'noseSneer', 0.3], ['anger', 'eyeSquint', 0.3],
+  ['speech', 'jawOpen', 0.3], ['speech', 'round', 0.6], ['speech', 'wide', 0.3]
+];
+const EXPECT_MAX: Array<[string, string, number]> = [
+  ['neutral', 'smile', 0.1], ['neutral', 'frown', 0.1], ['neutral', 'eyeSquint', 0.15], ['neutral', 'jawOpen', 0.05],
+  ['smile', 'frown', 0.1], ['laugh', 'frown', 0.1],
+  ['sad', 'smile', 0.1], ['sad', 'jawOpen', 0.05],
+  ['surprise', 'frown', 0.1], ['surprise', 'smile', 0.1],
+  ['anger', 'frown', 0.15],
+  // The lips close for m, b and p.
+  ['speech', 'jawOpenLow', 0.02], ['speech', 'frown', 0.1]
+];
 
 await rm(artifactDir, { recursive: true, force: true });
 await mkdir(artifactDir, { recursive: true });
@@ -112,10 +128,12 @@ try {
   };
   for (const set of track.sets) {
     if (wantFrames) await mkdir(path.join(artifactDir, 'frames', set.name), { recursive: true });
-    // The face settles on the set's first frame (a source change crossfades) before the set plays.
-    stage(`set ${set.name}`);
-    await setInput(set.frames[0]!);
-    await page.clock.runFor(400);
+    // The face settles on the set's first frame before the set plays: a source change crossfades, and the sad
+    // face of the set before fades out over the tracker samples that follow it.
+    for (let settle = 0; settle < 15; settle += 1) {
+      await setInput(set.frames[0]!);
+      await page.clock.runFor(100);
+    }
     for (const [index, scores] of set.frames.entries()) {
       stage(`frame ${index}`);
       await setInput(scores);
