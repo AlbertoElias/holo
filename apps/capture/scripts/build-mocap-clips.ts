@@ -311,7 +311,7 @@ export async function buildMocapClips(dumpDir: string): Promise<{ clips: THREE.A
     }
     const dump = JSON.parse(await readFile(file, 'utf8')) as Dump;
     const range = loop.to > loop.from ? loop : { ...loop, ...idleWindow(dump) };
-    ranges.push({ name: loop.name, take: loop.take, from: range.from, to: range.to, ...(loop.mirror ? { mirror: true } : {}), ...(loop.once ? { once: true } : {}), ...(loop.faced ? { faced: true } : {}) });
+    ranges.push({ name: loop.name, take: loop.take, from: range.from, to: range.to, ...(loop.mirror ? { mirror: true } : {}), ...(loop.once ? { once: true } : {}), ...(loop.faced ? { faced: true } : {}), ...(loop.half !== undefined ? { half: loop.half } : {}) });
     const { root, bones } = buildSourceRig(dump);
     const humanoid = HumanoidSkeleton.bind(root, {});
     humanoid.normalizeFacing(root);

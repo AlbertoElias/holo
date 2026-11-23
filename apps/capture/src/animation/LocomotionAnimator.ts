@@ -362,6 +362,7 @@ export class LocomotionAnimator {
     this.bindProfileActions('desktop-full', desktopClips);
     this.bindProfileActions('vr-lower-body', vrClips);
     this.bindDirections(root, desktopClips, humanoid);
+    // An avatar's own idle sways as its author made it; the house avatar's own idle is the library's scaled take.
     this.bindSway(clips);
     // Leap plays in no state; an avatar with its own clips still gets the library's (retargeted) one.
     this.leap = clips.find((clip) => /^leap$/i.test(clip.name)) ?? retargeted.find((clip) => /^leap$/i.test(clip.name));
@@ -397,8 +398,8 @@ export class LocomotionAnimator {
 
   /**
    * The desktop idle's sway: its spine, chest, neck and head keys, played as their own action. Not its hips or legs
-   * (they stand on the terrain IK) and not its arms (held at the first key). The builder already plays the take at
-   * 40 % of its sway (scripts/build-mocap-clips.ts), so it plays at full weight here.
+   * (they stand on the terrain IK) and not its arms (held at the first key). The builder already scales the take's
+   * sway (`sway` in scripts/build-mocap-clips.ts), so it plays at full weight here.
    */
   private bindSway(clips: readonly THREE.AnimationClip[]): void {
     const idle = this.resolveClip(clips, 'idle');
@@ -507,14 +508,19 @@ export class LocomotionAnimator {
           if (!this.directions.some((p) => p.direction === d)) target += this.directionTarget(d, yaw, input.crouch ?? 0);
         }
       }
-      // The first walking frame takes the weights at once: no forward stride before a backward walk.
-      play.weight = walking && this.walkFade > 0.01 ? play.weight + (target - play.weight) * k : target;
+      // The first walking frame takes the weights at once: no forward stride before a backward walk. A walk that is
+      // coming to a stop (no key held, or fading out to the idle) keeps its blend: the travel it still has can read
+      // another way (the view changed as the keys let go), and a new blend there turns the arms in a frame or two.
+      if (this.walkFade > 0.01) {
+        if (walking && input.moveIntent) play.weight += (target - play.weight) * k;
+      } else play.weight = target;
       total += play.weight;
     }
+    // All weights are normalised before the lead is picked: a lead still at its raw weight would compare unfairly.
+    for (const play of this.directions) play.weight /= total || 1;
     let lead = this.lead ?? walk;
     let forward = 0, left = 0, scale = 0, cycle = 0, ground = 0;
     for (const play of this.directions) {
-      play.weight /= total || 1;
       if (play.weight > lead.weight + LEAD_HYSTERESIS) lead = play;
       forward += play.weight * play.forward;
       left += play.weight * play.left;

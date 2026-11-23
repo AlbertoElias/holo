@@ -22,7 +22,7 @@ import type { BodySample } from '../src/types/contracts';
 import { DEFAULT_AVATAR_URL, STOCK_AVATAR_URL } from '../src/config/runtimeConfig';
 import { generateAvatarFixtures } from './lib/avatar-fixtures.ts';
 import { judgeGait, measureGait } from './lib/gait-metrics';
-import { framesFromBodySamples, judgeMotion, measureMotion, type MotionFrame } from './lib/motion-quality';
+import { framesFromBodySamples, judgeMotion, measureMotion, pooledPopP99MS2, type MotionFrame } from './lib/motion-quality';
 
 type Input = { forward: boolean; back: boolean; left: boolean; right: boolean; crouch: boolean };
 const idle: Input = { forward: false, back: false, left: false, right: false, crouch: false };
@@ -272,7 +272,9 @@ const SLICE2_TARGETS = {
   idleHeadSwayCm: { min: 0.5, max: 3 },
   solverAllocatingSites: { max: 0 },
   // 141_33's side-steps read 65-66 m/s² scaled to 1.8 m.
-  strafePopP99MS2: { max: 70 }
+  strafePopP99MS2: { max: 70 },
+  // The B-097 turn bar (SMOOTH_LIMITS.turn in scripts/authoring/lib/smoothness.ts), on the arms' world turn.
+  armTurnJumpMaxDegS: { max: 250 }
 } as const;
 const TERRAIN_SLICE2_TARGETS = {
   slopeFootTiltP95Deg: { max: 8 },
@@ -281,22 +283,48 @@ const TERRAIN_SLICE2_TARGETS = {
 const SLOPE_MIN_DEG = 10;
 const ARM_SEGMENTS = [['leftShoulder', 'leftElbow'], ['leftElbow', 'leftWrist'], ['rightShoulder', 'rightElbow'], ['rightElbow', 'rightWrist']] as const;
 
-/** How fast any upper arm or forearm turns (°/s, between successive frames): max and p99 over the run. */
-function armTurnRate(samples: Row[]): { maxDegS: number | null; p99DegS: number | null } {
-  const rates: number[] = [];
-  for (let i = 1; i < samples.length; i++) {
-    const a = samples[i - 1]!, b = samples[i]!;
-    const dt = (b.timeMs - a.timeMs) / 1000;
-    if (!(dt > 0)) continue;
-    for (const [from, to] of ARM_SEGMENTS) {
-      const pa = a.body.bones[from], qa = a.body.bones[to], pb = b.body.bones[from], qb = b.body.bones[to];
-      if (!pa || !qa || !pb || !qb) continue;
-      const u: Vec = [qa[0] - pa[0], qa[1] - pa[1], qa[2] - pa[2]], v: Vec = [qb[0] - pb[0], qb[1] - pb[1], qb[2] - pb[2]];
-      const cos = (u[0] * v[0] + u[1] * v[1] + u[2] * v[2]) / (Math.hypot(...u) * Math.hypot(...v) || 1);
-      rates.push((Math.acos(Math.max(-1, Math.min(1, cos))) * 180) / Math.PI / dt);
+/** A segment's direction in the torso's frame (clavicle line, chest to neck), or null without the bones. */
+function torsoDirection(r: Row, from: string, to: string): Vec | null {
+  const b = r.body.bones, p = b[from], q = b[to];
+  if (!p || !q || !b.chest || !b.neck || !b.leftClavicle || !b.rightClavicle) return null;
+  const sub = (x: Vec, y: Vec): Vec => [x[0] - y[0], x[1] - y[1], x[2] - y[2]];
+  const dot = (x: Vec, y: Vec) => x[0] * y[0] + x[1] * y[1] + x[2] * y[2];
+  const unit = (x: Vec): Vec => { const n = Math.hypot(...x) || 1; return [x[0] / n, x[1] / n, x[2] / n]; };
+  const up = unit(sub(b.neck, b.chest));
+  const across = sub(b.rightClavicle, b.leftClavicle);
+  const side = unit(sub(across, [up[0] * dot(across, up), up[1] * dot(across, up), up[2] * dot(across, up)]));
+  const front: Vec = [up[1] * side[2] - up[2] * side[1], up[2] * side[0] - up[0] * side[2], up[0] * side[1] - up[1] * side[0]];
+  const v = unit(sub(q, p));
+  return [dot(v, side), dot(v, up), dot(v, front)];
+}
+
+/** A segment's angular velocity against the torso between two samples (°/s), or null without its bones. */
+function segmentOmega(a: Row, b: Row, from: string, to: string): Vec | null {
+  const u = torsoDirection(a, from, to), v = torsoDirection(b, from, to);
+  const dt = (b.timeMs - a.timeMs) / 1000;
+  if (!u || !v || !(dt > 0)) return null;
+  const axis: Vec = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+  const sin = Math.hypot(...axis), cos = u[0] * v[0] + u[1] * v[1] + u[2] * v[2];
+  if (sin < 1e-9) return [0, 0, 0];
+  const k = (Math.atan2(sin, cos) * 180) / Math.PI / (sin * dt);
+  return [axis[0] * k, axis[1] * k, axis[2] * k];
+}
+
+/**
+ * The B-097 turn bar on the desktop samples: how much an upper arm's or forearm's angular velocity changes from one
+ * frame to the next (°/s), max and p99 over the run. The samples hold world positions only, so each segment is read
+ * against the torso (its clavicles and chest to neck), not against its parent joint as scripts/authoring/lib/
+ * smoothness.ts reads it; the body's own turn toward its travel does not count, as it does not there.
+ */
+function armTurnJump(samples: Row[]): { maxDegS: number | null; p99DegS: number | null } {
+  const jumps: number[] = [];
+  for (const [from, to] of ARM_SEGMENTS) {
+    for (let i = 2; i < samples.length; i++) {
+      const w1 = segmentOmega(samples[i - 2]!, samples[i - 1]!, from, to), w2 = segmentOmega(samples[i - 1]!, samples[i]!, from, to);
+      if (w1 && w2) jumps.push(Math.hypot(w2[0] - w1[0], w2[1] - w1[1], w2[2] - w1[2]));
     }
   }
-  return { maxDegS: rates.length ? Math.max(...rates) : null, p99DegS: quantile(rates, 0.99) };
+  return { maxDegS: jumps.length ? Math.max(...jumps) : null, p99DegS: quantile(jumps, 0.99) };
 }
 
 /** The slice 2 measurements of a flat-floor row; null where the avatar has no directional clips. */
@@ -347,7 +375,7 @@ function sliceTwoFlat(samples: Row[], frames: MotionFrame[], heightM: number) {
     crouchKneeMidStanceFlexDeg: crouchGait.kneeMidStanceFlexDeg,
     idleHeadSwayCm: sway === null ? null : sway * 100,
     idleSwayWeight: mean(still.map((i) => samples[i]!.loco.swayWeight)),
-    ...Object.fromEntries(Object.entries(armTurnRate(samples)).map(([k, v]) => [`arm${k[0]!.toUpperCase()}${k.slice(1)}`, v]))
+    ...Object.fromEntries(Object.entries(armTurnJump(samples)).map(([k, v]) => [`armTurnJump${k[0]!.toUpperCase()}${k.slice(1)}`, v]))
   };
 }
 
@@ -422,8 +450,15 @@ try {
     // The side-step's own take (141_33) pops harder than the walk (65-66 m/s² at 1.8 m): the walk's target judges the
     // rest of the run, and the side-steps are judged on their take (slice2.strafePopP99MS2).
     const sideStep = (i: number) => samples[i]!.phase === 'fp-left' || samples[i]!.phase === 'fp-right';
-    const metrics = { ...measureMotion(frames), popP99MS2: measureMotion(frames.filter((_, i) => !sideStep(i))).popP99MS2 };
-    const strafePopP99MS2 = samples.some((_, i) => sideStep(i)) ? measureMotion(frames.filter((_, i) => sideStep(i))).popP99MS2 : null;
+    // Each contiguous run is measured on its own, so no ±50 ms window spans a cut.
+    const runs = (keep: (i: number) => boolean) => frames.reduce<MotionFrame[][]>((out, frame, i) => {
+      if (!keep(i)) return out;
+      if (i === 0 || !keep(i - 1)) out.push([]);
+      out.at(-1)!.push(frame);
+      return out;
+    }, []);
+    const metrics = { ...measureMotion(frames), popP99MS2: pooledPopP99MS2(runs((i) => !sideStep(i))) };
+    const strafePopP99MS2 = samples.some((_, i) => sideStep(i)) ? pooledPopP99MS2(runs(sideStep)) : null;
     const gait = measureGait(steadyWalk(frames, samples), 1.8);
     // On terrain the slopes bend the walk, so only the feet against the ground are judged there.
     const { cm: belowGround, airborneFrames } = footBelowGround(samples);
@@ -438,6 +473,9 @@ try {
       : [...judgeMotion(metrics, 'desktop'), ...judgeGait(gait).map((v) => ({ ...v, metric: `gait.${v.metric}` }) as Verdict)];
     // Slice 2: the directional, crouch and slope behaviour, the idle's sway, the solver's allocations.
     const slice2 = avatar.terrain ? sliceTwoTerrain(samples) : sliceTwoFlat(samples, frames, 1.8);
+    // The house avatars and every retargeted one walk the library's directional clips: no slice 2 there is a miss.
+    const expectsSlice2 = !avatar.terrain && (avatar.walkClip === 'retargeted' || avatar.url === null || avatar.url === STOCK_AVATAR_URL);
+    if (!slice2 && expectsSlice2) verdicts.push({ metric: 'slice2.directionalClips', value: 0, target: { min: 1 }, pass: false } as unknown as Verdict);
     if (slice2) {
       const values: Record<string, number | null> = { ...slice2, ...(avatar.terrain ? {} : { solverAllocatingSites: allocatingSites.length, strafePopP99MS2 }) };
       const targets: Record<string, { min?: number; max?: number }> = avatar.terrain ? TERRAIN_SLICE2_TARGETS : SLICE2_TARGETS;

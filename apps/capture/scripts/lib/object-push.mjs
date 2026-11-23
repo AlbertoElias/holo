@@ -552,6 +552,7 @@ export async function runPhoneFetchAndPush({ browser, baseUrl, consoleErrors }) 
     // The view eases back to the idle's steady look after the point, and the bracket's thin arm shifts against its box
     // centre as the view turns: tap the same spot projected again, then the nearest points within 8 px.
     let refetched = afterHold;
+    let tapOffsetPx = null;
     for (const [ox, oy] of SCAN.filter(([x, y]) => Math.hypot(x, y) <= 8)) {
       const at3 = (await where()) ?? at2;
       await t.down(1, at3.x + P.dx + ox, at3.y + P.dy + oy);
@@ -559,10 +560,11 @@ export async function runPhoneFetchAndPush({ browser, baseUrl, consoleErrors }) 
       await t.up(1);
       await advance(3 / 60);
       refetched = await s.item();
+      tapOffsetPx = [ox, oy];
       if (refetched.heldBy) break;
       await advance(0.3);
     }
-    row('touch-and-hold on the prop points and fetches nothing (a tap on the same spot does fetch)', phase === 'held' && !during.heldBy && !afterHold.heldBy && refetched.heldBy === 'right', { holdPhase: phase, heldDuring: during.heldBy, heldAfterLift: afterHold.heldBy, thenTapHeldBy: refetched.heldBy, propScreen: at2 && [round(at2.x, 1), round(at2.y, 1)] });
+    row('touch-and-hold on the prop points and fetches nothing (a tap on the prop, within 8 px of the same spot, does fetch)', phase === 'held' && !during.heldBy && !afterHold.heldBy && refetched.heldBy === 'right', { tapOffsetPx, holdPhase: phase, heldDuring: during.heldBy, heldAfterLift: afterHold.heldBy, thenTapHeldBy: refetched.heldBy, propScreen: at2 && [round(at2.x, 1), round(at2.y, 1)] });
 
     return { label, status: failures.length ? 'fail' : 'pass', failures, rows };
   } finally {

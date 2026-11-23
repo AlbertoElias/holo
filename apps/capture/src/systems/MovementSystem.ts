@@ -106,6 +106,8 @@ export class MovementSystem extends createSystem() {
     const across = (move.left ? 1 : 0) - (move.right ? 1 : 0);
     const along = (move.forward ? 1 : 0) - (move.back ? 1 : 0);
     if (across === 0 && along === 0) return 1;
+    // `backingUp` is the last frame's (desktopTravelTurn runs after the motor reads this): a press of S is one frame at
+    // full speed.
     if (!onLook) return this.backingUp ? BACK_SPEED_SHARE : 1;
     const sum = Math.abs(across) + Math.abs(along);
     return (Math.max(0, along) + Math.max(0, -along) * BACK_SPEED_SHARE + Math.abs(across) * SIDE_SPEED_SHARE) / sum;
@@ -122,7 +124,9 @@ export class MovementSystem extends createSystem() {
       // Body forward is (-sin yaw, 0, -cos yaw) and its left (-cos yaw, 0, sin yaw), as the motor lays the keys.
       const forward = -v.x * Math.sin(yaw) - v.z * Math.cos(yaw);
       const left = -v.x * Math.cos(yaw) + v.z * Math.sin(yaw);
-      this.travelLocalYaw = onLook ? Math.atan2(left, forward) : forward >= 0 ? 0 : Math.PI;
+      // Third person walks backward only while it backs up (S, this frame's keys): any other travel, sideways ones
+      // included (the view changed mid-strafe, the body still turning to its travel), walks forward as the body turns.
+      this.travelLocalYaw = onLook ? Math.atan2(left, forward) : this.backingUp ? Math.PI : 0;
     }
     return this.travelLocalYaw;
   }

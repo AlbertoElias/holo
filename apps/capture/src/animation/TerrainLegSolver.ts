@@ -22,6 +22,8 @@ type Leg = {
   /** Rest toe height above the sole plane, as a share of the avatar's height. */
   toeRatio: number;
   correction: number; planted: boolean; plantCorrection: number;
+  /** Where a plant holds the foot, and its orientation: taken once, as the plant starts. */
+  plantAt: THREE.Vector3; plantQuat: THREE.Quaternion;
   heldTarget: THREE.Vector3; heldQuat: THREE.Quaternion; release: number; releaseSec: number;
   /** The last grounded frame's leg rotations (upper, lower, foot), which fade out over LIFT_OFF_SEC in the air. */
   airQuats: [THREE.Quaternion, THREE.Quaternion, THREE.Quaternion]; airFade: number;
@@ -200,7 +202,7 @@ export class TerrainLegSolver {
       this.legs.push({
         side, upper, lower, foot, toe, bones: [upper, lower, foot], ankleRatio, toeRatio,
         upInFoot: this.up.clone().applyQuaternion(foot.getWorldQuaternion(new THREE.Quaternion()).invert()),
-        correction: 0, planted: false, plantCorrection: 0, heldTarget: new THREE.Vector3(), heldQuat: new THREE.Quaternion(), release: 0, releaseSec: PLANT_RELEASE_SEC,
+        correction: 0, planted: false, plantCorrection: 0, plantAt: new THREE.Vector3(), plantQuat: new THREE.Quaternion(), heldTarget: new THREE.Vector3(), heldQuat: new THREE.Quaternion(), release: 0, releaseSec: PLANT_RELEASE_SEC,
         airQuats: [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()], airFade: 0,
         savedQuats: [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()], saved: false,
         last: new THREE.Vector3(), hasLast: false, velocity: new THREE.Vector3(), stepVelocity: new THREE.Vector3(),
@@ -221,7 +223,11 @@ export class TerrainLegSolver {
   update(rig: AvatarRig, grounded: boolean, deltaSec: number, plant = false, bent = false, gait?: GaitState): void {
     if (this.avatar !== rig.avatar) this.attach(rig);
     this.sampleCount = 0;
-    if (!rig.worldModel || !rig.avatar) return;
+    if (!rig.worldModel || !rig.avatar) {
+      // No ground to stand on: the next ground starts from the clip's hips, not a drop left over from the last one.
+      this.pelvisDrop = 0;
+      return;
+    }
     const model = rig.worldModel;
     rig.avatarRoot.updateWorldMatrix(true, true);
     const height = rig.avatarHeight;
@@ -232,7 +238,10 @@ export class TerrainLegSolver {
     forward.normalize();
     const walking = gait?.walking ?? false;
     // A teleport (respawn, a world swap, leaving XR) drops every plant: a pinned foot would sweep from the old spot.
-    if (this.updateTravel(root, forward, deltaSec, walking, height)) for (const leg of this.legs) this.resetLeg(leg);
+    if (this.updateTravel(root, forward, deltaSec, walking, height)) {
+      for (const leg of this.legs) this.resetLeg(leg);
+      this.pelvisDrop = 0;
+    }
     // Sample only around the support plane, never from the top of the room.
     const baseY = root.y + rig.avatarMinLocalY;
     this.model = model;
@@ -254,16 +263,21 @@ export class TerrainLegSolver {
       const sole = height * leg.ankleRatio;
       const target = leg.target;
       if (plant) {
-        // Planted at the start of the reach, at the height the foot stood at then.
+        // Planted at the start of the reach, where the foot stood then: last frame's footprint, which the stance can
+        // hold away from the clip's foot (rig.plantFeet), so the first planted frame does not move it.
         if (!leg.planted) {
           leg.planted = true;
           leg.plantCorrection = leg.correction;
+          const side = index === 0 ? 'left' : 'right';
+          const stand = rig.plantFeet[side];
+          if (leg.hasLast) leg.plantAt.copy(leg.last);
+          else leg.plantAt.set(stand.x, stand.y + leg.plantCorrection, stand.z);
+          leg.plantQuat.copy(leg.hasLastQuat ? leg.lastQuat : rig.plantFootQuats[side]);
         }
-        const stand = rig.plantFeet[index === 0 ? 'left' : 'right'];
-        target.set(stand.x, stand.y + leg.plantCorrection, stand.z);
+        target.copy(leg.plantAt);
         leg.correction = target.y - foot.y;
         leg.heldTarget.copy(target);
-        leg.heldQuat.copy(rig.plantFootQuats[index === 0 ? 'left' : 'right']);
+        leg.heldQuat.copy(leg.plantQuat);
         leg.release = 1;
         leg.releaseSec = PLANT_RELEASE_SEC;
         leg.mode = 'free';
@@ -286,7 +300,8 @@ export class TerrainLegSolver {
     }
 
     // The pelvis drops (one writer, before either leg is solved) so a standing foot it cannot reach still stands.
-    this.dropPelvis(plant, walking, height, deltaSec);
+    // Only with a gait (the flat-screen walk): elsewhere the feet follow the animation and nothing else moves the hips.
+    this.dropPelvis(plant || !gait, walking, height, deltaSec);
 
     // Pass 2: solve each leg onto its target and lay the foot on its ground.
     for (const leg of this.legs) {
@@ -329,8 +344,7 @@ export class TerrainLegSolver {
     const parentRotation = leg.foot.parent!.getWorldQuaternion(this.qa);
     if (plant) {
       // A planted foot keeps its orientation: at a deep squat the shin folds so far that tilting it toward the floor would spin it.
-      const planted = rig.plantFootQuats[leg.side];
-      leg.foot.quaternion.copy(parentRotation.invert().multiply(planted)).normalize();
+      leg.foot.quaternion.copy(parentRotation.invert().multiply(leg.plantQuat)).normalize();
       leg.foot.updateWorldMatrix(false, true);
       this.recordTilt(leg, model, baseY, height);
       return;
@@ -421,12 +435,13 @@ export class TerrainLegSolver {
 
   /**
    * Lowers the hips until each standing or planted foot is within the straight leg's reach, beyond what the clip's own
-   * pose asks of that leg (a stride's trailing leg stays as long as the clip has it). Eased; none during a reach plant.
+   * pose asks of that leg (a stride's trailing leg stays as long as the clip has it). Eased; none during a reach plant
+   * (`hold`), nor for a foot that no drop can bring into reach (too far across).
    */
-  private dropPelvis(plant: boolean, walking: boolean, height: number, deltaSec: number): void {
+  private dropPelvis(hold: boolean, walking: boolean, height: number, deltaSec: number): void {
     const hips = this.hips;
     let wanted = 0;
-    if (hips?.parent && !plant) {
+    if (hips?.parent && !hold) {
       for (const leg of this.legs) {
         if (!leg.onGround || (walking && leg.mode !== 'pinned')) continue;
         const hip = leg.upper.getWorldPosition(this.va);
@@ -435,7 +450,8 @@ export class TerrainLegSolver {
         const reach = Math.max(PELVIS_REACH_SHARE * (hip.distanceTo(knee) + knee.distanceTo(ankle)), hip.distanceTo(leg.animated));
         const dx = hip.x - leg.target.x, dy = hip.y - leg.target.y, dz = hip.z - leg.target.z;
         const across = dx * dx + dz * dz;
-        const drop = across < reach * reach ? dy - Math.sqrt(reach * reach - across) : Infinity;
+        if (across >= reach * reach) continue;
+        const drop = dy - Math.sqrt(reach * reach - across);
         if (drop > wanted) wanted = drop;
       }
     }
