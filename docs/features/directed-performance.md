@@ -4510,9 +4510,17 @@ browser part) are built. Nothing in `apps/capture/src/` changed. The read
 runs in headless Chromium through Playwright. The page loads only from a
 local origin, and the browser aborts every other request, so the photo
 cannot leave the machine. The one download is the segmenter model, once,
-from Google's storage, with a SHA-256 check. A full run (read, renders,
-`compare.jpg`) takes about 100 s, and `--read-only` (no renders, no style
-proposal) about 3 s.
+from Google's storage, with a SHA-256 check. The read itself takes 0.7 s.
+The hair styles' outlines and the base's face frame do not depend on the
+photo: the first full run renders them and keeps them as data in
+`output/authoring/photo-look/.styles/`. After that, `--read-only` writes
+the card with the hair style proposal in about 3 s from a cold start: 1.2 s
+to start Node, 1.5 s to build the page, start Chromium and load the
+models, and 0.7 s to read. A full run with `compare.jpg` takes about 22 s:
+the three finish renders are the rest. For slice 5b on a server, the
+target is about 3 s per photo: keep one browser with the models loaded
+(about 0.7 s per photo), ship the outlines as data, and let the client
+render the card, so the server makes no render.
 
 **Licences.** The agent read the model cards before any code used the
 models: the face mesh V2 (in `face_landmarker.task`), BlazeFace short
@@ -4593,9 +4601,44 @@ Eyes: 28 read (darkBrown 19, blue 4, coolGrey 2, mossGreen 2, hazel 1),
 (0.48, 0.13), and D000096, very short hair, with every overlap under 0.13,
 so the default style stays.
 
-**Check 1, stability.** Waits for at least five photos of the owner. They
-were asked for on 2026-11-23 through the session that started this work.
-No photo of the owner is in the repository or will be.
+**Check 1, stability: fails on online photos (2026-11-23).** The owner
+asked for this check on online photos before their own. The agent took
+public-domain photos (US federal works on Wikimedia Commons) of ten
+people: 25 by name search, then 25 portrait-shaped ones per person. None
+is in the repository.
+
+- Of 110 event photos, 95 were refused, 86 of them as "no face": the
+  short-range face detector does not find a small face in a wide photo.
+  The refusal now says to use a close photo of one face.
+- Of the portrait-shaped photos, 65 were read. By eye, 6 were dropped
+  (the wrong person in 5, one black-and-white). A face-crop hash found
+  that most of the rest are copies of a few official portraits: all six
+  Schumer files are one portrait, Harris's ten are two.
+- Copies of one photo stay within one skin swatch (Schumer 6 of 6,
+  Watkins 8 of 8), so re-encoding and cropping are stable.
+- Distinct photos are not. Only Koch has five: skin 4 of 5 and hair 3 of
+  5 within one swatch of the most common pick, which fails the bar.
+  Across people, the skin pick moves by two to five swatches between
+  photos of one person: Blackburn porcelain to umber, Glover linen to
+  umber, Harris porcelain to honey.
+
+The causes, from each read's white and skin values:
+
+- Sunglasses: the "eye whites" are the lenses (RGB 24, 26, 16), and the
+  capped gains push the skin light (Glover: linen). The read does not
+  check that the eye whites are bright.
+- A hat's shadow: the skin areas are in shadow (RGB 60, 36, 29) while the
+  eye whites are lit (Koch in a hard hat: espresso). Nothing flags the
+  spread between the areas.
+- A dim or high-key photo: dim eye whites with the exposure cap of 1.25
+  leave a dim photo dark (Blackburn: caramel, umber), and a bright
+  portrait reads light (Harris: porcelain against honey). Without the cap,
+  the spread check over-exposed many faces.
+
+So the skin read by lightness rank after eye-white balance is not stable
+enough between photos of one person. This waits for the owner's
+decision on the method. The owner's own photos are still the final
+check.
 
 **Check 3, the dressed result.** Five read cards (B001243 in clay, ink
 and light; M001229 and D000096 in clay) went through `dressedFile` and
@@ -4606,8 +4649,8 @@ evidence"), and the informational `other.tongueOut`. The read adds no
 failing row, because a card holds only values the audition already
 covers.
 
-**Check 4, the owner's verdict on `compare.jpg`.** Waits for the owner's
-photos.
+**Check 4, the owner's verdict on `compare.jpg`.** Waits for check 1's
+method and for the owner's photos.
 
 **Check 5, proof video.** Recorded in real time in the ignored
 `apps/capture/output/proof/`: a public-domain portrait goes in,

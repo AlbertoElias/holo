@@ -188,7 +188,7 @@ export async function createLookReader(assets: ReaderAssets): Promise<LookReader
     },
     read(canvas, defaults) {
       const found = landmarks(canvas);
-      if (found.length === 0) throw new PhotoRefused('no-face', 'no face found in the photo');
+      if (found.length === 0) throw new PhotoRefused('no-face', 'no face found in the photo (a small face in a wide photo is not found: use a close photo of one face)');
       if (found.length > 1) throw new PhotoRefused('several-faces', `${found.length} faces found in the photo; use a photo of one face, your own`);
       const points = found[0]!;
       const frame = frameOf(points);
