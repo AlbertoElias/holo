@@ -3,6 +3,27 @@
 Closed entries moved from `BUGS.md` so the live tracker stays scannable.
 `BUGS.md` remains the authority for open, verified defects.
 
+### B-086 — The house avatar sinks to the floor on a floor reach
+
+- **Area:** `apps/capture/src/avatar/AvatarRig.ts` (crouch drop), `apps/capture/src/objects/ObjectInteraction.ts`
+  and `DesktopReach.ts` (desktop grab and set-down)
+- **Severity:** P2
+- **Observed:** 2026-11-20, the capture `object` suite on the house base: the hips went down to 0.08–0.18 m
+  above the floor (limit 0.27 m), a knee dropped below its ankle and a thigh turned 11.3–11.6° in one step.
+- **Cause:** three parts. (1) The crouch and squat drops were fractions of the avatar's height, tuned on the
+  stock rig; the base's legs are shorter for its height, so the same drop folded them past the knee limit.
+  (2) The desktop reach took a prop as soon as the palm was 0.1 m from its bounds, also from below, so the
+  prop rode 0.10 m above the hand and a set-down squatted to full depth to bring it to the floor. (3) The
+  set-down squat went on at full rate until the let-go, and the relax took another 0.07 m of hips to stop it.
+- **Fix:** every crouch drop scales by the avatar's own leg (thigh plus shin, per metre of height) against the
+  stock rig's (0.507), clamped to 0.7–1.3. The reach takes the prop only when the palm is level with the
+  prop's middle or the shoulder, whichever is lower. The set-down squat slows over the hand's last 0.1 m
+  (to 20 % of its rate), so it is near rest at the let-go. No check limit changed.
+- **Proof:** `OBJECT_ONLY=desktop,mouse,phone,reach,resizeIwer` on the house base and on the stock avatar
+  (`XR_AVATAR_URL=/gltf/models/avatar.glb`): no hips, knee or thigh failure on either (house put-down hips
+  0.287 m); the remaining failures are B-069's. The stock avatar's desktop-object-bracket now passes; on the
+  house base it fails as B-069 lists for the stock avatar (a glancing walk-in, 0.014–0.096 m across runs).
+
 ### B-089 — Phone portal checks: the feed rests 1 px past the last card
 
 - **Area:** `apps/viewer-web/src/styles/global.css` (`.feed-sentinel`), `apps/viewer-web/e2e/portal-helpers.ts` (`settleScroll`)
