@@ -228,7 +228,7 @@ jitters"), fixed in 1b:
   motion capture database (free for any use, raw data not resold), from the
   original ASF/AMC takes. Walk: subject 07 take 12, frames 8–35, one step
   mirrored onto the other leg so both legs walk the same step. Idle: 113_21,
-  frames 165–315, its sway scaled to 0.4 and re-faced (the take stands ~100°
+  frames 165–315, its sway scaled to 0.4 (0.37 since slice 2) and re-faced (the take stands ~100°
   off its walk heading). Loops are cut at left heel strikes, in place, seams
   closed. On desktop the Idle only holds the arms, still, at its first frame
   (down on any rest pose, so a T-pose avatar does not swing them down when it
@@ -289,10 +289,15 @@ and a real crouch walk, and stands its feet on the slope under them.
     mirrored half), 1.23 m/s, 190 steps/min, knee swing 55°, arm swing
     15–18 cm at correlation −0.6 to −0.7. (136_25/26 back up at 0.5–0.6 m/s
     with no arm swing; 113_01 is irregular.)
-  - `StrafeLeft` 143_40 frames 47–67 and `StrafeRight` 143_40 frames
-    168–188, 1.2–1.3 m/s, 180 steps/min, knee swing 43–58°. A side-step
-    leads with one leg, so its half cannot be mirrored onto the other.
-    (141_33 shuffles with a 19–29° knee swing.)
+  - `StrafeLeft` 141_33 frames 162–180 and `StrafeRight` 141_33 frames
+    57–76, 1.1–1.3 m/s, about 190 steps/min, the feet at least 7 cm apart.
+    A side-step leads with one leg, so its half cannot be mirrored onto the
+    other. (143_40 has a larger knee swing, 43–58°, but its feet cross by up
+    to 35 cm in the source itself, which reads as scissoring; pending owner
+    confirmation.) The side-step's own pops are larger than the walk's: the
+    source measures p99 65–66 m/s² at 1.8 m, so the first-person side-step
+    phases are judged against 70 (`strafePopP99MS2`), and the rest of the run
+    against the desktop pop target (pending owner confirmation).
   - `CrouchWalk`: 136_10 frames 126–164 mirrored, 0.78 m/s, 92 steps/min,
     knee swing 100°, mid-stance 83°.
   - `CrouchWalkBackward`: 136_11 frames 121–167 mirrored, 0.64 m/s.
@@ -350,22 +355,39 @@ and a real crouch walk, and stands its feet on the slope under them.
     (R = max(0.995 · leg length, the clip's hip-to-ankle)), the hips go down
     by the deficit d = D.y − √(R² − D.xz²). Only grounded legs count that are
     pinned, or standing while not walking. The drop is at most 0.12 of the
-    height, eased with a 0.08 s time constant, applied along world down, and
+    height, eased with a 0.08 s time constant down (and while walking), and
+    with 0.3 s up while standing, so the settle step that brings the feet
+    together lets the hips rise smoothly. It is applied along world down and
     removed by `restore()`. The capture state reports it as `pelvisDrop`.
   - No per-frame allocation: scratch vectors and quaternions are members,
-    samples are written in place, and `place` has no closures.
+    samples are written in place, and `place` has no closures. The check
+    scans the solver's `update` path in the source for object creation
+    (`new`, array and object literals, closures, spreads, copying array
+    methods) and wants none. A V8 heap profile cannot measure this: it counts
+    the number boxing in three.js math (about 165 kB per frame) and, with the
+    debugger on, slows the pose 15 times (pending owner confirmation).
+  - The toe lift: down a slope the toe stands on its own ground. Only over a
+    drop steeper than 40° along the foot (a ledge) is it held at the ankle's
+    ground. Before, every downhill toe was held at the ankle's height and
+    floated up to 4 cm (slope tilt p95 8.9 → 5.6°).
   - The swing lift (`SWING_LIFT_RATIO`) applies only to a clip whose swing
     foot does not clear the floor by itself; the mocap walks clear it, and
     the extra lift bent the swing knee past the source (see the knee swing
     below).
-- Desktop Idle sway: a second action plays the idle clip's spine, chest,
+- Desktop Idle sway (the idle take's sway scaled to 0.37): a second action plays the idle clip's spine, chest,
   upper chest, neck and head tracks on top of the still idle, at the idle's
   weight times an eased share (VR has no idle, so nothing changes there).
   The share eases to 0 over 0.25 s while a point, carry, reach, set-down or
   plant holds the upper body, and back after: a person who reaches or aims
-  stops swaying. The hips and arms stay still, so the hand and eye the
-  reach, carry, set-down and placement read do not move with the sway. The
-  capture state reports the weight as `swayWeight`.
+  stops swaying. The hips and the arms' own joints stay still, but the
+  hands (children of the chest) and the eye (on the head) move with the
+  sway, about 2 cm. So the sway is also held in first person, where the
+  view rides the eye. In third person the view looks at the hips plus the
+  eye's offset from them through a 3 s filter, blended in by the sway's
+  weight (`CameraController.steadyLookTarget`), so the view does not rock
+  (pending owner confirmation). The phone object checks scan the open
+  bracket prop in 5 px steps: its thin arms shift on screen as the view
+  turns. The capture state reports the weight as `swayWeight`.
 - Knee swing: the slice 1 note (walk p99 77° against the source's 57–66°)
   came from the FBX-era source. The original AMC 07_12 swing knee measures
   72.6–74.2° with this code, and the shipped avatar already reads 72.6°. The
@@ -376,8 +398,10 @@ and a real crouch walk, and stands its feet on the slope under them.
   and the gait targets that apply to it (per-direction targets anchored on
   the source takes); a slope row graded on the planted foot's pitch and roll
   against the ground under heel and toe, and on the lower foot's float when
-  standing across the slope; an allocation probe on the leg solver; the
-  idle's head sway amplitude.
+  standing across the slope (past the ankle's and toe joint's own height over
+  the sole); the source scan of the leg solver; the idle's head sway
+  amplitude, from 2 s into the last stop. The crouch walk phase lasts 4.5 s,
+  so it holds two strides.
 
 **Excluded from slice 2:** run/sprint; VR directional clips (the VR body
 solver lays its own steps); a crouched strafe clip (no clean CMU take); the
@@ -388,7 +412,9 @@ which stays in `TODOS.md`.
 speed shares (back 0.6, side 0.65), which so differ by view mode (third
 person walks side keys forward at the full speed); third person keeps the
 travel turn for side keys instead of a strafe; the desktop idle sways its
-spine and head again and stops for reach, carry and aim.
+spine and head again and stops for reach, carry and aim; no sway in first
+person; the 3 s steady third-person look target; the strafe take 141_33;
+the side-step pop target; the source scan for allocation.
 
 ### Slice 2 acceptance criteria
 

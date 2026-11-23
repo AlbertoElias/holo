@@ -97,6 +97,7 @@ const WALL_CLEARANCE_RATIO = 0.005;
 const MAX_FOOT_TILT_DEG = 40;
 const MAX_FOOT_TILT_COS = Math.cos(THREE.MathUtils.degToRad(MAX_FOOT_TILT_DEG));
 const MAX_FOOT_TILT_SIN = Math.sin(THREE.MathUtils.degToRad(MAX_FOOT_TILT_DEG));
+const MAX_FOOT_TILT_TAN = Math.tan(THREE.MathUtils.degToRad(MAX_FOOT_TILT_DEG));
 /**
  * A standing or planted foot the straight leg cannot reach (the lower foot across a slope, a stance on a dip) lowers
  * the pelvis, to this share of the leg's reach and by at most PELVIS_DROP_MAX_RATIO of the height, eased.
@@ -104,6 +105,9 @@ const MAX_FOOT_TILT_SIN = Math.sin(THREE.MathUtils.degToRad(MAX_FOOT_TILT_DEG));
 const PELVIS_REACH_SHARE = 0.995;
 const PELVIS_DROP_MAX_RATIO = 0.12;
 const PELVIS_DROP_SEC = 0.08;
+// Standing, the hips come back up slower than they go down: a settle step that brings the feet together lets them
+// rise smoothly, not snap up in a tenth of a second (walking, they follow each stance at PELVIS_DROP_SEC).
+const PELVIS_RISE_SEC = 0.3;
 
 const smooth = (t: number) => t * t * (3 - 2 * t);
 const flatDistance = (a: THREE.Vector3, b: THREE.Vector3) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -441,7 +445,8 @@ export class TerrainLegSolver {
     for (const leg of this.legs) if (leg.mode === 'step') stepping = true;
     if (!walking && stepping) wanted = Math.max(wanted, this.pelvisDrop);
     wanted = Math.min(wanted, height * PELVIS_DROP_MAX_RATIO);
-    this.pelvisDrop += (wanted - this.pelvisDrop) * (1 - Math.exp(-Math.max(0, deltaSec) / PELVIS_DROP_SEC));
+    const ease = wanted > this.pelvisDrop || walking ? PELVIS_DROP_SEC : PELVIS_RISE_SEC;
+    this.pelvisDrop += (wanted - this.pelvisDrop) * (1 - Math.exp(-Math.max(0, deltaSec) / ease));
     if (!hips?.parent || this.pelvisDrop < 1e-5) return;
     this.hipsSaved.copy(hips.position);
     this.hipsWasSaved = true;
@@ -665,12 +670,15 @@ export class TerrainLegSolver {
     // the height above the base): a rock edge too steep to stand on still stops it, and so does a ledge the
     // body is stepping down from.
     const groundY = this.surface(this.probe, model, toe.x, Math.max(baseY, toe.y + height * 0.05 - height * 0.28), toe.z, height, 0) ? this.probe.y : ankleGroundY;
-    const floorY = Math.max(groundY, ankleGroundY) + height * leg.toeRatio;
-    if (toe.y >= floorY) return;
     const arm = this.vc.copy(toe).sub(ankle);
     const length = arm.length();
     const flat = Math.hypot(arm.x, arm.z);
     if (length < 1e-5 || flat < 1e-5) return;
+    // Down a slope the toe stands on its own ground; over a drop steeper than a foot can tilt to (a ledge the body is
+    // stepping down from) it holds at the ankle's ground, level, rather than point down over the edge.
+    const ledge = ankleGroundY - groundY > flat * MAX_FOOT_TILT_TAN;
+    const floorY = (ledge ? ankleGroundY : groundY) + height * leg.toeRatio;
+    if (toe.y >= floorY) return;
     // The toe's height below the ankle it may have, kept on its circle about the ankle.
     const drop = THREE.MathUtils.clamp(floorY - ankle.y, -length, length);
     const lifted = this.vd.set(arm.x / flat, 0, arm.z / flat).multiplyScalar(Math.sqrt(Math.max(0, length * length - drop * drop))).setY(drop);

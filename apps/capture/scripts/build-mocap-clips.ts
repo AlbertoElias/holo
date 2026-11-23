@@ -48,9 +48,9 @@ export const MOCAP_LOOPS: readonly MocapLoop[] = [
   // Subject 113, trial 21, "standing still": breathing, a slow sway and small weight shifts, arms at
   // the sides. ("Normal waiting", 137_28, fidgets: its hands travel three times as far, in gestures that
   // replay on every stop.)
-  // Played at 40% of its sway about the mean pose: the full take drifts the head 5 cm in a frame of view
+  // Played at 37% of its sway about the mean pose: the full take drifts the head 5 cm in a frame of view
   // that follows the eyes (the desktop camera and aim), where 2 cm reads as standing still and alive.
-  { name: 'Idle', take: '113_21', from: 0, to: 0, sway: 0.4 },
+  { name: 'Idle', take: '113_21', from: 0, to: 0, sway: 0.37 },
   // Subject 13, trial 42, "jump": a standing jump with a full arm swing that keeps moving through the flight (118_01, the
   // first pick, swings the arms back hard but only to 20° in front, then holds them there). Not a loop (`once`): the
   // squat with the arms going back (frame 24), the arms at their furthest back, 78° behind, as the legs drive (34),
@@ -62,10 +62,11 @@ export const MOCAP_LOOPS: readonly MocapLoop[] = [
   // (turned by the thighs, not the travel). Subject 143, trial 39, "walk backwards": a brisk back-pedal at 1.23 m/s,
   // 190 steps/min, arms swinging opposite the legs (136_25/26 back up at 0.5 m/s with the arms still).
   { name: 'WalkBackward', take: '143_39', from: 62, to: 81, half: 71, mirror: true, faced: true },
-  // Subject 143, trial 40, "sidestep": 1.2-1.3 m/s, 180 steps/min, each way. A side-step leads with one leg, so it is
-  // not mirrored: left and right are each their own recorded cycle (141_33 shuffles on nearly straight knees).
-  { name: 'StrafeLeft', take: '143_40', from: 47, to: 67, faced: true },
-  { name: 'StrafeRight', take: '143_40', from: 168, to: 188, faced: true },
+  // Subject 141, trial 33, side-steps: 1.1-1.3 m/s, about 190 steps/min, each way, the feet at least 7 cm apart
+  // (143_40's brisker side-step crosses them by up to 35 cm, which reads as scissoring). A side-step leads with one
+  // leg, so it is not mirrored: left and right are each their own recorded cycle, one left contact to the next.
+  { name: 'StrafeLeft', take: '141_33', from: 162, to: 180, faced: true },
+  { name: 'StrafeRight', take: '141_33', from: 57, to: 76, faced: true },
   // Subject 136, trials 10 and 11, crouched walks forward (0.78 m/s, near the full crouch's 0.81) and back (0.64 m/s).
   { name: 'CrouchWalk', take: '136_10', from: 126, to: 164, half: 147, mirror: true, faced: true },
   { name: 'CrouchWalkBackward', take: '136_11', from: 121, to: 167, half: 146, mirror: true, faced: true }

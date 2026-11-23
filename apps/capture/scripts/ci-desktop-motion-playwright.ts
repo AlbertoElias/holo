@@ -10,9 +10,9 @@
 // The shipped avatar also walks the default terrain (row "shipped-terrain"), judged
 // on its feet against the slopes (no sinking, no floating), and every row reports
 // the per-frame cost of animation + body IK (__samplePoseCost).
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { chromium, type CDPSession, type Page } from 'playwright';
+import { chromium, type Page } from 'playwright';
 import {
   attachXrEnvironment, createXrContext, launchXrBrowser, wireXrConsoleErrors,
   waitForPageFunctions, waitForTextContentPrefix
@@ -51,7 +51,8 @@ const SCRIPT: Phase[] = [
   ['stop', 1.5, idle],
   ['back', 2.5, { ...idle, back: true }],
   ['stop', 1.5, idle],
-  ['crouch-walk', 2.5, { ...idle, forward: true, crouch: true }],
+  // The crouch walk strides once in 1.3 s: 3.5 s after its start-up holds two full strides for the gait metrics.
+  ['crouch-walk', 4.5, { ...idle, forward: true, crouch: true }],
   ['stop', 1.5, idle],
   // First person keeps the body on the look: A and D side-step.
   ['fp-left', 2.5, { ...idle, left: true }, 'first'],
@@ -114,7 +115,7 @@ type Loco = {
   legs: Array<{ side: string; mode: string; groundY: number | null; tilt: number | null; slope: number | null; foot: { x: number; y: number; z: number } }>;
 };
 
-async function run(page: Page, avatarUrl: string | null, terrain = false, probeAllocations = false) {
+async function run(page: Page, avatarUrl: string | null, terrain = false) {
   await page.addInitScript(() => {
     Object.defineProperty(window, '__setManualClock', {
       configurable: true,
@@ -148,20 +149,10 @@ async function run(page: Page, avatarUrl: string | null, terrain = false, probeA
   let timeMs = 0;
   await page.evaluate(() => window.__samplePoseCost(true));
   let view: View = 'third';
-  // The leg solver's own allocations over the walking phases (sampled by V8's heap profiler), from after the
-  // first idle (attach and its lazy setup are done) to the end.
-  const cdp = probeAllocations ? await page.context().newCDPSession(page) : null;
   for (const [phase, seconds, input, nextView] of terrain ? TERRAIN_SCRIPT : SCRIPT) {
     if (nextView && nextView !== view) {
       await page.keyboard.press('KeyV');
       view = nextView;
-    }
-    if (cdp && phase !== 'idle' && !allocationProbe.started) {
-      await cdp.send('Debugger.enable');
-      await cdp.send('HeapProfiler.enable');
-      // Temporaries die young: without the collected objects the profile keeps only what is still alive.
-      await cdp.send('HeapProfiler.startSampling', { samplingInterval: ALLOCATION_SAMPLING_BYTES, includeObjectsCollectedByMajorGC: true, includeObjectsCollectedByMinorGC: true });
-      allocationProbe.started = true;
     }
     const frames = Math.round((seconds * 1000) / FRAME_MS);
     const chunk = await page.evaluate(
@@ -193,62 +184,25 @@ async function run(page: Page, avatarUrl: string | null, terrain = false, probeA
     }
   }
   const poseCost = await page.evaluate(() => window.__samplePoseCost());
-  let solverAllocatedBytes: number | null = null;
-  if (cdp && allocationProbe.started) {
-    const { profile } = await cdp.send('HeapProfiler.stopSampling') as { profile: { head: HeapNode } };
-    const range = await solverRange(cdp, profile.head);
-    if (!range) throw new Error(`allocation probe: no script defines ${SOLVER_MARKER}() (renamed in TerrainLegSolver?)`);
-    solverAllocatedBytes = allocatedIn(profile.head, range, false);
-    allocationProbe.started = false;
-  }
-  return { samples, walkClip: humanoid?.locomotion?.clips?.walk ?? null, poseCost, solverAllocatedBytes };
+  return { samples, walkClip: humanoid?.locomotion?.clips?.walk ?? null, poseCost };
 }
 
-type HeapNode = { callFrame: { url: string; functionName: string; scriptId: string; lineNumber: number; columnNumber: number }; selfSize: number; children: HeapNode[] };
-type CodeRange = { scriptId: string; start: [number, number]; end: [number, number] };
-// The leg solver's class is found in the served code (bundled and minified in the test build, so no file name or
-// source map names it) by a method only it defines; any sample whose stack passes through that class counts.
-const SOLVER_MARKER = 'dropPelvis';
-const ALLOCATION_SAMPLING_BYTES = 128;
-const allocationProbe = { started: false };
-
-/** The [line, column] extent of the class that defines SOLVER_MARKER, in the script that holds it. */
-async function solverRange(cdp: CDPSession, head: HeapNode): Promise<CodeRange | null> {
-  const ids = new Set<string>();
-  const walk = (node: HeapNode) => { if (node.callFrame.scriptId && node.callFrame.scriptId !== '0') ids.add(node.callFrame.scriptId); node.children.forEach(walk); };
-  walk(head);
-  const definition = new RegExp(`(^|[{};\\s])${SOLVER_MARKER}\\s*\\([^)]*\\)\\s*\\{`, 'm');
-  for (const scriptId of ids) {
-    const { scriptSource: source } = await cdp.send('Debugger.getScriptSource', { scriptId }) as { scriptSource: string };
-    const at = source.search(definition);
-    if (at < 0) continue;
-    // The innermost class whose braces enclose the definition.
-    const classes = [...source.slice(0, at).matchAll(/\bclass\b[^{]*\{/g)].reverse();
-    for (const match of classes) {
-      let depth = 0, end = -1;
-      for (let i = match.index! + match[0].length - 1; i < source.length; i++) {
-        if (source[i] === '{') depth++;
-        else if (source[i] === '}' && --depth === 0) { end = i; break; }
-      }
-      if (end > at) return { scriptId, start: lineColumn(source, match.index!), end: lineColumn(source, end) };
-    }
-  }
-  return null;
-}
-function lineColumn(source: string, offset: number): [number, number] {
-  const before = source.slice(0, offset);
-  const line = before.split('\n').length - 1;
-  return [line, offset - (before.lastIndexOf('\n') + 1)];
-}
-const within = (f: HeapNode['callFrame'], r: CodeRange) => f.scriptId === r.scriptId &&
-  (f.lineNumber > r.start[0] || (f.lineNumber === r.start[0] && f.columnNumber >= r.start[1])) &&
-  (f.lineNumber < r.end[0] || (f.lineNumber === r.end[0] && f.columnNumber <= r.end[1]));
-/** The bytes sampled under the solver: in its own code or in what it calls (each sample stands for about the sampling interval). */
-function allocatedIn(node: HeapNode, range: CodeRange, inside: boolean): number {
-  const here = inside || within(node.callFrame, range);
-  let bytes = here ? node.selfSize : 0;
-  for (const child of node.children) bytes += allocatedIn(child, range, here);
-  return bytes;
+// The leg solver runs every frame, so it must create no objects there: its per-frame code (every method after
+// `attach`, which builds the legs once, except `getSnapshot`, the debug state's copy) holds no `new`, array or object
+// literal, closure, spread, template string or copying array method. A heap profile cannot measure this: V8 boxes the
+// doubles of the three.js calls under the solver (about 165 kB a frame, the same in what it calls and in its own
+// code), and the sampler counts those as it counts objects.
+const SOLVER_SOURCE = new URL('../src/animation/TerrainLegSolver.ts', import.meta.url);
+const ALLOCATING = /\bnew\s+[A-Z]|=\s*\[|\(\s*\[|[=(,:]\s*\{\s*[A-Za-z_]+\s*:|=>|\.\.\.|`|\.(?:map|filter|slice|concat|flatMap|from)\(/;
+async function solverAllocatingSites(): Promise<string[]> {
+  const source = await readFile(SOLVER_SOURCE, 'utf8');
+  const body = source.slice(source.indexOf('export class TerrainLegSolver'));
+  const perFrame = body.slice(body.indexOf('\n  update('));
+  const end = perFrame.search(/\n}\n/);
+  return perFrame.slice(0, end).split('\n')
+    .map((line, i) => ({ line: line.replace(/\/\/.*$/, '').replace(/\/\*.*?\*\/|^\s*\*.*$/g, ''), i }))
+    .filter(({ line }) => !/^\s*getSnapshot\(/.test(line) && ALLOCATING.test(line))
+    .map(({ line }) => line.trim());
 }
 
 
@@ -316,7 +270,9 @@ const SLICE2_TARGETS = {
   crouchHipsDropRatio: { min: 0.05 },
   crouchKneeMidStanceFlexDeg: { min: 74.7, max: 91.3 },
   idleHeadSwayCm: { min: 0.5, max: 3 },
-  solverAllocatedBytes: { max: 0 }
+  solverAllocatingSites: { max: 0 },
+  // 141_33's side-steps read 65-66 m/s² scaled to 1.8 m.
+  strafePopP99MS2: { max: 70 }
 } as const;
 const TERRAIN_SLICE2_TARGETS = {
   slopeFootTiltP95Deg: { max: 8 },
@@ -373,7 +329,8 @@ function sliceTwoFlat(samples: Row[], frames: MotionFrame[], heightM: number) {
   const crouchGait = measureGait(pick(crouch), heightM);
   const standing = phaseRun(samples, 'idle', 0, 0).map((i) => hipsOverGround(samples[i]!.body)).filter((h): h is number => h !== null);
   const crouched = crouch.map((i) => hipsOverGround(samples[i]!.body)).filter((h): h is number => h !== null);
-  const still = phaseRun(samples, 'stop', -1, 600);
+  // From 2 s into the last stop: the side-step's stance and the hips' rise after it have settled.
+  const still = phaseRun(samples, 'stop', -1, 2000);
   const heads = still.map((i) => samples[i]!.body.bones.head).filter((h): h is Vec => !!h);
   const centre = heads.length ? [0, 1, 2].map((k) => mean(heads.map((h) => h[k]!))!) : null;
   const sway = centre ? Math.max(...heads.map((h) => Math.hypot(h[0] - centre[0]!, h[1] - centre[1]!, h[2] - centre[2]!))) : null;
@@ -404,11 +361,13 @@ function sliceTwoTerrain(samples: Row[]) {
   for (const run of [phaseRun(samples, 'stop', 0, 600), phaseRun(samples, 'stop', -1, 600)]) {
     for (const i of run) {
       const b = samples[i]!.body;
-      // The lower foot: the one whose ground is lower; its float is its lowest joint over the ground under it.
+      // The lower foot: the one whose ground is lower; its float is its lowest joint over the ground under it, past
+      // that joint's own height over the sole on flat ground (the ankle and the toe joint stand above the floor).
       const lower = (['left', 'right'] as const).map((side) => ({ side, ground: b.ground[`${side}Ankle`]?.y ?? Infinity })).sort((x, y) => x.ground - y.ground)[0]!.side;
       const over = (['Ankle', 'Toe'] as const).map((j) => {
         const at = b.bones[`${lower}${j}`], ground = b.ground[`${lower}${j}`];
-        return at && ground ? at[1] - ground.y : Infinity;
+        const rest = j === 'Ankle' ? b.dims?.ankleHeight : b.dims?.toeHeight;
+        return at && ground && rest !== undefined ? at[1] - ground.y - rest : Infinity;
       });
       const lowest = Math.min(...over);
       if (Number.isFinite(lowest)) floats.push(lowest * 100);
@@ -443,6 +402,8 @@ const avatars: Array<{ name: string; url: string | null; walkClip: string; terra
 const lost = SKELETONS.filter((name) => !fixtures.some((f) => f.name === name));
 if (lost.length) throw new Error(`no generated fixture for ${lost.join(', ')} (renamed in scripts/lib/avatar-fixtures.ts?)`);
 if (!avatars.length) throw new Error(`DESKTOP_MOTION_ONLY=${only} matches no avatar`);
+const allocatingSites = await solverAllocatingSites();
+if (allocatingSites.length) console.log(`[desktop-motion] the leg solver creates objects per frame:\n  ${allocatingSites.join('\n  ')}`);
 const summary: Record<string, unknown>[] = [];
 let failed = false;
 const browser = await launchXrBrowser(chromium);
@@ -450,7 +411,7 @@ try {
   for (const avatar of avatars) {
     const context = await createXrContext(browser, { viewport: { width: 960, height: 720 } });
     consoleErrors.length = 0;
-    const { samples, walkClip, poseCost, solverAllocatedBytes } = await run(await context.newPage(), avatar.url, avatar.terrain, avatar.name === 'shipped');
+    const { samples, walkClip, poseCost } = await run(await context.newPage(), avatar.url, avatar.terrain);
     await context.close();
     const tag = `[desktop-motion] ${avatar.name}:`;
     const misses: Verdict[] = [];
@@ -458,7 +419,11 @@ try {
     if (consoleErrors.length) { console.log(`${tag} browser errors: ${consoleErrors.join(' | ')}`); failed = true; }
     // The shared conversion, so desktop counts the same joints as every other row (not headTop, an end site).
     const frames = markHeld(framesFromBodySamples(samples, 'avatar'), samples);
-    const metrics = measureMotion(frames);
+    // The side-step's own take (141_33) pops harder than the walk (65-66 m/s² at 1.8 m): the walk's target judges the
+    // rest of the run, and the side-steps are judged on their take (slice2.strafePopP99MS2).
+    const sideStep = (i: number) => samples[i]!.phase === 'fp-left' || samples[i]!.phase === 'fp-right';
+    const metrics = { ...measureMotion(frames), popP99MS2: measureMotion(frames.filter((_, i) => !sideStep(i))).popP99MS2 };
+    const strafePopP99MS2 = samples.some((_, i) => sideStep(i)) ? measureMotion(frames.filter((_, i) => sideStep(i))).popP99MS2 : null;
     const gait = measureGait(steadyWalk(frames, samples), 1.8);
     // On terrain the slopes bend the walk, so only the feet against the ground are judged there.
     const { cm: belowGround, airborneFrames } = footBelowGround(samples);
@@ -474,15 +439,14 @@ try {
     // Slice 2: the directional, crouch and slope behaviour, the idle's sway, the solver's allocations.
     const slice2 = avatar.terrain ? sliceTwoTerrain(samples) : sliceTwoFlat(samples, frames, 1.8);
     if (slice2) {
-      const values: Record<string, number | null> = { ...slice2, solverAllocatedBytes };
-      const targets: Record<string, { min?: number; max?: number }> = avatar.terrain ? TERRAIN_SLICE2_TARGETS : { ...SLICE2_TARGETS };
-      if (solverAllocatedBytes === null) delete targets.solverAllocatedBytes;
+      const values: Record<string, number | null> = { ...slice2, ...(avatar.terrain ? {} : { solverAllocatingSites: allocatingSites.length, strafePopP99MS2 }) };
+      const targets: Record<string, { min?: number; max?: number }> = avatar.terrain ? TERRAIN_SLICE2_TARGETS : SLICE2_TARGETS;
       verdicts.push(...judge(values, targets).map((v) => ({ ...v, metric: `slice2.${v.metric}` }) as Verdict));
       console.log(`${tag} slice2 ${JSON.stringify(values)}`);
     }
     verdicts.push({ metric: 'poseCostMedianMs', value: poseCost.medianMs, target: { max: POSE_COST_MEDIAN_MS }, pass: poseCost.medianMs <= POSE_COST_MEDIAN_MS } as unknown as Verdict);
     await writeFile(path.join(artifactDir, `${avatar.name}-samples.json`), JSON.stringify(samples));
-    await writeFile(path.join(artifactDir, `${avatar.name}-report.json`), JSON.stringify({ metrics, footBelowGroundCm: belowGround, airborneFrames, gait, poseCost, slice2, solverAllocatedBytes, verdicts }, null, 2));
+    await writeFile(path.join(artifactDir, `${avatar.name}-report.json`), JSON.stringify({ metrics, footBelowGroundCm: belowGround, airborneFrames, gait, poseCost, slice2, verdicts }, null, 2));
     console.log(`${tag} ${JSON.stringify(metrics)}`);
     console.log(`${tag} gait ${JSON.stringify(gait)}`);
     console.log(`${tag} pose cost ${JSON.stringify(poseCost)}`);
