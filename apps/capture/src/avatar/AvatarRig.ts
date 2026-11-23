@@ -180,6 +180,12 @@ const SQUAT_EXTRA_HIPS_DROP_RATIO = 0.20;
 const SQUAT_DEEP_EXTRA_RATIO = 0.07;
 // The crouch's leg bend is relaxed by this much at full squat: the leg solver bends the knees instead.
 const SQUAT_LEG_RELAX = 0.85;
+// The drops above were tuned on the stock rig, whose leg (hip joint to ankle, along thigh and shin) is this fraction of its height.
+// A rig with other proportions scales every drop by its own leg against this: shorter legs fold less far (B-086).
+const STOCK_LEG_PER_HEIGHT = 0.507;
+// The leg scale stays in this band, so a rig with odd leg bones (or a misread one) still gets a usable crouch.
+const LEG_SCALE_MIN = 0.7;
+const LEG_SCALE_MAX = 1.3;
 const CROUCH_WALK_BLEND_START_SPEED = 0.08;
 const CROUCH_WALK_BLEND_END_SPEED = 0.28;
 const CROUCH_WALK_HIPS_POSE_WEIGHT = 0.85;
@@ -199,6 +205,8 @@ const CROUCH_GROUND_SAMPLE_OFFSETS: readonly Readonly<[number, number]>[] = [
   [-0.7, -0.7]
 ];
 const CROUCH_FOOT_PITCH_DEG = 8;
+/** After the set's see-through surfaces (0), before the recording bubble (999). */
+const AVATAR_TRANSLUCENT_RENDER_ORDER = 1;
 
 export class AvatarRig {
   readonly avatarRoot = new THREE.Group();
@@ -320,6 +328,7 @@ export class AvatarRig {
       this.neutralEyeAboveBase = this.avatarHeight * 0.92;
     }
     this.disableAvatarFrustumCulling(avatar);
+    this.drawTranslucentPartsAfterSet(avatar);
     this.classifyFirstPersonHeadMeshes(avatar);
     this.collectAvatarMaterials(avatar);
     this.resolveCrouchRig();
@@ -333,6 +342,7 @@ export class AvatarRig {
   refreshMeshes(): void {
     if (!this.avatar) return;
     this.disableAvatarFrustumCulling(this.avatar);
+    this.drawTranslucentPartsAfterSet(this.avatar);
     this.classifyFirstPersonHeadMeshes(this.avatar);
     this.collectAvatarMaterials(this.avatar);
   }
@@ -433,8 +443,9 @@ export class AvatarRig {
     // Bone translations use parent-local units; avatarHeight is world meters.
     const parentScale = this.crouchHips.bone.parent?.getWorldScale(this.tmpSize).y ?? 1;
     const heightInParent = this.avatarHeight / Math.max(1e-8, Math.abs(parentScale));
+    const legScale = this.crouchLegScale();
     if (!airborne) this.crouchHips.bone.position
-      .addScaledVector(this.crouchHips.downInParent, heightInParent * (CROUCH_HIPS_DROP_RATIO * hipsAmount + (SQUAT_EXTRA_HIPS_DROP_RATIO * squatAmount + SQUAT_DEEP_EXTRA_RATIO * clamp(deepExtra, 0, 1))))
+      .addScaledVector(this.crouchHips.downInParent, heightInParent * legScale * (CROUCH_HIPS_DROP_RATIO * hipsAmount + (SQUAT_EXTRA_HIPS_DROP_RATIO * squatAmount + SQUAT_DEEP_EXTRA_RATIO * clamp(deepExtra, 0, 1))))
       .addScaledVector(this.crouchHips.backInParent, heightInParent * 0.045 * hipsAmount);
     this.applyCrouchBoneRotation(this.crouchHips, hipsAmount * lean);
     this.crouchHips.bone.updateMatrixWorld(true);
@@ -458,6 +469,24 @@ export class AvatarRig {
 
     // Planted feet are pinned by the leg solver, so lifting the hips to clear the unplanted feet would only make the hips jump with the terrain probe.
     if (!plant && !airborne) this.applyCrouchFootGroundCompensation(clampedAmount, walkBlend, squatAmount);
+  }
+
+  /**
+   * The avatar's leg against the stock rig's, both per metre of height (1 on the stock rig). Bone lengths do not change
+   * with the pose, so this reads the same in any frame.
+   */
+  private crouchLegScale(): number {
+    const upper = this.crouchUpperLegs[0]?.bone;
+    const lower = this.crouchLowerLegs[0]?.bone;
+    const foot = this.crouchLeftFoot;
+    if (!upper || !lower || !foot || !(this.avatarHeight > 0)) return 1;
+    upper.getWorldPosition(this.tmpVecA);
+    lower.getWorldPosition(this.tmpVecB);
+    const thigh = this.tmpVecA.distanceTo(this.tmpVecB);
+    foot.getWorldPosition(this.tmpVecA);
+    const leg = thigh + this.tmpVecB.distanceTo(this.tmpVecA);
+    const scale = leg / this.avatarHeight / STOCK_LEG_PER_HEIGHT;
+    return Number.isFinite(scale) ? clamp(scale, LEG_SCALE_MIN, LEG_SCALE_MAX) : 1;
   }
 
   /** The avatar's canonical bone, or its end site for a `…Tip` reference. */
@@ -913,6 +942,23 @@ export class AvatarRig {
       if (isThreeMesh(obj)) {
         obj.frustumCulled = false;
       }
+    });
+  }
+
+  /**
+   * The light finish's see-through parts draw after the set's see-through
+   * surfaces and write depth. three sorts blended meshes by their origins,
+   * and a lake's origin can be nearer the camera than the avatar's feet: the
+   * water then drew over a body that wrote no depth. The viewer does the same
+   * in `sphereClipping.ts`.
+   */
+  private drawTranslucentPartsAfterSet(model: THREE.Object3D): void {
+    model.traverse((obj) => {
+      if (!isThreeMesh(obj)) return;
+      const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
+      if (!materials.some((material) => material?.transparent)) return;
+      for (const material of materials) if (material) material.depthWrite = true;
+      obj.renderOrder = AVATAR_TRANSLUCENT_RENDER_ORDER;
     });
   }
 
