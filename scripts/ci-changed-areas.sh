@@ -65,6 +65,10 @@ else
     case "${file}" in
       apps/viewer-api/tools/*|apps/capture/src/recording/*|apps/capture/public/gltf/*) usdz_tools=true ;;
     esac
+    # The viewer's mocked XR specs load capture's avatar model as their hologram.
+    case "${file}" in
+      apps/capture/public/gltf/*) web=true ;;
+    esac
     case "${file}" in
       # Knowledge content/code is an app surface, not plain documentation.
       apps/knowledge/*)
@@ -83,15 +87,20 @@ else
         saw_code=true; quality=true; capture_xr=true; pipeline=true; portal=true; capture_app=true ;;
       apps/viewer-web/*)
         saw_code=true; quality=true; e2e=true; pipeline=true; portal=true; web=true ;;
+      # The portal suite starts the test API (RUN_E2E_PIPELINE=1), as the pipeline does.
       apps/viewer-api/*)
-        saw_code=true; quality=true; pipeline=true; api=true ;;
+        saw_code=true; quality=true; pipeline=true; portal=true; api=true ;;
       apps/*)
         saw_code=true; all ;;
-      packages/avatar-face/*|packages/contracts/*|packages/design-tokens/*|packages/place/*|packages/tooling-testing/*|packages/ui-dom/*|packages/xr-*)
+      # Lint rules: no app build or suite loads them.
+      packages/config-eslint/*)
+        saw_code=true; quality=true ;;
+      # Every other package is a dependency of an app (or of its build and
+      # test tools), so it selects every browser suite and deploy. A new
+      # package lands here too.
+      packages/*)
         saw_code=true; quality=true; capture_xr=true; e2e=true; pipeline=true; portal=true
         api=true; web=true; capture_app=true ;;
-      packages/*)
-        saw_code=true; quality=true ;;
       # The API image: nothing tests it before the deploy health check.
       fly.toml|.dockerignore)
         saw_code=true; api=true ;;
