@@ -3,13 +3,16 @@
  * hand, and Blender gives those cuff vertices less of the hand bone than the hand skin around them (0.2–0.4 against
  * up to 1.0). When the wrist bends or the forearm turns, the hand skin goes with the hand and the cuff stays behind,
  * so the cuff comes out through the back of the hand (10 mm in the pinch at 1.2 s): a light, jagged band at the wrist.
- * `fitCuffs` gives each garment vertex at or past the wrist the joints and weights of the nearest skin vertex, so the
- * cuff and the hand skin deform alike. Nothing moves in the bind pose.
+ * `fitCuffs` gives each garment vertex at the wrist the mean joints and weights of the skin vertices near it (nearer
+ * ones count more), blended in from the forearm over `CUFF_BLEND`, so the cuff and the hand skin deform alike and
+ * neighbouring rim vertices do not follow different bones (a jagged edge). Nothing moves in the bind pose.
  */
 import type { Document, Node, Primitive } from '@gltf-transform/core';
 
-/** How far up the forearm from the wrist joint (m) a garment vertex still takes the skin's weights. */
-export const CUFF_REACH = 0.015;
+/** How far up the forearm from the wrist joint (m) a garment vertex starts to take the skin's weights. */
+export const CUFF_REACH = 0.035;
+/** Over how far (m) toward the wrist the skin's weights come in, from none to all. */
+const CUFF_BLEND = 0.025;
 /** Only vertices this near the wrist line (m) are a cuff. */
 const CUFF_RADIUS = 0.06;
 /** Only a skin vertex this near (m) gives its weights. */
@@ -49,10 +52,12 @@ export function fitCuffs(doc: Document, skin = /Body$/, garments = /Jumper$/): R
   const ibms = sk.getInverseBindMatrices()!.getArray()!;
   const jointAt = (name: string): V3 => { const i = joints.indexOf(name); if (i < 0) throw new Error(`fitCuffs: no ${name} joint`); return bindPosition(Array.from(ibms.subarray(i * 16, i * 16 + 16))); };
   const wrists = (['Left', 'Right'] as const).map((s) => { const h = jointAt(`${s}Hand`); return { h, ax: norm(sub(h, jointAt(`${s}ForeArm`))) }; });
-  const inCuff = (p: V3, lo: number): boolean => wrists.some(({ h, ax }) => {
+  /** How far along the forearm past the start of the cuff a point is (m), or -1 when it is not at a wrist. */
+  const cuffDepth = (p: V3): number => Math.max(-1, ...wrists.map(({ h, ax }) => {
     const v = sub(p, h); const d = dot(v, ax); const r = Math.sqrt(Math.max(0, dot(v, v) - d * d));
-    return d > lo && r < CUFF_RADIUS;
-  });
+    return r < CUFF_RADIUS ? d + CUFF_REACH : -1;
+  }));
+  const inCuff = (p: V3, lo: number): boolean => cuffDepth(p) > lo + CUFF_REACH;
 
   // The skin vertices at the wrists, in world space at bind, with their joints and weights.
   const skinPts: { p: V3; j: number[]; w: number[] }[] = [];
@@ -74,10 +79,26 @@ export function fitCuffs(doc: Document, skin = /Body$/, garments = /Jumper$/): R
     for (let i = 0; i < pos.getCount(); i++) {
       const p = apply(m, pos.getElement(i, e) as V3);
       if (!inCuff(p, -CUFF_REACH)) continue;
-      let best = -1, bd = SKIN_NEAR * SKIN_NEAR;
-      for (let k = 0; k < skinPts.length; k++) { const q = sub(skinPts[k]!.p, p); const d = dot(q, q); if (d < bd) { bd = d; best = k; } }
-      if (best < 0) continue;
-      J.setElement(i, skinPts[best]!.j); W.setElement(i, skinPts[best]!.w); n += 1;
+      // The skin's weights near the vertex, each skin vertex counted by 1 / distance², summed per joint.
+      const near = new Map<number, number>();
+      let total = 0;
+      for (const q of skinPts) {
+        const v = sub(q.p, p); const d2 = dot(v, v);
+        if (d2 > SKIN_NEAR * SKIN_NEAR) continue;
+        const k = 1 / Math.max(d2, 1e-8);
+        total += k;
+        q.j.forEach((j, x) => { if (q.w[x]! > 0) near.set(j, (near.get(j) ?? 0) + k * q.w[x]!); });
+      }
+      if (!total) continue;
+      const f = Math.min(1, cuffDepth(p) / CUFF_BLEND);
+      const mix = new Map<number, number>();
+      const j0 = J.getElement(i, []), w0 = W.getElement(i, []);
+      j0.forEach((j, x) => { if (w0[x]! > 0) mix.set(j, (1 - f) * w0[x]!); });
+      for (const [j, w] of near) mix.set(j, (mix.get(j) ?? 0) + (f * w) / total);
+      const top = [...mix].sort((a, b) => b[1] - a[1]).slice(0, 4);
+      const sum = top.reduce((t, [, w]) => t + w, 0);
+      while (top.length < 4) top.push([0, 0]);
+      J.setElement(i, top.map(([j]) => j)); W.setElement(i, top.map(([, w]) => w / sum)); n += 1;
     }
     const name = node.getMesh()!.getName();
     changed[name] = (changed[name] ?? 0) + n;
