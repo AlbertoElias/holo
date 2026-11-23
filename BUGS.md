@@ -72,21 +72,6 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Cause (suspected):** the physics of the take diverges (one fall>idle is missing), so the hand
   error follows from a different state, not from the arm solve.
 
-### B-086 — The house avatar sinks to the floor on a floor reach
-
-- **Area:** apps/capture (floor reach, house base avatar)
-- **Severity:** P2
-- **Observed:** 2026-11-20
-- **Evidence:** the capture `object` suite on the house base (the default avatar): in
-  put-down, a still release, a still touch lift and desktop-floor-reach the hips go down
-  to 0.08–0.18 m above the floor (limit 0.27 m), a knee drops to 0.07–0.19 m below its
-  ankle (limit 0.02 m above) and a thigh turns 11.3–11.6° in one step (limit 10°). The
-  stock avatar in the same runs: hips 0.24–0.25 m, no knee or thigh failure (its own
-  failures are B-069). The crouch depth is in metres tuned on the stock avatar's legs;
-  the base's legs are shorter.
-- **Expected:** the reach crouch fits the avatar's leg length; the hips stay above the limit.
-- **Reproduction:** `cd apps/capture && OBJECT_ONLY=desktop,mouse,phone,reach,resizeIwer node --import tsx scripts/run-xr-checks.ts object`
-
 ### B-069 — Desktop and phone object checks fail on `main` (outside `verify:pr`)
 
 - **Area:** apps/capture (objects)
@@ -102,6 +87,9 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   set fails, plus the floor-reach step stopping 0.18 m from the grasp point (needs 0.20–0.30)
   and still releases 1–2 cm higher (bracket put-down 0.043 m, phone lift 0.041 m, limit 0.03),
   since the desktop arms now rest in the Idle's pose instead of the bind pose.
+  After B-086's fix (2026-11-23), on the house base (the default avatar) desktop-object-bracket fails the
+  same way (walking into the prop moves it 0.014–0.096 m across runs, a glancing hit), while on the stock
+  avatar it now passes; the mouse let-go is 0.036 m up and the prop rests at 0.084 m.
 - **Expected:** every object check passes, and the suite runs in `verify:pr`.
 - **Reproduction:** `cd apps/capture && OBJECT_ONLY=desktop,mouse,phone,reach,trench,fetchDesktop node --import tsx scripts/run-xr-checks.ts object`
 
