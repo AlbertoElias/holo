@@ -59,7 +59,7 @@ export interface AutomationHooks {
   __setBodyFaults: (faults: readonly string[]) => void;
   __setHandOverlay: (enabled: boolean) => void;
   __setHeightEvidenceView: (enabled: boolean) => void;
-  __setSpectatorView: (mode: boolean | SpectatorViewMode, options?: { yawOffset?: number }) => void;
+  __setSpectatorView: (mode: boolean | SpectatorViewMode, options?: { yawOffset?: number; faceFrame?: 'eyes' | 'whole' | 'mouth' }) => void;
   __captureHandCalibrationPose: () => Record<VrHandSide, boolean>;
   __resetHandCalibrationPose: () => void;
   __loadObjectUrl: (url: string) => Promise<boolean>;
@@ -71,6 +71,8 @@ export interface AutomationHooks {
   // liveness until released with null.
   __setFaceInput: (sample: FaceSample | null) => void;
   __sampleFace: () => FaceSnapshot;
+  /** Recorded camera-tracker scores (ARKit names) in place of the camera, through the camera's own path to the face; null releases. */
+  __setFaceTrackerInput: (raw: Record<string, number> | null) => void;
   /** The avatar's canonical humanoid binding (bones, facing, disabled features), or null before load. */
   __sampleHumanoid: () => HumanoidBindingReport | null;
   /** Poses one locomotion state's clip at a clip time on one profile, for a pose read right after (null: rest, no clip). */

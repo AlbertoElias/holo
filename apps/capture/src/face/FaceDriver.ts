@@ -4,6 +4,7 @@ import { type FaceRigBones, FaceRig, type FaceBindingReport } from './FaceRig';
 import type { FaceCameraState, FaceExpressionSource, FaceGaze, FaceGazeSource, FaceSample, FaceWeights } from './faceTypes';
 import { LivenessFace } from './LivenessFace';
 import { VoiceLevel } from './VoiceLevel';
+import { TrackedFace } from './trackedFace';
 import { WebcamFace } from './WebcamFace';
 import { XrGaze } from './XrGaze';
 import type { BodycamSource } from '../bodycam/BodycamSource';
@@ -50,6 +51,7 @@ export class FaceDriver {
   private readonly liveness = new LivenessFace();
   private readonly voice = new VoiceLevel();
   private automation: FaceSample | null = null;
+  private replayShaper = new TrackedFace();
   private expressionSource: FaceExpressionSource = 'liveness';
   private gazeSource: FaceGazeSource = 'liveness';
   private output: FaceWeights = {};
@@ -81,6 +83,12 @@ export class FaceDriver {
   /** Automation: a full face (channels it omits are 0), or null to release. */
   setAutomationInput(sample: FaceSample | null): void {
     this.automation = sample;
+  }
+
+  /** Recorded camera-tracker scores in place of the camera: they take the camera's own path to the face. */
+  setTrackerInput(raw: Record<string, number> | null): void {
+    if (!raw) this.replayShaper.reset();
+    this.automation = raw ? this.replayShaper.sample(raw, performance.now()) : null;
   }
 
   toggleCamera(): void {

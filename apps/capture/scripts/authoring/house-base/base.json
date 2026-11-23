@@ -126,6 +126,8 @@
   "face": {
     "$comment": "The stylised face (decided by the agent on 2026-11-18, the owner away, for the owner to review; decision 7 of docs/features/directed-performance.md), drawn from the clay sheets: lengths in metres, angles in degrees unless named.",
     "skinUnits": {
+      "cheekSquintRight": 0.6,
+      "cheekSquintLeft": 0.6,
       "$comment": "The faceunits01 units kept on the skin, with their gains; every other face shape is authored on the parts below.",
       "jawOpen": 1.0,
       "jawForward": 1.0,
@@ -275,7 +277,7 @@
       "fade": 0.55
     },
     "mouth": {
-      "$comment": "`columns` across, halfWidth across, `raise` above the mouth corners the faceunits find, the corners `droop` below the middle. The dark line: thick at the middle (the corners keep `corner` of it), lift in front of the skin. lips: the upper and lower lips' heights at the middle, falling to the corners as (1 - s^2)^power, the upper one notched at the middle by `bow` over bowWidth; each lip's ridge `peak` of the way from the line to its outer edge and upperOut / lowerOut in front of the skin, its outer edge `edge` in front. roof: how far up under the upper lip (a share of its height) the inside's hidden top row lies.",
+      "$comment": "`columns` across, halfWidth across, `raise` above the mouth corners the faceunits find, the corners `droop` below the middle. The dark line: thick at the middle (the corners keep `corner` of it), lift in front of the skin. lips: the upper and lower lips' heights at the middle, falling to the corners as (1 - s^2)^power, the upper one notched at the middle by `bow` over bowWidth; each lip is a rounded roll: `profile` lists its rows from the line outward as [share of the way to the outer edge, share of upperOut / lowerOut in front of the skin], its outer edge `edge` in front; the lips end at `reach` of the half width, so a crease joins the corner to the cheek. roof: how far up under the upper lip (a share of its height) the inside's hidden top row lies.",
       "columns": 21,
       "toothGaps": {
         "$comment": "The columns at the teeth's edges, each line's half width as a share of a column, and its lift (m) in front of the teeth.",
@@ -283,47 +285,49 @@
         "width": 0.05,
         "lift": 0.0004
       },
-      "halfWidth": 0.0285,
+      "halfWidth": 0.03,
       "thick": 0.0016,
       "corner": 0.3,
       "lift": 0.001,
       "raise": -0.006,
       "droop": -0.0005,
       "lips": {
-        "upper": 0.0055,
+        "profile": [[0.3, 0.75], [0.6, 1.0], [0.85, 0.65], [1.0, 0.0]],
+        "reach": 0.92,
+        "upper": 0.0075,
         "upperPower": 0.55,
         "bow": 0.22,
         "bowWidth": 0.16,
-        "lower": 0.0085,
+        "lower": 0.0105,
         "lowerPower": 0.7,
-        "peak": 0.5,
-        "upperOut": 0.0028,
-        "lowerOut": 0.0038,
+        "upperOut": 0.0042,
+        "lowerOut": 0.0052,
         "edge": 0.0006,
         "roof": 0.4
       },
       "patch": {
-        "$comment": "Skin just behind the surface at the mouth, seen only through the slit MPFB leaves there: half-width in mouth half-widths, half-height and depth behind the skin (m), columns and rows.",
-        "wide": 1.5,
-        "tall": 0.02,
-        "behind": 0.001,
+        "$comment": "A strip of skin over the slit MPFB leaves at the mouth: half-width in mouth half-widths, half-height and depth behind the skin (m; below zero is in front of it), columns and rows.",
+        "wide": 1.2,
+        "tall": 0.0035,
+        "behind": -0.0003,
         "columns": 15,
-        "rows": 7
+        "rows": 3
       }
     },
     "mouthShapes": {
-      "$comment": "Moves (m) of the mouth's edges in the face's plane unless named. smile: the corners up and out, the upper edge's middle up by midUp, the middle open, the teeth row dropping `teeth` (a fraction) of the way, the opening keeping its height toward the corners as `round` falls below 1, the mouth `lift` forward (depth) halfway out so the cheek's curve stays behind it; frown: the corners down and out; stretch: the corners out and a little down; press: the corners out, the lips thinner, the corners down; lowerDown / upperUp: the lower lip down, the upper up; dimple: the corners back into the cheek; funnel: the corners in, the lips apart up and down; pucker: the corners in and the mouth forward (depth); roll: corners in, the rolled lip thinner and down; shrug: the lower lip up; side: mouthLeft/Right across; jawSide, jawForward (depth) and jawOpen: the mouth following the jaw units. jawMouth: with the open jaw the corners come `in` and `down`, the upper teeth show over `teeth` of the opening and the tongue over `tongue` of it at the middle, across `tongueWide` of the half-width (rounded by tongueRound); the opening keeps its height toward the corners as `round` falls below 1.",
+      "$comment": "Moves (m) of the mouth's edges in the face's plane unless named. smile: the corners up and out, the upper edge's middle up by midUp, the middle open, the teeth row dropping `teeth` (a fraction) of the way, the opening keeping its height toward the corners as `round` falls below 1, the mouth `lift` forward (depth) halfway out so the cheek's curve stays behind it; frown: the corners down and out; stretch: the corners out and a little down; press: the corners out, the lips thinner, the corners down; lowerDown / upperUp: the lower lip down, the upper up; dimple: the corners back into the cheek; funnel: the corners in, the lips apart up and down; pucker: the corners in, the mouth forward (depth) and the lips `open` apart; smile.thin: the share of their height the lips lose in a smile; upperUp / lowerDown move only the lip's edge, so the teeth show; jawMouth: with the jaw open the upper teeth stay level, dropping `teeth` (`teethRound` in a round mouth) of the opening, and the lower teeth row rises `lowTeeth` of it; roll: corners in, the rolled lip thinner and down; shrug: the lower lip up; side: mouthLeft/Right across; jawSide, jawForward (depth) and jawOpen: the mouth following the jaw units. jawMouth: with the open jaw the corners come `in` and `down`, the upper teeth show over `teeth` of the opening and the tongue over `tongue` of it at the middle, across `tongueWide` of the half-width (rounded by tongueRound); the opening keeps its height toward the corners as `round` falls below 1.",
       "smile": {
-        "up": 0.026,
-        "out": 0.034,
-        "midUp": 0.012,
+        "thin": 0.2,
+        "up": 0.014,
+        "out": 0.014,
+        "midUp": 0.002,
         "open": 0.0,
         "teeth": 0.8,
         "round": 0.35,
         "lift": 0.0
       },
       "frown": {
-        "down": 0.022,
+        "down": 0.016,
         "out": 0.004
       },
       "stretch": {
@@ -336,17 +340,18 @@
         "down": 0.002,
         "tuck": 0.4
       },
-      "lowerDown": 0.006,
-      "upperUp": 0.006,
+      "lowerDown": 0.007,
+      "upperUp": 0.007,
       "dimple": 0.004,
       "funnel": {
-        "in": 0.022,
+        "in": 0.012,
         "up": 0.01,
         "down": 0.018
       },
       "pucker": {
-        "in": 0.006,
-        "forward": 0.006
+        "open": 0.001,
+        "in": 0.012,
+        "forward": 0.007
       },
       "roll": {
         "in": 0.0045,
@@ -360,9 +365,11 @@
       "jawForward": 0.004,
       "jawOpen": 0.038,
       "jawMouth": {
+        "lowTeeth": 0.22,
+        "teethRound": 0.25,
         "in": 0.006,
         "down": 0.004,
-        "teeth": 0.28,
+        "teeth": 0.24,
         "tongue": 0.42,
         "tongueWide": 0.75,
         "tongueRound": 0.6, "round": 0.6
