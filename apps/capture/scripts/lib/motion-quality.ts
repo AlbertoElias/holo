@@ -241,13 +241,27 @@ function soleOffsets(frames: MotionFrame[], options: MotionOptions) {
 // timestamp, so a take whose frames land unevenly (a replay stepping 32/48 ms)
 // reads its real acceleration; on an even take it is the old fixed-k stencil.
 function pops(frames: MotionFrame[]) {
+  const accels = popSamples(frames);
+  return { popP99MS2: accels.length ? percentile(accels, 0.99) : null };
+}
+
+/**
+ * The p99 pop over several runs of one take, each measured on its own frames (a window never spans the gap between
+ * two runs), with their samples pooled.
+ */
+export function pooledPopP99MS2(runs: MotionFrame[][]): number | null {
+  const accels = runs.flatMap(popSamples);
+  return accels.length ? percentile(accels, 0.99) : null;
+}
+
+function popSamples(frames: MotionFrame[]): number[] {
   // Second difference over exactly ±50 ms, reading each side by linear
   // interpolation between the frames around it. Frames arrive 32–48 ms apart,
   // so a frame-count stencil reaches only ±34 ms on some takes (inflating
   // pops) and "the nearest frames ≥ 50 ms away" reaches ±64–80 ms (hiding them).
   const h = POP_HALF_WINDOW_SEC;
   const accels: number[] = [];
-  if (frames.length < 3) return { popP99MS2: null };
+  if (frames.length < 3) return accels;
   const first = frames[0]!.timeSec;
   const last = frames.at(-1)!.timeSec;
   // Frame index whose span [index, index + 1] holds the time.
@@ -277,7 +291,7 @@ function pops(frames: MotionFrame[]) {
       accels.push(Math.hypot(pa[0] - 2 * pb[0] + pc[0], pa[1] - 2 * pb[1] + pc[1], pa[2] - 2 * pb[2] + pc[2]) / (h * h));
     }
   }
-  return { popP99MS2: accels.length ? percentile(accels, 0.99) : null };
+  return accels;
 }
 
 function bend(a: Vec3 | undefined, mid: Vec3 | undefined, c: Vec3 | undefined) {

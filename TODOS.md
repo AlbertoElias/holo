@@ -55,7 +55,7 @@ it from the item below instead of duplicating its status here.
   long enough to measure. The owner also checks a room-scale walk and a stick
   walk on a Quest.
 
-- [ ] Realistic avatar motion, slice 2 (follow-up to <!-- T-fca791 -->
+- [x] Realistic avatar motion, slice 2 (follow-up to <!-- T-fca791 -->
   [`docs/features/realistic-avatar-motion.md`](docs/features/realistic-avatar-motion.md)):
   directional (back, strafe) and crouch mocap clips with phase-synced blending,
   foot pitch/roll to the slope sampled under heel and toe, pelvis drop to the
@@ -64,7 +64,8 @@ it from the item below instead of duplicating its status here.
   temporaries), and the desktop Idle's upper-body sway (slice 1 keeps the
   desktop body at rest; letting the Idle move the hand and eyes needs the
   desktop reach, carry, set-down and prop placement retuned). Slice 1 replaced
-  only Idle and Walk.
+  only Idle and Walk. Shipped 2026-11-23; its owner decisions are listed in the
+  brief, pending owner confirmation.
 
 - [x] "The way down", version 2 (agent-authored, 2026-11-12): the same <!-- T-305363 -->
   introspection, made to go inside and hit harder. Version 1 (scene

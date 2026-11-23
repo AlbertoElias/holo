@@ -50,6 +50,9 @@ export interface CaptureFrame {
   bodyTracking: boolean;
   // Written by MovementSystem after the character motor steps.
   character: CharacterSnapshot | null;
+  // Written by MovementSystem: the desktop body's travel in its own frame (rad: 0 forward, +π/2 to its left), from
+  // the eased velocity; null in XR and while the walk plays forward alone.
+  travelLocalYaw: number | null;
 }
 
 /** Capture's services: typed owners of Three, Rapier and domain state. */

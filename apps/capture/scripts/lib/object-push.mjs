@@ -303,8 +303,9 @@ export async function runDesktopFetch({ browser, baseUrl, consoleErrors }) {
     await advance(0.3);
     const afterLock = await s.item();
     row('the lock-acquiring click took the lock and grabbed nothing', !afterLock.heldBy && (await page.evaluate(() => document.pointerLockElement === document.querySelector('canvas'))), { heldBy: afterLock.heldBy });
+    // First person walks back at 0.6 of the walk (MovementSystem BACK_SPEED_SHARE): 2.5 s goes about 2.7 m.
     await page.keyboard.down('KeyS');
-    await advance(1.5);
+    await advance(2.5);
     await page.keyboard.up('KeyS');
     await advance(0.3);
     aimer.reset();
@@ -438,7 +439,8 @@ export async function runPhoneFetchAndPush({ browser, baseUrl, consoleErrors }) 
       await t.down(9, 60, 600);
       await t.move(9, 60, 660);
       await t.move(9, 60, 700);
-      await advance(0.7);
+      // The back walk is 0.6 of the walk (MovementSystem BACK_SPEED_SHARE): 1.2 s goes as far as 0.7 s did at full speed.
+      await advance(1.2);
       await t.up(9);
       await advance(0.5);
     };
@@ -547,12 +549,22 @@ export async function runPhoneFetchAndPush({ browser, baseUrl, consoleErrors }) 
     await t.up(1);
     await advance(0.4);
     const afterHold = await s.item();
-    await t.down(1, P2.x, P2.y);
-    await advance(1 / 60);
-    await t.up(1);
-    await advance(3 / 60);
-    const refetched = await s.item();
-    row('touch-and-hold on the prop points and fetches nothing (a tap on the same spot does fetch)', phase === 'held' && !during.heldBy && !afterHold.heldBy && refetched.heldBy === 'right', { holdPhase: phase, heldDuring: during.heldBy, heldAfterLift: afterHold.heldBy, thenTapHeldBy: refetched.heldBy, propScreen: at2 && [round(at2.x, 1), round(at2.y, 1)] });
+    // The view eases back to the idle's steady look after the point, and the bracket's thin arm shifts against its box
+    // centre as the view turns: tap the same spot projected again, then the nearest points within 8 px.
+    let refetched = afterHold;
+    let tapOffsetPx = null;
+    for (const [ox, oy] of SCAN.filter(([x, y]) => Math.hypot(x, y) <= 8)) {
+      const at3 = (await where()) ?? at2;
+      await t.down(1, at3.x + P.dx + ox, at3.y + P.dy + oy);
+      await advance(1 / 60);
+      await t.up(1);
+      await advance(3 / 60);
+      refetched = await s.item();
+      tapOffsetPx = [ox, oy];
+      if (refetched.heldBy) break;
+      await advance(0.3);
+    }
+    row('touch-and-hold on the prop points and fetches nothing (a tap on the prop, within 8 px of the same spot, does fetch)', phase === 'held' && !during.heldBy && !afterHold.heldBy && refetched.heldBy === 'right', { tapOffsetPx, holdPhase: phase, heldDuring: during.heldBy, heldAfterLift: afterHold.heldBy, thenTapHeldBy: refetched.heldBy, propScreen: at2 && [round(at2.x, 1), round(at2.y, 1)] });
 
     return { label, status: failures.length ? 'fail' : 'pass', failures, rows };
   } finally {

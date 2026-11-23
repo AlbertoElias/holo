@@ -54,7 +54,16 @@ export class BodyPoseSystem extends createSystem() {
       vrMode: frame.vrActive,
       // The walk's own target speed, for a clip without a measured gait.
       referenceSpeed: avatar.avatarHeight * WALK_HEIGHTS_PER_SEC,
-      position: avatar.avatarRoot.position
+      position: avatar.avatarRoot.position,
+      travelLocalYaw: frame.travelLocalYaw,
+      // A reach's squat is the planted crouch pose's: its step in plays the upright walk, not the crouch walk clips.
+      crouch: c.crouch.reach > 0 || avatar.isPlanted ? 0 : c.crouch.poseAmount,
+      // The desktop reach, carry, set-down and aim are tuned from a still upper body: the idle's sway eases out for them.
+      // The first-person eye rides the head, so the sway there would only rock the view and the aim at its centre.
+      // A crouch holds it too: the third-person view follows the eye at once, not through the sway's slow look filter.
+      // A point whose ray starts at the eye loses the sway at once; a touch's ray starts at the view, which eases with it.
+      aimHeld: (input.isPointHeld() || c.point.ownedSide() !== null) && !input.getPointScreenAim(),
+      holdStill: c.camera.desktopViewMode === 'first' || input.isPointHeld() || c.point.ownedSide() !== null || c.objects.carry.getWeight() > 0 || c.crouch.reach > 0 || avatar.isPlanted || c.crouch.poseAmount > CROUCH_HOLD_STILL
     });
     if (!body.active && body.posed) {
       body.solver.restoreBindPose();
@@ -78,7 +87,7 @@ export class BodyPoseSystem extends createSystem() {
       const jumpPlant = character.grounded && jump > 0.02 && !moving;
       const plant = ((c.crouch.reach > 0 || (avatar.isPlanted && c.crouch.amount > 0.003)) || jumpPlant) && !moving;
       this.crouchSpeed += (character.horizontalSpeed - this.crouchSpeed) * (1 - Math.exp(-Math.max(0, deltaSec) / CROUCH_SPEED_EASE_SEC));
-      avatar.applyCrouchPose(poseAmount, this.crouchSpeed, c.crouch.squat, plant, c.crouch.deepExtra, airborne);
+      avatar.applyCrouchPose(poseAmount, this.crouchSpeed, c.crouch.squat, plant, c.crouch.deepExtra, airborne, c.animator.getClipCrouch());
       c.terrainLegs.update(avatar, character.grounded, deltaSec, plant, poseAmount > 0.3, c.animator.getGaitState());
       // Desktop arms come from the clip alone; in XR the tracked hands own them.
       if (!frame.vrActive) {
@@ -189,6 +198,9 @@ export function samplePoseCost(reset = false): { frames: number; medianMs: numbe
   if (reset) poseCostCount = 0;
   return out;
 }
+
+// Above this crouch pose amount the idle's sway eases out.
+const CROUCH_HOLD_STILL = 0.01;
 
 // Time constant for the crouch pose's eased travel speed (s).
 const CROUCH_SPEED_EASE_SEC = 0.15;
