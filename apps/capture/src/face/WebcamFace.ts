@@ -1,8 +1,8 @@
 import { FaceLandmarker } from '@mediapipe/tasks-vision';
-import { gazeFromArkit, toCanonical } from '@holoim/avatar-face';
 import { headRotationFromMatrix } from '../bodycam/headMatrix';
 import type { Quat4 } from '../bodycam/types';
 import type { FaceCameraState, FaceSample } from './faceTypes';
+import { TrackedFace } from './trackedFace';
 
 // Self-hosted: the WASM runtime is bundled from the package and the model is
 // served from public/, so tracking never depends on a CDN.
@@ -42,6 +42,7 @@ export class WebcamFace {
   private video: HTMLVideoElement | null = null;
   private stream: MediaStream | null = null;
   private last: FaceSample | null = null;
+  private shaper = new TrackedFace();
   private lastSeenMs = -Infinity;
   /** performance.now() of the last face detection: the body trackers skip that step so no step runs all three models. */
   lastDetectMs = -Infinity;
@@ -161,6 +162,7 @@ export class WebcamFace {
     this.stream = null;
     this.video = null;
     this.last = null;
+    this.shaper.reset();
     this.head = null;
     this.setState(state);
   }
@@ -186,8 +188,7 @@ export class WebcamFace {
     if (categories?.length) {
       const raw: Record<string, number> = {};
       for (const category of categories) raw[swapSides(category.categoryName)] = category.score;
-      const weights = toCanonical('arkit', raw);
-      this.last = { weights, gaze: gazeFromArkit(weights) };
+      this.last = this.shaper.sample(raw, nowMs);
       this.lastSeenMs = nowMs;
       this.setState('tracking');
     }

@@ -243,6 +243,47 @@ disposed it with the kind it removed. Dressing now keeps any accessor that
 another mesh still uses, and the look e2e checks the posted hair and
 glasses for their index lists.
 
+## The live face and the rebuilt mouth (B-093, 2026-11-23)
+
+The owner, on the live face of the house avatar: "this is me smiling,
+laughing and putting on a sad face. they all look wrong and not real. also,
+when talking, the mouth doesnt really move in a realistic way", and "the
+mouth also needs to be far more realistic on all of them".
+
+**The map.** The camera face tracker gives weak scores for the parts that
+make an expression read, and the scores went to the face one to one.
+`apps/capture/src/face/trackedFace.ts` now shapes them first: a resting
+level comes off the jaw and the eye squint; wide eyes, brows, the round
+mouth and the stretch get a gain; the cheeks, the lower lids, the outer
+brows and the dimples follow the mouth corners in a smile; a sad face is
+read from the lower lip, the frown and the inner brows together, and holds
+for half a second; a scowl wrinkles the nose and presses the lips. The
+values that come from the automation hook `__setFaceInput` are not shaped.
+
+**The mouth.** `house-base/build.py` builds each lip as a rounded roll with
+a closed corner, an upper teeth row (the lower row stays behind the lip), a
+tongue and a dark cavity. A round mouth opens as an ellipse. The model
+carries normals for its face shapes, so a lifted cheek and the fold beside
+the mouth change the shading (the default avatar file is 2.7 MB, from
+1.3 MB; a recorded take stores those normals sparse). The lips move
+off the teeth, and the
+smile moves the skin round the mouth (the cheek and the fold from the nose
+to the mouth corner) through the `mouthSmile` skin units, masked by base.json
+`face.mouth.smileSkin` so that the lips themselves stay with the mouth.
+
+**The check.** `pnpm --filter @holoim/capture run test:xr:live-face` replays
+hand-made score sets (`scripts/fixtures/live-face-sets.ts`: neutral, smile,
+laugh, sad, surprise, anger and a spoken sentence, with the tracker's weak
+and uneven values) through the camera's own path and asserts what each set
+must and must not move. `LIVE_FACE_FRAMES=1` writes a picture of each frame
+and fails on a missing or repeated frame; `LIVE_FACE_VIEW=mouth` is the
+close view; `LIVE_FACE_RAW=1` shows the scores one to one, as before.
+
+**Not covered.** In a headset the camera is released, so the face there
+shows only blinks, gaze and a jaw that follows the microphone. No person
+was in the loop: the sets are hand-made, so a real camera stays a device
+check.
+
 ## Slice 2: the look step in a headset (design, 2026-11-20)
 
 The scope says "a look panel beside the mirror", but VR capture has no

@@ -293,8 +293,16 @@ for v in np.where(is_body & (w_skull > 0.5) & (base[:, 1] < sm["frontOf"]))[0]:
 jm = F["jawMask"]
 keep_jaw = 1 - smoothstep(zm - jm["from"], zm - jm["to"], base[:, 2])
 moved = {c: np.zeros((N, 3)) for c in SHAPES}
+# The smile unit moves the cheeks and the fold from the nose to the mouth corner, not the skin under the authored
+# mouth: it fades in from an ellipse round the mouth (`smileSkin`, in half-widths across and `tall` up and down).
+ss = F["mouth"]["smileSkin"]
+round_mouth = np.hypot((base[:, 0] - cx) / F["mouth"]["halfWidth"], (base[:, 2] - zm) / ss["tall"])
+keep_smile = smoothstep(ss["from"], ss["to"], round_mouth)
+# It also fades out toward the eyes: the sockets are let into the face after it, and a cheek lifted in front of a
+# socket that stayed back showed as a dark band under each eye.
+keep_smile *= 1 - smoothstep(ze - ss["eyeFrom"], ze - ss["eyeTo"], base[:, 2])
 for c in SKIN:
-    moved[c] = skin_moved[c] * (keep_jaw[:, None] if c.startswith("jaw") else 1.0)
+    moved[c] = skin_moved[c] * (keep_jaw[:, None] if c.startswith("jaw") else keep_smile[:, None] if c.startswith("mouthSmile") else 1.0)
 skin = BVHTree.FromPolygons([tuple(v) for v in base], body_polys)
 def on_skin(x, z, lift=0.0, whole=False):
     """The skin in front at (x, z), less lift. A ray through a gap left in the face (the mouth's slit, a nostril)
@@ -563,26 +571,37 @@ lp = mo["lips"]
 cols = mo["columns"]
 S_ = np.linspace(-1, 1, cols)
 mid = np.clip(1 - S_ ** 2, 0, 1)  # 1 at the middle, 0 at the corners
+# The lips end `reach` of the way to the corners and keep `floor` of their height there.
+lip_mid = lp["floor"] + (1 - lp["floor"]) * np.clip(1 - (S_ / lp["reach"]) ** 2, 0, 1)
+# The opening ends `openReach` of the way to the corners, so a corner is a closed, rounded pocket of lip, not a
+# dark wedge that runs out into the cheek.
+gap = np.clip(1 - (S_ / mo["openReach"]) ** 2, 0, 1)
 thick = mo["thick"] * np.sqrt(mid) + mo["corner"] * mo["thick"]
 line = -mo["droop"] * S_ ** 2
-up_h = lp["upper"] * mid ** lp["upperPower"] * (1 - lp["bow"] * np.exp(-(S_ / lp["bowWidth"]) ** 2))
-lo_h = lp["lower"] * mid ** lp["lowerPower"]
+up_h = lp["upper"] * lip_mid ** lp["upperPower"] * (1 - lp["bow"] * np.exp(-(S_ / lp["bowWidth"]) ** 2))
+lo_h = lp["lower"] * lip_mid ** lp["lowerPower"]
 # The inside (the teeth and the dark) has its own rows, apart from the lips', so its shading is not the lips';
 # its `roof` row, hidden under the upper lip, keeps the teeth facing forward while they are closed to nothing.
 # The `tongue` row lies on the lower edge and rises from it only when the jaw opens, so an open mouth shows the
 # upper teeth, the dark and a tongue, not one black hole.
-ROWS = ("lipTop", "lipUp", "lipIn", "roof", "upper", "teeth", "tongue", "lower", "lipUnder", "lipLow", "lipBottom")
-BETWEEN = ("lips", "lips", None, "teeth", "teeth", "mouth", "tongue", None, "lips", "lips")
-FOLLOW = {"lipTop": "upper", "lipUp": "upper", "lipIn": "upper", "roof": "upper", "tongue": "lower", "lipUnder": "lower", "lipLow": "lower", "lipBottom": "lower"}
-plan = {
-    "lipTop": line + thick / 2 + up_h, "lipUp": line + thick / 2 + lp["peak"] * up_h, "lipIn": line + thick / 2, "roof": line + thick / 2 + lp["roof"] * up_h,
-    "upper": line + thick / 2, "teeth": line + thick / 2, "tongue": line - thick / 2, "lower": line - thick / 2, "lipUnder": line - thick / 2, "lipLow": line - thick / 2 - lp["peak"] * lo_h, "lipBottom": line - thick / 2 - lo_h,
-}
-swell = np.sqrt(mid)
-LIFT = {
-    "lipTop": lp["edge"] + 0 * swell, "lipUp": lp["edge"] + (lp["upperOut"] - lp["edge"]) * swell, "lipIn": mo["lift"] + 0 * swell, "roof": mo["lift"] + 0 * swell, "upper": mo["lift"] + 0 * swell, "teeth": mo["lift"] + 0 * swell, "tongue": mo["lift"] + 0 * swell,
-    "lower": mo["lift"] + 0 * swell, "lipUnder": mo["lift"] + 0 * swell, "lipLow": lp["edge"] + (lp["lowerOut"] - lp["edge"]) * swell, "lipBottom": lp["edge"] + 0 * swell,
-}
+# Each lip is a rounded roll: its rows lie at `profile` shares of its height from the line ([share, how far
+# out, as a share of upperOut / lowerOut]), so it has a full front that turns in to the line. The lower teeth
+# (`lowTeeth`, their top edge) stand on the lower lip's edge and show when the jaw or the lower lip goes down.
+PROFILE = lp["profile"]
+UP_ROWS = tuple(f"lipUp{k}" for k in range(len(PROFILE)))  # from the outer edge in to the line
+LOW_ROWS = tuple(f"lipLow{k}" for k in range(len(PROFILE)))  # from the line out to the outer edge
+ROWS = (*UP_ROWS, "lipIn", "roof", "upper", "teeth", "tongue", "lowTeeth", "lower", "lipUnder", *LOW_ROWS)
+BETWEEN = (*["lips"] * len(PROFILE), None, "teeth", "teeth", "mouth", "tongue", "teeth", None, *["lips"] * len(PROFILE))
+FOLLOW = {**{r: "upper" for r in (*UP_ROWS, "lipIn", "roof")}, **{r: "lower" for r in ("tongue", "lowTeeth", "lipUnder", *LOW_ROWS)}}
+swell = np.sqrt(lip_mid)
+plan = {"lipIn": line + thick / 2, "roof": line + thick / 2 + lp["roof"] * up_h, "upper": line + thick / 2, "teeth": line + thick / 2, "tongue": line - thick / 2, "lowTeeth": line - thick / 2, "lower": line - thick / 2, "lipUnder": line - thick / 2}
+LIFT = {r: mo["lift"] + 0 * swell for r in plan}
+for k, (share, out) in enumerate(PROFILE[::-1]):
+    plan[UP_ROWS[k]] = line + thick / 2 + share * up_h
+    LIFT[UP_ROWS[k]] = lp["edge"] + (out * lp["upperOut"] - lp["edge"]) * swell if out else lp["edge"] + 0 * swell
+for k, (share, out) in enumerate(PROFILE):
+    plan[LOW_ROWS[k]] = line - thick / 2 - share * lo_h
+    LIFT[LOW_ROWS[k]] = lp["edge"] + (out * lp["lowerOut"] - lp["edge"]) * swell if out else lp["edge"] + 0 * swell
 
 
 def mouth_at(d):
@@ -620,12 +639,16 @@ for side in SIDES:
         "teeth": (sg * sm_["out"] * on, rise - sm_["teeth"] * open_, fore),
         "lower": (sg * sm_["out"] * on, rise - open_, fore),
     }
+    mouth_shapes[f"mouthSmile{side}"]["tuck"] = {r: sm_["thin"] * np.clip(sg * S_ * 4 + 0.5, 0, 1) for r in (*UP_ROWS, *LOW_ROWS)}
     mouth_shapes[f"mouthFrown{side}"] = every(sg * fr["out"] * on ** 2, -fr["down"] * on ** 2)
     mouth_shapes[f"mouthStretch{side}"] = every(sg * st["out"] * on, -st["down"] * on)
     mouth_shapes[f"mouthPress{side}"] = {"upper": (sg * pr_["out"] * on, -pr_["thin"] * on - pr_["down"] * on ** 2, Z), "teeth": (sg * pr_["out"] * on, -pr_["thin"] * on - pr_["down"] * on ** 2, Z), "lower": (sg * pr_["out"] * on, pr_["thin"] * on - pr_["down"] * on ** 2, Z)}
-    bump = np.clip(1 - ((sg * S_ - 0.45) / 0.45) ** 2, 0, 1)
-    mouth_shapes[f"mouthLowerDown{side}"] = {"lower": (Z, -lo * bump, Z)}
-    mouth_shapes[f"mouthUpperUp{side}"] = {"upper": (Z, up * bump, Z), "teeth": (Z, up * bump, Z)}
+    # This side's share of a lip that lifts as one arc: the two sides together lift the middle most, so a raised
+    # upper lip is a curve over the teeth, not two bumps with a dip between them. The teeth stay where they are
+    # (they belong to the skull and the jaw): the lip that moves off them shows them.
+    bump = np.clip(0.5 + sg * S_ * 1.5, 0, 1) * gap ** ms["lipRound"]
+    mouth_shapes[f"mouthLowerDown{side}"] = {"lower": (Z, -lo * bump, Z), "lowTeeth": (Z, -ms["lowerDownTeeth"] * lo * bump, Z), "tongue": (Z, Z, Z)}
+    mouth_shapes[f"mouthUpperUp{side}"] = {"upper": (Z, up * bump, Z)}
     mouth_shapes[f"mouthDimple{side}"] = every(sg * di * on, 0.3 * di * on)
 fu, pu, ro, sh = ms["funnel"], ms["pucker"], ms["roll"], ms["shrug"]
 # The open jaw: the lower edge down, the corners in and a little down (an open mouth is narrower and rounder),
@@ -633,21 +656,29 @@ fu, pu, ro, sh = ms["funnel"], ms["pucker"], ms["roll"], ms["shrug"]
 # `tongueWide` of the mouth's half-width.
 jm = ms["jawMouth"]
 jaw_x, jaw_z = -jm["in"] * S_, -jm["down"] * S_ ** 2
-jaw_mid = mid ** jm["round"]  # below 1 the open mouth keeps its height toward the corners
+jaw_mid = gap ** jm["round"]  # below 1 the open mouth keeps its height toward the corners
 tongue_up = jm["tongue"] * np.clip(1 - (S_ / jm["tongueWide"]) ** 2, 0, 1) ** jm["tongueRound"]
+# The upper teeth's edge is nearly level (`teethRound`), the lower teeth show over `lowTeeth` of the opening
+# above the lower lip, and the tongue rises from behind them into the dark between the two rows.
+jaw_low = ms["jawOpen"] * jaw_mid
+jaw_teeth = ms["jawOpen"] * jm["teeth"] * gap ** jm["teethRound"]
+jaw_low_teeth = jaw_low * (1 - jm["lowTeeth"])
 mouth_shapes["jawOpen"] = {
     "upper": (jaw_x, jaw_z, Z),
-    "teeth": (jaw_x, jaw_z - ms["jawOpen"] * jm["teeth"] * jaw_mid, Z),
-    "tongue": (jaw_x, jaw_z - ms["jawOpen"] * jaw_mid * (1 - tongue_up), Z),
-    "lower": (jaw_x, jaw_z - ms["jawOpen"] * jaw_mid, Z),
+    "teeth": (jaw_x, jaw_z - np.minimum(jaw_teeth, jaw_low_teeth), Z),
+    "tongue": (jaw_x, jaw_z - (jaw_low_teeth - tongue_up * np.maximum(jaw_low_teeth - jaw_teeth, 0)), Z),
+    "lowTeeth": (jaw_x, jaw_z - jaw_low_teeth, Z),
+    "lower": (jaw_x, jaw_z - jaw_low, Z),
 }
 mouth_shapes["mouthClose"] = {"lower": (Z, thick, Z)}
-mouth_shapes["mouthFunnel"] = {"upper": (-fu["in"] * S_, fu["up"] * mid, Z), "teeth": (-fu["in"] * S_, fu["up"] * mid, Z), "lower": (-fu["in"] * S_, -fu["down"] * mid, Z)}
-mouth_shapes["mouthPucker"] = every(-pu["in"] * S_, Z, -pu["forward"] * mid)
+# A round mouth opens as an ellipse (the square root of the parabola), not as an almond with pointed ends.
+ring = np.sqrt(gap)
+mouth_shapes["mouthFunnel"] = {"upper": (-fu["in"] * S_, fu["up"] * ring, Z), "teeth": (-fu["in"] * S_, fu["up"] * ring, Z), "lower": (-fu["in"] * S_, -fu["down"] * ring, Z)}
+mouth_shapes["mouthPucker"] = {"upper": (-pu["in"] * S_, pu["open"] * ring, -pu["forward"] * mid), "teeth": (-pu["in"] * S_, pu["open"] * ring, -pu["forward"] * mid), "lower": (-pu["in"] * S_, -pu["open"] * ring, -pu["forward"] * mid)}
 mouth_shapes["mouthRollLower"] = {"upper": (-ro["in"] * S_, -ro["down"] * np.abs(S_), Z), "teeth": (-ro["in"] * S_, -ro["down"] * np.abs(S_), Z), "lower": (-ro["in"] * S_, ro["thin"] - ro["down"] * np.abs(S_), Z)}
 mouth_shapes["mouthRollUpper"] = {"upper": (-ro["in"] * S_, -ro["thin"] - ro["down"] * np.abs(S_), Z), "teeth": (-ro["in"] * S_, -ro["thin"] - ro["down"] * np.abs(S_), Z), "lower": (-ro["in"] * S_, -ro["down"] * np.abs(S_), Z)}
 # Rolled or pressed lips tuck in: their outer rows come toward the line, so the lip's colour thins to a line.
-UPPER_LIP, LOWER_LIP = ("lipTop", "lipUp", "roof"), ("lipLow", "lipBottom")
+UPPER_LIP, LOWER_LIP = (*UP_ROWS, "roof"), LOW_ROWS
 mouth_shapes["mouthRollUpper"]["tuck"] = {r: ro["tuck"] for r in UPPER_LIP}
 mouth_shapes["mouthRollLower"]["tuck"] = {r: ro["tuck"] for r in LOWER_LIP}
 for side in SIDES:
@@ -727,8 +758,9 @@ for i in range(cols - 1):
         mouth_mats.append(mat)
 add_part(mouth_v, mouth_faces, mouth_mats, mouth_offs, front)
 
-# MPFB's own mouth is a slit left in the skin, covered by the lips at rest. A closed smile lifts the lips off
-# it, so a patch of skin sits just behind the surface there and the slit shows skin, not the dark behind it.
+# MPFB's own mouth is a slit left in the skin, covered by the lips at rest. A smile lifts the lips off it and a
+# rounded mouth leaves its ends bare, so a narrow strip of skin lies over it (`behind` below zero: in front of
+# the skin, but behind the lips and the mouth's inside) and no line shows where the lips have left.
 pt = mo["patch"]
 pxs, pzs = np.linspace(-pt["wide"], pt["wide"], pt["columns"]), np.linspace(-pt["tall"], pt["tall"], pt["rows"])
 add_part([on_skin(cx + x * mo["halfWidth"], zm + z, -pt["behind"]) for x in pxs for z in pzs], grid_faces(len(pxs), len(pzs)), ["skin"] * ((len(pxs) - 1) * (len(pzs) - 1)), {}, front)
@@ -737,14 +769,19 @@ add_part([on_skin(cx + x * mo["halfWidth"], zm + z, -pt["behind"]) for x in pxs 
 # the teeth row, so it has no height until a shape shows the teeth (wound as the mouth's own quads, since
 # add_part cannot turn a face with no area). Each goes with the rows it lies on.
 tg = mo["toothGaps"]
-r_up, r_te = ROWS.index("upper"), ROWS.index("teeth")
-for c in tg["columns"]:
+for c, (r_up, r_te) in itertools.product(tg["columns"], ((ROWS.index("upper"), ROWS.index("teeth")),)):
     ids, w = [], []
     for nb in (c - 1, c + 1):
         for r_ in (r_up, r_te):
             ids.append((c * n_rows + r_, nb * n_rows + r_))
             w.append(tg["width"])
-    mix = lambda A: np.array([A[i] * (1 - f) + A[j] * f for (i, j), f in zip(ids, w)])
+    side = lambda A: np.array([A[i] * (1 - f) + A[j] * f for (i, j), f in zip(ids, w)])
+
+    def mix(A, top=tg["from"]):  # the line starts `from` of the way down the tooth: a notch at the biting edge
+        B = side(A)
+        B[0::2] = B[0::2] * (1 - top) + B[1::2] * top
+        return B
+
     gv = mix(mouth_v) + np.array((0.0, -tg["lift"], 0.0))
     add_part(gv, [[0, 1, 3, 2]], ["mouth"], {ch: mix(o) for ch, o in mouth_offs.items()}, front)
 
@@ -1024,7 +1061,7 @@ bpy.context.scene["holoimAvatar"] = json.dumps({"name": P["name"], "finish": P["
 bpy.ops.object.select_all(action="SELECT")
 bpy.ops.export_scene.gltf(
     filepath=OUT, export_format="GLB", use_selection=False, export_yup=True, export_apply=False,
-    export_morph=True, export_morph_normal=False, export_skins=True, export_animations=False,
+    export_morph=True, export_morph_normal=True, export_skins=True, export_animations=False,
     export_materials="EXPORT", export_extras=True, export_def_bones=False, export_texcoords=False,
     export_tangents=False, export_cameras=False, export_lights=False,
 )
