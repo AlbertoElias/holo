@@ -162,6 +162,20 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   (protraction grows near full reach, `ArmIkSolver.ts` line 90) and the elbow hint per frame. If the swing jumps, ease
   it by the target's distance over a wider band. A bar for a one-frame step of a joint from its parent would catch it.
 
+### B-101 — House avatar: the jumper's sleeve end has a jagged edge at the wrist
+
+- **Area:** `apps/capture/scripts/authoring` house avatar (jumper cuff mesh against the hand skin)
+- **Severity:** P3 (a draft look fault; no bar sees it)
+- **Observed:** 2026-11-23, pinch v14 at 1.0 to 3.9 s (right wrist); the approved pinch v8 has the same edge
+- **Evidence:** the opus review of pinch v14 and crouch v43 saw a saw-tooth edge where the cuff meets the hand skin.
+  It is the line where the two meshes cross, not a gap. The B-099 cuff refit does not make it worse (the same edge is in
+  v8 and v12). In v14 the palm faces the camera, so more of the edge is in view. The crouch sleeve end is smooth.
+- **Expected:** the sleeve ends in a clean ring at the wrist.
+- **Reproduction:** `node --conditions=development --import tsx scripts/authoring/make.ts output/authoring/gesture-proof/pinch.json`
+  in `apps/capture`, then `review.ts` on the take and a crop of the right hand at 3.4 s.
+- **Next fix:** pull the cuff end back to a clean ring of vertices at the wrist and push it out 1 to 2 mm along its
+  normals, so that the cuff covers the skin with no crossing line. If that does not work, hide the hand skin under the cuff.
+
 ## Entry template
 
 ```md
