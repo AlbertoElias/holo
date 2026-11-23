@@ -23,11 +23,14 @@
  * into memory and served to the local page only. Nothing is sent to any
  * service. The segmenter model is fetched once from Google's model store, at
  * a pinned SHA-256, into `output/authoring/photo-look/.models/`. The six
- * hair styles do not depend on the photo: they are rendered on the first run
- * and kept in `output/authoring/photo-look/.styles/`.
+ * hair styles' outlines do not depend on the photo: the first full run
+ * renders them (about 15 s) and keeps them in
+ * `output/authoring/photo-look/.styles/`; later runs read the card in about
+ * 3 s, and only compare.jpg renders.
  *
- * `--read-only` skips the renders (no hair style proposal, no compare.jpg):
- * the quick form the stability and spread checks run on many photos.
+ * `--read-only` skips the renders and compare.jpg: the card only, in about
+ * 3 s. It proposes the hair style from the kept outlines, so run once
+ * without it first.
  *
  * Exits 2 when the photo is refused (no face, two or more faces, a face too
  * small), naming why.
@@ -278,22 +281,34 @@ async function renderHeads(servers: ViewerServers, dir: string, label: string, a
   } finally { await open.close(); }
 }
 
+type Reader = Awaited<ReturnType<typeof openReader>>;
+
+/** The face frame of the house base render and the outline of each hair style, from the same view. */
+interface StyleOutlines { readonly frame: FaceFrame; readonly grids: Record<HairStyle, HairGrid> }
+
+const AVATAR_LOOK_SRC = fileURLToPath(new URL('../../../../packages/avatar-look/src/', import.meta.url));
+
 /**
- * The house base in the default look (its face frame) and the six hair
- * styles keyed. They do not depend on the photo, so they are rendered once
- * and kept in `.styles/<hash>/`, keyed by the GLB files and the view.
+ * The outlines do not depend on the photo, so they are kept in
+ * `.styles/<key>.json`. The key covers what makes them: the wardrobe, the
+ * default look, and the code that dresses, renders and reads them.
  */
-async function styleShots(servers: ViewerServers, defaults: LookCard, work: string): Promise<Buffer[]> {
+async function outlinesKey(defaults: LookCard): Promise<string> {
+  const hash = createHash('sha256').update(JSON.stringify(defaults)).update(await readFile(wardrobeFile(defaults.build)));
+  const sources = [fileURLToPath(import.meta.url), fileURLToPath(new URL('./lib/house-look.ts', import.meta.url)), ...['photo.ts', 'read.ts', 'look.ts', 'traits.ts'].map((f) => join(AVATAR_LOOK_SRC, f))];
+  for (const file of sources) if (existsSync(file)) hash.update(await readFile(file));
+  return hash.digest('hex').slice(0, 16);
+}
+
+/** Renders the base and the six keyed styles once (about 15 s) and reads their outlines; null when the base render shows no face. */
+async function renderOutlines(reader: Reader, servers: ViewerServers, defaults: LookCard, work: string): Promise<StyleOutlines | null> {
   const avatars = [await dressedFile(defaults, 'clay'), ...await Promise.all(HAIR_STYLES.map((style) => keyedFile({ ...defaults, hair: { ...defaults.hair, style } }, work)))];
-  const hash = createHash('sha256').update(JSON.stringify({ VIEW, RENDER, BACKGROUND, SPACING }));
-  for (const file of avatars) hash.update(await readFile(file));
-  const cache = join(STYLE_CACHE, hash.digest('hex').slice(0, 16));
-  const names = ['plain', ...HAIR_STYLES].map((n) => join(cache, `${n}.jpg`));
-  if (names.every((n) => existsSync(n))) return Promise.all(names.map((n) => readFile(n)));
   const shots = await renderHeads(servers, join(work, 'styles'), 'Photo look: hair styles', avatars);
-  await mkdir(cache, { recursive: true });
-  await Promise.all(shots.map((shot, i) => writeFile(names[i]!, shot)));
-  return shots;
+  const frame = await reader.look<FaceFrame | null>('frame', reader.addRender('plain', shots[0]!));
+  if (!frame) return null;
+  const grids = {} as Record<HairStyle, HairGrid>;
+  for (const [i, style] of HAIR_STYLES.entries()) grids[style] = await reader.look<HairGrid>('keyedGrid', reader.addRender(`keyed-${style}`, shots[i + 1]!), frame);
+  return { frame, grids };
 }
 
 export interface PhotoLookReport {
@@ -329,33 +344,36 @@ async function main(): Promise<void> {
     const base = cardFromRead(defaults, { skin: read.skin, eyes: read.eyes, hairColour: read.hairColour, hairStyle: { value: defaults.hair.style, read: false, notes: [] } });
 
     const readOnly = args.includes('--read-only');
+    // The hair style: the photo's hair outline against the six styles' outlines, kept from an earlier run.
+    const cached = join(STYLE_CACHE, `${await outlinesKey(defaults)}.json`);
+    let outlines: StyleOutlines | null = existsSync(cached) ? JSON.parse(await readFile(cached, 'utf8')) as StyleOutlines : null;
     if (!readOnly) servers = await startViewer();
-    // The six hair styles, keyed, and the look unkeyed (its face frame), all from the same view.
-    let hairStyle: PhotoLookReport['hairStyle'] = { value: defaults.hair.style, read: false, notes: ['the hair is not read, so no style is proposed; the default is kept'] };
-    let renderFrame: FaceFrame | null = null;
-    let grids: { label: string; grid: HairGrid }[] | null = null;
-    if (readOnly) {
-      hairStyle = { value: defaults.hair.style, read: false, notes: ['--read-only: no style is proposed; the default is kept'] };
-    } else if (read.hairGrid) {
-      const shots = await styleShots(servers!, defaults, work);
-      renderFrame = await reader.look<FaceFrame | null>('frame', reader.addRender('plain', shots[0]!));
-      if (!renderFrame) {
-        hairStyle = { value: defaults.hair.style, read: false, notes: ['the face landmarker found no face on the house base render, so no style is proposed; the default is kept'] };
-      } else {
-        const styleGrids = {} as Record<HairStyle, HairGrid>;
-        for (const [i, style] of HAIR_STYLES.entries()) styleGrids[style] = await reader.look<HairGrid>('keyedGrid', reader.addRender(`keyed-${style}`, shots[i + 1]!), renderFrame);
-        const proposal = proposeHairStyle(read.hairGrid, styleGrids);
-        const sure = proposal.confidence >= HAIR_STYLE_MIN_CONFIDENCE;
-        hairStyle = {
-          value: sure ? proposal.value : defaults.hair.style, read: sure, confidence: proposal.confidence, proposal,
-          notes: [
-            `a proposal: overlap ${HAIR_STYLES.map((s) => `${s} ${proposal.overlap[s].toFixed(2)}`).join(', ')}; margin ${proposal.margin.toFixed(2)} over the next`,
-            ...(sure ? [] : [`confidence ${proposal.confidence.toFixed(2)} is under ${HAIR_STYLE_MIN_CONFIDENCE}: the outline says ${proposal.value}, the card keeps the default ${defaults.hair.style}`])
-          ]
-        };
-        grids = [{ label: 'photo', grid: read.hairGrid }, ...HAIR_STYLES.map((s) => ({ label: `${s} ${proposal.overlap[s].toFixed(2)}`, grid: styleGrids[s] }))];
-      }
+    if (!outlines && !readOnly && read.hairGrid) {
+      outlines = await renderOutlines(reader, servers!, defaults, work);
+      if (outlines) { await mkdir(STYLE_CACHE, { recursive: true }); await writeFile(cached, JSON.stringify(outlines)); }
     }
+    let hairStyle: PhotoLookReport['hairStyle'];
+    let grids: { label: string; grid: HairGrid }[] | null = null;
+    if (!read.hairGrid) {
+      hairStyle = { value: defaults.hair.style, read: false, notes: ['the hair is not read, so no style is proposed; the default is kept'] };
+    } else if (!outlines) {
+      hairStyle = { value: defaults.hair.style, read: false, notes: [readOnly
+        ? 'the hair styles are not rendered yet: run once without --read-only; the default is kept'
+        : 'the face landmarker found no face on the house base render, so no style is proposed; the default is kept'] };
+    } else {
+      const styleGrids = outlines.grids;
+      const proposal = proposeHairStyle(read.hairGrid, styleGrids);
+      const sure = proposal.confidence >= HAIR_STYLE_MIN_CONFIDENCE;
+      hairStyle = {
+        value: sure ? proposal.value : defaults.hair.style, read: sure, confidence: proposal.confidence, proposal,
+        notes: [
+          `a proposal: overlap ${HAIR_STYLES.map((s) => `${s} ${proposal.overlap[s].toFixed(2)}`).join(', ')}; margin ${proposal.margin.toFixed(2)} over the next`,
+          ...(sure ? [] : [`confidence ${proposal.confidence.toFixed(2)} is under ${HAIR_STYLE_MIN_CONFIDENCE}: the outline says ${proposal.value}, the card keeps the default ${defaults.hair.style}`])
+        ]
+      };
+      grids = [{ label: 'photo', grid: read.hairGrid }, ...HAIR_STYLES.map((s) => ({ label: `${s} ${proposal.overlap[s].toFixed(2)}`, grid: styleGrids[s] }))];
+    }
+    let renderFrame: FaceFrame | null = outlines?.frame ?? null;
 
     const card = parseLook({ ...base, hair: { ...base.hair, style: hairStyle.value } }, 'photo-look card');
     const finishShots = readOnly ? [] : await renderHeads(servers!, join(work, 'finishes'), 'Photo look: the card', await Promise.all(finishes.map((f) => dressedFile(card, f))));
