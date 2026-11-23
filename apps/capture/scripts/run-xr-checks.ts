@@ -54,7 +54,7 @@ const CHECKS = {
   bodycam: 'scripts/ci-bodycam-playwright.ts',
   // Needs the Quest Pro emulator for eye gaze; see CHECK_SERVER_ENV.
   face: 'scripts/ci-face-playwright.ts',
-  // Recorded camera-tracker scores replayed on the default avatar: every expression moves the whole face (B-092).
+  // Recorded camera-tracker scores replayed on the default avatar: every expression moves the whole face (B-093).
   'live-face': 'scripts/ci-live-face-playwright.ts',
   // Standard avatar formats: binds generated rigs, replays hands and body on
   // the geometric ones, and runs the face check (on the face server) on one.

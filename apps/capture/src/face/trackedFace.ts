@@ -1,7 +1,7 @@
 import { gazeFromArkit, toCanonical } from '@holoim/avatar-face';
 import type { FaceSample, FaceWeights } from './faceTypes';
 
-// What the camera face tracker (MediaPipe FaceLandmarker) gives for a real face (B-092): almost no cheek raise,
+// What the camera face tracker (MediaPipe FaceLandmarker) gives for a real face (B-093): almost no cheek raise,
 // almost no frown on a plainly sad face, eyes that open wide to a small part of the range, a resting eye squint
 // well above zero on many faces, and little mouth stretch. Applied one to one, a smile moved only the mouth
 // and a sad face moved nothing. So the scores are shaped here before they reach the face: weak scores get a gain,

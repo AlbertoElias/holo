@@ -14,9 +14,9 @@ import { LivenessFace } from '../../../src/face/LivenessFace.ts';
 import type { JointName, MotionFrame, Vec3 } from '../../lib/motion-quality.ts';
 import type { FaceGaze, FaceWeights } from '../../../src/face/faceTypes.ts';
 import { resetPose, type LoadedAvatar } from './avatar.ts';
-import { ArmMeter, armPoints, armSkin, BodySkin, measureArmBody, partDepth, propNormal, propParts, propSurface, type ArmBody, type ArmReport } from './arm-quality.ts';
+import { armAngles, ArmMeter, armPoints, armSkin, BodySkin, measureArmBody, partDepth, skinned, propNormal, propParts, propSurface, type ArmBody, type ArmReport } from './arm-quality.ts';
 import { FACE_MIXES, GESTURES, cueTime, STATE_FACES, envelope, gestureCycle, holdingsOf, pointObjects, resolveTiming, validateSheet, type BeatSheet, type Direction, type Holding, type ObjectSpec, type PerformerSpec, type Place, type Point, type Resolved, type Side } from './beats.ts';
-import { FINGERS, HAND_SHAPES, blendPose, shapePose, type FingerName, type HandPose, type HandRig } from './hands.ts';
+import { FINGERS, HAND_SHAPES, blendPose, shapePose, type FingerName, type HandPose } from './hands.ts';
 import { elbowPole } from '../../../src/ik/armPoseModel.ts';
 import { armRestOffset, bodyUp, hangArm, keepingTwist, rollHand, moveBoneWorld, orientHand, plantFeet, restElbowHint, rotateBoneWorld, solveArm, steadyTwist, easeTwist, toWorld, turnBody, TURN_SHARE } from './pose.ts';
 import { speakingAt, visemesAt, type LineLips } from './lips.ts';
@@ -54,13 +54,17 @@ const PALM_OFFSET = 0.07;
 /** The most the hips move toward a reach, and the most the spine leans. */
 const LEAN_HIPS = 0.04;
 const LEAN_MAX_DEG = 28;
+/** Seconds a take's or put's lean takes to ease out after the hand arrives. */
+const LEAN_LET_GO = 0.6;
+/** Metres: how softly a reach's shortfall starts to lean the body. */
+const LEAN_SOFT = 0.015;
+const smootherStep = (u: number): number => u * u * u * (u * (u * 6 - 15) + 10);
 const LEAN_SHARE: ReadonlyArray<readonly [VrmHumanoidBone, number]> = [['spine', 0.35], ['chest', 0.4], ['upperChest', 0.25]];
 
 // Held objects: the fingers close over this long before a take's hand arrives, and open over this long after a put's lands.
 const GRIP_CLOSE = 0.2;
 /** How far a finger may rest into what it holds (skin presses a little), metres, and the finger's radius as the arm meter takes it. */
 const GRIP_REST = 0.002;
-const GRIP_FINGER_RADIUS = 0.009;
 const GRIP_OPEN = 0.25;
 /** A put's object settles from where the hand let it go to upright on its place over this long. */
 const PUT_SETTLE = 0.2;
@@ -136,6 +140,8 @@ const STATE_POSE = {
 export const BEND = { deg: 45, hipsBack: 0.07, drop: 0.035 } as const;
 /** A crouch at amount 1: the hips down and back (m) over the planted feet, and the spine leans forward (degrees) to keep the weight over the feet. */
 export const CROUCH = { drop: 0.3, hipsBack: 0.1, deg: 22 } as const;
+/** How far past a full crouch its arrival overshoot may go (a share of the full crouch). */
+const CROUCH_OVER = 0.06;
 /** A shrug's face: brows up, the lower lip pushed up. */
 const SHRUG_FACE: Partial<Record<FaceChannel, number>> = { browInnerUp: 0.4, browOuterUpLeft: 0.45, browOuterUpRight: 0.45, mouthShrugLower: 0.5, mouthPressLeft: 0.2, mouthPressRight: 0.2 };
 const RUB_HAND = { low: { thumb: 0.5, index: 0.45, middle: 0.66 }, high: { thumb: 0.75, index: 0.62, middle: 0.5 }, ring: 0.7, little: 0.74, spread: 0.05 } as const;
@@ -251,9 +257,14 @@ const yawOf = (q: THREE.Quaternion): number => { const z = new THREE.Vector3(0, 
 /**
  * Solves the take. An arm that must clear the body or an object moves frame by
  * frame, and those moves alone jump (the way out of an object changes from one
- * frame to the next). So a take whose arms had to clear solves twice: the
- * first time records each frame's move, and the second applies those moves
- * widened and smoothed over time, then clears what is left.
+ * frame to the next, and each pass picks its push and its best pose afresh).
+ * So a take whose arms had to clear solves twice: the first time records how
+ * each clearing turned each arm bone, and the second applies those turns
+ * widened and smoothed over time. Smoothing takes some depth out of a short,
+ * deep move, so the second solve clears again only where an arm is still more
+ * than CLEAR.deep in. The turns, not the
+ * wrist and the elbow, carry the clearing: a wrist target and an elbow hint
+ * do not give back the clavicle and the twist the passes found.
  */
 export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources: ReadonlyMap<string, LoadedSource> = new Map(), speech: ReadonlyMap<string, readonly Speech[]> = new Map()): SolvedTake {
   clearing.plan = undefined;
@@ -261,7 +272,7 @@ export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, 
   const first = solveOnce(sheet, avatars, sources, speech);
   const record = clearing.record;
   clearing.record = undefined;
-  if (![...record.values()].some((moves) => moves.some((m) => m.wrist.lengthSq() + m.elbow.lengthSq() > 1e-10))) return first;
+  if (![...record.values()].some((moves) => moves.some((m) => turned(m) > 1e-5))) return first;
   clearing.plan = smoothClearing(record, first.times.length);
   try {
     return solveOnce(sheet, avatars, sources, speech);
@@ -394,8 +405,9 @@ function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources
       c.a.frame.quaternion.toArray(tr.root.rotation, f * 4);
       tr.motion.push(motionFrame(c.a, t));
       c.a.scene.updateMatrixWorld(true);
-      // A hand is measured against what it holds: fingers may rest on it, not sink into it.
-      meters[ci]!.sample(t, [...stage.props.values()].map((st) => st.prop), (s, prop) => gripOf(c.spec.id, s, t)?.prop !== prop && mayTouch(c, s, prop, t));
+      // A hand is measured against what it holds by its skin (the held bar): fingers may rest on it, not sink into it.
+      // The prop bar's few hand points do not count against it: a finger that lies on a ball has its middle point in the ball's chord.
+      meters[ci]!.sample(t, [...stage.props.values()].map((st) => st.prop), (s, prop) => mayTouch(c, s, prop, t), (s) => gripOf(c.spec.id, s, t)?.prop);
       see(c, t);
     });
     // Measured as the file plays: every performer at this frame. (A performer
@@ -667,7 +679,7 @@ function swivelClear(cast: Cast[], c: Cast, t: number, s: Side, props: readonly 
 }
 
 /** How far an arm may sink before the clearance moves it, and how far clear it lands, metres. */
-const CLEAR = { slack: 0.004, margin: 0.008, passes: 14, residual: 0.03 } as const;
+const CLEAR = { slack: 0.004, margin: 0.008, passes: 14, deep: 0.015 } as const;
 
 /**
  * Keeps each arm out of the body, the head and the objects it is not
@@ -687,11 +699,19 @@ function clearArms(cast: Cast[], c: Cast, t: number): void {
     const key = `${c.spec.id}/${s}`;
     const wrist0 = ch.hand.getWorldPosition(new THREE.Vector3());
     const elbow0 = ch.foreArm.getWorldPosition(new THREE.Vector3());
-    const planned = solving.f >= 0 ? clearing.plan?.get(key)?.[solving.f] : undefined;
-    if (planned && planned.wrist.lengthSq() + planned.elbow.lengthSq() > 1e-10) {
-      moveArm(a, s, wrist0.clone().add(planned.wrist.clone().applyQuaternion(frameQ)), elbow0.clone().add(planned.elbow.clone().applyQuaternion(frameQ)));
-      moveHeld(cast, c, t);
+    const unturned = armBones(ch).map((b) => b.quaternion.clone());
+    if (clearing.plan) {
+      // The second solve: the first solve's clearing turns, smoothed.
+      const planned = solving.f >= 0 ? clearing.plan.get(key)?.[solving.f] : undefined;
+      if (planned) {
+        armBones(ch).forEach((b, i) => b.quaternion.premultiply(planned.turns[i]!));
+        a.frame.updateMatrixWorld(true);
+        moveHeld(cast, c, t);
+      }
     }
+    // The second solve clears only what the smoothed plan left deeper than CLEAR.deep: a short, deep move
+    // loses some of its depth to the smoothing, and a full pass in every frame shakes (each picks its push and its best pose afresh).
+    const slack = clearing.plan ? CLEAR.deep : CLEAR.slack;
     // The first way out of each surface, kept for the later passes and the next frames while the contact lasts: in a thin slab the nearest face flips as the arm crosses its middle.
     const ways = new Map<string, THREE.Vector3>();
     let last = Infinity;
@@ -700,14 +720,9 @@ function clearArms(cast: Cast[], c: Cast, t: number): void {
     const pose = (): THREE.Quaternion[] => armBones(ch).map((b) => b.quaternion.clone());
     const load = (q: readonly THREE.Quaternion[]): void => { armBones(ch).forEach((b, i) => b.quaternion.copy(q[i]!)); a.frame.updateMatrixWorld(true); };
     let best = { depth: Infinity, pose: pose() };
-    // On a second solve, how far the wrist and the elbow may go from the planned move: a clear arm that jumps is worse than a clip the meter reports.
-    // The first solve has no limit: an arm caught between two surfaces (a hand on the chest, the forearm on the side) can need a long way out,
-    // and the second solve smooths that move over time.
-    const from = ch.hand.getWorldPosition(new THREE.Vector3());
-    const fromElbow = ch.foreArm.getWorldPosition(new THREE.Vector3());
-    const most = planned ? CLEAR.residual : Infinity;
+    // An arm caught between two surfaces (a hand on the chest, the forearm on the side) can need a long way out: the second solve smooths that move over time.
     for (let pass = 0; pass <= CLEAR.passes; pass += 1) {
-      let worst: { depth: number; normal: THREE.Vector3; along: number; upper: THREE.Vector3 | null } = { depth: CLEAR.slack, normal: new THREE.Vector3(), along: 1, upper: null };
+      let worst: { depth: number; normal: THREE.Vector3; along: number; upper: THREE.Vector3 | null } = { depth: slack, normal: new THREE.Vector3(), along: 1, upper: null };
       for (const q of armSkin(a, c.armBody, s)) {
         const d = c.skin.depth(q.p, q.x.part.endsWith('upper arm') ? (p) => p === 'torso' : undefined);
         if (d.depth > worst.depth) worst = { depth: d.depth, normal: d.away, along: q.along, upper: q.x.part.endsWith('upper arm') ? q.p : null };
@@ -735,8 +750,9 @@ function clearArms(cast: Cast[], c: Cast, t: number): void {
         }
       }
       if (worst.depth < best.depth) best = { depth: worst.depth, pose: pose() };
-      if (worst.depth <= CLEAR.slack || pass === CLEAR.passes) break;
-      const push = worst.normal.clone().multiplyScalar(worst.depth + CLEAR.margin);
+      if (worst.depth <= slack || pass === CLEAR.passes) break;
+      // A leftover goes back to CLEAR.deep only: a full clear in a few frames pops.
+      const push = worst.normal.clone().multiplyScalar(clearing.plan ? worst.depth - CLEAR.deep + CLEAR.slack : worst.depth + CLEAR.margin);
       const shoulder = ch.upperArm.getWorldPosition(new THREE.Vector3());
       const elbowAt = ch.foreArm.getWorldPosition(new THREE.Vector3());
       const wristAt = ch.hand.getWorldPosition(new THREE.Vector3());
@@ -751,37 +767,47 @@ function clearArms(cast: Cast[], c: Cast, t: number): void {
         // The elbow alone did not get it out (the hand is held in place): move the whole arm.
         if (worst.depth > 0.7 * last) dWrist.add(push);
       } else if (worst.along >= 0.75) { dWrist.add(push); dElbow.addScaledVector(push, 0.5); } else dElbow.addScaledVector(push, 1 / Math.max(0.3, 1 - worst.along));
-      // A push that takes the arm too far from where it started is tried at a half and a quarter before the pass gives up:
-      // a part of the way out is better than none.
-      const before = pose();
-      let moved = false;
-      for (const share of [1, 0.5, 0.25]) {
-        const wrist = wristAt.clone().addScaledVector(dWrist, share);
-        const elbow = elbowAt.clone().addScaledVector(dElbow, share);
-        const line = wrist.clone().sub(shoulder).normalize();
-        const out = elbow.sub(shoulder);
-        out.addScaledVector(line, -out.dot(line));
-        if (out.lengthSq() < 1e-8) break;
-        const hint = out.normalize().applyQuaternion(a.frame.getWorldQuaternion(new THREE.Quaternion()).invert());
-        keepingTwist(a, s, () => solveArm(a, s, wrist, { elbowHint: hint }));
-        a.frame.updateMatrixWorld(true);
-        if (ch.hand.getWorldPosition(new THREE.Vector3()).distanceTo(from) <= most && ch.foreArm.getWorldPosition(new THREE.Vector3()).distanceTo(fromElbow) <= most) { moved = true; break; }
-        load(before);
-      }
-      if (!moved) break;
+      const wrist = wristAt.clone().add(dWrist);
+      const out = elbowAt.clone().add(dElbow).sub(shoulder);
+      const line = wrist.clone().sub(shoulder).normalize();
+      out.addScaledVector(line, -out.dot(line));
+      if (out.lengthSq() < 1e-8) break;
+      const hint = out.normalize().applyQuaternion(a.frame.getWorldQuaternion(new THREE.Quaternion()).invert());
+      keepingTwist(a, s, () => solveArm(a, s, wrist, { elbowHint: hint }));
+      a.frame.updateMatrixWorld(true);
       moveHeld(cast, c, t);
       last = worst.depth;
     }
     load(best.pose);
     moveHeld(cast, c, t);
-    // On a second solve the planned move already holds the first solve's swivel, smoothed: a second swivel undoes that smoothing.
-    if (!planned) swivelClear(cast, c, t, s, props);
+    // The second solve keeps the swivel the plan holds: a second swivel undoes its smoothing.
+    if (!clearing.plan) swivelClear(cast, c, t, s, props);
+    // Clearing can bend an elbow backward (a smoothed turn, a push on a straight arm). Then the arm keeps less of its
+    // clearing, as much as keeps the elbow within CLEAR_BACKWARD past straight (or as far as the direction solve bent it).
+    {
+      const bones = armBones(ch);
+      const cleared = bones.map((b) => b.quaternion.clone());
+      const take = (k: number): number => {
+        bones.forEach((b, i) => b.quaternion.slerpQuaternions(unturned[i]!, cleared[i]!, k));
+        a.frame.updateMatrixWorld(true);
+        return -armAngles(a, c.armBody, s).flex;
+      };
+      const most = Math.max(CLEAR_BACKWARD, take(0));
+      if (take(1) > most) {
+        let lo = 0;
+        let hi = 1;
+        for (let n = 0; n < 8; n += 1) { const mid = (lo + hi) / 2; if (take(mid) > most) hi = mid; else lo = mid; }
+        take(lo);
+      }
+      moveHeld(cast, c, t);
+    }
     if (clearing.record && solving.f >= 0) {
       const inv = frameQ.clone().invert();
       const moves = clearing.record.get(key) ?? [];
       moves[solving.f] = {
         wrist: ch.hand.getWorldPosition(new THREE.Vector3()).sub(wrist0).applyQuaternion(inv),
-        elbow: ch.foreArm.getWorldPosition(new THREE.Vector3()).sub(elbow0).applyQuaternion(inv)
+        elbow: ch.foreArm.getWorldPosition(new THREE.Vector3()).sub(elbow0).applyQuaternion(inv),
+        turns: armBones(ch).map((b, i) => b.quaternion.clone().multiply(unturned[i]!.clone().invert()))
       };
       clearing.record.set(key, moves);
     }
@@ -792,13 +818,18 @@ function clearArms(cast: Cast[], c: Cast, t: number): void {
 const armBones = (ch: LoadedAvatar['arms'][Side]): THREE.Object3D[] => [ch.shoulder, ch.upperArm, ch.foreArm, ch.hand];
 
 /** How a performer's arm moved to clear, per frame, in the performer's frame. */
-interface ClearMove { readonly wrist: THREE.Vector3; readonly elbow: THREE.Vector3 }
+interface ClearMove { readonly wrist: THREE.Vector3; readonly elbow: THREE.Vector3; /** Each arm bone's turn (clavicle first), applied before its unturned pose, in its parent's space. */ readonly turns: readonly THREE.Quaternion[] }
+/** How far a clearing move turned the arm: its bones' turn angles added, radians. */
+const turned = (m: ClearMove): number => m.turns.reduce((sum, q) => sum + 2 * Math.acos(Math.min(1, Math.abs(q.w))), 0);
 /** The first solve records each arm's clearing moves; the second applies them smoothed. Keyed `performer/side`. */
 const clearing: { record: Map<string, ClearMove[]> | undefined; plan: Map<string, ClearMove[]> | undefined } = { record: undefined, plan: undefined };
 /** The way out of each surface while a contact lasts, by arm and prop part, with the last frame that used it: the nearest face of a deep overlap changes from frame to frame, and a push that changes direction makes the elbow pop. */
 const clearWays = new Map<string, { way: THREE.Vector3; f: number }>();
 /** Frames on each side over which a clearing move holds (widen) and then blends (Gaussian sigma), at 30 fps. */
 const CLEAR_SMOOTH = { widen: 4, sigma: 3 } as const;
+/** Degrees: how far past straight a clearing may bend an elbow (the bar allows 10°). */
+const CLEAR_BACKWARD = 5;
+
 
 /**
  * Each arm's clearing moves, widened (each frame takes the largest move near
@@ -806,19 +837,19 @@ const CLEAR_SMOOTH = { widen: 4, sigma: 3 } as const;
  * it eases in and out instead of jumping).
  */
 function smoothClearing(record: ReadonlyMap<string, ClearMove[]>, frames: number): Map<string, ClearMove[]> {
-  const zero = (): ClearMove => ({ wrist: new THREE.Vector3(), elbow: new THREE.Vector3() });
-  const size = (m: ClearMove): number => m.wrist.lengthSq() + m.elbow.lengthSq();
+  const zero = (): ClearMove => ({ wrist: new THREE.Vector3(), elbow: new THREE.Vector3(), turns: [0, 1, 2, 3].map(() => new THREE.Quaternion()) });
   const plan = new Map<string, ClearMove[]>();
   for (const [key, moves] of record) {
     const at = (f: number): ClearMove => moves[f] ?? zero();
     const wide = Array.from({ length: frames }, (_, f) => {
       let best = at(f);
-      for (let g = Math.max(0, f - CLEAR_SMOOTH.widen); g <= Math.min(frames - 1, f + CLEAR_SMOOTH.widen); g += 1) if (size(at(g)) > size(best)) best = at(g);
+      for (let g = Math.max(0, f - CLEAR_SMOOTH.widen); g <= Math.min(frames - 1, f + CLEAR_SMOOTH.widen); g += 1) if (turned(at(g)) > turned(best)) best = at(g);
       return best;
     });
     const reach = Math.ceil(3 * CLEAR_SMOOTH.sigma);
     plan.set(key, wide.map((_, f) => {
       const out = zero();
+      const sums = out.turns.map(() => new THREE.Vector4());
       let total = 0;
       for (let g = f - reach; g <= f + reach; g += 1) {
         const w = Math.exp(-((g - f) ** 2) / (2 * CLEAR_SMOOTH.sigma ** 2));
@@ -826,24 +857,16 @@ function smoothClearing(record: ReadonlyMap<string, ClearMove[]>, frames: number
         const m = wide[Math.min(frames - 1, Math.max(0, g))]!;
         out.wrist.addScaledVector(m.wrist, w);
         out.elbow.addScaledVector(m.elbow, w);
+        // Small turns average as their components, each on the identity's side (q and -q are the same turn).
+        m.turns.forEach((q, i) => { const k = q.w < 0 ? -w : w; sums[i]!.add(new THREE.Vector4(q.x * k, q.y * k, q.z * k, q.w * k)); });
       }
       out.wrist.multiplyScalar(1 / total);
       out.elbow.multiplyScalar(1 / total);
+      sums.forEach((v, i) => out.turns[i]!.set(v.x, v.y, v.z, v.w).normalize());
       return out;
     }));
   }
   return plan;
-}
-
-/** Puts an arm's wrist at `wrist` with its elbow toward `elbow`, keeping the forearm's twist. */
-function moveArm(a: LoadedAvatar, s: Side, wrist: THREE.Vector3, elbow: THREE.Vector3): void {
-  const shoulder = a.arms[s].upperArm.getWorldPosition(new THREE.Vector3());
-  const line = wrist.clone().sub(shoulder).normalize();
-  const out = elbow.clone().sub(shoulder);
-  out.addScaledVector(line, -out.dot(line));
-  const hint = out.lengthSq() > 1e-8 ? out.normalize().applyQuaternion(a.frame.getWorldQuaternion(new THREE.Quaternion()).invert()) : undefined;
-  keepingTwist(a, s, () => solveArm(a, s, wrist, hint ? { elbowHint: hint } : {}));
-  a.frame.updateMatrixWorld(true);
 }
 
 /** The object in a performer's hand at `t`, if any. */
@@ -854,21 +877,28 @@ function heldIn(performer: string, side: Side, t: number): PropState | undefined
   return undefined;
 }
 
-/** How far a finger is into the objects it must rest on, metres: its tip, and the point the arm meter samples (0.4 of the way to the palm). */
-function fingerDepth(rig: HandRig, finger: FingerName, props: readonly Prop[]): number {
-  const tip = rig.tip(finger, new THREE.Vector3());
-  if (!tip) return -Infinity;
-  const mid = tip.clone().lerp(rig.palmCenter(new THREE.Vector3()), 0.4);
+/** How far a finger's skin is into the objects it must rest on, metres (its deepest point). */
+function fingerDepth(skin: readonly SkinPoint[], props: readonly Prop[]): number {
   let worst = -Infinity;
-  for (const prop of props) for (const part of propParts(prop)) worst = Math.max(worst, partDepth(prop, part, tip, GRIP_FINGER_RADIUS), partDepth(prop, part, mid, GRIP_FINGER_RADIUS));
+  const p = new THREE.Vector3();
+  for (const x of skin) {
+    skinned(x, p);
+    for (const prop of props) for (const part of propParts(prop)) worst = Math.max(worst, partDepth(prop, part, p, 0));
+  }
   return worst;
 }
+
+type SkinPoint = Parameters<typeof skinned>[0];
 
 /**
  * A hand closes round what it holds only until each finger rests on it: a
  * fist's grip curl suits a handle, and would sink into a ball. Each finger
- * that would go in (or into an object the hand may not touch) opens, by a
- * binary search on its curl, until it touches.
+ * that would go in (or into an object the hand may not touch) closes joint by
+ * joint, from the knuckle out, as a real grasp does: a joint bends until the
+ * finger's skin beyond it touches the surface, and the joints after it then
+ * bend on to follow the surface, so the finger wraps the object and does not
+ * sink into it. The skin is the arm meter's, so the fit and the held bar
+ * measure the same points.
  */
 function fitGrip(c: Cast, t: number, posed: Partial<Record<Side, HandPose>>): void {
   for (const s of SIDES) {
@@ -879,40 +909,56 @@ function fitGrip(c: Cast, t: number, posed: Partial<Record<Side, HandPose>>): vo
     rig.hand.updateMatrixWorld(true);
     // What it holds, and what it may not touch: a hand closing on a ball that sits on a crate stops at the crate too.
     const props = [...stage.props.values()].map((st) => st.prop).filter((p) => p === held.prop || !mayTouch(c, s, p, t));
-    const curl = { ...pose.curl } as Record<FingerName, number>;
-    let changed = false;
     for (const finger of FINGERS) {
-      if (fingerDepth(rig, finger, props) <= GRIP_REST) continue;
-      // The nearest curl that rests on the objects, within the rig's range (it may bend back a little).
-      // Opening is not always the way out: a straight finger under a ball points into what the ball sits on.
-      const depthAt = (v: number): number => {
-        rig.apply({ curl: { ...curl, [finger]: v }, spread: pose.spread });
-        rig.hand.updateMatrixWorld(true);
-        return fingerDepth(rig, finger, props);
+      const bones = rig.fingerBones(finger);
+      if (!bones.length) continue;
+      const skinOf = (from: number): SkinPoint[] => {
+        const beyond = new Set<THREE.Object3D>();
+        bones.slice(from).forEach((b) => b.traverse((o) => beyond.add(o)));
+        return c.armBody.hand[s].filter((x) => beyond.has(x.bone));
       };
-      let best = { curl: curl[finger], depth: Infinity, off: Infinity };
-      for (let v = -0.1; v <= 1 + 1e-9; v += 0.05) {
-        const depth = Math.max(GRIP_REST, depthAt(v));
-        const off = Math.abs(v - curl[finger]);
-        if (depth < best.depth || (depth === best.depth && off < best.off)) best = { curl: v, depth, off };
-      }
-      // Then the edge of the free range nearest the asked curl.
-      if (best.depth <= GRIP_REST) {
-        let free = best.curl; let inside = curl[finger];
-        for (let i = 0; i < 8; i++) {
-          const mid = (free + inside) / 2;
-          if (depthAt(mid) <= GRIP_REST) free = mid; else inside = mid;
+      const asked = jointCurls(pose.curl[finger], bones.length);
+      const ks = [...asked];
+      const depthWith = (skin: readonly SkinPoint[]): number => {
+        rig.applyFinger(finger, ks, pose.spread);
+        bones[0]!.updateMatrixWorld(true);
+        return fingerDepth(skin, props);
+      };
+      if (depthWith(skinOf(0)) <= GRIP_REST) continue;
+      let touched = false;
+      for (let i = 0; i < bones.length; i++) {
+        const skin = skinOf(i);
+        // The joints after this one straight while it closes; after a joint touches, the rest follow the surface (up to closed, as far as the hand is closed).
+        for (let k = i + 1; k < ks.length; k++) ks[k] = 0;
+        const cap = touched ? asked[i]! + (1 - asked[i]!) * held.weight : asked[i]!;
+        const at = (v: number): number => { ks[i] = v; return depthWith(skin); };
+        if (at(cap) <= GRIP_REST) { ks[i] = cap; continue; }
+        // The largest free curl below the cap, then its edge by a binary search.
+        let free: number | undefined;
+        let inside = cap;
+        for (let v = cap - 0.05; v >= -0.1 - 1e-9; v -= 0.05) {
+          if (at(v) <= GRIP_REST) { free = v; break; }
+          inside = v;
         }
-        best.curl = free;
+        if (free === undefined) { ks[i] = Math.max(-0.1, Math.min(cap, 0)); touched = true; continue; }
+        let edge: number = free;
+        for (let n = 0; n < 8; n++) {
+          const mid: number = (edge + inside) / 2;
+          if (at(mid) <= GRIP_REST) edge = mid; else inside = mid;
+        }
+        ks[i] = edge;
+        touched = true;
       }
-      curl[finger] = best.curl;
-      changed = true;
-    }
-    if (changed) {
-      rig.apply({ curl, spread: pose.spread });
-      rig.hand.updateMatrixWorld(true);
+      rig.applyFinger(finger, ks, pose.spread);
+      bones[0]!.updateMatrixWorld(true);
     }
   }
+}
+
+/** Each joint's curl that `HandRig.apply` sets for a finger curl `c` (distal joints lag at low curl). */
+function jointCurls(c: number, n: number): number[] {
+  const k = THREE.MathUtils.clamp(c, -0.1, 1.05);
+  return Array.from({ length: n }, (_, i) => (i === 0 ? k : Math.pow(Math.max(k, 0), 1 + 0.25 * i)));
 }
 
 /** How closed a hand is on an object (0..1) at `t`, with the object: closing before a take arrives, open again after a put lands. */
@@ -1209,6 +1255,16 @@ const clamp01 = (x: number): number => Math.min(1, Math.max(0, x));
 const smooth = (u: number): number => u * u * (3 - 2 * u);
 const lerp = (a: number, b: number, f: number): number => a + (b - a) * f;
 
+/**
+ * A hand's own weight toward its reach, take, put or aim: the envelope without
+ * the dip the other way. A negative weight puts the hand behind its rest and
+ * turns it backwards (into the thigh in a crouch), so the hand starts from
+ * rest at `at`; the body's moves keep their anticipation.
+ */
+function handEnv(r: Resolved, t: number, flat: boolean): number {
+  return flat ? env(r, t, flat) : envelope(t, { ...r, anticipation: 0, start: r.at });
+}
+
 function env(r: Resolved, t: number, flat: boolean): number {
   if (!flat) return envelope(t, r);
   // Flat: straight lines between keys, no anticipation or overshoot.
@@ -1382,7 +1438,8 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
     if (d.kind !== 'crouch') continue;
     crouch += env(r, t, flat) * (d.amount ?? 0.7);
   }
-  crouch = Math.min(crouch, 1);
+  // Stacked crouches go no deeper than a full one, but a full one keeps its arrival overshoot: a hard cap there stops the hips dead.
+  if (crouch > 1) crouch = 1 + CROUCH_OVER * Math.tanh((crouch - 1) / CROUCH_OVER);
   hipsLocal.z -= CROUCH.hipsBack * crouch;
   hipsLocal.y -= CROUCH.drop * crouch;
   // A step carries the hips toward the lead foot and down a little while a foot is off the floor.
@@ -1683,7 +1740,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
     for (const r of c.dirs) {
       const d = r.direction;
       if ((d.kind !== 'reach' && d.kind !== 'take' && d.kind !== 'put' && d.kind !== 'aim') || d.side !== s) continue;
-      const e = env(r, t, flat);
+      const e = handEnv(r, t, flat);
       if (e === 0) continue;
       if (d.kind === 'aim') { turns.push({ r, e }); continue; }
       const shoulder = a.arms[s].upperArm.getWorldPosition(new THREE.Vector3());
@@ -1848,7 +1905,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
   for (const s of SIDES) {
     const hand = a.hands[s];
     if (!hand) continue;
-    const reachW = Math.max(0, ...c.dirs.filter((r) => (r.direction.kind === 'reach' || r.direction.kind === 'take' || r.direction.kind === 'put') && r.direction.side === s).map((r) => env(r, t, false)));
+    const reachW = Math.max(0, ...c.dirs.filter((r) => (r.direction.kind === 'reach' || r.direction.kind === 'take' || r.direction.kind === 'put') && r.direction.side === s).map((r) => handEnv(r, t, false)));
     let pose: HandPose = blendPose(HAND_SHAPES.relaxed, HAND_SHAPES.reach, clamp01(reachW) * 0.8);
     // Closed round what it holds: tighter round a thin handle, looser round a thick one.
     const held = gripOf(c.spec.id, s, t);
@@ -2005,7 +2062,10 @@ function leanFor(cast: Cast[], c: Cast, t: number, hipsLocal: THREE.Vector3): { 
   for (const r of c.dirs) {
     const d = r.direction;
     if (d.kind !== 'reach' && d.kind !== 'take' && d.kind !== 'put') continue;
-    const e = clamp01(envelope(t, r));
+    // A take or put leans only to get the hand there: once it arrives, the object moves with the hand (or stays put), so the lean eases out.
+    const arrive = r.at + r.attack;
+    const after = d.kind === 'reach' || t <= arrive ? 1 : 1 - smootherStep(Math.min(1, (t - arrive) / LEAN_LET_GO));
+    const e = clamp01(handEnv(r, t, false)) * after;
     if (e === 0) continue;
     const shoulder = toWorld(a, a.bind.get(`${d.side}UpperArm`)!.rootPosition.clone().add(hipsLocal));
     let goal: THREE.Vector3;
@@ -2020,13 +2080,17 @@ function leanFor(cast: Cast[], c: Cast, t: number, hipsLocal: THREE.Vector3): { 
     const dir = goal.clone().sub(shoulder).setY(0);
     if (dir.lengthSq() < 1e-8) continue;
     dir.normalize();
-    if (!best || over * e > best.need) best = { dir, need: over * e, r, e };
+    // The shortfall comes in softly (slope 0 where it starts), so a lean starts from rest; it is at most LEAN_SOFT less.
+    const need = (over - LEAN_SOFT * (1 - Math.exp(-over / LEAN_SOFT))) * e;
+    if (!best || need > best.need) best = { dir, need, r, e };
   }
   if (!best) return undefined;
   const torso = a.bind.get('leftUpperArm')!.rootPosition.y - a.bind.get('hips')!.rootPosition.y;
-  const hipShift = Math.min(LEAN_HIPS, best.need * 0.35);
+  // Both limits are soft (tanh), so the body slows into them and does not stop dead when it gets there.
+  const hipShift = LEAN_HIPS * Math.tanh((best.need * 0.35) / LEAN_HIPS);
   const rest = best.need - hipShift;
-  const theta = Math.asin(Math.min(Math.sin(LEAN_MAX_DEG * DEG), rest / torso));
+  const most = Math.sin(LEAN_MAX_DEG * DEG);
+  const theta = Math.asin(most * Math.tanh(rest / torso / most));
   if (best.e > 0.9) c.shortfall.set(best.r, Math.max(c.shortfall.get(best.r) ?? 0, rest - torso * Math.sin(theta)));
   return { dir: best.dir, hipShift, theta };
 }

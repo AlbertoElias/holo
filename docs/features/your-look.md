@@ -243,7 +243,7 @@ disposed it with the kind it removed. Dressing now keeps any accessor that
 another mesh still uses, and the look e2e checks the posted hair and
 glasses for their index lists.
 
-## The live face and the rebuilt mouth (B-092, 2026-11-23)
+## The live face and the rebuilt mouth (B-093, 2026-11-23)
 
 The owner, on the live face of the house avatar: "this is me smiling,
 laughing and putting on a sad face. they all look wrong and not real. also,
@@ -379,6 +379,16 @@ shown, and the head stays hidden to the eye after the change; Record
 closes Look; the exported take carries the chosen hair and glasses nodes
 and the card in its extras, and no mirror or panel node; after Close the
 mirror renders no more. A headset frame of the open mirror is saved.
+
+## Look in phone AR: owner decision 2026-11-21
+
+A check on 2026-11-21 found that the house avatar and Look are the
+default on phone, desktop and Quest. One place has no Look: phone AR.
+There, `flat` is false and a handheld phone has no wrist dock.
+
+**Decision (owner, option A):** keep it as it is. A person changes the
+look on the flat screen before they enter AR. Phone AR gets no hint and
+no AR control. The dock's "Look" button stays as it is.
 
 ## Test plan and evidence
 

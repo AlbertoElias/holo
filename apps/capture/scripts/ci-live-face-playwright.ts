@@ -21,7 +21,7 @@ import type {} from '../src/runtime/automationHooks';
 import type { FaceSnapshot } from '../src/face/FaceDriver';
 import { liveFaceTrack, type FaceTrack } from './fixtures/live-face-sets';
 
-// The live face on the default avatar, with no person in the loop (B-092): hand-made scores of the camera face
+// The live face on the default avatar, with no person in the loop (B-093): hand-made scores of the camera face
 // tracker (fixtures/live-face-sets.ts, which keeps the tracker's habits: weak and uneven scores) are replayed through
 // the camera's own path to the face, one expression at a time, and the face the avatar shows must move as a whole:
 // cheeks and eyes with a smile, brows and mouth corners with a sad face, lips that close and round in speech.

@@ -490,21 +490,37 @@ function gestureHold(d: Direction, attack: number): number | undefined {
 
 const smoother = (u: number): number => u * u * u * (u * (u * 6 - 15) + 10);
 
+/** The overshoot for a hold window: smaller in a short window, so its speed stays that of a full 0.35 s window. */
+const lift = (overshoot: number, win: number): number => overshoot * Math.min(1, win / 0.35);
+
 /**
  * How far a direction has its way at `t`: 0 before, a small dip the other way
  * during anticipation, up to 1 with a small arrival overshoot, held, then
  * back to 0 (transient) or settled at 1 (persistent).
+ *
+ * Its rate of change has no jump at any border, so a body never stops dead
+ * between two phases (a stop and a go read as a stammer): the dip eases out
+ * to its deepest at `at`, where the move turns round from rest; the attack
+ * arrives at 1 with the speed the overshoot leaves with; the overshoot and
+ * the settle start and end at rest.
  */
 export function envelope(t: number, r: Resolved, depth = 0.08, overshoot = 0.05): number {
   if (t <= r.start) return 0;
-  if (t < r.at) return r.anticipation > 0 ? -depth * Math.sin((Math.PI * (t - r.start)) / r.anticipation) : 0;
+  const dip = r.anticipation > 0 ? depth : 0;
+  if (t < r.at) return -dip * smoother((t - r.start) / r.anticipation);
   const arrive = r.at + r.attack;
-  if (t < arrive) return smoother((t - r.at) / r.attack);
+  const win = Math.min(0.35, r.hold);
+  if (t < arrive) {
+    const u = (t - r.at) / r.attack;
+    // u²(u − 1) is 0 at both ends, with slope 0 at the start and 1 at the end: it gives the arrival the overshoot's speed.
+    const exit = win > 0 && !r.persistent ? lift(overshoot, win) * Math.PI / win * r.attack : 0;
+    return -dip + (1 + dip) * smoother(u) + exit * u * u * (u - 1);
+  }
   const holdEnd = arrive + r.hold;
   if (t < holdEnd) {
-    const win = Math.min(0.35, r.hold);
+    if (r.persistent) return 1;
     const u = win > 0 ? Math.min(1, (t - arrive) / win) : 1;
-    return 1 + overshoot * Math.sin(Math.PI * u) * (1 - u);
+    return 1 + lift(overshoot, win) * Math.sin(Math.PI * u) * (1 - u);
   }
   const s = (t - holdEnd) / r.settle;
   if (r.persistent) return 1;

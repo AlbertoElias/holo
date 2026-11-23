@@ -313,6 +313,8 @@ production and needs the owner's word.
 | `arms.prop.*` | no arm or hand more than 1 cm into an object it does not hold or touch |
 | `arms.twist.*`, `arms.wrist.*` | the forearm twists at most 90° from neutral (palm up and palm down are each a quarter turn), the wrist bends at most 80° |
 | `arms.elbow.*` | the elbow goes at most 10° past straight and at most 15° off its hinge (an elbow bends only one way) |
+| `arms.held.*` | no finger or palm more than 3 mm into the object the hand holds: the fingers close on its surface (measured on the posed skin, every frame) |
+| `smooth.*` | no joint slows under 25% of its speed around it (within 0.3 s, both sides at least 0.15 m/s) and then goes on the same way: that is a stammer. Overlap the moves so one starts before the last one ends |
 | `story` | the main bar: a fresh reader, told nothing, gets the setup (who and where), the event and the reaction. Fails at once when the sheet has no `story` |
 | `visual` | the `design-reviewer` (opus) passes the arm motion, the clipping and the face |
 | `reading` | a fresh reader reads every beat (each beat needs an `intent`), and the piece as a whole |

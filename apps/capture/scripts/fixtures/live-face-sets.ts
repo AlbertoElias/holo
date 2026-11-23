@@ -1,4 +1,4 @@
-// Hand-made score sets of the camera face tracker (ARKit names) for the live face check (B-092). No real face
+// Hand-made score sets of the camera face tracker (ARKit names) for the live face check (B-093). No real face
 // is in them. They keep the tracker's habits, because a face that is right only for ideal scores is wrong for
 // a person: the cheek raise is almost absent in a smile, a sad face gives almost no frown (it shows as a lower
 // lip pushed up and raised inner brows), wide eyes reach a small part of the range, the eye squint rests well

@@ -1700,7 +1700,80 @@ bug above.)
 - **Fix:** the spec keeps each card's probe by URL and reads the uploaded card's. Bubble-capture at load 2 passed 11 of 11.
 - **Closed:** 2026-11-21.
 
-### B-092 — The live face of the house avatar looks wrong: a smile, a laugh and a sad face do not read, and speech does not move the mouth like a mouth
+### B-081 — A dark strip of the default scene's mountain floats behind the performer on the card
+
+- **Area:** apps/capture (`SceneBubbleSampler.triangleInsideBubble`), apps/viewer-web (feed dome clip)
+- **Severity:** P3
+- **Observed:** 2026-11-20, phone journey audit, card seen from behind the performer
+- **Evidence:**
+  - The strip is 82 triangles of `Montanha_lambert13_0`, 5.99–8.67 m from the bubble centre.
+  - The export keeps a triangle whose nearest point lies within 6 m of a sample.
+  - The feed's dome (radii about 7 × 4.7 × 7 m) is wider than the 6 m reach, so the card shows the triangles.
+  - The viewer, XR and AR fade the set past the reach, so they do not show it.
+  - Renders and per-mesh measurements are in the session notes `option-b/` folder (`compare.jpg`, `C-compare.jpg`, `clip-reach-3d.txt`).
+- **Expected:** set past the take's reach does not float as a separate shape on the card.
+- **Tried and rejected:**
+  - A hard cut at the reach in the feed: it broke a structure 2 m behind the performer on an old take.
+  - The sphere's soft fade in the feed: it faded the ground under the performer on another old take.
+  - The owner kept the card as it is.
+- **Next:** a take whose spawn keeps the mountain more than 6 m away removes the strip at its source (B-082).
+  On 2026-11-21, B-082 option C (spawn off the statue) exported no mountain triangles, and option E (statue moved,
+  spawn at the centre) exported 113. So only C removes the strip, and C fails the rim bar (see B-082).
+- **Reproduction:** post a phone take on the default scene, then view its card from behind the performer.
+- **Closed:** 2026-11-21, no change, owner decision (option A). With B-082 option E the take keeps 113 mountain triangles, so the strip stays on the card.
+
+### B-082 — A take on the default scene starts on the statue
+
+- **Area:** apps/capture (`CharacterMotor` spawn search), apps/viewer-web (cloche rim)
+- **Severity:** P2
+- **Observed:** 2026-11-20, phone journey audit
+- **Evidence:**
+  - The spawn search takes the scene's centre first, and the statue stands there, so every default-scene take starts on top of it.
+  - The fix 3400acffe803 (branch `bug/spawn-off-statue`) skips a pedestal.
+  - With that fix, `bubble-capture.pipeline.spec.ts` failed twice with "start: bins off the ground". At bin 12 the rim is at 18.67 and the raycast ground at 17.91, edge (7.95, 2.99).
+  - So the fix is not on `main`.
+  - 2026-11-21, both options merged with `main` 22f48373262f, `bubble-capture.pipeline.spec.ts` ×3 under `CI_EMULATE_LOAD=2`:
+    - Option E (branch `bug/statue-off-centre`, only `scene.glb` changed: the statue stands off the centre): 3 of 3 pass.
+      In the last run's rim report, the bins that pass only at the lift cap are none at the start, 32 in the middle (119–150) and 36 at the end (117–152).
+      The export keeps 113 mountain triangles, so the B-081 strip stays.
+    - Option C (branch `bug/spawn-off-statue-2`, commit 1ec5fdc574d6: the spawn takes a level spot off the pedestal): 3 of 3 fail at the start with 10 bins off the ground.
+      The worst is bin 26: rim 17.04, ground 16.23, slope 30°, edge (−1.55, 13.04). The middle and the end each have 4 bins off the ground and 30–33 capped passes (26 at the start).
+      The export has no mountain triangles.
+- **Expected:** the performer starts on the grass beside the statue, and the rim stays on the ground.
+- **Reproduction:** record any take on the default scene in capture.
+- **Cause:** the default scene's statue stood at the scene's centre, where the spawn search starts, so every take began on it.
+- **Fix:** option E, ae06f9f1636c: `scene.glb` moves the statue off the centre, and the spawn stays at the centre on the grass. The spawn code does not change. Bubble-capture under `CI_EMULATE_LOAD=2` passed 3 of 3; `verify:pr` passed before the merge.
+  - With the statue off the centre, the card's centre can show only sky, so `portal.pipeline.spec.ts` wheeled over no hologram
+    and did not zoom (3 of 4 runs failed). The spec now wheels over a point that the card's hit test finds on the hologram
+    (`hologramPoints`, moved to `portal-helpers.ts`, and it skips controls); 6 of 6 passed.
+- **Closed:** 2026-11-21, owner decision (option E).
+
+### B-092 — Authored takes: the hand sinks into a held ball, and the body stammers at beat borders
+
+- **Area:** `apps/capture/scripts/authoring` (`lib/direct.ts` `fitGrip` and `leanFor`, `lib/hands.ts` `fistPoint`, `lib/beats.ts` `envelope`)
+- **Severity:** P2 (the owner saw both in the crouch draft v41)
+- **Observed:** 2026-11-22, owner feedback on crouch v41: "the ball is still not grabbed but clipped, and the overall take stammers".
+- **Cause, clip:** the grip curl was fixed per finger and scaled only by the grip radius, and `fitGrip` tested only the
+  fingertip and one point 40% of the way to the palm, so the proximal segments curled into the ball. `fistPoint` cleared
+  the palm centre only, so the knuckle skin sat 6.5 mm in the ball. No bar measured the hand skin against what it holds.
+- **Cause, stammer:** the motion, not the recording (review frames are seeked stills joined at 30 fps; v41's mp4 has 181
+  frames and no repeats). `envelope()` had speed jumps at its borders: the anticipation ended at full speed and the attack
+  started from rest, so the hips stopped dead at 1.13 s between two moves the same way. The lean of a take was clamped
+  hard at its limits, chased the ball's first place after the hand took it, and started where the weight crossed zero.
+- **Fix:** `fitGrip` closes each finger joint by joint from the knuckle out until its skin rests on the surface; `fistPoint`
+  keeps the knuckles clear. `envelope()` is velocity-continuous at every border. A hand's own weight (and the lean it asks
+  for) has no dip the other way and starts from rest; the lean limits are soft, and a take's or put's lean eases out after
+  the hand arrives. New bars in `make.ts`: `arms.held` (hand skin ≤ 3 mm into what it holds) and `smooth` (no joint slows
+  under 25% of the speed around it and goes on the same way). The arm clearing out of the body is smoothed over time
+  and solved a second time, and it bends an elbow at most 5° past straight (goodbye had gone to 12°).
+- **Proof:** crouch v41 measures 37.1 mm into the ball (105 of 181 frames over 3 mm) and 20 stalls; crouch v42 measures
+  2.0 mm and 0 stalls (worst 27%). Pinch v9 passes every arm bar and `smooth` (it had 2 stalls); goodbye v10 passes
+  every arm bar (elbows 5°).
+- **Left open:** the visual review of crouch v42 still fails. The left arm snaps in one frame at 2.13 s, the palm-down
+  grip still looks sunk into the ball, the eyes stray, and the take goes still, then fast, then still. Those need a new
+  bug or a sheet change, not this fix.
+
+### B-093 — The live face of the house avatar looks wrong: a smile, a laugh and a sad face do not read, and speech does not move the mouth like a mouth
 
 - **Area:** apps/capture (camera face path, `src/face`), the house base (`scripts/authoring/house-base`)
 - **Severity:** P1
