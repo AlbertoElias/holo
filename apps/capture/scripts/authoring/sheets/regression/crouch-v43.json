@@ -1,0 +1,209 @@
+{
+  "title": "Crouch",
+  "intent": "Someone notices a ball on a low crate on the floor, crouches, picks it up, then stands and looks at it.",
+  "story": {
+    "request": "someone crouches and picks up a ball",
+    "setup": {
+      "says": "Someone stands near a small crate with a red ball on it.",
+      "see": [
+        "a low wooden crate in front of them, to their right",
+        "a red ball on top of the crate",
+        "they notice the ball and look at it"
+      ]
+    },
+    "event": {
+      "says": "They crouch down and pick up the ball.",
+      "see": [
+        "they bend their knees and lean down to the crate",
+        "the right hand takes the ball from the side",
+        "they stand up with the ball in the hand"
+      ]
+    },
+    "reaction": {
+      "says": "They hold the ball up in front of them and look at it.",
+      "see": [
+        "the ball rests on the open right hand in front of the chest",
+        "their eyes stay on the ball"
+      ]
+    }
+  },
+  "duration": 6,
+  "marks": {
+    "viewer": [
+      0,
+      1.55,
+      2.5
+    ],
+    "floor": {
+      "of": "me",
+      "forward": 0.45,
+      "height": 0.02
+    }
+  },
+  "performers": [
+    {
+      "id": "me",
+      "avatar": "house:clay",
+      "at": [
+        0,
+        0
+      ],
+      "facing": 20,
+      "seed": 7,
+      "faceAway": [
+        {
+          "from": 1.2,
+          "to": 3.1,
+          "why": "crouches and looks down at the ball on the floor"
+        }
+      ]
+    }
+  ],
+  "beats": [
+    {
+      "id": "notice",
+      "performer": "me",
+      "at": 0.3,
+      "hold": 0.6,
+      "intent": "They notice something on the floor in front of them.",
+      "directions": [
+        {
+          "kind": "look",
+          "at": "ball.top",
+          "head": 0.3
+        },
+        {
+          "kind": "expression",
+          "shape": "noticing"
+        }
+      ]
+    },
+    {
+      "id": "down",
+      "performer": "me",
+      "at": 0.8,
+      "hold": 1.8,
+      "intent": "They crouch and lean down low to the ball.",
+      "directions": [
+        {
+          "kind": "crouch",
+          "amount": 1,
+          "attack": 1.3,
+          "hold": 0.4,
+          "settle": 1.5
+        },
+        {
+          "kind": "bend",
+          "amount": 0.6,
+          "attack": 1.3,
+          "hold": 0.4,
+          "settle": 1.5
+        },
+        {
+          "kind": "look",
+          "at": "ball.top",
+          "head": 0.15
+        }
+      ]
+    },
+    {
+      "id": "pick",
+      "performer": "me",
+      "at": 1.6,
+      "hold": 0.8,
+      "intent": "They pick the ball up.",
+      "directions": [
+        {
+          "kind": "take",
+          "side": "right",
+          "object": "ball",
+          "palm": "in",
+          "attack": 0.7
+        }
+      ]
+    },
+    {
+      "id": "up",
+      "performer": "me",
+      "at": 2.55,
+      "hold": 1.0,
+      "intent": "They stand up with the ball.",
+      "directions": [
+        {
+          "kind": "look",
+          "at": "ball.top",
+          "head": 0.2
+        }
+      ]
+    },
+    {
+      "id": "show",
+      "performer": "me",
+      "at": 3.1,
+      "hold": 2.9,
+      "intent": "They hold the ball in front of them and look at it.",
+      "directions": [
+        {
+          "kind": "reach",
+          "side": "right",
+          "at": {
+            "of": "me",
+            "forward": 0.36,
+            "right": 0.18,
+            "height": "chest"
+          },
+          "stopShort": 0,
+          "attack": 1.0,
+          "hold": 2.9,
+          "palm": "up"
+        },
+        {
+          "kind": "look",
+          "at": "ball.top",
+          "head": 0.3
+        }
+      ]
+    }
+  ],
+  "objects": {
+    "crate": {
+      "name": "Crate",
+      "shape": "box",
+      "size": [
+        0.2,
+        0.26,
+        0.2
+      ],
+      "color": "#9a6b3f",
+      "at": {
+        "of": "me",
+        "forward": 0.4,
+        "right": 0.27
+      },
+      "facing": "me.hips"
+    },
+    "ball": {
+      "shape": "sphere",
+      "size": [
+        0.08,
+        0.08,
+        0.08
+      ],
+      "color": "#e0452b",
+      "grip": {
+        "at": [
+          0,
+          0.04,
+          0
+        ],
+        "axis": [
+          -1.5,
+          2,
+          0
+        ],
+        "radius": 0.04
+      },
+      "on": "crate"
+    }
+  }
+}

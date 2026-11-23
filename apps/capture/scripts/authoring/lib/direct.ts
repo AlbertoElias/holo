@@ -1429,12 +1429,15 @@ function turnHand(cast: Cast[], c: Cast, s: Side, turns: readonly { r: Resolved;
     if (d.kind === 'take' && rig) {
       const across = new THREE.Vector3(1, 0, 0).applyQuaternion(rig.palmFrame(new THREE.Quaternion()));
       const g = takeGoal(r).axis!.clone();
-      // The grip axis keeps the sign the take chose in its first frame (per arm): a hand that turns on past 90° while
-      // the take settles (palm in, then up) would flip the wanted turn by 180° in one frame.
+      // Until the take arrives, the grip axis takes whichever way round is nearer: the hand may come from an earlier
+      // direction that turned it far from the grip (a palm-down reach to an oven door). From its arrival it keeps the
+      // sign it had there (per arm): a hand that turns on past 90° while the take settles (palm in, then up) would
+      // flip the wanted turn by 180° in one frame.
+      const nearer = g.dot(across) < 0 ? -1 : 1;
       const signs = gripSigns.get(r) ?? {};
-      signs[s] ??= g.dot(across) < 0 ? -1 : 1;
+      if (solving.t >= r.at + r.attack) signs[s] ??= nearer;
       gripSigns.set(r, signs);
-      if (signs[s] < 0) g.negate();
+      if ((signs[s] ?? nearer) < 0) g.negate();
       wanted = new THREE.Quaternion().setFromUnitVectors(across, g).multiply(Hc);
     } else if (d.kind === 'put') {
       const offset = holdingRun(r)?.offset;
@@ -1885,6 +1888,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
       const leading = e === 0 && held > 0 && over !== undefined && over.q > 0 && t < r.at;
       if (e === 0 && !leading && !(over && held === 0 && t < over.to && t > r.at)) continue;
       if (d.kind === 'aim') { turns.push({ r, e }); continue; }
+      const earlierEffector = effector;
       const shoulder = a.arms[s].upperArm.getWorldPosition(new THREE.Vector3());
       let g: THREE.Vector3;
       let target: THREE.Vector3;
@@ -1929,7 +1933,9 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
       const p = d.kind === 'reach' && d.palmAt ? pointOf(cast, c.spec, d.palmAt).sub(target).normalize() : palmKind === 'up' ? up : palmKind === 'down' ? up.clone().negate() : palmKind === 'in' ? new THREE.Vector3(s === 'left' ? -1 : 1, 0, 0).applyQuaternion(bodyQ) : towards;
       const lead = held > 0 && over ? over.q : undefined;
       if (leading) {
-        // Before the later starts: only its palm, by the takeover's progress.
+        // Before the later starts: only its palm, by the takeover's progress. The hand still meets the earlier's goal
+        // with the earlier's own point (a fist round a held object, not the palm's center 9 cm from it).
+        effector = earlierEffector;
         if (palm) palm = palm.lerp(p, lead!).normalize();
         continue;
       }
