@@ -99,8 +99,12 @@ const DOCS_CODE = new Set(["docs/product/design/tokens.json"]);
 const IGNORED_ENV_FILE = /^\.env(\..+)?$/;
 const IGNORED_INPUT_DIRS = ["apps/viewer-web/public/local-places"];
 
-/** Set by verify:pr itself for one step. A run that starts with it set cannot be judged. */
-const RESERVED_ENV = ["E2E_PASSED_SPECS"];
+/**
+ * A run that starts with one of these set cannot be judged. verify:pr sets
+ * E2E_PASSED_SPECS itself for one step. With REUSE_DEV_SERVER=1 a suite uses
+ * a server that this run did not start, possibly from a different tree.
+ */
+const RESERVED_ENV = ["E2E_PASSED_SPECS", "REUSE_DEV_SERVER"];
 /** Read by the code but without effect on a verdict: where servers listen, and verify:pr's own switches. */
 const NEUTRAL_ENV = /^(E2E_API_PORT|E2E_POLYHAVEN_PORT|E2E_POLYPIZZA_PORT|KNOWLEDGE_E2E_PORT|DEV_PORT|TEST_API_PORT|VERIFY_PR_\w+|CLAUDE_PROJECT_DIR|GITHUB_STEP_SUMMARY|HOME|PATH|PWD|TMPDIR|USER|SHELL)$/;
 /** Variables the tools read (not the repo's code), and prefixes the code builds names from. */
@@ -213,9 +217,16 @@ export function readTree(root: string): Map<string, { id: string; mode: string }
     if (!mode || !id || stage !== "0") throw new CacheOff("the git index has unmerged paths");
     files.set(entry.slice(tab + 1), { id, mode });
   }
+  // `git update-index --assume-unchanged` and `--skip-worktree` hide an edit
+  // from `ls-files -m` (tags: a lowercase letter, or S). Those files are
+  // hashed from disk too.
+  const hidden = nulList(git(root, ["ls-files", "-v", "-z"]))
+    .filter((entry) => /^[a-zS] /.test(entry))
+    .map((entry) => entry.slice(2));
   const dirty = new Set([
     ...nulList(git(root, ["ls-files", "-m", "-z"])),
-    ...nulList(git(root, ["ls-files", "-o", "--exclude-standard", "-z"]))
+    ...nulList(git(root, ["ls-files", "-o", "--exclude-standard", "-z"])),
+    ...hidden
   ]);
   const toHash: { file: string; mode: string }[] = [];
   for (const file of dirty) {

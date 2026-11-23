@@ -104,6 +104,9 @@ else
       # The API image: nothing tests it before the deploy health check.
       fly.toml|.dockerignore)
         saw_code=true; api=true ;;
+      # The API that the pipeline and portal suites start (playwright.config.ts).
+      scripts/test-api.ts)
+        saw_code=true; quality=true; pipeline=true; portal=true ;;
       # Lint, typecheck and tooling unit tests cover these.
       scripts/*.ts|tsconfig*.json|eslint.config.*)
         saw_code=true; quality=true ;;

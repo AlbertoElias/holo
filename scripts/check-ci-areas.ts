@@ -16,8 +16,10 @@
 //   7. The CI gate stops enforcing the rule.        -> ci.yml wiring check
 //   9. A file selects fewer suites than read it (B-099): a workspace package
 //      an app depends on, capture's avatar model in the viewer's mocked
-//      specs, the API under the portal suite. -> package.json dependencies,
-//      and one case per known cross-app read
+//      specs, the API under the portal suite, a root script that a suite
+//      starts. -> package.json dependencies, a scan of each app's
+//      package.json and Playwright config for `../../scripts/`, and one case
+//      per known cross-app read
 //   8. A folder mapped to quality only (offline authoring tools; also left out
 //      of the browser suites' keys in scripts/verify-cache.ts) starts to be
 //      read by a suite, a build or a workflow. -> no file outside names it
@@ -219,6 +221,20 @@ async function main() {
   expect(avatar.web === true && avatar.portal === true && avatar.pipeline === true, "capture's avatar model does not select the viewer suites that load it (web, portal, pipeline)");
   const apiEdit = await select(["apps/viewer-api/src/server.ts"]);
   expect(apiEdit.portal === true && apiEdit.pipeline === true, "an API edit does not select the suites that start the test API (pipeline, portal)");
+  // A root script that an app's suite starts selects that suite. A new one fails here until it has a case.
+  const SUITE_SCRIPTS: Record<string, string[]> = { "scripts/test-api.ts": ["pipeline", "portal"] };
+  const started = new Set<string>();
+  for (const file of tracked.filter((f) => /^apps\/[^/]+\/(package\.json|playwright[^/]*\.config\.ts)$/.test(f))) {
+    for (const match of readFileSync(path.join(root, file), "utf8").matchAll(/\.\.\/\.\.\/(scripts\/[A-Za-z0-9_./-]+)/g)) started.add(match[1] ?? "");
+  }
+  for (const script of started) {
+    const areas = SUITE_SCRIPTS[script];
+    expect(areas !== undefined, `${script} is started from an app but has no case in SUITE_SCRIPTS (scripts/check-ci-areas.ts)`);
+    if (!areas) continue;
+    const r = await select([script]);
+    const missing = areas.filter((area) => !r[area]);
+    expect(missing.length === 0, `${script} is started by a suite but does not select ${missing.join(", ")}`);
+  }
 
   // 8. A folder no suite reads selects only quality, and nothing outside names it.
   for (const folder of NOT_SUITE_INPUTS) {

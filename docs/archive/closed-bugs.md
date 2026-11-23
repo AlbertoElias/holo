@@ -12,14 +12,17 @@ Closed entries moved from `BUGS.md` so the live tracker stays scannable.
   `packages/objects`, `packages/avatar-look`, `packages/tooling-scripts` and `packages/config-ts` selected
   only `quality`, but capture, the viewer and the API depend on them. (2) `apps/capture/public/gltf/*` did
   not select `web`, but six mocked viewer specs load `avatar.glb` from there. (3) `apps/viewer-api/*` did not
-  select `portal`, but the portal suite starts the test API.
+  select `portal`, but the portal suite starts the test API. (4) `scripts/test-api.ts`, the API that the
+  pipeline and portal suites start, selected only `quality` (found by the code review of the fix).
 - **Cause:** the mapping named the shared packages one by one, so a package added later fell to a
   quality-only catch-all. `check:ci-areas` checked only that each file selects something.
 - **Fix:** every package but `config-eslint` selects all browser suites and deploys (a new package too).
-  The avatar folder also selects `web`. The API also selects `portal`.
+  The avatar folder also selects `web`. The API also selects `portal`. `scripts/test-api.ts` also selects
+  `pipeline` and `portal`.
 - **Proof:** `pnpm run check:ci-areas` now reads each app's `package.json` and fails when a workspace
   dependency (direct or through another package) does not select the app's suites and deploy. It also holds
-  one case for the avatar model and one for the API. Run against the old selector, it fails 11 times.
+  one case for the avatar model and one for the API, and it fails when an app's `package.json` or Playwright
+  config starts a root script that has no case. Run against the old selector, it fails 12 times.
 
 ### B-086 — The house avatar sinks to the floor on a floor reach
 

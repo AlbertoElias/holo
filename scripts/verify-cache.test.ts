@@ -173,6 +173,17 @@ test("A: an unstaged edit, a staged edit, a new file, a deletion and a mode chan
   assert.notEqual(key(root, CODE), edited, "mode change");
 });
 
+test("A: an edit to a file that git is told not to look at changes the key", () => {
+  for (const flag of ["--assume-unchanged", "--skip-worktree"]) {
+    const root = makeRepo();
+    const clean = key(root, CODE);
+    git(root, "update-index", flag, "apps/viewer-web/src/app.ts");
+    assert.equal(key(root, CODE), clean, `${flag} alone keeps the key`);
+    write(root, "apps/viewer-web/src/app.ts", "export const app = 'hidden edit';\n");
+    assert.notEqual(key(root, CODE), clean, `an edit under ${flag}`);
+  }
+});
+
 test("A: a git-ignored .env file and a downloaded scan are inputs", () => {
   const root = makeRepo();
   const clean = key(root, CODE);
@@ -250,13 +261,16 @@ test("C: a variable the code reads is in the key; ports and verify:pr's own swit
   assert.notEqual(key(root, CODE, { E2E_BASE_URL: "https://staging.example.com" }), local, "another host does not");
 });
 
-test("C: the cache is off when packages do not match the lockfile, and when a run starts with E2E_PASSED_SPECS set", () => {
+test("C: the cache is off when packages do not match the lockfile, and when a run starts with E2E_PASSED_SPECS or REUSE_DEV_SERVER set", () => {
   const root = makeRepo();
   const dir = path.join(root, "output/cache");
   assert.ok(openCache({ env: { VERIFY_PR_CACHE_DIR: dir }, read: true, root }) instanceof ResultCache);
 
   const reserved = openCache({ env: { E2E_PASSED_SPECS: "a.spec.ts", VERIFY_PR_CACHE_DIR: dir }, read: true, root });
   assert.ok("off" in reserved && /E2E_PASSED_SPECS/.test(reserved.off));
+  // The suites would use a server that this run did not start.
+  const reused = openCache({ env: { REUSE_DEV_SERVER: "1", VERIFY_PR_CACHE_DIR: dir }, read: true, root });
+  assert.ok("off" in reused && /REUSE_DEV_SERVER/.test(reused.off));
 
   write(root, "pnpm-lock.yaml", "lockfileVersion: 9\n# a new dependency\n");
   const stale = openCache({ env: { VERIFY_PR_CACHE_DIR: dir }, read: true, root });

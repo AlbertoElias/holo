@@ -30,6 +30,7 @@
 // instead of grepping a log: `until [ -s output/verify-pr.exit ]; do sleep 20; done`.
 import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -53,6 +54,8 @@ interface Step {
   /** Runs for seconds and starts no server, so it does not need the machine-wide lock. */
   free?: boolean;
   label: string;
+  /** The port of a server that the suite uses when one is already there (Playwright `reuseExistingServer`). */
+  reusesPort?: () => number;
 }
 
 // The viewer's Playwright suites: one stored pass per spec file. The report
@@ -73,7 +76,13 @@ export const STEPS: Step[] = [
   // Later steps load the dist folders this makes, so a skipped build still runs before the first later step that runs.
   { area: "quality", label: "build", command: "pnpm run build:all", cache: { inputs: "tree", artifact: true } },
   { area: "quality", label: "e2e-shards", command: "pnpm run check:e2e-shards", cache: { inputs: "tree" } },
-  { area: "e2e", label: "knowledge", command: "pnpm run test:knowledge", cache: { inputs: "tree" } },
+  {
+    area: "e2e",
+    label: "knowledge",
+    command: "pnpm run test:knowledge",
+    cache: { inputs: "tree" },
+    reusesPort: () => Number(process.env.KNOWLEDGE_E2E_PORT ?? 4176)
+  },
   { area: "pipeline", label: "pipeline", command: "pnpm run test:smoke:pipeline", cache: viewerSpecs("test-e2e-pipeline") },
   { area: "portal", label: "portal", command: "pnpm run test:portal", cache: viewerSpecs("test-e2e-portal") },
   // Not cached: it passes with SKIPPED when Python packages are missing, and it reads tools outside the repo.
@@ -169,6 +178,20 @@ function runStep(step: Step, env: Record<string, string> = {}): Promise<number> 
   });
 }
 
+/** True when a server answers on the port. */
+function listening(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = connect({ host: "127.0.0.1", port });
+    const answer = (open: boolean) => {
+      socket.destroy();
+      resolve(open);
+    };
+    socket.setTimeout(1000, () => answer(false));
+    socket.once("connect", () => answer(true));
+    socket.once("error", () => answer(false));
+  });
+}
+
 const NO_DECISION: Decision = { action: "run", env: {}, keys: null, note: "", passedSpecs: [] };
 
 /** Run or skip, from the stored passes. A cache that cannot decide turns itself off for the rest of the run. */
@@ -209,7 +232,7 @@ async function main(): Promise<void> {
     for (const step of steps) {
       const decision = decide(state, step);
       if (decision.action === "skip") console.log(`[verify-pr] = ${step.label}: ${decision.note}; would skip`);
-      else if (decision.note) console.log(`[verify-pr] ~ ${step.label}: would run ${decision.note}`);
+      else console.log(`[verify-pr] ~ ${step.label}: would run${decision.note ? ` ${decision.note}` : ""}`);
     }
     return;
   }
@@ -250,6 +273,11 @@ async function main(): Promise<void> {
   steps: for (const step of steps) {
     let decision = decide(state, step);
     if (decision.action === "run" && !step.free && (await takeLock())) decision = decide(state, step);
+    // A pass against a server from an unknown tree says nothing about this tree: it is not stored.
+    if (decision.action === "run" && step.reusesPort && (await listening(step.reusesPort()))) {
+      console.log(`[verify-pr] ! ${step.label}: a server that this run did not start is on port ${step.reusesPort()}; the suite uses it, so no pass is stored`);
+      decision = NO_DECISION;
+    }
     if (decision.action === "skip") {
       console.log(`[verify-pr] = ${step.label}: ${decision.note}; skipped`);
       if (step.cache?.artifact) deferred.push(step);
