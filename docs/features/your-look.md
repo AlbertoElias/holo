@@ -279,6 +279,13 @@ must and must not move. `LIVE_FACE_FRAMES=1` writes a picture of each frame
 and fails on a missing or repeated frame; `LIVE_FACE_VIEW=mouth` is the
 close view; `LIVE_FACE_RAW=1` shows the scores one to one, as before.
 
+**A moderate laugh and sad face (B-102).** The owner asked for less strong,
+"pixar-like" faces. In a laugh (a wide smile with an open jaw) the jaw opens
+less far and the cheeks and eyes carry more of it; in a sad face the mouth
+corners take 0.69 of the sad level and the brows and the lower lip carry the
+rest. The check holds the laugh jaw in 0.3 to 0.5 and the sad frown in 0.5
+to 0.7.
+
 **Not covered.** In a headset the camera is released, so the face there
 shows only blinks, gaze and a jaw that follows the microphone. No person
 was in the loop: the sets are hand-made, so a real camera stays a device

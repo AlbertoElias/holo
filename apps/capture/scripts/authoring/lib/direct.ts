@@ -14,6 +14,7 @@ import { LivenessFace } from '../../../src/face/LivenessFace.ts';
 import type { JointName, MotionFrame, Vec3 } from '../../lib/motion-quality.ts';
 import type { FaceGaze, FaceWeights } from '../../../src/face/faceTypes.ts';
 import { resetPose, type LoadedAvatar } from './avatar.ts';
+import { bothEyes, clampGaze, EyeMeter, eyeView, type EyeReport, type EyeView } from './eye-view.ts';
 import { armAngles, ArmMeter, PairMeter, armPoints, armSkin, BodySkin, measureArmBody, partDepth, skinned, propNormal, propParts, propSurface, type ArmBody, type ArmReport, type PairReport } from './arm-quality.ts';
 import { FACE_MIXES, GESTURES, cueTime, STATE_FACES, envelope, gestureCycle, holdingsOf, pointObjects, resolveTiming, validateSheet, type BeatSheet, type Direction, type Holding, type ObjectSpec, type PerformerSpec, type Place, type Point, type Resolved, type Side } from './beats.ts';
 import { FINGERS, HAND_SHAPES, blendPose, shapePose, type FingerName, type HandPose } from './hands.ts';
@@ -81,6 +82,13 @@ const RUB_ROLL_DEG = 15;
 /** Where a gesture's hand goes, from its shoulder per arm length (out, up, forward in the body frame). */
 /** A hanging hand: fingers this far forward of straight down (radians), the wrist turned at most `most` to get there. */
 const REST_WRIST = { forward: 12 * DEG, most: 45 * DEG } as const;
+/**
+ * The wrist goal moves by this share of the hand's error per step. Near full stretch a whole step overshoots and
+ * the goal swings between two arm lengths (3 mm apart); the pose then depends on which step ends the loop, and
+ * the wrist steps when the loop starts to converge (B-099, B-100: the crouch at 1.73 s).
+ */
+const EFFECTOR_GAIN = 0.5;
+const EFFECTOR_STEPS = 16;
 /** The elbow reaches its working direction by this fraction of a lift (1 / ELBOW_LEAD). */
 const ELBOW_LEAD = 2;
 /**
@@ -169,6 +177,8 @@ export interface PerformerTrack {
   readonly motion: MotionFrame[];
   /** Arm quality over the take (`arm-quality.ts`): overlaps with the body and props, joint ranges. */
   arms?: ArmReport;
+  /** Whether each iris stayed in view (`eye-view.ts`). */
+  eyes?: EyeReport;
   /** The performer's life events (`life.ts`); undefined when the take has no life. */
   readonly life?: LifeSchedule;
   /** Attending life (`life.ts`), drawn when the take has life; plays only while facing someone. */
@@ -250,6 +260,8 @@ interface Cast {
   readonly speech: readonly Speech[];
   /** The body's skin and the arms' bind frames (`arm-quality.ts`), so the arms keep out of the body. */
   readonly armBody: ArmBody;
+  /** Each eye's opening and how far it turns with the pupil in view (`eye-view.ts`). */
+  readonly eyeView: EyeView;
   readonly skin: BodySkin;
 }
 
@@ -336,6 +348,7 @@ function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources
     })).sort((x, y) => x.start - y.start);
     const ankles0 = { left: toWorld(a, a.legs.left.foot.rootPosition), right: toWorld(a, a.legs.right.foot.rootPosition) };
     const armBody = measureArmBody(a);
+    const eyes = eyeView(a);
     const morphing: Cast['morphing'] = [];
     const seenNodes = new Set<THREE.Object3D>();
     a.scene.traverse((o) => {
@@ -353,7 +366,7 @@ function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources
       turnDeg: new Map(), stepWorld: new Map(), fixed: { next: 0, yaw: spec.facing }, ankles0,
       feetMid0: ankles0.left.clone().add(ankles0.right).multiplyScalar(0.5),
       seen: new Map(), seenBefore: new Map(), seenAt: { t: -Infinity, before: -Infinity }, shortfall: new Map(), morphing, speech: speech.get(spec.id) ?? [],
-      armBody, skin: new BodySkin(armBody.body)
+      armBody, skin: new BodySkin(armBody.body), eyeView: eyes
     };
   });
   // A hand someone reaches to keeps still while they do (its fidget would move what they touch).
@@ -407,6 +420,7 @@ function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources
   }));
 
   const meters = cast.map((c) => new ArmMeter(c.a, c.armBody));
+  const eyeMeters = cast.map((c) => new EyeMeter(c.a, c.eyeView));
   const pairMeter = new PairMeter(cast.map((c) => c.spec.id), cast.map((c) => c.armBody));
   for (let f = 0; f < frames; f += 1) {
     const t = times[f]!;
@@ -426,6 +440,7 @@ function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources
       // A hand is measured against what it holds by its skin (the held bar): fingers may rest on it, not sink into it.
       // The prop bar's few hand points do not count against it: a finger that lies on a ball has its middle point in the ball's chord.
       meters[ci]!.sample(t, [...stage.props.values()].map((st) => st.prop), (s, prop) => mayTouch(c, s, prop, t), (s) => gripOf(c.spec.id, s, t)?.prop);
+      eyeMeters[ci]!.sample(t);
       see(c, t);
     });
     // Performer against performer, once every performer stands at this frame.
@@ -457,7 +472,7 @@ function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources
     }
     props.forEach((pt) => { pt.prop.position.toArray(pt.position, f * 3); pt.prop.quaternion.toArray(pt.rotation, f * 4); });
   }
-  tracks.forEach((tr, ci) => { tr.arms = meters[ci]!.report(); });
+  tracks.forEach((tr, ci) => { tr.arms = meters[ci]!.report(); tr.eyes = eyeMeters[ci]!.report(); });
   return { sheet, fps, times, tracks, props, objects: stage.report, pairs: pairMeter.report() };
 }
 
@@ -1699,8 +1714,18 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
     const local = point.clone().sub(from).applyQuaternion(bodyQ.clone().invert());
     // Relative to where the twisted upper body already faces.
     const faced = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), twist + chestYaw);
-    const yaw = THREE.MathUtils.clamp(Math.atan2(local.x, local.z) - Math.atan2(faced.x, faced.z), -70 * DEG, 70 * DEG) * share * weight;
-    const pitch = THREE.MathUtils.clamp(Math.atan2(local.y, Math.hypot(local.x, local.z)), -35 * DEG, 35 * DEG) * share * weight;
+    // The head takes its share, and more when the eyes could not turn the rest with the pupil in view.
+    const eyeLim = bothEyes(c.eyeView.limits.left, c.eyeView.limits.right);
+    const part = (total: number, lim: number | undefined): number => {
+      const mine = total * share;
+      if (lim === undefined) return mine;
+      const room = 0.9 * lim;
+      return Math.abs(total - mine) > room ? total - Math.sign(total) * room : mine;
+    };
+    const yawAll = Math.atan2(local.x, local.z) - Math.atan2(faced.x, faced.z);
+    const pitchAll = Math.atan2(local.y, Math.hypot(local.x, local.z));
+    const yaw = THREE.MathUtils.clamp(part(yawAll, eyeLim && (yawAll >= 0 ? eyeLim.left : eyeLim.right)), -70 * DEG, 70 * DEG) * weight;
+    const pitch = THREE.MathUtils.clamp(part(pitchAll, eyeLim && (pitchAll >= 0 ? eyeLim.up : eyeLim.down)), -35 * DEG, 35 * DEG) * weight;
     const up = bodyUp(a);
     const parts: [THREE.Object3D | undefined, number][] = [[neck, 0.4], [head, neck ? 0.6 : 1]];
     for (const [bone, k] of parts) {
@@ -1827,13 +1852,38 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
     // the hand over from there. Without it the weight dips between the two (the earlier settles as the later attacks),
     // the hand sinks toward hanging and stops, and its palm turn waits and then flips.
     const before: Resolved[] = [];
+    // Each takeover's progress, 0 in the middle of the earlier direction's hold and 1 where the later one
+    // arrives: the later's palm comes in over it and the earlier's hand turn goes out, so the palm turns across the
+    // whole move (a lift) and not in the later's attack alone; and the earlier's goal stays in the blend until the
+    // later arrives, so the goal does not stop where the earlier ends.
+    const takeover = new Map<Resolved, { q: number; to: number }>();
+    for (const r of c.dirs) {
+      const d = r.direction;
+      if ((d.kind !== 'reach' && d.kind !== 'take' && d.kind !== 'put') || d.side !== s) continue;
+      let earlier: Resolved | undefined;
+      let most = 0;
+      for (const p of before) { const h = handEnv(p, r.at, flat); if (h > most) { most = h; earlier = p; } }
+      before.push(r);
+      if (!earlier) continue;
+      const to = r.at + r.attack;
+      // From the middle of the earlier's hold: a take has its grip settled by then, and the body has started to rise.
+      const from = Math.min(earlier.at + earlier.attack + earlier.hold / 2, r.at);
+      const q = smootherStep(clamp01((t - from) / Math.max(1e-6, to - from)));
+      takeover.set(r, { q, to });
+      takeover.set(earlier, { q: Math.max(q, takeover.get(earlier)?.q ?? 0), to: Math.max(to, takeover.get(earlier)?.to ?? 0) });
+    }
+    before.length = 0;
     for (const r of c.dirs) {
       const d = r.direction;
       if ((d.kind !== 'reach' && d.kind !== 'take' && d.kind !== 'put' && d.kind !== 'aim') || d.side !== s) continue;
       const held = d.kind === 'aim' ? 0 : before.reduce((most, p) => Math.max(most, handEnv(p, r.at, flat)), 0);
       if (d.kind !== 'aim') before.push(r);
       const e = handEnv(r, t, flat);
-      if (e === 0) continue;
+      const over = takeover.get(r);
+      // An earlier direction stays (as the goal the later moves from) until the later arrives; a later one's palm
+      // comes in from the earlier's arrival, before the later starts.
+      const leading = e === 0 && held > 0 && over !== undefined && over.q > 0 && t < r.at;
+      if (e === 0 && !leading && !(over && held === 0 && t < over.to && t > r.at)) continue;
       if (d.kind === 'aim') { turns.push({ r, e }); continue; }
       const shoulder = a.arms[s].upperArm.getWorldPosition(new THREE.Vector3());
       let g: THREE.Vector3;
@@ -1861,7 +1911,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
         g = target.clone();
         const radius = stage.props.get(d.object)!.prop.grip!.radius;
         effector = (out) => (a.hands[s] ? a.hands[s]!.fistPoint(radius, out) : a.arms[s].hand.getWorldPosition(out));
-        turns.push({ r, e });
+        turns.push({ r, e: e * (1 - (held === 0 ? over?.q ?? 0 : 0)) });
       } else {
         target = putGoal(cast, c, r).point;
         g = target.clone();
@@ -1874,17 +1924,22 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
         }
         palmKind = 'in';
       }
-      // A takeover moves the goal and the palm over the earlier direction's whole settle (0 where the later starts, 1 where
-      // the earlier ends): the usual share (the later against the earlier's settle) waits while the earlier holds and then
-      // rushes, and the later's own curve is still short of 1 when the earlier ends, so the goal jumps there.
-      const k = goal ? (held > 0 ? clamp01(1 - w / held) : overK(w, e)) : 1;
+      const up = bodyUp(a);
+      const towards = target.clone().sub(shoulder).normalize();
+      const p = d.kind === 'reach' && d.palmAt ? pointOf(cast, c.spec, d.palmAt).sub(target).normalize() : palmKind === 'up' ? up : palmKind === 'down' ? up.clone().negate() : palmKind === 'in' ? new THREE.Vector3(s === 'left' ? -1 : 1, 0, 0).applyQuaternion(bodyQ) : towards;
+      const lead = held > 0 && over ? over.q : undefined;
+      if (leading) {
+        // Before the later starts: only its palm, by the takeover's progress.
+        if (palm) palm = palm.lerp(p, lead!).normalize();
+        continue;
+      }
+      // A takeover moves the goal by the later's own curve, from the earlier's goal (kept in the blend until the later
+      // arrives), and keeps the weight at least where the earlier held it.
+      const k = goal ? (held > 0 ? e : overK(w, e)) : 1;
       goal = goal ? goal.lerp(g, k) : g;
       w = goal === g ? e : Math.max(w, e);
       if (held > 0) w = Math.max(w, e + clamp01(held) * (1 - e));
-      const up = bodyUp(a);
-      const towards = target.clone().sub(shoulder).normalize();
-      const p = palmKind === 'up' ? up : palmKind === 'down' ? up.clone().negate() : palmKind === 'in' ? new THREE.Vector3(s === 'left' ? -1 : 1, 0, 0).applyQuaternion(bodyQ) : towards;
-      palm = palm ? palm.lerp(p, k).normalize() : p.clone();
+      palm = palm ? palm.lerp(p, lead ?? k).normalize() : p.clone();
     }
     // Gestures (and attending's hands together), blended in the same way.
     const add = (g: THREE.Vector3, e: number, p: THREE.Vector3, elbow: number): void => {
@@ -1961,7 +2016,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
         const line = point.clone().sub(shoulder).normalize().applyQuaternion(a.frame.getWorldQuaternion(new THREE.Quaternion()).invert());
         const hint = elbowHint.clone().applyAxisAngle(line, swivel * DEG);
         const wr = wrist.clone();
-        for (let i = 0; i < 8; i += 1) {
+        for (let i = 0; i < EFFECTOR_STEPS; i += 1) {
           solveArm(a, s, wr, { palmToward: toward, wristBend: flat ? 0 : 0.35 * turnK, elbowHint: hint });
           easeTwist(a, s, turnK);
           a.frame.updateMatrixWorld(true);
@@ -1969,7 +2024,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
           effector(at);
           const err = point.clone().sub(at);
           if (err.length() < 5e-4) break;
-          wr.add(err);
+          wr.addScaledVector(err, EFFECTOR_GAIN);
         }
       };
       // A turn the wrist cannot make alone (an aim, a grip axis, an object set upright)
@@ -2149,7 +2204,8 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
     gaze = { left: { yaw: gaze.left.yaw + liveSample.gaze.left.yaw * k, pitch: gaze.left.pitch + liveSample.gaze.left.pitch * k }, right: { yaw: gaze.right.yaw + liveSample.gaze.right.yaw * k, pitch: gaze.right.pitch + liveSample.gaze.right.pitch * k } };
   }
   // An expression's eyeLook channels (looking down) turn the eyes on top of the gaze, since FaceRig.apply leaves them out of the morphs;
-  // a look target the eyes hold wins over them, and the sum stays within the eyes' range (eye bones are not clamped).
+  // a look target the eyes hold wins over them, and the sum stays within the eyes' range (eye bones are not clamped):
+  // the house range here, and below the range in which this avatar's pupil shows between its lids (`eye-view.ts`).
   const looked = gazeFromArkit(weights);
   const free = eyeTarget ? 1 - clamp01(eyeTarget.weight) : 1;
   const turn = (g: { yaw: number; pitch: number }, l: { yaw: number; pitch: number }) => ({
@@ -2164,6 +2220,17 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
     const pitch = (gaze.left.pitch + gaze.right.pitch) / 2;
     const verge = Math.max(0, Math.min(EYE_VERGE, (gaze.right.yaw - gaze.left.yaw) / 2));
     gaze = { left: { yaw: yaw - verge, pitch }, right: { yaw: yaw + verge, pitch } };
+    // Each pupil stays in view: the shared turn pulls back until both eyes are within their lids (the head took the rest).
+    const lims = c.eyeView.limits;
+    if (lims.left || lims.right) {
+      const k = Math.min(...(['left', 'right'] as const).map((side) => {
+        const g = gaze[side], lim = lims[side];
+        if (!lim) return 1;
+        const cl = clampGaze(g, lim);
+        return Math.hypot(g.yaw, g.pitch) > 1e-9 ? Math.hypot(cl.yaw, cl.pitch) / Math.hypot(g.yaw, g.pitch) : 1;
+      }));
+      if (k < 1) gaze = { left: { yaw: gaze.left.yaw * k, pitch: gaze.left.pitch * k }, right: { yaw: gaze.right.yaw * k, pitch: gaze.right.pitch * k } };
+    }
   }
   // Both lids blink and squint together: one lid alone reads as a wink or a fault.
   for (const [l, r] of [['eyeBlinkLeft', 'eyeBlinkRight'], ['eyeSquintLeft', 'eyeSquintRight'], ['eyeWideLeft', 'eyeWideRight']] as [FaceChannel, FaceChannel][]) {

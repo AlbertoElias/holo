@@ -207,8 +207,8 @@ const CROUCH_GROUND_SAMPLE_OFFSETS: readonly Readonly<[number, number]>[] = [
   [-0.7, -0.7]
 ];
 const CROUCH_FOOT_PITCH_DEG = 8;
-/** After the set's see-through surfaces (0), before the recording bubble (999). */
-const AVATAR_TRANSLUCENT_RENDER_ORDER = 1;
+/** Before the set's see-through surfaces (0), so that depth sorts them like an opaque body. */
+const AVATAR_TRANSLUCENT_RENDER_ORDER = -1;
 
 export class AvatarRig {
   readonly avatarRoot = new THREE.Group();
@@ -330,7 +330,7 @@ export class AvatarRig {
       this.neutralEyeAboveBase = this.avatarHeight * 0.92;
     }
     this.disableAvatarFrustumCulling(avatar);
-    this.drawTranslucentPartsAfterSet(avatar);
+    this.drawTranslucentPartsBeforeSet(avatar);
     this.classifyFirstPersonHeadMeshes(avatar);
     this.collectAvatarMaterials(avatar);
     this.resolveCrouchRig();
@@ -344,7 +344,7 @@ export class AvatarRig {
   refreshMeshes(): void {
     if (!this.avatar) return;
     this.disableAvatarFrustumCulling(this.avatar);
-    this.drawTranslucentPartsAfterSet(this.avatar);
+    this.drawTranslucentPartsBeforeSet(this.avatar);
     this.classifyFirstPersonHeadMeshes(this.avatar);
     this.collectAvatarMaterials(this.avatar);
   }
@@ -951,13 +951,14 @@ export class AvatarRig {
   }
 
   /**
-   * The light finish's see-through parts draw after the set's see-through
-   * surfaces and write depth. three sorts blended meshes by their origins,
-   * and a lake's origin can be nearer the camera than the avatar's feet: the
-   * water then drew over a body that wrote no depth. The viewer does the same
-   * in `sphereClipping.ts`.
+   * The light finish's see-through parts write depth and draw before the
+   * set's see-through surfaces, as the opaque body did before that finish.
+   * Water or smoke behind the avatar then fails the depth test, and smoke or
+   * water in front of it draws over it. Without depth, three's origin sort
+   * let a lake whose origin is nearer the camera paint over the body. The
+   * viewer does the same in `sphereClipping.ts`.
    */
-  private drawTranslucentPartsAfterSet(model: THREE.Object3D): void {
+  private drawTranslucentPartsBeforeSet(model: THREE.Object3D): void {
     model.traverse((obj) => {
       if (!isThreeMesh(obj)) return;
       const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
