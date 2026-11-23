@@ -1378,7 +1378,7 @@ the phone capture mandate):
 4b changes the recording format, so it waits for both owners to agree;
 4a's loss report is the case for it.
 
-### Slice 5: likeness from a photo (deferred)
+### Slice 5: likeness from a photo (5a approved, 5b after 2e)
 
 The second finish moved into slice 2 (2f) on 2026-11-17. What is left is
 the deferred half of likeness: a selfie read once into the slice 2 trait
@@ -1387,6 +1387,109 @@ phone journey's two minutes, kept on the device and made only from the
 creator's own photo. It changes no trait and no file format: it only
 fills the card a creator can already set by hand. It starts after the
 trait card has been used in both capture flows (2e).
+
+**Split on 2026-11-23 (5a approved, decision 16).** The owner asked for "a
+feature where the avatar configuration is based on a photo of the user".
+Most of slice 5 does not need 2e, because beat sheets and `direct.ts`
+already take a trait card. So slice 5 is now two parts:
+
+- **5a: a photo read into a card, for authoring.** No change to
+  `apps/capture/src/`, so it does not wait for 2e or decision 8.
+- **5b: the same read in the capture flows.** A "from a photo" choice in
+  the "your look" step (phone) and the mirror panel (headset). It waits for
+  2e, as before, and is built with the phone mandate's owner.
+
+#### Slice 5a: a photo read into a card
+
+`photo-look.ts <photo> [--out card.json] [--finish clay|ink|light]` in
+`apps/capture/scripts/authoring/` reads one photo of one face and writes a
+trait card that `parseLook` accepts, plus a report.
+
+**What it reads, and how.** It uses `@mediapipe/tasks-vision`, which
+capture already uses (0.10.17, `src/face/WebcamFace.ts`). The read runs in
+headless Chromium through Playwright, so 5b can use the same code in the
+browser. The shared read goes in `packages/avatar-look` (for example
+`readLook(image)`), and the CLI only loads the photo and writes files.
+
+| Trait | Read | Method |
+|---|---|---|
+| Skin | Yes | Face landmarker for the cheeks and forehead. Take the median colour of those areas, correct the white balance, then order by lightness. The `SKIN` swatches are the sheet's warm clay colours, not real skin colours, so a nearest-RGB match is wrong. The swatches' lightness order (porcelain to espresso) is the scale |
+| Hair colour | Yes | The hair class of MediaPipe's multiclass selfie segmenter. Take the median colour, correct the white balance, then match to the nearest `HAIR_COLOUR`. A dye outside the palette takes the nearest one, and the report says so |
+| Eyes | Yes, with low confidence | The iris landmarks. The iris is small and reflections and glasses change it, so the report gives a confidence value, and a low value keeps the default and says so |
+| Hair style | A proposal | Compare the hair mask's outline (length, volume, parting) with the outlines of the six `HAIR_STYLES` rendered from the same view. The best match is a proposal, not a fact |
+| Glasses | No | The landmarker does not detect frames. The person picks, as now |
+| Build | No | A head-and-shoulders photo does not show a build. The person picks, as now |
+| Height | No | As now: the person's own in a headset, or a preset |
+| Clothing | No | The finish's palette, as now |
+
+So 5a fills three traits and proposes a fourth. The person confirms or
+changes every value, as they do by hand today. No value from a photo is
+used without that check.
+
+**What it writes.** In `output/authoring/photo-look/<name>/`: `card.json`;
+`report.json` (each trait's value, the measured colour, the distance to
+the swatch and a confidence value); and `compare.jpg` (the photo's face
+crop beside the dressed base, rendered from the same view in each
+finish). The photo itself is not copied anywhere.
+
+**Privacy and consent.** It reads only the author's own photo, on this
+machine. It sends nothing to a service: no vision model API and no upload.
+The photo, the card and the report stay in the ignored `output/`. A
+photo with more than one face, or with no face, is refused by name. The
+CLI does not check who is in the photo, so the author's own-photo rule is
+stated in its help text and the skill, as the risk row says.
+
+**Licences (check before building, per the owner's rule).** The
+`@mediapipe/tasks-vision` code is Apache 2.0. The `face_landmarker.task`
+model capture already ships and the multiclass selfie segmenter each have
+their own model card. 5a reads both cards before any code uses them, and
+any territory, non-commercial or user-count clause goes to the owner
+first. If the segmenter does not pass, the hair colour comes from a band
+above the landmarker's forehead points, and the hair style is not
+proposed.
+
+**Failure cases.**
+
+| Failure case | Prevention or evidence |
+|---|---|
+| Warm or cool room light moves the skin tone by one or more swatches | White balance from the eye whites and the photo's neutral areas; the stability check below on photos in at least three lights |
+| Make-up, a beard or a shadow changes the cheek colour | Several cheek and forehead areas; the median, not the mean; the report shows each area's value |
+| A hat or hood covers the hair | The hair class is too small: hair is not read and the report says why |
+| Glasses glare on the irises | The iris confidence drops and the eyes keep the default |
+| A dyed colour outside the palette | The nearest swatch, flagged in the report |
+| A low-resolution or blurred photo | A minimum face size in pixels; below it the CLI refuses by name |
+| Two faces, or no face | Refused by name |
+| A photo of someone else | Not detectable; the own-photo rule in the help text and the skill |
+| The card reads right but the avatar does not look like the person | `compare.jpg` and the owner's verdict are the gate, not the numbers |
+
+**Checks and evidence.** These are end-to-end, from the photo to the
+dressed avatar:
+
+1. **Stability.** On at least five photos of the owner (different lights,
+   with and without glasses), skin and hair colour are each within one
+   swatch of the most common pick. The numbers go in "Slice 5a evidence".
+2. **Spread.** On a small set of photos with a clear licence for this use
+   (to be found before building; no photo of a third party without a
+   licence), the skin picks follow the photos' lightness order.
+3. **The dressed result.** `card.json` goes through `dressedFile` and the
+   audition, which must still pass, because the card holds only values the
+   audition already passed.
+4. **The owner's verdict.** The owner looks at `compare.jpg` for their own
+   photos. That verdict is the gate.
+5. **Proof video.** A real-time recording: the photo goes in, the CLI
+   runs, the card comes out, and a beat sheet plays with that card.
+
+**What 5a does not do.** It makes no mesh from the photo, so no face shape
+or proportions come from it. On 2026-11-19 the owner called a face that
+was closer to realism "uncanny as hell", and a mesh from a photo makes
+that risk larger. It adds no trait and no value, and it changes no file
+format. If the owner later wants face shape from a photo, it becomes a new
+trait with its own audition rows, in its own slice.
+
+**Ownership.** The lead of this brief owns `photo-look.ts`, its report and
+the read in `packages/avatar-look`. 5a edits nothing in
+`apps/capture/src/`. It only imports MediaPipe and the model file that
+capture already ships.
 
 ### Slice 6: publish a take in one command (2026-11-18)
 
@@ -1729,7 +1832,9 @@ each joins both owning sessions when it starts.
 ## Scope
 
 **Included:** slices 0 to 3, with slice 2 as the avatar flow (2a to 2g);
-slice 4 once camera driving is on `main`; slice 5 after 2e.  
+slice 4 once camera driving is on `main`; slice 5a (a photo read into a
+card for authoring), approved 2026-11-23 (decision 16); slice 5b
+after 2e.  
 **Excluded:** an avatar editor in the app beyond the trait card; more than
 one family and three finishes; facial hair and headwear; uploading an
 outside avatar inside the app; a creator profile on the server; synthesized speech; a prompt box in the app; an MCP tool (the CLI
@@ -2234,6 +2339,24 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
     and every beat read. (Reversible: one `advisory: true` in `make.ts` `readingRow`.)
     The evidence is each piece's two results (story parts read, beats read), in the
     slice 8 evidence below. This is not approval of a piece or of a piece video.
+
+16. **Slice 5a: build the photo read for authoring now?** Asked 2026-11-23,
+    after the owner asked for "a feature where the avatar configuration is
+    based on a photo of the user". See "Slice 5a: a photo read into a
+    card".
+    - **(A)** Build 5a now: skin, hair colour and eyes read from a photo,
+      and a hair style proposed, into a card for beat sheets. The person
+      confirms every value. No change to capture, so decision 8's hold is
+      not touched. Recommended: it is the larger part of slice 5, and 5b
+      then reuses the same read.
+    - **(B)** Keep all of slice 5 after 2e, as before.
+    - **(C)** Also read face shape from the photo. Not recommended: it adds
+      a trait and a mesh change, and the 2026-11-19 "uncanny" verdict is
+      against it.
+
+    **Answered 2026-11-23: "Approve 5a"** (option A). This approves building
+    5a as written, not the finished build: the build is approved only by the
+    owner's word after its proof video and `compare.jpg`.
 
 ## Test plan and evidence
 
