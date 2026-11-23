@@ -7,6 +7,23 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
+### B-091 — verify:pr: the pipeline Playwright run does not exit after test timeouts
+
+- **Area:** `test:smoke:pipeline` (`@holoim/web` `test:e2e:pipeline`, Playwright teardown), `verify:pr` lock
+- **Severity:** P2 (a stuck run holds the machine-wide check lock, so every other `verify:pr` waits)
+- **Observed:** 2026-11-22, two runs: `verify:pr` on `bug/statue-off-centre` (pid 79871) and one in the
+  story session.
+- **Evidence (`bug/statue-off-centre`):** the machine was overloaded (CPU 2% idle, 88 MB unused; `build`
+  took 3183 s). Pipeline tests failed on their timeouts after 12 to 18 min each: `avatar-formats` unreal-cm
+  (16.1 min), vrm0-minus-z (17.0 min), pointing take (15.2 min), `bubble-capture` (12.0 min),
+  `capture-to-viewer` (15.9 min), `hand-traces` ×4 (15.1 to 17.9 min), `hologram-budgets` 3 M splat
+  (15.0 min). Then "Worker teardown timeout of 30000ms exceeded". After that, the Playwright runner stayed for
+  about 3 h with no worker and no browser. Only its web servers stayed (vite preview on 3174 and 5175, the API,
+  the registry fixture server), all at 0% CPU. The run ended only when it was stopped by hand.
+- **Expected:** after test timeouts and a teardown timeout, the runner exits with a failure and `verify:pr`
+  releases the lock.
+- **Reproduction:** run `verify:pr` on a machine with no free CPU or memory, so the pipeline tests time out.
+
 ### B-090 — Phone tilt check cannot click Return on a loaded runner
 
 - **Area:** `apps/viewer-web/e2e/portal.spec.ts` ("tilt: turning the phone turns the camera, past a small deadzone", line 213)
@@ -114,51 +131,6 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   - Other runs of the same file pass all four cases.
 - **Expected:** the CPU budget (`ITIMER_PROF`) fires only when the conversion itself spends 100 s of CPU.
 - **Reproduction:** `bash apps/viewer-api/tools/check_usdz_tools.sh <watering.glb> <out>` on a loaded Mac. It is intermittent (about 1 run in 3 so far). The case with audio is the one that fails, so the ffmpeg child or its teardown is a suspect.
-
-### B-081 — A dark strip of the default scene's mountain floats behind the performer on the card
-
-- **Area:** apps/capture (`SceneBubbleSampler.triangleInsideBubble`), apps/viewer-web (feed dome clip)
-- **Severity:** P3
-- **Observed:** 2026-11-20, phone journey audit, card seen from behind the performer
-- **Evidence:**
-  - The strip is 82 triangles of `Montanha_lambert13_0`, 5.99–8.67 m from the bubble centre.
-  - The export keeps a triangle whose nearest point lies within 6 m of a sample.
-  - The feed's dome (radii about 7 × 4.7 × 7 m) is wider than the 6 m reach, so the card shows the triangles.
-  - The viewer, XR and AR fade the set past the reach, so they do not show it.
-  - Renders and per-mesh measurements are in the session notes `option-b/` folder (`compare.jpg`, `C-compare.jpg`, `clip-reach-3d.txt`).
-- **Expected:** set past the take's reach does not float as a separate shape on the card.
-- **Tried and rejected:**
-  - A hard cut at the reach in the feed: it broke a structure 2 m behind the performer on an old take.
-  - The sphere's soft fade in the feed: it faded the ground under the performer on another old take.
-  - The owner kept the card as it is.
-- **Next:** a take whose spawn keeps the mountain more than 6 m away removes the strip at its source (B-082).
-  On 2026-11-21, B-082 option C (spawn off the statue) exported no mountain triangles, and option E (statue moved,
-  spawn at the centre) exported 113. So only C removes the strip, and C fails the rim bar (see B-082).
-- **Reproduction:** post a phone take on the default scene, then view its card from behind the performer.
-
-### B-082 — A take on the default scene starts on the statue
-
-- **Area:** apps/capture (`CharacterMotor` spawn search), apps/viewer-web (cloche rim)
-- **Severity:** P2
-- **Observed:** 2026-11-20, phone journey audit
-- **Evidence:**
-  - The spawn search takes the scene's centre first, and the statue stands there, so every default-scene take starts on top of it.
-  - The fix 3400acffe803 (branch `bug/spawn-off-statue`) skips a pedestal.
-  - With that fix, `bubble-capture.pipeline.spec.ts` failed twice with "start: bins off the ground". At bin 12 the rim is at 18.67 and the raycast ground at 17.91, edge (7.95, 2.99).
-  - So the fix is not on `main`.
-  - 2026-11-21, both options merged with `main` 22f48373262f, `bubble-capture.pipeline.spec.ts` ×3 under `CI_EMULATE_LOAD=2`:
-    - Option E (branch `bug/statue-off-centre`, only `scene.glb` changed: the statue stands off the centre): 3 of 3 pass.
-      In the last run's rim report, the bins that pass only at the lift cap are none at the start, 32 in the middle (119–150) and 36 at the end (117–152).
-      The export keeps 113 mountain triangles, so the B-081 strip stays.
-    - Option C (branch `bug/spawn-off-statue-2`, commit 1ec5fdc574d6: the spawn takes a level spot off the pedestal): 3 of 3 fail at the start with 10 bins off the ground.
-      The worst is bin 26: rim 17.04, ground 16.23, slope 30°, edge (−1.55, 13.04). The middle and the end each have 4 bins off the ground and 30–33 capped passes (26 at the start).
-      The export has no mountain triangles.
-- **Expected:** the performer starts on the grass beside the statue, and the rim stays on the ground.
-- **Reproduction:** record any take on the default scene in capture.
-- **Next:**
-  - Find what the rim stands on at bin 12 with the spawn fix: geometry that the test's ground list (grass and mountain) leaves out, or an export fault.
-  - A spawn spot off the statue with flat ground at the rim, and with the mountain more than 6 m away, is also acceptable.
-  - Owner decision: merge option E (passes the bar, fixes the statue start, keeps the B-081 strip), or keep working on C (removes the strip, fails the rim on a 30° slope).
 
 ### B-085 — Deep zoom: the camera mode is "follow", not "free", when the wheel stops (hosted, once)
 

@@ -4,7 +4,7 @@ import type { BrowserContext, Page, TestInfo } from "@playwright/test";
 import { waitForTextContentPrefix } from "@holoim/tooling-testing/xr-env";
 
 import { assertViewerShell, captureEvidence, expect, test } from "./bootstrap";
-import { cardCenter, installProbe, readPortal, waitForFrozenTimes, waitForPortalReady } from "./portal-helpers";
+import { cardCenter, hologramPoints, installProbe, readPortal, waitForFrozenTimes, waitForPortalReady } from "./portal-helpers";
 import { CONTROL_NAMES } from "@holoim/xr-ui-core";
 
 // Portal view (PRD-002) on a real capture export: only the checks that need
@@ -111,8 +111,10 @@ test("portal view on a real capture: freeze, orbit, zoom inside the bubble, Retu
   await captureEvidence(page, testInfo, "real-2-orbit");
 
   // Zoom to the inside end: within the recorded bubble, true scale kept.
-  // The orbit drag ended over the upload panel; wheel over the card.
-  await page.mouse.move(center.x, center.y);
+  // A wheel zooms only when it begins on the hologram, so wheel over a point the hit test finds on it:
+  // the card's centre can show only sky, as it depends on where the take stands in the set.
+  const { on } = await hologramPoints(page, uploaded.id, uploaded.url);
+  await page.mouse.move(on.x, on.y);
   await page.mouse.wheel(0, -2000);
   await page.mouse.wheel(0, -2000);
   await expect.poll(async () => (await readPortal(page, uploaded.url)).cameraDistance, { timeout: 10_000 })
