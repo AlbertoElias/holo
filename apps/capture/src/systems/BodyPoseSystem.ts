@@ -61,7 +61,8 @@ export class BodyPoseSystem extends createSystem() {
       // The desktop reach, carry, set-down and aim are tuned from a still upper body: the idle's sway eases out for them.
       // The first-person eye rides the head, so the sway there would only rock the view and the aim at its centre.
       // A crouch holds it too: the third-person view follows the eye at once, not through the sway's slow look filter.
-      aimHeld: input.isPointHeld() || c.point.ownedSide() !== null,
+      // A point whose ray starts at the eye loses the sway at once; a touch's ray starts at the view, which eases with it.
+      aimHeld: (input.isPointHeld() || c.point.ownedSide() !== null) && !input.getPointScreenAim(),
       holdStill: c.camera.desktopViewMode === 'first' || input.isPointHeld() || c.point.ownedSide() !== null || c.objects.carry.getWeight() > 0 || c.crouch.reach > 0 || avatar.isPlanted || c.crouch.poseAmount > CROUCH_HOLD_STILL
     });
     if (!body.active && body.posed) {

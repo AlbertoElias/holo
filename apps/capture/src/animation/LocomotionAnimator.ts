@@ -26,7 +26,7 @@ export interface LocomotionUpdateInput {
   travelLocalYaw?: number | null;
   /** A point, aim, carry, reach or plant holds the upper body: the idle's sway eases out (IDLE_SWAY_HOLD_SEC). */
   holdStill?: boolean;
-  /** With holdStill, a point or aim is held: its ray starts at the eye, so the sway leaves within IDLE_SWAY_AIM_SEC. */
+  /** With holdStill, a point whose ray starts at the eye is held: the sway leaves within IDLE_SWAY_AIM_SEC. */
   aimHeld?: boolean;
   /** The crouch pose's amount (0..1): the desktop walk blends toward the crouch walk clips by it. */
   crouch?: number;

@@ -382,7 +382,11 @@ and a real crouch walk, and stands its feet on the slope under them.
   weight times an eased share (VR has no idle, so nothing changes there).
   The share eases to 0 over 0.25 s while a point, carry, reach, set-down or
   plant holds the upper body, and back after: a person who reaches or aims
-  stops swaying. The hips and the arms' own joints stay still, but the
+  stops swaying. A desktop point takes it out in 50 ms: its ray starts at
+  the eye, and the stored link end is the mean of its hits (the place
+  pipeline holds that end within 2 cm of the hit). A touch hold keeps the
+  0.25 s: its ray starts at the view, which a fast exit would move under
+  the finger. The hips and the arms' own joints stay still, but the
   hands (children of the chest) and the eye (on the head) move with the
   sway, about 2 cm. So the sway is also held in first person, where the
   view rides the eye. In third person the view looks at the hips plus the
