@@ -318,6 +318,7 @@ production and needs the owner's word.
 | `bodies.*` | no part of one performer (torso, head, legs, arms, hands) or what they hold more than 3 cm into another performer's skin, on every frame. A hand may rest on the other; it does not go through |
 | `smooth.*` | no joint slows under 25% of its speed around it (within 0.3 s, both sides at least 0.15 m/s) and then goes on the same way: that is a stammer. Overlap the moves so one starts before the last one ends |
 | `jump.*` | no wrist or elbow changes its velocity by more than 2 m/s between two frames: that is a snap. A reach target or a clearing that changes inside one frame causes it. Give the beat a longer attack, or move the point so the arm does not pass through the body |
+| `jump.props` | no object changes its velocity by more than 2 m/s between two frames. A held object jumps when the solver moves the hand off it after the grip (a clearing out of the body or out of the object's support). Give the hand room (move the object or the performer) or a longer attack |
 | `story` | the main bar: a fresh reader, told nothing, gets the setup (who and where), the event and the reaction. Fails at once when the sheet has no `story` |
 | `visual` | the `design-reviewer` (opus) passes the arm motion, the clipping and the face |
 | `reading` | a fresh reader reads every beat (each beat needs an `intent`), and the piece as a whole |

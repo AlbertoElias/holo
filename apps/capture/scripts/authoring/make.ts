@@ -39,7 +39,7 @@ import { BUILDS, CLOTHING, EYES, FINISHES, GLASSES, HAIR_COLOUR, HAIR_STYLES, SK
 
 import { actingReport, diffTakes, summarize } from './acting-report.ts';
 import { bodyLine, build, loadSheet, OBJECT_LIMITS, resolveAvatar } from './direct.ts';
-import { measureJumps, measureSmoothness, SMOOTH_LIMITS } from './lib/smoothness.ts';
+import { measureJumps, measurePropJumps, measureSmoothness, SMOOTH_LIMITS } from './lib/smoothness.ts';
 import { BAR } from './lib/audition-bar.ts';
 import { faceBarPasses, faceBarPx, FACE_AWAY_MAX_SHARE, PAIR_FACE_BAR_PX } from './lib/face-bar.ts';
 import { FACE_CHANNELS } from '@holoim/avatar-face';
@@ -529,6 +529,11 @@ async function make(sheetFile: string, quick: boolean): Promise<boolean> {
     const jw = jm.worst;
     rows.push({ id: `jump.${t.spec.id}`, bar: `no hand or elbow changes its velocity by more than ${S.jump} m/s between two frames (a snap)`, value: jw ? `worst ${jw.change.toFixed(2)} m/s at ${jw.t.toFixed(2)} s, ${jw.joint}; ${jm.over} frames over` : 'no hand or elbow tracked', pass: jm.over === 0, ...(jm.over ? { fix: `the arm snaps at ${jw!.t.toFixed(2)} s: a reach target or a clearing changes inside one frame; give the beat a longer attack, or move the point so the arm does not pass through the body` } : {}) });
     await writeFile(join(dir, `smooth.${t.spec.id}.json`), `${JSON.stringify(sm.stalls.map((x) => ({ t: x.t, joint: x.joint, share: Math.round(x.share * 1000) / 1000, speed: Math.round(x.speed * 100) / 100, around: Math.round(x.around * 100) / 100 })))}\n`);
+  }
+  if (built.take.props.length) {
+    const pj = measurePropJumps(built.take.times, built.take.props.map((p) => ({ id: p.prop.id, position: p.position })));
+    const pw = pj.worst;
+    rows.push({ id: 'jump.props', bar: `no object changes its velocity by more than ${SMOOTH_LIMITS.jump} m/s between two frames (a snap)`, value: pw ? `worst ${pw.change.toFixed(2)} m/s at ${pw.t.toFixed(2)} s, ${pw.joint}; ${pj.over} frames over` : 'no object', pass: pj.over === 0, ...(pj.over ? { fix: `${pw!.joint} jumps at ${pw!.t.toFixed(2)} s: the hand is moved off it after the grip (a clearing out of the body or a support); give the hand room (move the object or the performer) or a longer attack` } : {}) });
   }
 
   // Arms: nothing through the body or a prop, every joint in a human range.

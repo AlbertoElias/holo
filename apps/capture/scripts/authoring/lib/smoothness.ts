@@ -45,6 +45,27 @@ export function measureJumps(frames: readonly MotionFrame[]): JumpReport {
   return { worst, over: new Set(jumps.map((x) => x.t)).size, jumps: jumps.sort((x, y) => y.change - x.change) };
 }
 
+/**
+ * Prop velocity changes between two frames over `SMOOTH_LIMITS.jump`, and the largest: a held prop that jumps
+ * into the hand (crouch v45: the ball moved 14.8 cm in one frame at 2.40 s, 4.5 m/s, while every arm bar passed).
+ */
+export function measurePropJumps(times: ArrayLike<number>, props: readonly { id: string; position: ArrayLike<number> }[]): JumpReport {
+  const jumps: Jump[] = [];
+  let worst: Jump | undefined;
+  for (const p of props) {
+    const at = (i: number, k: number): number => p.position[3 * i + k]!;
+    for (let i = 2; i < times.length; i += 1) {
+      const d1 = times[i - 1]! - times[i - 2]!; const d2 = times[i]! - times[i - 1]!;
+      if (d1 <= 0 || d2 <= 0) continue;
+      const change = Math.hypot(...[0, 1, 2].map((k) => (at(i, k) - at(i - 1, k)) / d2 - (at(i - 1, k) - at(i - 2, k)) / d1));
+      const jump = { t: times[i - 1]!, joint: p.id, change };
+      if (!worst || change > worst.change) worst = jump;
+      if (change > SMOOTH_LIMITS.jump) jumps.push(jump);
+    }
+  }
+  return { worst, over: new Set(jumps.map((x) => x.t)).size, jumps: jumps.sort((x, y) => y.change - x.change) };
+}
+
 /** Seconds each side of a slow frame in which the speeds around it are looked for. */
 const STALL_WINDOW = 0.3;
 /** m/s: the speeds around a slow frame must both be over this for it to be a stall. */
