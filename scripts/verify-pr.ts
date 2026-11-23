@@ -17,9 +17,12 @@
 //   --no-fetch  skip `git fetch origin main` (offline)
 //   --no-cache  run every selected step (also VERIFY_PR_NO_CACHE=1); passes are still stored
 //
-// Only one verify:pr runs at a time on the machine (scripts/verify-lock.ts): a
-// second run waits and prints who holds the lock. VERIFY_PR_NO_LOCK=1 skips it
-// for a run whose suites use moved ports.
+// Only one verify:pr runs its checks at a time on the machine
+// (scripts/verify-lock.ts): a second run waits and prints who holds the lock.
+// A run takes the lock before the first step that runs and is not `free`
+// (doctor and ci-areas: seconds, no server). Thus a run whose steps all passed
+// before with the same inputs does not wait. VERIFY_PR_NO_LOCK=1 skips the
+// lock for a run whose suites use moved ports.
 //
 // Progress goes to stdout with NUL bytes made visible (Vite prints module ids
 // prefixed with \0, which makes grep treat a log as binary). The final status
@@ -31,7 +34,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { CacheOff, openCache, type Decision, type ResultCache, type StepCache } from "./verify-cache.ts";
-import { acquireLock } from "./verify-lock.ts";
+import { acquireLock, type HeldLock } from "./verify-lock.ts";
 
 type Area =
   | "quality"
@@ -47,6 +50,8 @@ interface Step {
   /** How a stored pass is keyed. Without it the step always runs. */
   cache?: StepCache;
   command: string;
+  /** Runs for seconds and starts no server, so it does not need the machine-wide lock. */
+  free?: boolean;
   label: string;
 }
 
@@ -61,8 +66,8 @@ const viewerSpecs = (script: string): StepCache => ({
 // mocked XR checks follow `web` because knowledge-only changes cannot affect
 // them.
 export const STEPS: Step[] = [
-  { area: "always", label: "doctor", command: "pnpm run doctor" },
-  { area: "always", label: "ci-areas", command: "pnpm run check:ci-areas" },
+  { area: "always", label: "doctor", command: "pnpm run doctor", free: true },
+  { area: "always", label: "ci-areas", command: "pnpm run check:ci-areas", free: true },
   { area: "quality", label: "lint+typecheck", command: "pnpm run check:all", cache: { inputs: "tree" } },
   { area: "quality", label: "unit", command: "pnpm run test:unit:all", cache: { inputs: "tree" } },
   // Later steps load the dist folders this makes, so a skipped build still runs before the first later step that runs.
@@ -209,8 +214,16 @@ async function main(): Promise<void> {
     return;
   }
 
-  const lock = process.env.VERIFY_PR_NO_LOCK === "1" ? null : await acquireLock();
-  if (!lock) console.log("[verify-pr] VERIFY_PR_NO_LOCK=1: running without the machine-wide lock");
+  // The lock is taken before the first step that needs it, not at the start.
+  const noLock = process.env.VERIFY_PR_NO_LOCK === "1";
+  if (noLock) console.log("[verify-pr] VERIFY_PR_NO_LOCK=1: running without the machine-wide lock");
+  let lock: HeldLock | null = null;
+  /** True when this call waited for the lock: the stored passes can be different after the wait. */
+  const takeLock = async (): Promise<boolean> => {
+    if (noLock || lock) return false;
+    lock = await acquireLock();
+    return true;
+  };
 
   let status = 0;
   const started = Date.now();
@@ -235,7 +248,8 @@ async function main(): Promise<void> {
   // Skipped steps whose output a later step loads (build). They run when a later step runs.
   let deferred: Step[] = [];
   steps: for (const step of steps) {
-    const decision = decide(state, step);
+    let decision = decide(state, step);
+    if (decision.action === "run" && !step.free && (await takeLock())) decision = decide(state, step);
     if (decision.action === "skip") {
       console.log(`[verify-pr] = ${step.label}: ${decision.note}; skipped`);
       if (step.cache?.artifact) deferred.push(step);
@@ -252,7 +266,8 @@ async function main(): Promise<void> {
   }
   console.log(`[verify-pr] ${status === 0 ? "PASSED" : "FAILED"} in ${((Date.now() - started) / 1000).toFixed(0)}s`);
   writeFileSync(exitFile, `${status}\n`, "utf8");
-  await lock?.release();
+  if (!lock && !noLock) console.log("[verify-pr] no step needed the machine-wide lock");
+  await (lock as HeldLock | null)?.release();
   process.exitCode = status;
 }
 

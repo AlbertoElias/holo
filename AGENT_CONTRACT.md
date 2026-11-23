@@ -150,7 +150,10 @@ hosted CI is still a defect to explain, not something to rerun.
   `verify:full` run every selected step and still store passes: use one when
   you doubt a stored pass, for example after a flaky test. The cache turns
   itself off, with a printed reason, when it cannot decide (packages that do
-  not match `pnpm-lock.yaml`, an unmerged index).
+  not match `pnpm-lock.yaml`, an unmerged index). A run takes the machine-wide
+  lock only before the first step that runs (doctor and `check:ci-areas` do
+  not need it), so a run with no step to execute does not wait for another
+  session.
 - `verify:pr` writes its exit code to `output/verify-pr.exit` when it ends.
   Wait on that file, not on the log:
   `until [ -s output/verify-pr.exit ]; do sleep 20; done` (give a watcher at

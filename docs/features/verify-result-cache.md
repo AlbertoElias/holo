@@ -169,6 +169,15 @@ Records older than 14 days are removed at the start of a run.
 not read the cache. They still store passes. `--dry-run` prints which steps
 the cache would skip.
 
+### Lock
+
+The first measured rerun did 11 s of work after it waited 140 s for another
+session's lock. The lock protects ports and CPU, and a skipped step uses
+neither. So a run now takes the lock before the first step that runs, not at
+the start. Doctor and `check:ci-areas` are marked `free` (seconds, no server)
+and run without it. After a wait, the run reads the cache again for that step:
+another session can store the pass during the wait.
+
 ### Authoring scripts
 
 `apps/capture/scripts/authoring/*` maps to `quality` only (no capture XR,
@@ -244,6 +253,8 @@ Six findings, each checked in the code and accepted:
       `quality` (local plan and `ci-changed-areas.sh` output), and the guard
       fails on a new reference to the folder from outside.
 - [ ] `--no-cache` and `verify:full` run every selected step and store passes.
+- [ ] A run whose steps are all skipped ends while another process holds the
+      machine-wide lock. A run with one step to execute waits for the lock.
 - [ ] Each selector gap in the table above selects its suite.
 
 ## Failure cases considered
@@ -288,6 +299,7 @@ Six findings, each checked in the code and accepted:
 | Key changes; shared store; partial reports; skips; environment | `scripts/verify-cache.test.ts` on temporary git repositories and the measured Playwright report shapes (tests A to G) | Pending |
 | Authoring-only selection and guard; selector gaps | `pnpm run check:ci-areas` | Pending |
 | `--no-cache`, `verify:full` | Real run with `--no-cache` | Pending |
+| No wait for the lock when all steps are skipped | Hold the lock in a second process, real `verify:pr` | Pending |
 
 ## Physical-device limits
 
