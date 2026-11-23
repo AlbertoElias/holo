@@ -367,6 +367,11 @@ export class CharacterMotor {
     return this.spawnResolved;
   }
 
+  /** The eased keyboard velocity on the ground plane (m/s, world), zero without an acceleration limit. */
+  getPlanarVelocity(out: THREE.Vector3): THREE.Vector3 {
+    return out.copy(this.planarVelocity);
+  }
+
   getSnapshot(): CharacterSnapshot {
     const p = this.characterBody?.translation() ?? { x: 0, y: 0, z: 0 };
     return {

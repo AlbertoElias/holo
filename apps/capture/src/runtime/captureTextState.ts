@@ -49,6 +49,10 @@ export function renderCaptureTextState(c: CaptureContext): string {
       gait: { ...animator.getGaitState(), gait: animator.getGait(), stanceSpeed: animator.stanceSpeedWorld() ?? null },
       activeProfile: animator.getActiveProfile(),
       legs: c.terrainLegs.getSnapshot(),
+      pelvisDrop: c.terrainLegs.getPelvisDrop(),
+      directions: animator.getDirectionWeights(),
+      clipCrouch: animator.getClipCrouch(),
+      swayWeight: animator.getSwayWeight(),
       clip: animator.getClipSnapshot()
     },
     pose: reachPoseSnapshot(c),

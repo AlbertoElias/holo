@@ -266,7 +266,10 @@ export async function runPhoneResize({ browser, baseUrl, consoleErrors }) {
     const holds = () => page.evaluate(() => window.__sampleHolds());
     const yawOf = async () => (await readState(page)).avatar.yaw;
     const where = async () => page.evaluate((p) => window.__projectToScreen(p), centreOf(await item()));
-    const OFFSETS = [[0, 0], [10, 0], [-10, 0], [0, 10], [0, -10], [20, 0], [-20, 0], [0, 20], [0, -20], [16, 16], [-16, -16], [16, -16], [-16, 16]];
+    // The bracket is open at its centre, and its arms are a few pixels wide at this distance: scan in 5 px steps, nearest first.
+    const OFFSETS = [];
+    for (let ox = -20; ox <= 20; ox += 5) for (let oy = -20; oy <= 20; oy += 5) OFFSETS.push([ox, oy]);
+    OFFSETS.sort((a, b) => Math.hypot(...a) - Math.hypot(...b));
     const reload = async () => {
       if (!(await page.evaluate((url) => window.__loadObjectUrl(url), OBJECT_URL))) throw new Error('the object did not reload');
       await advance(0.5);

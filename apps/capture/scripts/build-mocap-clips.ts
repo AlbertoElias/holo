@@ -37,7 +37,9 @@ const SHIPPED = fileURLToPath(new URL('../public/gltf/models/avatar.glb', import
  * `mirror`: the loop is the first half of the range (left strike to right strike) and then that half
  * mirrored left for right, so both legs walk the same step (a recorded cycle is rarely symmetric).
  */
-export interface MocapLoop { readonly name: string; readonly take: string; readonly from: number; readonly to: number; readonly mirror?: boolean; readonly sway?: number; readonly once?: boolean }
+/** `half`: a mirrored loop's right foot contact (frame), where the pose search would miss it (a back-pedal, a crouch). */
+/** `faced`: the loop is turned so the body faces +Z (its thigh line), not so its travel points there: a backward or sideways take keeps its direction. */
+export interface MocapLoop { readonly name: string; readonly take: string; readonly from: number; readonly to: number; readonly mirror?: boolean; readonly sway?: number; readonly once?: boolean; readonly faced?: boolean; readonly half?: number }
 
 export const MOCAP_LOOPS: readonly MocapLoop[] = [
   // Subject 7, trial 12, "brisk walk": a 0.9 s cycle at 1.93 m/s, near the desktop walk's 1.8. Its left
@@ -46,16 +48,28 @@ export const MOCAP_LOOPS: readonly MocapLoop[] = [
   // Subject 113, trial 21, "standing still": breathing, a slow sway and small weight shifts, arms at
   // the sides. ("Normal waiting", 137_28, fidgets: its hands travel three times as far, in gestures that
   // replay on every stop.)
-  // Played at 40% of its sway about the mean pose: the full take drifts the head 5 cm in a frame of view
+  // Played at 37% of its sway about the mean pose: the full take drifts the head 5 cm in a frame of view
   // that follows the eyes (the desktop camera and aim), where 2 cm reads as standing still and alive.
-  { name: 'Idle', take: '113_21', from: 0, to: 0, sway: 0.4 },
+  { name: 'Idle', take: '113_21', from: 0, to: 0, sway: 0.37 },
   // Subject 13, trial 42, "jump": a standing jump with a full arm swing that keeps moving through the flight (118_01, the
   // first pick, swings the arms back hard but only to 20° in front, then holds them there). Not a loop (`once`): the
   // squat with the arms going back (frame 24), the arms at their furthest back, 78° behind, as the legs drive (34),
   // lift-off with the arms 73° in front (46), falling through the flight to 22° at touch-down (63), and the absorb (70).
   // The desktop body's jump scrubs its arms through it in step with the game's own jump (JumpArms); no locomotion state
   // plays it, so its name matches none of theirs.
-  { name: 'Leap', take: '13_42', from: 14, to: 94, once: true }
+  { name: 'Leap', take: '13_42', from: 14, to: 94, once: true },
+  // The directional walks (slice 2), each cut at a left foot contact so one shared phase drives them all, and faced
+  // (turned by the thighs, not the travel). Subject 143, trial 39, "walk backwards": a brisk back-pedal at 1.23 m/s,
+  // 190 steps/min, arms swinging opposite the legs (136_25/26 back up at 0.5 m/s with the arms still).
+  { name: 'WalkBackward', take: '143_39', from: 62, to: 81, half: 71, mirror: true, faced: true },
+  // Subject 141, trial 33, side-steps: 1.1-1.3 m/s, about 190 steps/min, each way, the feet at least 7 cm apart
+  // (143_40's brisker side-step crosses them by up to 35 cm, which reads as scissoring). A side-step leads with one
+  // leg, so it is not mirrored: left and right are each their own recorded cycle, one left contact to the next.
+  { name: 'StrafeLeft', take: '141_33', from: 162, to: 180, faced: true },
+  { name: 'StrafeRight', take: '141_33', from: 57, to: 76, faced: true },
+  // Subject 136, trials 10 and 11, crouched walks forward (0.78 m/s, near the full crouch's 0.81) and back (0.64 m/s).
+  { name: 'CrouchWalk', take: '136_10', from: 126, to: 164, half: 147, mirror: true, faced: true },
+  { name: 'CrouchWalkBackward', take: '136_11', from: 121, to: 167, half: 146, mirror: true, faced: true }
 ];
 
 // CMU bone → Mixamo name (what HumanoidSkeleton binds). Buttocks fold into
@@ -141,12 +155,12 @@ function standingYaw(dump: Dump, from: number, to: number): number {
 }
 
 /** Local rotations per kept bone over frames [from, to] (to included), travel turned to +Z. */
-function localTrack(dump: Dump, from: number, to: number): Map<string, THREE.Quaternion[]> {
+function localTrack(dump: Dump, from: number, to: number, faced = false): Map<string, THREE.Quaternion[]> {
   const hipAt = (f: number) => { const v = dump.frames[f]!.hip!; return toYUpP(v[4]!, v[5]!, v[6]!); };
   const travel = hipAt(to).sub(hipAt(from)).setY(0);
   // A take that does not travel (idle) is turned to the rest facing by its thighs: the subject of 113_21
   // stands about 100° off the capture's axes.
-  const yaw = travel.length() > 0.2 ? Math.atan2(travel.x, travel.z) : standingYaw(dump, from, to);
+  const yaw = travel.length() > 0.2 && !faced ? Math.atan2(travel.x, travel.z) : standingYaw(dump, from, to);
   const unturn = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -yaw);
   const out = new Map<string, THREE.Quaternion[]>();
   for (let f = from; f <= to; f++) {
@@ -213,7 +227,7 @@ function smoothOnce(keys: THREE.Quaternion[]): THREE.Quaternion[] {
 }
 
 /** Each bone's keys closed into a loop: end to start, or (mirror) a half closed onto its own mirror and followed by it. */
-function loopTracks(local: Map<string, THREE.Quaternion[]>, mirror: boolean): Map<string, THREE.Quaternion[]> {
+function loopTracks(local: Map<string, THREE.Quaternion[]>, mirror: boolean, contact?: number): Map<string, THREE.Quaternion[]> {
   const out = new Map<string, THREE.Quaternion[]>();
   if (!mirror) {
     for (const [b, keys] of local) out.set(b, smoothLoop(closeTo(keys, keys[0]!)));
@@ -222,8 +236,8 @@ function loopTracks(local: Map<string, THREE.Quaternion[]>, mirror: boolean): Ma
   const length = local.values().next().value!.length - 1;
   // The right strike: the frame near mid-cycle whose pose best matches the first frame mirrored.
   const angle = (a: THREE.Quaternion, b: THREE.Quaternion) => 2 * Math.acos(Math.min(1, Math.abs(a.dot(b))));
-  let half = Math.round(length / 2), best = Infinity;
-  for (let m = Math.round(length * 0.4); m <= Math.round(length * 0.6); m++) {
+  let half = contact ?? Math.round(length / 2), best = Infinity;
+  for (let m = Math.round(length * 0.4); contact === undefined && m <= Math.round(length * 0.6); m++) {
     let cost = 0;
     for (const [b, keys] of local) cost += angle(keys[m]!, mirrorQ(local.get(swapSide(b))![0]!));
     if (cost < best) { best = cost; half = m; }
@@ -297,14 +311,14 @@ export async function buildMocapClips(dumpDir: string): Promise<{ clips: THREE.A
     }
     const dump = JSON.parse(await readFile(file, 'utf8')) as Dump;
     const range = loop.to > loop.from ? loop : { ...loop, ...idleWindow(dump) };
-    ranges.push({ name: loop.name, take: loop.take, from: range.from, to: range.to, ...(loop.mirror ? { mirror: true } : {}), ...(loop.once ? { once: true } : {}) });
+    ranges.push({ name: loop.name, take: loop.take, from: range.from, to: range.to, ...(loop.mirror ? { mirror: true } : {}), ...(loop.once ? { once: true } : {}), ...(loop.faced ? { faced: true } : {}), ...(loop.half !== undefined ? { half: loop.half } : {}) });
     const { root, bones } = buildSourceRig(dump);
     const humanoid = HumanoidSkeleton.bind(root, {});
     humanoid.normalizeFacing(root);
-    const cut = localTrack(dump, range.from, range.to);
+    const cut = localTrack(dump, range.from, range.to, loop.faced === true);
     const local = loop.once
       ? new Map([...cut].map(([b, keys]) => [b, smoothOnce(keys)] as const))
-      : scaleSway(loopTracks(cut, loop.mirror === true), loop.sway ?? 1);
+      : scaleSway(loopTracks(cut, loop.mirror === true, loop.half === undefined ? undefined : loop.half - range.from), loop.sway ?? 1);
     const tracks: THREE.KeyframeTrack[] = [];
     const times = Array.from({ length: local.values().next().value!.length }, (_, i) => i / dump.fps);
     for (const [b, keys] of local) {

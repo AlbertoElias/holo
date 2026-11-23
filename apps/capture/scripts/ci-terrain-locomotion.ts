@@ -13,7 +13,7 @@ type Leg = { side: string; foot: Vec; groundY: number | null; correction: number
 type State = {
   mode: string;
   character: { position: Vec; grounded: boolean; velocityY: number };
-  locomotion: { state: string; horizontalSpeed: number; timeScale: number; gait?: { stanceSpeed: number | null }; activeProfile: string; legs: Leg[]; clip: { name: string; time: number; duration: number } | null };
+  locomotion: { state: string; horizontalSpeed: number; timeScale: number; gait?: { stanceSpeed: number | null; phase?: number }; activeProfile: string; legs: Leg[]; clip: { name: string; time: number; duration: number } | null };
   crouch: { amount: number };
 };
 type Input = { forward?: boolean; back?: boolean; left?: boolean; right?: boolean; crouch?: boolean; jump?: boolean };
@@ -95,6 +95,18 @@ function quaternionVariation(states: State[]): number {
 function meanCadence(states: State[]): number {
   return states.slice(-10).reduce((sum, state) => sum + state.locomotion.timeScale, 0) / 10;
 }
+/**
+ * Desktop: steps per second over the last samples (30 per second), from the walk's shared phase (two steps a cycle). The
+ * crouch walk plays its own clip, whose cycle is not the walk's, so the time scale alone does not compare them.
+ */
+function stepRate(states: State[], mode: 'desktop' | 'xr'): number {
+  // XR plays one clip at the speed-scaled cadence: its time scale is the step rate.
+  if (mode === 'xr') return meanCadence(states);
+  const phases = states.slice(-11).map(state => state.locomotion.gait?.phase ?? 0);
+  let cycles = 0;
+  for (let i = 1; i < phases.length; i++) cycles += (((phases[i]! - phases[i - 1]!) % 1) + 1) % 1;
+  return (2 * cycles) / ((phases.length - 1) / 30);
+}
 async function runMode(page: Page, mode: 'desktop' | 'xr'): Promise<void> {
   // Claim the public debug clock as soon as it is published, before asset loading
   // starts the realtime loop. Respawn alone cannot erase prior physics history.
@@ -173,11 +185,11 @@ async function runMode(page: Page, mode: 'desktop' | 'xr'): Promise<void> {
     assert(Math.abs(meanCadence(states) - expected) < 0.15, `${mode}: cadence fails to follow actual corrected travel`);
   }
   if (meanSpeed(crouchWalk) < meanSpeed(walk) * 0.85) {
-    assert(meanCadence(crouchWalk) < meanCadence(walk) * 0.85, `${mode}: crouch cadence fails to follow slower travel`);
+    assert(stepRate(crouchWalk, mode) < stepRate(walk, mode) * 0.85, `${mode}: crouch cadence fails to follow slower travel`);
   }
   // Every input walks one avatar height per second on the stock avatar's legs (1.8 m/s); a shorter leg walks slower, to 0.8 of it (`walkHeightsPerSec`).
   assert(meanSpeed(walk) > 1.8 * 0.75, `${mode}: unobstructed standing walk stuck on ramp`);
-  assert(Math.abs(meanCadence(crouchWalk) - meanCadence(walk)) > 0.1, `${mode}: fixed cadence despite distinct measured speeds`);
+  assert(Math.abs(stepRate(crouchWalk, mode) - stepRate(walk, mode)) > 0.1, `${mode}: fixed cadence despite distinct measured speeds`);
   await screenshot(page, `${mode}-crouch-walk.png`);
 
   await settle(page);
@@ -221,7 +233,7 @@ async function runMode(page: Page, mode: 'desktop' | 'xr'): Promise<void> {
       assert(Math.abs(relativeFootHeight - referenceHeight) < 0.035, 'XR crouch exit left persistent leg/hips displacement');
     }
   }
-  (evidence.scenarios as Record<string, unknown>)[mode] = { standing, walkVariation: quaternionVariation(walk), crouchVariation: quaternionVariation(crouchWalk), walkCadence: meanCadence(walk), crouchCadence: meanCadence(crouchWalk), wallEnd: blocked.at(-1), jumpTransitions: jump.map(state => [state.locomotion.state, state.character.grounded, state.character.velocityY]) };
+  (evidence.scenarios as Record<string, unknown>)[mode] = { standing, walkVariation: quaternionVariation(walk), crouchVariation: quaternionVariation(crouchWalk), walkCadence: meanCadence(walk), crouchCadence: meanCadence(crouchWalk), walkStepRate: stepRate(walk, mode), crouchStepRate: stepRate(crouchWalk, mode), wallEnd: blocked.at(-1), jumpTransitions: jump.map(state => [state.locomotion.state, state.character.grounded, state.character.velocityY]) };
 }
 
 await mkdir(artifactDir, { recursive: true });
