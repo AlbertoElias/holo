@@ -549,7 +549,7 @@ async function make(sheetFile: string, quick: boolean): Promise<boolean> {
     }
   }
 
-  // Two performers do not go into each other (B-093): skin, head, arms and what they hold.
+  // Two performers do not go into each other (B-094): skin, head, arms and what they hold.
   for (const pr of built.take.pairs) {
     const P = PAIR_LIMITS;
     const w = pr.worst;

@@ -561,7 +561,7 @@ export class ArmMeter {
   }
 }
 
-/** Performer against performer: the deepest skin of one under the other's skin (evidence: B-093). */
+/** Performer against performer: the deepest skin of one under the other's skin (evidence: B-094). */
 export const PAIR_LIMITS = {
   /**
    * Any skin (torso, head, legs, arms, hands) or held object of one performer into another's skin, metres.

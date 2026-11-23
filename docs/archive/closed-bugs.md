@@ -1786,7 +1786,7 @@ bug above.)
 - **Not covered:** the headset path has no expression tracking (the camera is released in VR; the face there shows blinks, gaze and a jaw that follows the microphone). The check uses hand-made scores, not a person.
 - **Closed:** 2026-11-23.
 
-### B-093 — Authored takes: two performers go into each other, and no bar sees it
+### B-094 — Authored takes: two performers go into each other, and no bar sees it
 
 - **Area:** `apps/capture/scripts/authoring` (`make.ts`, `lib/arm-quality.ts`, `lib/direct.ts`)
 - **Severity:** P2 (a draft that passes every bar shows two bodies in each other)
