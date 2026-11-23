@@ -314,6 +314,7 @@ production and needs the owner's word.
 | `arms.twist.*`, `arms.wrist.*` | the forearm twists at most 90° from neutral (palm up and palm down are each a quarter turn), the wrist bends at most 80° |
 | `arms.elbow.*` | the elbow goes at most 10° past straight and at most 15° off its hinge (an elbow bends only one way) |
 | `arms.held.*` | no finger or palm more than 3 mm into the object the hand holds: the fingers close on its surface (measured on the posed skin, every frame) |
+| `bodies.*` | no part of one performer (torso, head, legs, arms, hands) or what they hold more than 3 cm into another performer's skin, on every frame. A hand may rest on the other; it does not go through |
 | `smooth.*` | no joint slows under 25% of its speed around it (within 0.3 s, both sides at least 0.15 m/s) and then goes on the same way: that is a stammer. Overlap the moves so one starts before the last one ends |
 | `story` | the main bar: a fresh reader, told nothing, gets the setup (who and where), the event and the reaction. Fails at once when the sheet has no `story` |
 | `visual` | the `design-reviewer` (opus) passes the arm motion, the clipping and the face |

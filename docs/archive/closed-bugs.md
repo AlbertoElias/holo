@@ -1785,3 +1785,19 @@ bug above.)
 - **Fix:** `src/face/trackedFace.ts` shapes the scores before they reach the face (gains, a resting level taken off, cheeks and lower lids that follow the mouth corners, a sad face read from the lower lip, the frown and the inner brows, a scowl that wrinkles the nose and presses the lips, a small ring for "oo"). The house mouth is rebuilt in `house-base/build.py`: each lip is a rounded roll that ends in a closed corner, there are an upper teeth row (the lower row stays behind the lip), a tongue and a dark cavity, a round mouth opens as an ellipse, the lips move off the teeth, and the smile moves the cheeks and the fold from the nose to the mouth corner. The model now carries normals for its face shapes (the default avatar file goes from 1.3 MB to 2.7 MB), `sparseMorphTargets` stores them sparse in a recorded take as it does the positions, and the cheek shape raises the lower lid half as far. The `live-face` XR check replays hand-made score sets (neutral, smile, laugh, sad, surprise, anger, a spoken sentence) through the camera's own path and asserts what each must and must not move.
 - **Not covered:** the headset path has no expression tracking (the camera is released in VR; the face there shows blinks, gaze and a jaw that follows the microphone). The check uses hand-made scores, not a person.
 - **Closed:** 2026-11-23.
+
+### B-094 — Authored takes: two performers go into each other, and no bar sees it
+
+- **Area:** `apps/capture/scripts/authoring` (`make.ts`, `lib/arm-quality.ts`, `lib/direct.ts`)
+- **Severity:** P2 (a draft that passes every bar shows two bodies in each other)
+- **Observed:** 2026-11-23, the goodbye draft v25 passed every bar in `make.ts`, while her head went into his and her hand
+  went through his torso.
+- **Cause:** the arm bars measure each performer against their own body and the props only. Nothing measured one
+  performer against another.
+- **Fix:** a new bar, `bodies.<a>-<b>`: on every frame, each skin sample of one performer (torso, head, legs, arms, hands)
+  and the surface of what they hold, against the other performer's skin. The limit is 3 cm. `make.ts` writes the depth of
+  each frame to `bodies.<a>-<b>.json`.
+- **Proof:** the v25 sheet goes 6.3 cm in (her right fingers in his torso at 3.37 s; her head 4.6 cm into his at
+  1.67 s), 84 of 211 frames over 3 cm. The goodbye sheet, where her hand rests on his chest, goes 2.2 cm in at
+  1.97 s and passes. The head centres confirm it: 25 cm apart where the bar reads 4.2 cm, 37–39 cm apart where it reads 0.
+- **Closed:** 2026-11-23.

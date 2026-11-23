@@ -45,7 +45,7 @@ import { faceBarPasses, faceBarPx, FACE_AWAY_MAX_SHARE, PAIR_FACE_BAR_PX } from 
 import { FACE_CHANNELS } from '@holoim/avatar-face';
 import { DEFAULT_TIMING, FACE_MIXES, GESTURES, houseFinish, parseSheetText, resolveTiming, STATES, STORY_PARTS, storyEventProblem, validateSheet, type BeatSheet, type ObjectSpec, type Place, type Point } from './lib/beats.ts';
 import { solveTake } from './lib/direct.ts';
-import { ARM_LIMITS, type ArmReport } from './lib/arm-quality.ts';
+import { ARM_LIMITS, PAIR_LIMITS, type ArmReport } from './lib/arm-quality.ts';
 import { parseGlb } from './lib/gltf-read.ts';
 import { HAND_SHAPES } from './lib/hands.ts';
 import { LANDMARKS, MEASURES } from './lib/stage.ts';
@@ -547,6 +547,14 @@ async function make(sheetFile: string, quick: boolean): Promise<boolean> {
       arm('held', `no finger or palm more than ${A.heldDepth * 1000} mm into what the hand holds`, `deepest ${(Math.max(0, r.heldDepth.value) * 1000).toFixed(1)} mm ${at(r.heldDepth)}`, r.over.heldDepth, 'the hand sinks into what it holds: this is a solver fault (the fingers must close on its surface), report it with the sheet');
       await writeFile(join(dir, `held-depth.${t.spec.id}.json`), `${JSON.stringify(r.held.map((h) => ({ t: h.t, mm: Math.round(h.depth * 10000) / 10, where: h.where })))}\n`);
     }
+  }
+
+  // Two performers do not go into each other (B-094): skin, head, arms and what they hold.
+  for (const pr of built.take.pairs) {
+    const P = PAIR_LIMITS;
+    const w = pr.worst;
+    rows.push({ id: `bodies.${pr.a}-${pr.b}`, bar: `no part of one performer (or what they hold) more than ${P.bodyDepth * 100} cm into the other`, value: `deepest ${(w.value * 100).toFixed(1)} cm at ${w.t.toFixed(2)} s${w.where ? `, ${w.where}` : ''}; ${pr.over} of ${pr.frames} frames over`, pass: pr.over === 0, ...(pr.over ? { fix: `the two bodies go into each other (${w.where} at ${w.t.toFixed(2)} s): stand them further apart, turn one away, or shorten the step or reach toward the other` } : {}) });
+    await writeFile(join(dir, `bodies.${pr.a}-${pr.b}.json`), `${JSON.stringify(pr.perFrame.map((x) => ({ t: Math.round(x.t * 1000) / 1000, cm: Math.round(x.depth * 1000) / 10, where: x.where })))}\n`);
   }
 
   // 4. Size per avatar file, and the Quick Look budget.
