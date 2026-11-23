@@ -1907,3 +1907,36 @@ bug above.)
   still pulls against the show's palm turn while the show takes over, and the show's goal arrives with no speed when
   the take ends while the target still moves. Next fix: fade the take's hand turn by the takeover progress, and keep
   the take's goal moving until the show's attack ends.
+
+### B-099 — Authored takes: a white seam at the wrist cuff, the crouch palm turns late, the pinch ring faces away
+
+- **Area:** `apps/capture/scripts/authoring` (`house-base.ts`, `lib/fit-cuffs.ts`, `lib/direct.ts`, `lib/beats.ts`),
+  `apps/capture/assets/house-base/wardrobe-*.glb`, `apps/capture/public/gltf/models/house-base.glb`
+- **Severity:** P2 (the opus review of the B-098 drafts saw the seam in both pieces, the late palm turn and the pinch)
+- **Observed:** 2026-11-23, after B-098. A white line showed at the right wrist cuff in the crouch and the pinch.
+  The crouch palm turned to the show only after 3.1 s, and two bars stayed open (`turn.me` 333°/s at 3.60 s,
+  `smooth.me` 0 % at 3.93 s). The pinch palm rolled about 50° in 0.2 s at 1.0 s and the ring faced up, not to the
+  camera.
+- **Cause:** (1) Seam: not B-096 (the jumper and body buffers are byte-identical before and after it). The jumper
+  cuff goes about 3 cm into the hand, with a hand weight of 0.18 to 0.44, where the hand skin has up to 1.0. When
+  the wrist turns, the cuff comes out through the hand skin by up to 10 mm. (2) Crouch: the show's palm and goal
+  came in only by the show's own attack, and the take left the blend when its settle ended, while the show target
+  still moved. At 3.83 s the arm was also at full stretch toward a target 0.42 m forward. (3) Pinch: `palm: toward`
+  faces the shoulder-to-target line, which is near the forearm line during the raise.
+- **Fix:** `fitCuffs` (in `house-base.ts`) blends the skin weights into each jumper vertex near the wrist: the mean
+  weights of the hand-skin vertices within 3 cm (each counted by 1/d²), in by the cuff depth over 2.5 cm, so the
+  sleeve end has no jagged edge. The three wardrobes and the public base are redressed. A takeover (a later reach
+  while an earlier take holds) has a progress from the middle of the take's hold to the later's arrival: the later's
+  palm comes in by it, the take's hand turn goes out by it, the take's goal stays in the blend until the later
+  arrives, and the goal moves by the later's envelope. A `reach` takes `palmAt`, a point the palm faces. Sheets:
+  the crouch show target is 0.36 m forward (was 0.42); the pinch lift has `"palmAt": "viewer"`. The reach solve's
+  wrist goal moves by half the hand's error per round, 16 rounds (`EFFECTOR_GAIN`): a whole step swung the goal
+  between two arm lengths near full stretch. No bar changed.
+- **Proof:** the cuff comes out 0.0 mm in all frames of both pieces (was 6 to 10 mm). The refit changes only the
+  jumper: 182 JOINTS and 200 WEIGHTS of its 2563 vertices, all within 4.7 cm of a wrist joint; every other byte,
+  the JSON and the file sizes are the same. On the approved sheets the joints move 0.000 mm in all 181 frames.
+  Crouch v43: all motion bars pass, `turn.me` 231°/s (3.80 s, was 333), `smooth.me` 66 % (was 0 %), `jump.me`
+  1.25 m/s, `jump.props` 1.37 m/s; grip 0.3 mm 2.7°, reach.show 12 mm, held 2.0 mm, support 57 % (the same as v27);
+  the arms at rest 0.0 mm from v27. Pinch v14: `turn.me` 129°/s (was 276), all motion bars pass, the arms at rest
+  0.0 mm from v8, the palm and ring face the camera.
+- **Closed:** 2026-11-23. Open: B-100, the crouch arm still steps 8 mm in one frame at 1.73 s (was 13 mm).
