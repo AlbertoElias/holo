@@ -30,6 +30,8 @@ export const ARM_LIMITS = {
   bodyDepth: 0.02,
   /** An arm or hand into a prop's surface, metres. */
   propDepth: 0.01,
+  /** The hand's skin into the object it holds, metres: fingers and palm rest on the surface, they do not sink into it. */
+  heldDepth: 0.003,
   /** Forearm twist from neutral (thumb forward), degrees: pronation and supination are each about 80-90°. */
   twist: 90,
   /** The wrist's bend off the forearm, degrees (flexion about 80°, extension about 70°). */
@@ -63,6 +65,8 @@ export interface ArmBody {
   readonly body: readonly SkinSample[];
   /** Each arm's skin from the elbow down (and the outer upper arm, `part` 'upper arm'), one vertex per 1.5 cm cell. */
   readonly arm: Readonly<Record<Side, readonly SkinSample[]>>;
+  /** Each hand's skin (the palm, the fingers and the thumb), one vertex per 4 mm cell, `part` the bone's name. */
+  readonly hand: Readonly<Record<Side, readonly SkinSample[]>>;
   readonly arms: Readonly<Record<Side, ArmBind>>;
 }
 
@@ -104,10 +108,10 @@ function bindVertices(a: LoadedAvatar): { p: THREE.Vector3; bone: THREE.Object3D
 }
 
 /** One vertex per cell of `CELL` metres. */
-function thin<T extends { p: THREE.Vector3 }>(verts: readonly T[]): T[] {
+function thin<T extends { p: THREE.Vector3 }>(verts: readonly T[], cell = CELL): T[] {
   const seen = new Set<string>();
   return verts.filter((v) => {
-    const k = `${Math.floor(v.p.x / CELL)},${Math.floor(v.p.y / CELL)},${Math.floor(v.p.z / CELL)}`;
+    const k = `${Math.floor(v.p.x / cell)},${Math.floor(v.p.y / cell)},${Math.floor(v.p.z / cell)}`;
     if (seen.has(k)) return false;
     seen.add(k);
     return true;
@@ -153,6 +157,12 @@ export function measureArmBody(a: LoadedAvatar): ArmBody {
     })).map((v) => ({ mesh: v.mesh, i: v.i, bone: v.bone, part: armPart.get(v.bone)!.label }));
   };
   const arm = { left: armOf('left'), right: armOf('right') };
+  const handOf = (s: Side): SkinSample[] => {
+    const bones = new Set<THREE.Object3D>();
+    a.arms[s].hand.traverse((o) => bones.add(o));
+    return thin(verts.filter((v) => bones.has(v.bone) && v.w >= 0.4), 0.004).map((v) => ({ mesh: v.mesh, i: v.i, bone: v.bone, part: v.bone.name || `${s} hand` }));
+  };
+  const hand = { left: handOf('left'), right: handOf('right') };
   const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(bodyQ);
   const arms = {} as Record<Side, ArmBind>;
   for (const s of SIDES) {
@@ -185,7 +195,7 @@ export function measureArmBody(a: LoadedAvatar): ArmBody {
     const x = (o: THREE.Object3D): number => a.body.worldToLocal(o.getWorldPosition(new THREE.Vector3())).x;
     hipOut[s] = (s === 'left' ? 1 : -1) * (x(a.legs[s].upLeg.bone) - x(a.arms[s].upperArm));
   }
-  return { body, arm, arms, hipOut, restOut: { left: restOutOf(a, verts, part, 'left', arms.left.foreRadius), right: restOutOf(a, verts, part, 'right', arms.right.foreRadius) } };
+  return { body, arm, hand, arms, hipOut, restOut: { left: restOutOf(a, verts, part, 'left', arms.left.foreRadius), right: restOutOf(a, verts, part, 'right', arms.right.foreRadius) } };
 }
 
 /** The gap kept between a hanging hand's mid-line and the widest hip or thigh skin beside it: half a hand's thickness, a slightly curled finger and 1 cm. */
@@ -479,27 +489,32 @@ export interface ArmReport {
   /** The worst frame of each measure: value, take time and what. */
   readonly bodyDepth: { value: number; t: number; where: string };
   readonly propDepth: { value: number; t: number; where: string };
+  /** The hand's skin into what it holds. */
+  readonly heldDepth: { value: number; t: number; where: string };
+  /** Per held frame, the deepest skin point into the held object, metres. */
+  readonly held: readonly { t: number; depth: number; where: string }[];
   readonly twist: { value: number; t: number; where: string };
   readonly wristBend: { value: number; t: number; where: string };
   readonly hyperextension: { value: number; t: number; where: string };
   readonly elbowSideways: { value: number; t: number; where: string };
   /** Frames over each limit. */
-  readonly over: Record<'bodyDepth' | 'propDepth' | 'twist' | 'wristBend' | 'hyperextension' | 'elbowSideways', number>;
+  readonly over: Record<'bodyDepth' | 'propDepth' | 'heldDepth' | 'twist' | 'wristBend' | 'hyperextension' | 'elbowSideways', number>;
   readonly frames: number;
 }
 
 export class ArmMeter {
   private readonly worst: { [K in keyof ArmReport['over']]: { value: number; t: number; where: string } } = {
-    bodyDepth: { value: -Infinity, t: 0, where: '' }, propDepth: { value: -Infinity, t: 0, where: '' }, twist: { value: 0, t: 0, where: '' },
+    bodyDepth: { value: -Infinity, t: 0, where: '' }, propDepth: { value: -Infinity, t: 0, where: '' }, heldDepth: { value: -Infinity, t: 0, where: '' }, twist: { value: 0, t: 0, where: '' },
     wristBend: { value: 0, t: 0, where: '' }, hyperextension: { value: -Infinity, t: 0, where: '' }, elbowSideways: { value: 0, t: 0, where: '' }
   };
-  private readonly over = { bodyDepth: 0, propDepth: 0, twist: 0, wristBend: 0, hyperextension: 0, elbowSideways: 0 };
+  private readonly over = { bodyDepth: 0, propDepth: 0, heldDepth: 0, twist: 0, wristBend: 0, hyperextension: 0, elbowSideways: 0 };
   private frames = 0;
+  private readonly held: { t: number; depth: number; where: string }[] = [];
   private readonly skin: BodySkin;
   constructor(private readonly a: LoadedAvatar, readonly body: ArmBody) { this.skin = new BodySkin(body.body); }
 
-  /** Measures the avatar as posed now; `props` are the stage's, `handFree(side, prop)` is true where that hand may touch the prop. */
-  sample(t: number, props: readonly Prop[], handFree: (s: Side, prop: Prop) => boolean): void {
+  /** Measures the avatar as posed now; `props` are the stage's, `handFree(side, prop)` is true where that hand may touch the prop, `heldBy(side)` is what that hand holds. */
+  sample(t: number, props: readonly Prop[], handFree: (s: Side, prop: Prop) => boolean, heldBy: (s: Side) => Prop | undefined = () => undefined): void {
     this.frames += 1;
     const note = (k: keyof ArmReport['over'], value: number, where: string, limit: number): void => {
       if (value > this.worst[k].value) this.worst[k] = { value, t, where };
@@ -519,12 +534,29 @@ export class ArmMeter {
       note('hyperextension', -ang.flex, `${s} elbow`, ARM_LIMITS.hyperextension);
       note('elbowSideways', Math.abs(ang.sideways), `${s} elbow`, ARM_LIMITS.elbowSideways);
     }
+    // A held object: the hand's skin rests on it. Only a skin point that sinks into it counts.
+    let heldD = { depth: -Infinity, where: '' };
+    for (const s of SIDES) {
+      const prop = heldBy(s);
+      if (!prop) continue;
+      for (const x of this.body.hand[s]) {
+        const p = skinned(x, tmp.c);
+        for (const part of propParts(prop)) {
+          const d = partDepth(prop, part, p, 0);
+          if (d > heldD.depth) heldD = { depth: d, where: `${x.part} in ${prop.id}` };
+        }
+      }
+    }
+    if (heldD.depth > -Infinity) {
+      this.held.push({ t, depth: heldD.depth, where: heldD.where });
+      note('heldDepth', heldD.depth, heldD.where, ARM_LIMITS.heldDepth);
+    }
     // Per frame, the deepest overlap of either arm counts once.
     note('bodyDepth', bodyD.depth, bodyD.where, ARM_LIMITS.bodyDepth);
     note('propDepth', propD.depth, propD.where, ARM_LIMITS.propDepth);
   }
 
   report(): ArmReport {
-    return { ...this.worst, over: { ...this.over }, frames: this.frames };
+    return { ...this.worst, held: [...this.held], over: { ...this.over }, frames: this.frames };
   }
 }

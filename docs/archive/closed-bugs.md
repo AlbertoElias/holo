@@ -1657,3 +1657,29 @@ bug above.)
 - **Cause:** not the arm change or the gate (1 of 5 on `main` and on the gate branch alike). The feed also loads the neighbour cards, paused, and each reports its own probe; the spec kept whichever card reported last, so it sometimes read a paused neighbour (clip time 0, running false).
 - **Fix:** the spec keeps each card's probe by URL and reads the uploaded card's. Bubble-capture at load 2 passed 11 of 11.
 - **Closed:** 2026-11-21.
+
+### B-092 — Authored takes: the hand sinks into a held ball, and the body stammers at beat borders
+
+- **Area:** `apps/capture/scripts/authoring` (`lib/direct.ts` `fitGrip` and `leanFor`, `lib/hands.ts` `fistPoint`, `lib/beats.ts` `envelope`)
+- **Severity:** P2 (the owner saw both in the crouch draft v41)
+- **Observed:** 2026-11-22, owner feedback on crouch v41: "the ball is still not grabbed but clipped, and the overall take stammers".
+- **Cause, clip:** the grip curl was fixed per finger and scaled only by the grip radius, and `fitGrip` tested only the
+  fingertip and one point 40% of the way to the palm, so the proximal segments curled into the ball. `fistPoint` cleared
+  the palm centre only, so the knuckle skin sat 6.5 mm in the ball. No bar measured the hand skin against what it holds.
+- **Cause, stammer:** the motion, not the recording (review frames are seeked stills joined at 30 fps; v41's mp4 has 181
+  frames and no repeats). `envelope()` had speed jumps at its borders: the anticipation ended at full speed and the attack
+  started from rest, so the hips stopped dead at 1.13 s between two moves the same way. The lean of a take was clamped
+  hard at its limits, chased the ball's first place after the hand took it, and started where the weight crossed zero.
+- **Fix:** `fitGrip` closes each finger joint by joint from the knuckle out until its skin rests on the surface; `fistPoint`
+  keeps the knuckles clear. `envelope()` is velocity-continuous at every border. A hand's own weight (and the lean it asks
+  for) has no dip the other way and starts from rest; the lean limits are soft, and a take's or put's lean eases out after
+  the hand arrives. New bars in `make.ts`: `arms.held` (hand skin ≤ 3 mm into what it holds) and `smooth` (no joint slows
+  under 25% of the speed around it and goes on the same way). The arm clearing out of the body is smoothed over time
+  and solved a second time, and it bends an elbow at most 5° past straight (goodbye had gone to 12°).
+- **Proof:** crouch v41 measures 37.1 mm into the ball (105 of 181 frames over 3 mm) and 20 stalls; crouch v42 measures
+  2.0 mm and 0 stalls (worst 27%). Pinch v9 passes every arm bar and `smooth` (it had 2 stalls); goodbye v10 passes
+  every arm bar (elbows 5°).
+- **Left open:** the visual review of crouch v42 still fails. The left arm snaps in one frame at 2.13 s, the palm-down
+  grip still looks sunk into the ball, the eyes stray, and the take goes still, then fast, then still. Those need a new
+  bug or a sheet change, not this fix.
+- **Closed:** 2026-11-23.
