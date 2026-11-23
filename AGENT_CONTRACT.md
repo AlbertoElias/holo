@@ -136,6 +136,21 @@ hosted CI is still a defect to explain, not something to rerun.
   holder's PID, branch and worktree, and takes the lock the moment the holder
   exits, however it dies. `VERIFY_PR_NO_LOCK=1` skips it for a run on moved
   ports.
+- `verify:pr` does not run a selected step again when the same inputs already
+  passed it, in this worktree or another one (`scripts/verify-cache.ts`,
+  [`docs/features/verify-result-cache.md`](docs/features/verify-result-cache.md)).
+  The log names the earlier pass on a line that starts `[verify-pr] =`. The
+  inputs are the files on disk (committed or not), the environment variables
+  the code reads, and the tool versions. The browser suites do not count
+  Markdown, `docs/` and `apps/capture/scripts/authoring/` as inputs. A viewer
+  Playwright step (pipeline, portal, viewer XR) keeps one pass per spec file:
+  after a failure or an edit, the next run executes only the spec files with
+  no pass. The Quick Look tool check, doctor and `check:ci-areas` always run.
+  `pnpm run verify:pr -- --no-cache` (or `VERIFY_PR_NO_CACHE=1`) and
+  `verify:full` run every selected step and still store passes: use one when
+  you doubt a stored pass, for example after a flaky test. The cache turns
+  itself off, with a printed reason, when it cannot decide (packages that do
+  not match `pnpm-lock.yaml`, an unmerged index).
 - `verify:pr` writes its exit code to `output/verify-pr.exit` when it ends.
   Wait on that file, not on the log:
   `until [ -s output/verify-pr.exit ]; do sleep 20; done` (give a watcher at

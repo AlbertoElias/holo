@@ -68,8 +68,15 @@ const webServers = captureOnly ? [captureServer] : [
 // Per-test durations land beside the CI step timings (one file per pnpm script).
 const suiteName = (process.env.npm_lifecycle_event ?? "test-e2e").replace(/[^a-zA-Z0-9_-]+/g, "-");
 
+// verify:pr names the spec files that already passed with the current inputs
+// (scripts/verify-cache.ts), as paths under e2e/. They do not run again, also
+// when the command line names them.
+const passedSpecs = (process.env.E2E_PASSED_SPECS ?? "").split(",").filter(Boolean);
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 export default defineConfig({
   testDir: "./e2e",
+  testIgnore: passedSpecs.map((file) => new RegExp(`^${escapeRegExp(path.resolve(import.meta.dirname, "e2e", file))}$`)),
   // The pipeline shard runs ~7 minutes of tests under a 20-minute job. On CI
   // it stops itself first, so a stalled run still names the test it was in
   // and leaves its report and diagnostics instead of being cancelled blind.

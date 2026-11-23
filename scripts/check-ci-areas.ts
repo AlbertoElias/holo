@@ -14,6 +14,9 @@
 //      without being a declared no-suite change. -> invariant over every tracked file
 //   6. An empty or unusable diff is silently green. -> empty list, bad base
 //   7. The CI gate stops enforcing the rule.        -> ci.yml wiring check
+//   8. A folder mapped to quality only (offline authoring tools; also left out
+//      of the browser suites' keys in scripts/verify-cache.ts) starts to be
+//      read by a suite, a build or a workflow. -> no file outside names it
 //
 // The invariant behind all of them: every result either selects an area, is
 // docs_only, or sets no_suite (docs and CI plumbing only); never none of these.
@@ -21,6 +24,8 @@ import { execFileSync, spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+
+import { NOT_SUITE_INPUTS, outsideReferences } from "./verify-cache.ts";
 
 const root = path.resolve(__dirname, "..");
 const selector = path.join(root, "scripts/ci-changed-areas.sh");
@@ -168,6 +173,26 @@ async function main() {
     stdio: ["ignore", "pipe", "ignore"]
   });
   expect(areaKeys.every((key) => out.includes(`${key}=true`)) && out.includes("no_suite=false"), "unusable base does not fail closed");
+
+  // 8. A folder no suite reads selects only quality, and nothing outside names it.
+  for (const folder of NOT_SUITE_INPUTS) {
+    const inside = tracked.filter((f) => f.startsWith(folder) && !f.endsWith(".md"));
+    expect(inside.length > 0, `${folder}: no tracked file (remove it from NOT_SUITE_INPUTS in scripts/verify-cache.ts)`);
+    await pool(inside, 8, async (file) => {
+      const r = await select([file]);
+      expect(selected(r).join() === "quality" && !r.docs_only && !r.no_suite, `${file}: expected to select only quality, got ${selected(r).join() || "nothing"}`);
+    });
+    // The files that declare the rule name the folder.
+    const declares = ["scripts/ci-changed-areas.sh", "scripts/verify-cache.ts", "scripts/verify-cache.test.ts"];
+    const outside = tracked
+      .filter((f) => !f.startsWith(folder) && !declares.includes(f) && /^(apps\/|packages\/|scripts\/|\.github\/|[^/]+$)/.test(f) && !isDoc(f) && !f.endsWith(".md"))
+      .filter((f) => /\.([cm]?[jt]sx?|json|jsonc|sh|ya?ml|html|toml|py)$/.test(f))
+      .map((f) => ({ path: f, text: readFileSync(path.join(root, f), "utf8") }));
+    for (const reference of outsideReferences(folder, outside)) {
+      expect(false, `${reference} <- names ${folder}, which the browser suites do not run for. Remove the reference, or remove the folder from NOT_SUITE_INPUTS and from its quality-only case in scripts/ci-changed-areas.sh`);
+    }
+    checked++;
+  }
 
   // 7. The CI gate still enforces the rule.
   const ci = readFileSync(path.join(root, ".github/workflows/ci.yml"), "utf8");
