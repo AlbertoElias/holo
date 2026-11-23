@@ -199,6 +199,8 @@ const CROUCH_GROUND_SAMPLE_OFFSETS: readonly Readonly<[number, number]>[] = [
   [-0.7, -0.7]
 ];
 const CROUCH_FOOT_PITCH_DEG = 8;
+/** After the set's see-through surfaces (0), before the recording bubble (999). */
+const AVATAR_TRANSLUCENT_RENDER_ORDER = 1;
 
 export class AvatarRig {
   readonly avatarRoot = new THREE.Group();
@@ -320,6 +322,7 @@ export class AvatarRig {
       this.neutralEyeAboveBase = this.avatarHeight * 0.92;
     }
     this.disableAvatarFrustumCulling(avatar);
+    this.drawTranslucentPartsAfterSet(avatar);
     this.classifyFirstPersonHeadMeshes(avatar);
     this.collectAvatarMaterials(avatar);
     this.resolveCrouchRig();
@@ -333,6 +336,7 @@ export class AvatarRig {
   refreshMeshes(): void {
     if (!this.avatar) return;
     this.disableAvatarFrustumCulling(this.avatar);
+    this.drawTranslucentPartsAfterSet(this.avatar);
     this.classifyFirstPersonHeadMeshes(this.avatar);
     this.collectAvatarMaterials(this.avatar);
   }
@@ -913,6 +917,23 @@ export class AvatarRig {
       if (isThreeMesh(obj)) {
         obj.frustumCulled = false;
       }
+    });
+  }
+
+  /**
+   * The light finish's see-through parts draw after the set's see-through
+   * surfaces and write depth. three sorts blended meshes by their origins,
+   * and a lake's origin can be nearer the camera than the avatar's feet: the
+   * water then drew over a body that wrote no depth. The viewer does the same
+   * in `sphereClipping.ts`.
+   */
+  private drawTranslucentPartsAfterSet(model: THREE.Object3D): void {
+    model.traverse((obj) => {
+      if (!isThreeMesh(obj)) return;
+      const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
+      if (!materials.some((material) => material?.transparent)) return;
+      for (const material of materials) if (material) material.depthWrite = true;
+      obj.renderOrder = AVATAR_TRANSLUCENT_RENDER_ORDER;
     });
   }
 
