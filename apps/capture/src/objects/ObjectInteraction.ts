@@ -224,6 +224,7 @@ export class ObjectInteraction {
   private readonly up = new THREE.Vector3(0, 1, 0);
   private readonly axis = new THREE.Vector3();
   private readonly otherPalm = new THREE.Vector3();
+  private readonly shoulderPos = new THREE.Vector3();
   private readonly eyePos = new THREE.Vector3();
   private readonly lineDir = new THREE.Vector3();
   private readonly fetchRay = new THREE.Raycaster();
@@ -621,7 +622,7 @@ export class ObjectInteraction {
         this.lowerPoint.lerpVectors(settle.handFrom!, settle.handTo!, t * t * (3 - 2 * t));
         const shoulder = this.deps.avatar.getBoneWorldPosition('rightUpperArm', this.pos2);
         const reachM = carry.getReach();
-        reach.stepLower(step.deltaSec, !shoulder || !reachM || shoulder.distanceTo(this.lowerPoint) > reachM * REACH_TARGET_FRACTION);
+        reach.stepLower(step.deltaSec, !shoulder || !reachM ? Infinity : shoulder.distanceTo(this.lowerPoint) - reachM * REACH_TARGET_FRACTION);
       } else {
         const t = Math.min(1, (this.clock - settle.startSec) / SET_DOWN_SEC);
         // A pushed-out prop is lowered by itself; the hand stays where it is.
@@ -648,7 +649,7 @@ export class ObjectInteraction {
     // The hand has its arm pose for the step: take the prop once the palm is on it. It stays where it was until then.
     if (reach.phase === 'reach' && reach.object) {
       const palm = this.palmWorld('right', this.pos2);
-      if (palm && this.distanceToObject(reach.object, palm) <= REACH_PALM_M) {
+      if (palm && this.distanceToObject(reach.object, palm) <= REACH_PALM_M && this.palmOverProp(palm)) {
         const object = reach.object;
         this.grab(object, 'right', true);
         this.hold!.pointer = reach.pointerDown;
@@ -685,6 +686,17 @@ export class ObjectInteraction {
     if (held.settle && (settled || hanging)) {
       this.release(false);
     }
+  }
+
+  /**
+   * The palm is level with the middle of the prop (in `box`) or above it, or at the shoulder for a prop held up higher.
+   * A hand that comes up to a prop from below takes it only then, so the prop hangs from the hand. Taken from below,
+   * it rode above the wrist, and a set-down had to put the wrist under the floor: the squat went to its full depth (B-086).
+   */
+  private palmOverProp(palm: THREE.Vector3): boolean {
+    const middle = (this.box.min.y + this.box.max.y) / 2;
+    const shoulder = this.deps.avatar.getBoneWorldPosition('rightUpperArm', this.shoulderPos);
+    return palm.y >= (shoulder ? Math.min(middle, shoulder.y) : middle);
   }
 
   /** Starts a reach for `object`: the body bends toward it, and it is taken once the palm is on it. */

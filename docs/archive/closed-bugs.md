@@ -3,6 +3,48 @@
 Closed entries moved from `BUGS.md` so the live tracker stays scannable.
 `BUGS.md` remains the authority for open, verified defects.
 
+### B-086 — The house avatar sinks to the floor on a floor reach
+
+- **Area:** `apps/capture/src/avatar/AvatarRig.ts` (crouch drop), `apps/capture/src/objects/ObjectInteraction.ts`
+  and `DesktopReach.ts` (desktop grab and set-down)
+- **Severity:** P2
+- **Observed:** 2026-11-20, the capture `object` suite on the house base: the hips went down to 0.08–0.18 m
+  above the floor (limit 0.27 m), a knee dropped below its ankle and a thigh turned 11.3–11.6° in one step.
+- **Cause:** three parts. (1) The crouch and squat drops were fractions of the avatar's height, tuned on the
+  stock rig; the base's legs are shorter for its height, so the same drop folded them past the knee limit.
+  (2) The desktop reach took a prop as soon as the palm was 0.1 m from its bounds, also from below, so the
+  prop rode 0.10 m above the hand and a set-down squatted to full depth to bring it to the floor. (3) The
+  set-down squat went on at full rate until the let-go, and the relax took another 0.07 m of hips to stop it.
+- **Fix:** every crouch drop scales by the avatar's own leg (thigh plus shin, per metre of height) against the
+  stock rig's (0.507), clamped to 0.7–1.3. The reach takes the prop only when the palm is level with the
+  prop's middle or the shoulder, whichever is lower. The set-down squat slows over the hand's last 0.1 m
+  (to 20 % of its rate), so it is near rest at the let-go. No check limit changed.
+- **Proof:** `OBJECT_ONLY=desktop,mouse,phone,reach,resizeIwer` on the house base and on the stock avatar
+  (`XR_AVATAR_URL=/gltf/models/avatar.glb`): no hips, knee or thigh failure on either (house put-down hips
+  0.287 m); the remaining failures are B-069's. The stock avatar's desktop-object-bracket now passes; on the
+  house base it fails as B-069 lists for the stock avatar (a glancing walk-in, 0.014–0.096 m across runs).
+
+### B-089 — Phone portal checks: the feed rests 1 px past the last card
+
+- **Area:** `apps/viewer-web/src/styles/global.css` (`.feed-sentinel`), `apps/viewer-web/e2e/portal-helpers.ts` (`settleScroll`)
+- **Severity:** P2 (red `main` run)
+- **Observed:** 2026-11-21, hosted run 44880742510 attempt 1 (a0ad1998), job "Portal view end-to-end":
+  `portal.spec.ts:246` threw "feed scroll did not settle: 845, 845, 845, 845, 845". Attempt 2 passed.
+- **Cause:** the product. The load-more sentinel (1 px) sat below the last card, so a two-card feed was
+  1689 px tall on an 844 px phone and could scroll to 845. Scrolling to the last card sometimes came to
+  rest at that end, 1 px past the card's snap point, and the check waits for a card boundary. A viewer
+  on a short feed saw the same 1 px offset.
+- **Fix:** the sentinel takes a `-1px` top margin, so it overlaps the last card's bottom pixel and adds no
+  scroll room; it still meets the viewport at the end of the feed, so the next page still loads.
+  `settleScroll` now prints each child's offset and height, the scroll height and the snap type when it
+  throws.
+- **Proof:** before the fix, the phone checks failed 25 of 64 under `CI_EMULATE_LOAD=2` (one worker), 16
+  of them "did not settle" in the tilt-permission checks. After it, 0 settle failures in 4 runs of the
+  whole `portal.spec.ts` (5–6 repeats each) under the same load. A temporary probe that
+  pages a two-card feed passed 44 of 44 at 390×844 and 1280×800: no scroll room past the last card, and
+  scrolling to it loads the next page. The tilt check at line 213 fails under that load with or without
+  the fix; it is B-090.
+
 ### B-001 — XR locomotion runner lacks an observable final result
 
 - **Area:** `apps/capture` test tooling
