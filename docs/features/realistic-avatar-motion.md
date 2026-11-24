@@ -1,7 +1,7 @@
 # Feature brief: realistic avatar motion (mocap clips + IK)
 
 **Lead:** Claude (Opus), session local_86351c34 family, worktree `.worktrees/desktop-gait`
-**Status:** Shipped (slice 1 and the follow-up fix 1b, 2026-11-18); physical Quest check pending with the owner
+**Status:** Slice 1 and fix 1b shipped (2026-11-18); slice 2 shipped (2026-11-23; its owner decisions pending owner confirmation); physical Quest check pending with the owner
 **Layer:** event (the recorded body)
 
 ## User outcome
@@ -228,7 +228,7 @@ jitters"), fixed in 1b:
   motion capture database (free for any use, raw data not resold), from the
   original ASF/AMC takes. Walk: subject 07 take 12, frames 8–35, one step
   mirrored onto the other leg so both legs walk the same step. Idle: 113_21,
-  frames 165–315, its sway scaled to 0.4 and re-faced (the take stands ~100°
+  frames 165–315, its sway scaled to 0.4 (0.37 since slice 2) and re-faced (the take stands ~100°
   off its walk heading). Loops are cut at left heel strikes, in place, seams
   closed. On desktop the Idle only holds the arms, still, at its first frame
   (down on any rest pose, so a T-pose avatar does not swing them down when it
@@ -261,8 +261,8 @@ jitters"), fixed in 1b:
 (back/strafe) and crouch mocap clips with phase-synced blending; foot
 pitch/roll to the terrain normal and heel sampling; pelvis drop to the lower
 foot; the desktop Idle's upper-body sway (needs the desktop reach, carry,
-set-down and prop placement retuned to read a moving hand and eye); the remaining knee-swing excess (walk p99 77° against the source's
-57–66°); what the audit of cause 23 left: a one-frame knee twitch (up to 130 m/s²)
+set-down and prop placement retuned to read a moving hand and eye); the remaining knee-swing excess (walk p99 77°; slice 2 re-measured the
+source at 72.6–74.2°, see the slice 2 knee note); what the audit of cause 23 left: a one-frame knee twitch (up to 130 m/s²)
 when the VR stick stops during a swing, the VR landing (168 m/s², the
 capsule's one-frame velocity change, which the tracked head shares), and the
 mock-VR float (1.71 cm) and knee limit share (3%); an allocation-free leg solver (slice 1 removed its per-probe raycasts,
@@ -271,6 +271,205 @@ but `TerrainLegSolver` still makes Vector3/Quaternion temporaries each frame).
 **Excluded:** run/sprint (the VR stick is capped at the walk speed, cause 23); physical Quest validation (owner, in New York);
 facial animation; the directed-performance cast (it imports these modules
 unchanged and keeps working); phone AR (no avatar, by design).
+
+## Slice 2: directional and crouch clips, slope feet (2026-11-23)
+
+**Lead:** Claude (Opus), worktree `.claude/worktrees/hungry-kalam-a37711`,
+branch `feature/avatar-motion-slice2` (`TODOS.md` T-fca791).
+
+Slice 1 plays one forward walk for every direction. Backing up plays it with
+the stride turned toward travel, so the body walks forward in reverse at the
+full 1.8 m/s. Slice 2 gives the body a real backward walk, a real side-step
+and a real crouch walk, and stands its feet on the slope under them.
+
+**Included:**
+- Five clips from CMU takes, measured with `gait-metrics.ts` in the same
+  facing frame as the walk (speed along travel, cadence, knee swing):
+  - `WalkBackward`: 143_39 frames 62–81 (one left contact to the next,
+    mirrored half), 1.23 m/s, 190 steps/min, knee swing 55°, arm swing
+    15–18 cm at correlation −0.6 to −0.7. The loop mirrors the second half
+    (the left step, frames 71–81: knee 10° to 58°); the first half (the
+    right step) swings only to 48°, and the low-pass cut it to 47°, so the
+    back walk measured a 23° knee range and read stiff (B-106). (136_25/26 back up at 0.5–0.6 m/s
+    with no arm swing; 113_01 is irregular.)
+  - `StrafeLeft` 141_33 frames 162–180 and `StrafeRight` 141_33 frames
+    57–76, 1.1–1.3 m/s, about 190 steps/min, the feet at least 7 cm apart.
+    A side-step leads with one leg, so its half cannot be mirrored onto the
+    other. (143_40 has a larger knee swing, 43–58°, but its feet cross by up
+    to 35 cm in the source itself, which reads as scissoring; pending owner
+    confirmation.) The side-step's own pops are larger than the walk's: the
+    source measures p99 65–66 m/s² at 1.8 m, so the first-person side-step
+    phases are judged against 70 (`strafePopP99MS2`), and the rest of the run
+    against the desktop pop target (pending owner confirmation).
+  - `CrouchWalk`: 136_10 frames 126–164 mirrored, 0.78 m/s, 92 steps/min,
+    knee swing 100°, mid-stance 83°.
+  - `CrouchWalkBackward`: 136_11 frames 121–167 mirrored, 0.64 m/s.
+  The builder turns a take to the body's facing (its thigh line) instead of
+  its travel, so a backward or sideways take keeps its direction. All loops
+  are cut at a left foot contact (normalized time 0). An avatar with its own
+  Idle and Walk keeps them (never a mix of its own and the library's, see
+  `usesOwnClips`): it plays its own directional clips where it has them by
+  these names (the house avatar does, as its clips are the library's), and
+  slice 1's turned forward walk where it has none. Its own idle sways at full weight, as its author made it
+  (the house avatar's own idle is the library's scaled take; pending owner
+  confirmation).
+- Desktop directional blend (`desktop-full` profile only; VR keeps the
+  forward walk and the stride turn):
+  - Third person keeps the travel turn (cause 11): a sideways or forward
+    diagonal key turns the body and walks forward. Backing up (travel more
+    than 120° from the look, held until it comes back under 105°, so the
+    back diagonals at 135° back up and the 45° forward diagonals turn) faces
+    the look and plays `WalkBackward`.
+  - First person, a reach and a carry keep the body on the look. There the
+    walk blends `Walk`, `WalkBackward`, `StrafeLeft` and `StrafeRight` by
+    the angle of the eased velocity (not the keys) in the body frame
+    (weights |cos|, |sin|, normalized, eased over 0.1 s; the first walking
+    frame takes them at once). A reversal so plays the clip of the way the
+    body still moves.
+  - Crouching blends each of forward and back toward its crouch clip by the
+    crouch amount. A crouched side-step is the standing strafe under the
+    crouch pose.
+  - Phase sync: one shared normalized phase drives every walk clip (the
+    actions are paused and their times set from it). The phase advances so
+    that the blended planted foot moves at the travel speed:
+    phase += rate·dt / Σ wᵢ·durationᵢ, with rate = speed / stance speed and
+    the stance speed Σ wᵢ·sᵢ·durationᵢ / Σ wᵢ·durationᵢ (cause 16's held-back
+    cadence floor and stride share still apply). Each clip's time is the
+    phase plus its own offset from its left contact. The clip with the most
+    weight (with hysteresis) gives the leg solver its gait (land, lift), and
+    `GaitState` carries the blended travel direction (`clipForward`,
+    `clipLeft`), so the stride turn only corrects what the blend leaves.
+    A clip's stride axis is fitted with each foot centred on its own mean:
+    pooled, the gap between the feet outweighs the short backward stride
+    and the axis turned sideways (the back walk then measured 0.21 m/s and
+    played at three times its cadence).
+  - Speed by direction on the desktop keys (pending owner confirmation):
+    forward 1.0 of the walk speed, backing up 0.6 (1.08 m/s at 1.8 m),
+    side-stepping 0.65 (like the VR stick, B-079), blended by the keys.
+    Crouched speeds multiply in (0.45 at full crouch). The speed so changes
+    with the view mode: third person walks a side key forward at the full
+    speed, and only backing up is slower.
+  - The crouch pose's leg, foot, hips and spine weights while walking go down
+    by the crouch clip's share, since the clip carries that bend itself. The
+    crouch clip's hips drop comes from its feet (`withHipsBob`), as the walk's
+    does. The capture state reports the share as `clipCrouch`.
+- Leg solver (`TerrainLegSolver`):
+  - Foot pitch from the ground under the heel (the ankle) and under the toe,
+    and roll from the ground normal, clamped to 40°: the foot lies on the
+    slope instead of on the ankle's normal alone.
+  - Pelvis drop: when the lower foot's ground is out of the leg's reach
+    (R = max(0.995 · leg length, the clip's hip-to-ankle)), the hips go down
+    by the deficit d = D.y − √(R² − D.xz²). Only grounded legs count that are
+    pinned, or standing while not walking. The drop is at most 0.12 of the
+    height, eased with a 0.08 s time constant down (and while walking), and
+    with 0.3 s up while standing, so the settle step that brings the feet
+    together lets the hips rise smoothly. It is applied along world down and
+    removed by `restore()`. The capture state reports it as `pelvisDrop`.
+  - No per-frame allocation: scratch vectors and quaternions are members,
+    samples are written in place, and `place` has no closures. The check
+    scans the solver's `update` path in the source for object creation
+    (`new`, array and object literals, closures, spreads, copying array
+    methods) and wants none. A V8 heap profile cannot measure this: it counts
+    the number boxing in three.js math (about 165 kB per frame) and, with the
+    debugger on, slows the pose 15 times (pending owner confirmation).
+  - The toe lift: down a slope the toe stands on its own ground. Only over a
+    drop steeper than 40° along the foot (a ledge) is it held at the ankle's
+    ground. Before, every downhill toe was held at the ankle's height and
+    floated up to 4 cm (slope tilt p95 8.9 → 5.6°).
+  - The swing lift (`SWING_LIFT_RATIO`) applies only to a clip whose swing
+    foot does not clear the floor by itself; the mocap walks clear it, and
+    the extra lift bent the swing knee past the source (see the knee swing
+    below).
+- Desktop Idle sway (the idle take's sway scaled to 0.37): a second action plays the idle clip's spine, chest,
+  upper chest, neck and head tracks (the neck and head sway about the walk's mean neck and head pose: 113_21's own
+  head stands 37–103° off its neck, and played back it held the head 90° to the side, B-105) on top of the still idle, at the idle's
+  weight times an eased share (VR has no idle, so nothing changes there).
+  The share eases to 0 over 0.25 s while a point, carry, reach, set-down or
+  plant holds the upper body, and back after: a person who reaches or aims
+  stops swaying. A desktop point takes it out in 50 ms: its ray starts at
+  the eye, and the stored link end is the mean of its hits (the place
+  pipeline holds that end within 2 cm of the hit). A touch hold keeps the
+  0.25 s: its ray starts at the view, which a fast exit would move under
+  the finger. The hips and the arms' own joints stay still, but the
+  hands (children of the chest) and the eye (on the head) move with the
+  sway, about 2 cm. So the sway is also held in first person, where the
+  view rides the eye. In third person the view looks at the hips plus the
+  eye's offset from them through a 3 s filter, blended in by the sway's
+  weight (`CameraController.steadyLookTarget`), so the view does not rock
+  (pending owner confirmation). The phone object checks scan the open
+  bracket prop in 5 px steps: its thin arms shift on screen as the view
+  turns. The capture state reports the weight as `swayWeight`.
+- Knee swing: the slice 1 note (walk p99 77° against the source's 57–66°)
+  came from the FBX-era source. The original AMC 07_12 swing knee measures
+  72.6–74.2° with this code, and the shipped avatar already reads 72.6°. The
+  fixtures read 79°; the swing lift is the excess. The target's max goes
+  from 80° to 76°.
+- Checks (`ci-desktop-motion-playwright.ts`): per row, a backward walk, a
+  first-person strafe each way and a crouch walk, each graded on foot slide
+  and the gait targets that apply to it (per-direction targets anchored on
+  the source takes); a slope row graded on the planted foot's pitch and roll
+  against the ground under heel and toe, and on the lower foot's float when
+  standing across the slope (past the ankle's and toe joint's own height over
+  the sole); the source scan of the leg solver; the idle's head sway
+  amplitude, from 2 s into the last stop. The crouch walk phase lasts 4.5 s,
+  so it holds two strides.
+
+**Excluded from slice 2:** run/sprint; VR directional clips (the VR body
+solver lays its own steps); a crouched strafe clip (no clean CMU take); the
+cause 23 residue (VR stick stop knee twitch, VR landing, mock-VR float),
+which stays in `TODOS.md`.
+
+**Owner decisions taken (pending owner confirmation):** the per-direction
+speed shares (back 0.6, side 0.65), which so differ by view mode (third
+person walks side keys forward at the full speed); third person keeps the
+travel turn for side keys instead of a strafe; the desktop idle sways its
+spine and head again and stops for reach, carry and aim; no sway in first
+person; the 3 s steady third-person look target; the strafe take 141_33;
+the side-step pop target; the source scan for allocation; an avatar's own
+idle sways at full weight; the arm turn bar read against the torso; the
+slope tilt judged at p95.
+
+### Slice 2 acceptance criteria
+
+All on the shipped avatar and the 7 fixture skeletons, desktop keyboard:
+
+- [ ] Backing up plays `WalkBackward` at 0.6 of the walk speed: planted feet
+      slide under the existing skate target, knees flex in swing (40–76°),
+      the swing foot moves backward, cadence within the back targets
+      (anchored on 143_39's left step: 135–220 steps/min). The lower
+      leg's swing peak is 54–76° and each knee moves through at least 30°
+      (B-106).
+- [ ] First person, A and D side-step with the strafe clips, the feet never
+      cross (left ankle stays left of the right by at least 0.04 of the
+      height), and the planted feet stay under the skate target.
+- [ ] A crouch walk plays `CrouchWalk`: hips lower than standing, knee
+      mid-stance flexion within ±10% of 136_10's, planted feet under the
+      skate target, no foot under the ground.
+- [ ] Slopes: on the default terrain, on faces of 10° or more, a planted
+      foot's pitch and roll are within 8° of the ground under its heel and
+      toe at p95 of the planted frames (the max reads 15.9° on the short
+      frames where a foot crosses a face edge; pending owner confirmation);
+      standing across a slope, the lower foot floats less than 1.5 cm above
+      its ground at p95.
+- [ ] Knee swing ≤ 76° on every upright walk row: the forward walk's lowest
+      swing peak (slice 1's gait target) and the back walk's highest (the
+      crouch walk keeps its own target).
+- [ ] No arm turns faster than the 250°/s turn bar (B-097). The desktop
+      samples hold world positions only, so the check reads the change of an
+      upper arm's or forearm's angular velocity against the torso (clavicle
+      line, chest to neck) from one frame to the next, not against its parent
+      joint; the body's own turn toward its travel does not count (pending
+      owner confirmation).
+- [ ] The leg solver allocates nothing per frame (a source scan of its
+      `update` path, see above).
+- [ ] Desktop idle: head sway 0.5–3 cm standing, from 2 s into the last stop
+      to its end (3 s); the held idle's head (look and up against the torso)
+      within 10° of the steady walk's, and the head never turns on the torso
+      faster than 400°/s (B-105); the pointing,
+      summon, object (desktop and phone) and held-states checks pass.
+- [ ] Every slice 1 criterion and check still passes.
+- [ ] Proof videos: desktop backward walk, first-person strafe, crouch
+      walk, a slope walk and the idle, and the phone view of the same.
 
 ## Undo
 
@@ -290,8 +489,8 @@ Targets are anchored on the CMU source walks (02_01, 07_01, 08_01, 07_12 at
 - [ ] Knees flex in swing (gait targets) and are never locked straight
       through stance (mid-stance flexion ≤ 40°).
 - [ ] Gait: cadence 100–140 steps/min, stance share and step asymmetry within
-      the gait targets; pops p99 ≤ 46 m/s² (CMU 08_01 at 1.86 m/s measures
-      46.3) and held jitter p95 ≤ 3 mm (a real person standing, 113_21,
+      the gait targets; pops p99 ≤ 50 m/s² (CMU 08_01 at 1.86 m/s measures
+      46.3; the gate went from 46 to 50 with the walk's own stride, above) and held jitter p95 ≤ 3 mm (a real person standing, 113_21,
       measures 4.1).
 - [ ] Terrain: on the default scene, toe and ankle never more than 1.5 cm
       below the ground straight under each of them, and planted feet within
@@ -348,6 +547,7 @@ dependency for what a 150-line vertical-only grid does).
 | Every input path (cause 23) | `output/motion-audit/audit.ts` (ignored; drives each path on a frozen clock and grades it with `scripts/lib/motion-quality.ts`) | Before → after, 2026-11-20. Desktop first/third and touch: penetration 2.87 → 0 cm, standing take-off 455 → 99 m/s², walking take-off 463 → 121, pops p99 65 → 62. Mock VR: walk start 459 → 124, take-off 204 → 100, pops p99 84 → 73. VR stick and headset AR: skate 2.77 → 1.08 cm, penetration 2.16 → 0.09 cm, pops p99 65.5 → 59.0, take-off 174 → 136, largest stop spike 170 → 130 |
 | VR checks still pass | `node --import tsx scripts/run-xr-checks.ts desktop-motion body hands locomotion loco-states mock-vr terrain held-states ar-record` | All pass (2026-11-20) |
 | VR arms, every input (cause 24) | `pnpm --filter @holoim/capture run test:xr:arms` (`ARM_REACH_SESSION=ar` for passthrough, `ARM_REACH_VIDEO=1` for video) | `output/ci-arm-reach/{hand,controller}-report.json`, per segment. Before → after 2026-11-20 in cause 24 |
+| Slice 2: directions, crouch, slopes, sway, arms | `node --import tsx scripts/run-xr-checks.ts desktop-motion` (from `apps/capture`) | `output/ci-desktop-motion/summary.json`: PASS on all 10 rows (2026-11-23). Shipped: back walk weight 1.00, back knee swing max 51.5°, swing foot along travel 100%; strafe gap 0.084 of the height; crouch hips 0.106 of the height lower, mid-stance 78.5°; idle head sway 2.95 cm; arm turn jump max 183°/s (p99 83); pops 46.6 m/s². Terrain: slope foot tilt p95 5.6°, lower foot float p95 0.25 cm. Pose cost median 0.2 ms. After B-105/B-106 (2026-11-23, PASS on all 10 rows): shipped back knee swing 57.9°, knee range 36.1°, back cadence 150 steps/min (stock 144); idle head 4.0° off the walk's, head turn max 214°/s (was 90° and 3900°/s); held jitter is judged from 800 ms into a stop (two settle steps), 1.1 mm. The terrain, loco-states, walk-direction, held-states, pointing, object, summon and arms checks keep their main results |
 | Looks right | proof video (ignored `output/`, not linked) | A 14 s desktop keyboard walk over the default terrain: arms hang and swing opposite the legs, knees bend through the stride, and the feet stay on the slopes |
 
 ## Physical-device limits

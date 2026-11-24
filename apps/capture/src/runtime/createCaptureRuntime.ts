@@ -315,7 +315,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       getBodyYaw: () => body.solver.bodyYaw,
       getHud: () => vrChrome.root
     }),
-    frame: { deltaSec: 0, elapsedSec: 0, steps: 0, xrPresenting: false, arCameraAuthor: false, vrActive: false, bodyTracking: false, character: null },
+    frame: { deltaSec: 0, elapsedSec: 0, steps: 0, xrPresenting: false, arCameraAuthor: false, vrActive: false, bodyTracking: false, character: null, travelLocalYaw: null },
     clockMode: () => loop.clockMode
   };
   world.globals.capture = capture;
@@ -506,6 +506,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
         __loadTrayUrls: (urls) => objects.loadTrayUrls(urls),
         __setFaceInput: (sample) => capture.face.setAutomationInput(sample),
         __sampleFace: () => capture.face.snapshot(),
+        __setFaceTrackerInput: (raw) => capture.face.setTrackerInput(raw),
         __sampleHumanoid: () => avatar.humanoid?.report() ?? null,
         __poseLocomotion: (state, profile, timeSec) => capture.animator.poseForCheck(state, profile, timeSec),
         __sampleAvatarPose: () => sampleAvatarPose(avatar, capture.animator),

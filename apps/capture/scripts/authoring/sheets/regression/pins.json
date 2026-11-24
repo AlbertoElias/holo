@@ -1,0 +1,887 @@
+{
+  "baker": {
+    "grip.take": {
+      "pass": true,
+      "numbers": [
+        [
+          4,
+          "mm"
+        ],
+        [
+          2.8,
+          "°"
+        ]
+      ]
+    },
+    "reach.open": {
+      "pass": true,
+      "numbers": [
+        [
+          12,
+          "mm"
+        ]
+      ]
+    },
+    "reach.carry": {
+      "pass": true,
+      "numbers": [
+        [
+          15,
+          "mm"
+        ]
+      ]
+    },
+    "reach.show": {
+      "pass": true,
+      "numbers": [
+        [
+          5,
+          "mm"
+        ]
+      ]
+    },
+    "reach.offer": {
+      "pass": true,
+      "numbers": [
+        [
+          13,
+          "mm"
+        ]
+      ]
+    },
+    "reach.offer#2": {
+      "pass": true,
+      "numbers": [
+        [
+          15,
+          "mm"
+        ]
+      ]
+    },
+    "smooth.b": {
+      "pass": false,
+      "numbers": [
+        [
+          4,
+          "%"
+        ],
+        [
+          0.01,
+          "m/s"
+        ]
+      ]
+    },
+    "jump.b": {
+      "pass": false,
+      "numbers": [
+        [
+          3.71,
+          "m/s"
+        ]
+      ]
+    },
+    "turn.b": {
+      "pass": false,
+      "numbers": [
+        [
+          835,
+          "°/s"
+        ]
+      ]
+    },
+    "jump.props": {
+      "pass": false,
+      "numbers": [
+        [
+          4.8,
+          "m/s"
+        ]
+      ]
+    },
+    "arms.body.b": {
+      "pass": true,
+      "numbers": [
+        [
+          14,
+          "mm"
+        ]
+      ]
+    },
+    "arms.prop.b": {
+      "pass": false,
+      "numbers": [
+        [
+          42,
+          "mm"
+        ]
+      ]
+    },
+    "arms.twist.b": {
+      "pass": true,
+      "numbers": [
+        [
+          77,
+          "°"
+        ]
+      ]
+    },
+    "arms.wrist.b": {
+      "pass": true,
+      "numbers": [
+        [
+          45,
+          "°"
+        ]
+      ]
+    },
+    "arms.elbow.b": {
+      "pass": true,
+      "numbers": [
+        [
+          4,
+          "°"
+        ],
+        [
+          0,
+          "°"
+        ]
+      ]
+    },
+    "arms.held.b": {
+      "pass": false,
+      "numbers": [
+        [
+          78,
+          "mm"
+        ]
+      ]
+    },
+    "arms.support.b": {
+      "pass": false,
+      "numbers": [
+        [
+          3,
+          "%"
+        ]
+      ]
+    }
+  },
+  "crouch-v43": {
+    "grip.pick": {
+      "pass": true,
+      "numbers": [
+        [
+          0.3,
+          "mm"
+        ],
+        [
+          2.7,
+          "°"
+        ]
+      ]
+    },
+    "reach.show": {
+      "pass": true,
+      "numbers": [
+        [
+          12,
+          "mm"
+        ]
+      ]
+    },
+    "smooth.me": {
+      "pass": true,
+      "numbers": [
+        [
+          58,
+          "%"
+        ],
+        [
+          0.33,
+          "m/s"
+        ]
+      ]
+    },
+    "jump.me": {
+      "pass": true,
+      "numbers": [
+        [
+          1.09,
+          "m/s"
+        ]
+      ]
+    },
+    "turn.me": {
+      "pass": true,
+      "numbers": [
+        [
+          231,
+          "°/s"
+        ]
+      ]
+    },
+    "jump.props": {
+      "pass": true,
+      "numbers": [
+        [
+          1.17,
+          "m/s"
+        ]
+      ]
+    },
+    "arms.body.me": {
+      "pass": true,
+      "numbers": [
+        [
+          14,
+          "mm"
+        ]
+      ]
+    },
+    "arms.prop.me": {
+      "pass": true,
+      "numbers": [
+        [
+          0,
+          "mm"
+        ]
+      ]
+    },
+    "arms.twist.me": {
+      "pass": true,
+      "numbers": [
+        [
+          76,
+          "°"
+        ]
+      ]
+    },
+    "arms.wrist.me": {
+      "pass": true,
+      "numbers": [
+        [
+          42,
+          "°"
+        ]
+      ]
+    },
+    "arms.elbow.me": {
+      "pass": true,
+      "numbers": [
+        [
+          5,
+          "°"
+        ],
+        [
+          0,
+          "°"
+        ]
+      ]
+    },
+    "arms.held.me": {
+      "pass": true,
+      "numbers": [
+        [
+          2,
+          "mm"
+        ]
+      ]
+    },
+    "arms.support.me": {
+      "pass": true,
+      "numbers": [
+        [
+          57,
+          "%"
+        ]
+      ]
+    }
+  },
+  "goodbye-v35": {
+    "grip.h-bag": {
+      "pass": false,
+      "numbers": [
+        [
+          0.4,
+          "mm"
+        ],
+        [
+          8.1,
+          "°"
+        ]
+      ]
+    },
+    "reach.r-reach": {
+      "pass": true,
+      "numbers": [
+        [
+          293,
+          "mm"
+        ]
+      ]
+    },
+    "smooth.her": {
+      "pass": false,
+      "numbers": [
+        [
+          2,
+          "%"
+        ],
+        [
+          0,
+          "m/s"
+        ]
+      ]
+    },
+    "jump.her": {
+      "pass": true,
+      "numbers": [
+        [
+          1.04,
+          "m/s"
+        ]
+      ]
+    },
+    "turn.her": {
+      "pass": false,
+      "numbers": [
+        [
+          426,
+          "°/s"
+        ]
+      ]
+    },
+    "smooth.him": {
+      "pass": false,
+      "numbers": [
+        [
+          8,
+          "%"
+        ],
+        [
+          0.01,
+          "m/s"
+        ]
+      ]
+    },
+    "jump.him": {
+      "pass": true,
+      "numbers": [
+        [
+          1.93,
+          "m/s"
+        ]
+      ]
+    },
+    "turn.him": {
+      "pass": false,
+      "numbers": [
+        [
+          515,
+          "°/s"
+        ]
+      ]
+    },
+    "jump.props": {
+      "pass": false,
+      "numbers": [
+        [
+          2.55,
+          "m/s"
+        ]
+      ]
+    },
+    "arms.body.her": {
+      "pass": true,
+      "numbers": [
+        [
+          15,
+          "mm"
+        ]
+      ]
+    },
+    "arms.prop.her": {
+      "pass": true,
+      "numbers": [
+        [
+          0,
+          "mm"
+        ]
+      ]
+    },
+    "arms.twist.her": {
+      "pass": true,
+      "numbers": [
+        [
+          82,
+          "°"
+        ]
+      ]
+    },
+    "arms.wrist.her": {
+      "pass": true,
+      "numbers": [
+        [
+          43,
+          "°"
+        ]
+      ]
+    },
+    "arms.elbow.her": {
+      "pass": true,
+      "numbers": [
+        [
+          5,
+          "°"
+        ],
+        [
+          0,
+          "°"
+        ]
+      ]
+    },
+    "arms.body.him": {
+      "pass": false,
+      "numbers": [
+        [
+          29,
+          "mm"
+        ]
+      ]
+    },
+    "arms.prop.him": {
+      "pass": false,
+      "numbers": [
+        [
+          12,
+          "mm"
+        ]
+      ]
+    },
+    "arms.twist.him": {
+      "pass": true,
+      "numbers": [
+        [
+          41,
+          "°"
+        ]
+      ]
+    },
+    "arms.wrist.him": {
+      "pass": true,
+      "numbers": [
+        [
+          42,
+          "°"
+        ]
+      ]
+    },
+    "arms.elbow.him": {
+      "pass": true,
+      "numbers": [
+        [
+          3,
+          "°"
+        ],
+        [
+          0,
+          "°"
+        ]
+      ]
+    },
+    "arms.held.him": {
+      "pass": false,
+      "numbers": [
+        [
+          9.3,
+          "mm"
+        ]
+      ]
+    },
+    "arms.support.him": {
+      "pass": false,
+      "numbers": [
+        [
+          0,
+          "%"
+        ]
+      ]
+    }
+  },
+  "pinch-v14": {
+    "reach.lift": {
+      "pass": true,
+      "numbers": [
+        [
+          8,
+          "mm"
+        ]
+      ]
+    },
+    "smooth.me": {
+      "pass": true,
+      "numbers": []
+    },
+    "jump.me": {
+      "pass": true,
+      "numbers": [
+        [
+          0.73,
+          "m/s"
+        ]
+      ]
+    },
+    "turn.me": {
+      "pass": true,
+      "numbers": [
+        [
+          129,
+          "°/s"
+        ]
+      ]
+    },
+    "arms.body.me": {
+      "pass": true,
+      "numbers": [
+        [
+          17,
+          "mm"
+        ]
+      ]
+    },
+    "arms.prop.me": {
+      "pass": true,
+      "numbers": [
+        [
+          0,
+          "mm"
+        ]
+      ]
+    },
+    "arms.twist.me": {
+      "pass": true,
+      "numbers": [
+        [
+          48,
+          "°"
+        ]
+      ]
+    },
+    "arms.wrist.me": {
+      "pass": true,
+      "numbers": [
+        [
+          41,
+          "°"
+        ]
+      ]
+    },
+    "arms.elbow.me": {
+      "pass": true,
+      "numbers": [
+        [
+          5,
+          "°"
+        ],
+        [
+          0,
+          "°"
+        ]
+      ]
+    }
+  },
+  "slip-sO": {
+    "reach.bump": {
+      "pass": true,
+      "numbers": [
+        [
+          7,
+          "mm"
+        ]
+      ]
+    },
+    "reach.sweep": {
+      "pass": true,
+      "numbers": [
+        [
+          3,
+          "mm"
+        ]
+      ]
+    },
+    "reach.startle": {
+      "pass": true,
+      "numbers": [
+        [
+          6,
+          "mm"
+        ]
+      ]
+    },
+    "reach.startle#2": {
+      "pass": true,
+      "numbers": [
+        [
+          9,
+          "mm"
+        ]
+      ]
+    },
+    "reach.lower": {
+      "pass": true,
+      "numbers": [
+        [
+          14,
+          "mm"
+        ]
+      ]
+    },
+    "reach.lower#2": {
+      "pass": true,
+      "numbers": [
+        [
+          11,
+          "mm"
+        ]
+      ]
+    },
+    "smooth.me": {
+      "pass": false,
+      "numbers": [
+        [
+          4,
+          "%"
+        ],
+        [
+          0.01,
+          "m/s"
+        ]
+      ]
+    },
+    "jump.me": {
+      "pass": true,
+      "numbers": [
+        [
+          1.73,
+          "m/s"
+        ]
+      ]
+    },
+    "turn.me": {
+      "pass": false,
+      "numbers": [
+        [
+          682,
+          "°/s"
+        ]
+      ]
+    },
+    "jump.props": {
+      "pass": true,
+      "numbers": [
+        [
+          0.23,
+          "m/s"
+        ]
+      ]
+    },
+    "arms.body.me": {
+      "pass": true,
+      "numbers": [
+        [
+          14,
+          "mm"
+        ]
+      ]
+    },
+    "arms.prop.me": {
+      "pass": false,
+      "numbers": [
+        [
+          12,
+          "mm"
+        ]
+      ]
+    },
+    "arms.twist.me": {
+      "pass": true,
+      "numbers": [
+        [
+          85,
+          "°"
+        ]
+      ]
+    },
+    "arms.wrist.me": {
+      "pass": true,
+      "numbers": [
+        [
+          38,
+          "°"
+        ]
+      ]
+    },
+    "arms.elbow.me": {
+      "pass": true,
+      "numbers": [
+        [
+          3,
+          "°"
+        ],
+        [
+          0,
+          "°"
+        ]
+      ]
+    }
+  },
+  "stone-sD": {
+    "grip.find": {
+      "pass": true,
+      "numbers": [
+        [
+          0.3,
+          "mm"
+        ],
+        [
+          4.5,
+          "°"
+        ]
+      ]
+    },
+    "reach.lid": {
+      "pass": true,
+      "numbers": [
+        [
+          30,
+          "mm"
+        ]
+      ]
+    },
+    "reach.look-at-it": {
+      "pass": true,
+      "numbers": [
+        [
+          12,
+          "mm"
+        ]
+      ]
+    },
+    "reach.you": {
+      "pass": true,
+      "numbers": [
+        [
+          6,
+          "mm"
+        ]
+      ]
+    },
+    "smooth.me": {
+      "pass": false,
+      "numbers": [
+        [
+          19,
+          "%"
+        ],
+        [
+          0.06,
+          "m/s"
+        ]
+      ]
+    },
+    "jump.me": {
+      "pass": false,
+      "numbers": [
+        [
+          4.69,
+          "m/s"
+        ]
+      ]
+    },
+    "turn.me": {
+      "pass": false,
+      "numbers": [
+        [
+          1008,
+          "°/s"
+        ]
+      ]
+    },
+    "jump.props": {
+      "pass": false,
+      "numbers": [
+        [
+          5.73,
+          "m/s"
+        ]
+      ]
+    },
+    "arms.body.me": {
+      "pass": true,
+      "numbers": [
+        [
+          15,
+          "mm"
+        ]
+      ]
+    },
+    "arms.prop.me": {
+      "pass": false,
+      "numbers": [
+        [
+          15,
+          "mm"
+        ]
+      ]
+    },
+    "arms.twist.me": {
+      "pass": true,
+      "numbers": [
+        [
+          77,
+          "°"
+        ]
+      ]
+    },
+    "arms.wrist.me": {
+      "pass": true,
+      "numbers": [
+        [
+          45,
+          "°"
+        ]
+      ]
+    },
+    "arms.elbow.me": {
+      "pass": true,
+      "numbers": [
+        [
+          5,
+          "°"
+        ],
+        [
+          0,
+          "°"
+        ]
+      ]
+    },
+    "arms.held.me": {
+      "pass": false,
+      "numbers": [
+        [
+          109.2,
+          "mm"
+        ]
+      ]
+    },
+    "arms.support.me": {
+      "pass": false,
+      "numbers": [
+        [
+          3,
+          "%"
+        ]
+      ]
+    }
+  }
+}

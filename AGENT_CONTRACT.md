@@ -127,7 +127,7 @@ hosted CI is still a defect to explain, not something to rerun.
   packages in `apps/viewer-api/tools/requirements.txt`; `USDZ_PYTHON` picks
   the interpreter (default `python3`). When they are missing the step prints
   `SKIPPED` with the install commands and passes, so read the log: hosted CI
-  is then the first run of that check, and a failure there skips the deploys. The mapping fails closed (lockfile, unclassified file, no
+  is then the first run of that check, and a failure there skips the deploys. The solver regression (`pnpm --filter @holoim/capture run test:authoring:solver`) runs only in `verify:pr`, not on hosted CI, when a change touches `apps/capture/scripts/authoring/lib/`, `make.ts` or `sheets/regression/`: it quick-builds each piece in `sheets/regression/` and fails when a grip, reach, motion or arm row gets worse than its pin in `pins.json` (`--write-pins` sets new pins; the diff shows each number that moved). The mapping fails closed (lockfile, unclassified file, no
   merge-base: everything runs). `pnpm run verify:pr -- --dry-run` prints the
   plan; `pnpm run verify:full` (or `verify:pr -- --full`) runs every suite
   (capture XR flows, viewer AR checks, pipeline, portal, Quick Look tool check). Keep `STEPS` in
@@ -155,7 +155,7 @@ before pushing. Measured locally on Node 24 (M-series, shared machine):
 |---|---|---|
 | Docs-only edit | `pnpm run verify:agent` (runs Knowledge `check:docs` only) | ~2 s |
 | One package edit | `pnpm run verify:agent` | 5–10 s |
-| One capture XR check | `pnpm --filter @holoim/capture run test:xr:<mock\|recording\|take\|flows\|terrain\|hands\|height\|body\|pointing\|object\|summon\|face>` | 10–45 s |
+| One capture XR check | `pnpm --filter @holoim/capture run test:xr:<mock\|recording\|take\|flows\|terrain\|hands\|height\|body\|pointing\|object\|summon\|face\|live-face>` | 10–45 s |
 | One replay fixture | `XR_REPLAY_ONLY=walk-forward pnpm --filter @holoim/capture run test:xr:body` | ~25 s |
 | All capture XR checks | `pnpm run test:xr:capture` (checks run in parallel) | ~1.5 min |
 | Body fault matrix | `BODY_REPLAY_FAULTS=1 pnpm --filter @holoim/capture run test:xr:body` (`BODY_REPLAY_FAULT=<name>` for one) | ~2 min |

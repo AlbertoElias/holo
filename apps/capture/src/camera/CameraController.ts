@@ -38,6 +38,15 @@ export class CameraController {
   private lookOffsetHeld = false;
   private readonly lookOffset = new THREE.Vector3();
   private readonly lookOffsetNow = new THREE.Vector3();
+  /**
+   * How much of the desktop idle's upper-body sway plays (0..1). The sway moves the eye anchor about 2 cm; the
+   * third-person view looks at the hips plus the eye's slowly followed offset from them, so the view does not rock with it.
+   */
+  swayWeight = 0;
+  private readonly steadyEyeOffset = new THREE.Vector3();
+  private steadySeeded = false;
+  private readonly liveEyeOffset = new THREE.Vector3();
+  private readonly tmpHips = new THREE.Vector3();
   private snapDesktopCameraAfterVrExit = false;
   private postVrExitSnapFrames = 0;
   private postVrForceThirdFrames = 0;
@@ -255,6 +264,7 @@ export class CameraController {
     this.tmpDesiredCam.add(this.deps.avatarRig.avatarRoot.position);
 
     this.deps.avatarRig.getEyeAnchorWorldPosition(this.tmpTargetCam, this.deps.embodyOffset);
+    this.steadyLookTarget(delta, snapInstantly);
     this.holdLookTarget(delta, snapInstantly);
     this.tmpCorrectedCam.copy(this.tmpDesiredCam);
 
@@ -278,6 +288,25 @@ export class CameraController {
     const smoothing = snapInstantly ? 1 : 1 - Math.exp(-8 * delta);
     this.deps.desktopCamera.position.lerp(this.tmpCorrectedCam, smoothing);
     this.deps.desktopCamera.lookAt(this.tmpTargetCam);
+  }
+
+  /**
+   * While the idle's sway plays, the look target follows the eye's offset from the hips through a slow filter
+   * (STEADY_LOOK_SEC), blended in by the sway's weight: the sway's drift is filtered out, a crouch is followed in a
+   * few seconds. Without the sway (walking, a reach, a point or a carry) the target is the eye itself.
+   */
+  private steadyLookTarget(delta: number, snap: boolean): void {
+    const hips = this.deps.avatarRig.getBoneWorldPosition('hips', this.tmpHips);
+    if (!hips) return;
+    this.liveEyeOffset.subVectors(this.tmpTargetCam, hips);
+    const weight = THREE.MathUtils.clamp(this.swayWeight, 0, 1);
+    if (snap || weight <= 0 || !this.steadySeeded) {
+      this.steadyEyeOffset.copy(this.liveEyeOffset);
+      this.steadySeeded = true;
+      if (snap || weight <= 0) return;
+    }
+    this.steadyEyeOffset.lerp(this.liveEyeOffset, 1 - Math.exp(-Math.max(0, delta) / STEADY_LOOK_SEC));
+    this.tmpTargetCam.copy(hips).add(this.liveEyeOffset.lerp(this.steadyEyeOffset, weight));
   }
 
   /**
@@ -367,3 +396,6 @@ export class CameraController {
     return clamp(value, -1.45, 1.2);
   }
 }
+
+// Time constant (s) of the third-person look target's follow of the eye while the idle sways: about the sway's own period, so its drift is filtered to a fraction.
+const STEADY_LOOK_SEC = 3;

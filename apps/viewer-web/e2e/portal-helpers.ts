@@ -110,6 +110,35 @@ export async function cardCenter(page: Page, cardId: string): Promise<{ x: numbe
   return { x: box.x + box.width / 2, y: box.y + box.height * 0.4 };
 }
 
+/**
+ * A point on the hologram and one off it in the viewing box, within the window, as the canvas's hit test sees
+ * them; `glass` counts its cloche, as a touch does. The point on the hologram is never on a control, because
+ * a wheel or a touch there belongs to the control.
+ */
+export async function hologramPoints(page: Page, cardId: string, modelPath: string, glass = false): Promise<{ on: { x: number; y: number }; off: { x: number; y: number } }> {
+  const box = await page.locator(`.feed-card[data-card-id="${cardId}"] .feed-card-portal`).boundingBox();
+  if (!box) throw new Error("viewing box not laid out");
+  return page.evaluate(({ box, path, glass }) => {
+    const probes = (window as unknown as { __portalProbes: Record<string, { portal: { runtime: { hitTest: ((x: number, y: number, options?: { glass?: boolean }) => boolean) | null } } }> }).__portalProbes;
+    const hitTest = Object.entries(probes).find(([url]) => url.endsWith(path))?.[1].portal.runtime.hitTest;
+    if (!hitTest) throw new Error(`no hit test for ${path}`);
+    const onControl = (x: number, y: number) => document.elementFromPoint(x, y)?.closest("button, a, input, select, [role=button], [role=slider]") != null;
+    let on: { x: number; y: number } | null = null;
+    let off: { x: number; y: number } | null = null;
+    for (let row = 1; row < 12; row += 1) {
+      for (let column = 1; column < 12; column += 1) {
+        const point = { x: box.x + (box.width * column) / 12, y: box.y + (box.height * row) / 12 };
+        if (point.y < 4 || point.y > window.innerHeight - 4) continue;
+        if (hitTest(point.x, point.y, { glass })) {
+          if (!onControl(point.x, point.y)) on ??= point;
+        } else off ??= point;
+      }
+    }
+    if (!on || !off) throw new Error(`the viewing box is all ${on ? "hologram" : "empty space"}`);
+    return { on, off };
+  }, { box, path: modelPath, glass });
+}
+
 export async function feedScrollTop(page: Page): Promise<number> {
   return page.locator(".feed-scroll").evaluate((element) => element.scrollTop);
 }

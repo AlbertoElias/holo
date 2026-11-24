@@ -1,7 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 import { assertViewerShell, captureEvidence, expect, test, reachFor, pressReach } from "./bootstrap";
 import {
@@ -14,6 +14,7 @@ import {
   installMotionPermissionShim,
   motionPermissionCalls,
   feedScrollTop,
+  hologramPoints,
   installProbe,
   readPortal,
   scrollFeedToTop,
@@ -48,6 +49,22 @@ const [first, second] = items as [typeof items[number], typeof items[number]];
 // Each touch event waits for a software-rendered frame; a 2-CPU runner needs
 // about 30 s for the longest of these.
 test.describe.configure({ timeout: 60_000 });
+
+/**
+ * Presses a reach control on a card that must stay in focus. A plain click (or pressReach) on a control that folded
+ * while the runner stalled fails Playwright's hit-target check, and Playwright then scrolls the control into view
+ * again with another alignment. The feed scrolls smoothly, so that scroll glides past half a card under load, focus
+ * moves to the next card, and this card resets to Follow with tilt off. So each try brings the controls out, clicks
+ * where the control is without that scroll (force), and checks that the press took effect; a press that the folded
+ * controls took no notice of is tried again.
+ */
+async function pressShown(card: Locator, control: Locator, pressed: () => Promise<void>): Promise<void> {
+  await expect(async () => {
+    await reachFor(card);
+    await control.click({ force: true, timeout: 10_000 });
+    await pressed();
+  }).toPass({ timeout: 50_000, intervals: [0] });
+}
 
 async function openFeed(page: Page, variant: string | null): Promise<void> {
   await installProbe(page);
@@ -213,9 +230,9 @@ test.describe("phone", () => {
   test("tilt: turning the phone turns the camera, past a small deadzone", async ({ page }, testInfo) => {
     await openFeed(page, "tilt");
     const card = page.locator(`.feed-card[data-card-id="${first.id}"]`);
-    await reachFor(card);
-    await card.getByRole("button", { name: "Look around by tilting the phone" }).click();
-    await expect(card.getByRole("button", { name: "Stop looking around by tilting" })).toHaveAttribute("aria-pressed", "true");
+    await pressShown(card, card.getByRole("button", { name: "Look around by tilting the phone" }), async () => {
+      await expect(card.getByRole("button", { name: "Stop looking around by tilting" })).toHaveAttribute("aria-pressed", "true", { timeout: 5_000 });
+    });
     await dispatchOrientation(page, 10, 60);
     await dispatchOrientation(page, 12, 61);
     expect((await readPortal(page, first.url)).mode, "a small wobble stays in Follow").toBe("follow");
@@ -224,8 +241,9 @@ test.describe("phone", () => {
     expect((await readPortal(page, first.url)).tiltYaw, "yaw follows the turn, amplified").toBeCloseTo((-30 * Math.PI / 180) * 1.5, 3);
 
     // Return re-centres tilt on how the phone is held now.
-    await card.getByRole("button", { name: CONTROL_NAMES.returnToAuthorView }).click();
-    await expect(card).toHaveAttribute("data-portal-mode", "follow");
+    await pressShown(card, card.getByRole("button", { name: CONTROL_NAMES.returnToAuthorView }), async () => {
+      await expect(card).toHaveAttribute("data-portal-mode", "follow", { timeout: 5_000 });
+    });
     await dispatchOrientation(page, 41, 60);
     expect((await readPortal(page, first.url)).mode, "holding still after Return stays in Follow").toBe("follow");
     await captureEvidence(page, testInfo, "phone-tilt-variant");
@@ -339,30 +357,6 @@ test("desktop (default): drag rotates, and the wheel or trackpad pinch over the 
   await expect.poll(() => feedScrollTop(page), { message: "fully out, the wheel scrolls to the next card" }).toBeGreaterThan(0);
   expect(await settleScroll(page)).toBeGreaterThan(0);
 });
-
-/** One point in the viewing box, within the window, on the hologram itself and one off it, as the canvas's hit test sees them. */
-/** A point on the hologram and one off it in the viewing box; `glass` counts its cloche, as a touch does. */
-async function hologramPoints(page: Page, cardId: string, modelPath: string, glass = false): Promise<{ on: { x: number; y: number }; off: { x: number; y: number } }> {
-  const box = await page.locator(`.feed-card[data-card-id="${cardId}"] .feed-card-portal`).boundingBox();
-  if (!box) throw new Error("viewing box not laid out");
-  return page.evaluate(({ box, path, glass }) => {
-    const probes = (window as unknown as { __portalProbes: Record<string, { portal: { runtime: { hitTest: ((x: number, y: number, options?: { glass?: boolean }) => boolean) | null } } }> }).__portalProbes;
-    const hitTest = Object.entries(probes).find(([url]) => url.endsWith(path))?.[1].portal.runtime.hitTest;
-    if (!hitTest) throw new Error(`no hit test for ${path}`);
-    let on: { x: number; y: number } | null = null;
-    let off: { x: number; y: number } | null = null;
-    for (let row = 1; row < 12; row += 1) {
-      for (let column = 1; column < 12; column += 1) {
-        const point = { x: box.x + (box.width * column) / 12, y: box.y + (box.height * row) / 12 };
-        if (point.y < 4 || point.y > window.innerHeight - 4) continue;
-        if (hitTest(point.x, point.y, { glass })) on ??= point;
-        else off ??= point;
-      }
-    }
-    if (!on || !off) throw new Error(`the viewing box is all ${on ? "hologram" : "empty space"}`);
-    return { on, off };
-  }, { box, path: modelPath, glass });
-}
 
 test("desktop: the wheel scrolls the feed unless it begins on the hologram itself", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 800, height: 440 });

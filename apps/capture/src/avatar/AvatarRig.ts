@@ -180,12 +180,20 @@ const SQUAT_EXTRA_HIPS_DROP_RATIO = 0.20;
 const SQUAT_DEEP_EXTRA_RATIO = 0.07;
 // The crouch's leg bend is relaxed by this much at full squat: the leg solver bends the knees instead.
 const SQUAT_LEG_RELAX = 0.85;
+// The drops above were tuned on the stock rig, whose leg (hip joint to ankle, along thigh and shin) is this fraction of its height.
+// A rig with other proportions scales every drop by its own leg against this: shorter legs fold less far (B-086).
+const STOCK_LEG_PER_HEIGHT = 0.507;
+// The leg scale stays in this band, so a rig with odd leg bones (or a misread one) still gets a usable crouch.
+const LEG_SCALE_MIN = 0.7;
+const LEG_SCALE_MAX = 1.3;
 const CROUCH_WALK_BLEND_START_SPEED = 0.08;
 const CROUCH_WALK_BLEND_END_SPEED = 0.28;
 const CROUCH_WALK_HIPS_POSE_WEIGHT = 0.85;
 const CROUCH_WALK_LEG_POSE_WEIGHT = 0.6;
 const CROUCH_WALK_FOOT_POSE_WEIGHT = 0.25;
 const CROUCH_WALK_EXTRA_GROUND_CLEARANCE_RATIO = 0.02;
+// The crouch walk clip leans the torso less than the crouch pose: the pose keeps this share of its spine bend under it.
+const CROUCH_CLIP_SPINE_SHARE = 0.5;
 const CROUCH_GROUND_SAMPLE_RADIUS_RATIO = 0.045;
 const CROUCH_GROUND_SAMPLE_OFFSETS: readonly Readonly<[number, number]>[] = [
   [0, 0],
@@ -199,6 +207,8 @@ const CROUCH_GROUND_SAMPLE_OFFSETS: readonly Readonly<[number, number]>[] = [
   [-0.7, -0.7]
 ];
 const CROUCH_FOOT_PITCH_DEG = 8;
+/** Before the set's see-through surfaces (0), so that depth sorts them like an opaque body. */
+const AVATAR_TRANSLUCENT_RENDER_ORDER = -1;
 
 export class AvatarRig {
   readonly avatarRoot = new THREE.Group();
@@ -320,6 +330,7 @@ export class AvatarRig {
       this.neutralEyeAboveBase = this.avatarHeight * 0.92;
     }
     this.disableAvatarFrustumCulling(avatar);
+    this.drawTranslucentPartsBeforeSet(avatar);
     this.classifyFirstPersonHeadMeshes(avatar);
     this.collectAvatarMaterials(avatar);
     this.resolveCrouchRig();
@@ -333,6 +344,7 @@ export class AvatarRig {
   refreshMeshes(): void {
     if (!this.avatar) return;
     this.disableAvatarFrustumCulling(this.avatar);
+    this.drawTranslucentPartsBeforeSet(this.avatar);
     this.classifyFirstPersonHeadMeshes(this.avatar);
     this.collectAvatarMaterials(this.avatar);
   }
@@ -387,7 +399,8 @@ export class AvatarRig {
 
   /** `plant`: a reach is driving the pose, so the feet stay where they stood when it began. */
   /** `airborne` tucks the legs under hips that stay put (a jump), rather than lowering the hips onto the ground. */
-  applyCrouchPose(amount: number, horizontalSpeed = 0, squat = 0, plant = false, deepExtra = 0, airborne = false): void {
+  /** `clipCrouch` (0..1): how much of the crouch the walk's crouch clips already carry; the pose leaves them that much. */
+  applyCrouchPose(amount: number, horizontalSpeed = 0, squat = 0, plant = false, deepExtra = 0, airborne = false, clipCrouch = 0): void {
     const clampedAmount = clamp(amount, 0, CROUCH_MAX_POSE_AMOUNT);
     if (!this.crouchRigReady || !this.crouchHips) return;
     if (!plant) this.feetPlanted = false;
@@ -420,10 +433,12 @@ export class AvatarRig {
     const legPoseWeight = THREE.MathUtils.lerp(1, CROUCH_WALK_LEG_POSE_WEIGHT, walkBlend);
     const footPoseWeight = THREE.MathUtils.lerp(1, CROUCH_WALK_FOOT_POSE_WEIGHT, walkBlend);
     const lean = 1;
-    const hipsAmount = Math.pow(clampedAmount, 0.9) * hipsPoseWeight;
-    const legAmount = Math.pow(clampedAmount, 0.72) * legPoseWeight * (1 - SQUAT_LEG_RELAX * squatAmount);
-    const spineAmount = Math.pow(clampedAmount, 0.78) * lean;
-    const footAmount = Math.pow(clampedAmount, 0.9) * footPoseWeight * (1 - squatAmount);
+    // A crouch walk clip bends the legs and drops the hips itself (its own hips bob); the pose adds only what it leaves.
+    const clipShare = 1 - clamp(clipCrouch, 0, 1);
+    const hipsAmount = Math.pow(clampedAmount, 0.9) * hipsPoseWeight * clipShare;
+    const legAmount = Math.pow(clampedAmount, 0.72) * legPoseWeight * (1 - SQUAT_LEG_RELAX * squatAmount) * clipShare;
+    const spineAmount = Math.pow(clampedAmount, 0.78) * lean * (1 - CROUCH_CLIP_SPINE_SHARE * (1 - clipShare));
+    const footAmount = Math.pow(clampedAmount, 0.9) * footPoseWeight * (1 - squatAmount) * clipShare;
 
     for (const binding of [this.crouchHips, ...this.crouchSpine, ...this.crouchUpperLegs, ...this.crouchLowerLegs, ...this.crouchFeet]) {
       this.preCrouchPose.set(binding.bone, {
@@ -433,8 +448,9 @@ export class AvatarRig {
     // Bone translations use parent-local units; avatarHeight is world meters.
     const parentScale = this.crouchHips.bone.parent?.getWorldScale(this.tmpSize).y ?? 1;
     const heightInParent = this.avatarHeight / Math.max(1e-8, Math.abs(parentScale));
+    const legScale = this.crouchLegScale();
     if (!airborne) this.crouchHips.bone.position
-      .addScaledVector(this.crouchHips.downInParent, heightInParent * (CROUCH_HIPS_DROP_RATIO * hipsAmount + (SQUAT_EXTRA_HIPS_DROP_RATIO * squatAmount + SQUAT_DEEP_EXTRA_RATIO * clamp(deepExtra, 0, 1))))
+      .addScaledVector(this.crouchHips.downInParent, heightInParent * legScale * (CROUCH_HIPS_DROP_RATIO * hipsAmount + (SQUAT_EXTRA_HIPS_DROP_RATIO * squatAmount + SQUAT_DEEP_EXTRA_RATIO * clamp(deepExtra, 0, 1))))
       .addScaledVector(this.crouchHips.backInParent, heightInParent * 0.045 * hipsAmount);
     this.applyCrouchBoneRotation(this.crouchHips, hipsAmount * lean);
     this.crouchHips.bone.updateMatrixWorld(true);
@@ -457,7 +473,25 @@ export class AvatarRig {
     }
 
     // Planted feet are pinned by the leg solver, so lifting the hips to clear the unplanted feet would only make the hips jump with the terrain probe.
-    if (!plant && !airborne) this.applyCrouchFootGroundCompensation(clampedAmount, walkBlend, squatAmount);
+    if (!plant && !airborne) this.applyCrouchFootGroundCompensation(clampedAmount * clipShare, walkBlend, squatAmount);
+  }
+
+  /**
+   * The avatar's leg against the stock rig's, both per metre of height (1 on the stock rig). Bone lengths do not change
+   * with the pose, so this reads the same in any frame.
+   */
+  private crouchLegScale(): number {
+    const upper = this.crouchUpperLegs[0]?.bone;
+    const lower = this.crouchLowerLegs[0]?.bone;
+    const foot = this.crouchLeftFoot;
+    if (!upper || !lower || !foot || !(this.avatarHeight > 0)) return 1;
+    upper.getWorldPosition(this.tmpVecA);
+    lower.getWorldPosition(this.tmpVecB);
+    const thigh = this.tmpVecA.distanceTo(this.tmpVecB);
+    foot.getWorldPosition(this.tmpVecA);
+    const leg = thigh + this.tmpVecB.distanceTo(this.tmpVecA);
+    const scale = leg / this.avatarHeight / STOCK_LEG_PER_HEIGHT;
+    return Number.isFinite(scale) ? clamp(scale, LEG_SCALE_MIN, LEG_SCALE_MAX) : 1;
   }
 
   /** The avatar's canonical bone, or its end site for a `…Tip` reference. */
@@ -913,6 +947,24 @@ export class AvatarRig {
       if (isThreeMesh(obj)) {
         obj.frustumCulled = false;
       }
+    });
+  }
+
+  /**
+   * The light finish's see-through parts write depth and draw before the
+   * set's see-through surfaces, as the opaque body did before that finish.
+   * Water or smoke behind the avatar then fails the depth test, and smoke or
+   * water in front of it draws over it. Without depth, three's origin sort
+   * let a lake whose origin is nearer the camera paint over the body. The
+   * viewer does the same in `sphereClipping.ts`.
+   */
+  private drawTranslucentPartsBeforeSet(model: THREE.Object3D): void {
+    model.traverse((obj) => {
+      if (!isThreeMesh(obj)) return;
+      const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
+      if (!materials.some((material) => material?.transparent)) return;
+      for (const material of materials) if (material) material.depthWrite = true;
+      obj.renderOrder = AVATAR_TRANSLUCENT_RENDER_ORDER;
     });
   }
 

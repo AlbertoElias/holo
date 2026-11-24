@@ -30,12 +30,23 @@ export const ARM_LIMITS = {
   bodyDepth: 0.02,
   /** An arm or hand into a prop's surface, metres. */
   propDepth: 0.01,
+  /** The hand's skin into the object it holds, metres: fingers and palm rest on the surface, they do not sink into it. */
+  heldDepth: 0.003,
   /** Forearm twist from neutral (thumb forward), degrees: pronation and supination are each about 80-90°. */
   twist: 90,
   /** The wrist's bend off the forearm, degrees (flexion about 80°, extension about 70°). */
   wristBend: 80,
   /** The elbow's flexion: past straight by at most this (hyperextension), degrees. */
   hyperextension: 10,
+  /**
+   * The share of a carried object's lower half (the cap below half-way down) that the fingers or the palm
+   * hold up: a skin point within `supportGap` of the surface. A hand that carries a ball from above (crouch
+   * v42: 2% to 37% from 4.1 s on) shows the ball stuck to the palm; a hand that took it from the side and
+   * carries it on the palm (crouch v43: 41% at least, about 80% held out) cups it.
+   */
+  support: 0.4,
+  /** How near the skin must come to a point of the surface to hold it up, metres. */
+  supportGap: 0.012,
   /** The forearm off the elbow's hinge plane, degrees. */
   elbowSideways: 15
 } as const;
@@ -63,6 +74,8 @@ export interface ArmBody {
   readonly body: readonly SkinSample[];
   /** Each arm's skin from the elbow down (and the outer upper arm, `part` 'upper arm'), one vertex per 1.5 cm cell. */
   readonly arm: Readonly<Record<Side, readonly SkinSample[]>>;
+  /** Each hand's skin (the palm, the fingers and the thumb), one vertex per 4 mm cell, `part` the bone's name. */
+  readonly hand: Readonly<Record<Side, readonly SkinSample[]>>;
   readonly arms: Readonly<Record<Side, ArmBind>>;
 }
 
@@ -104,10 +117,10 @@ function bindVertices(a: LoadedAvatar): { p: THREE.Vector3; bone: THREE.Object3D
 }
 
 /** One vertex per cell of `CELL` metres. */
-function thin<T extends { p: THREE.Vector3 }>(verts: readonly T[]): T[] {
+function thin<T extends { p: THREE.Vector3 }>(verts: readonly T[], cell = CELL): T[] {
   const seen = new Set<string>();
   return verts.filter((v) => {
-    const k = `${Math.floor(v.p.x / CELL)},${Math.floor(v.p.y / CELL)},${Math.floor(v.p.z / CELL)}`;
+    const k = `${Math.floor(v.p.x / cell)},${Math.floor(v.p.y / cell)},${Math.floor(v.p.z / cell)}`;
     if (seen.has(k)) return false;
     seen.add(k);
     return true;
@@ -153,6 +166,12 @@ export function measureArmBody(a: LoadedAvatar): ArmBody {
     })).map((v) => ({ mesh: v.mesh, i: v.i, bone: v.bone, part: armPart.get(v.bone)!.label }));
   };
   const arm = { left: armOf('left'), right: armOf('right') };
+  const handOf = (s: Side): SkinSample[] => {
+    const bones = new Set<THREE.Object3D>();
+    a.arms[s].hand.traverse((o) => bones.add(o));
+    return thin(verts.filter((v) => bones.has(v.bone) && v.w >= 0.4), 0.004).map((v) => ({ mesh: v.mesh, i: v.i, bone: v.bone, part: v.bone.name || `${s} hand` }));
+  };
+  const hand = { left: handOf('left'), right: handOf('right') };
   const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(bodyQ);
   const arms = {} as Record<Side, ArmBind>;
   for (const s of SIDES) {
@@ -185,7 +204,7 @@ export function measureArmBody(a: LoadedAvatar): ArmBody {
     const x = (o: THREE.Object3D): number => a.body.worldToLocal(o.getWorldPosition(new THREE.Vector3())).x;
     hipOut[s] = (s === 'left' ? 1 : -1) * (x(a.legs[s].upLeg.bone) - x(a.arms[s].upperArm));
   }
-  return { body, arm, arms, hipOut, restOut: { left: restOutOf(a, verts, part, 'left', arms.left.foreRadius), right: restOutOf(a, verts, part, 'right', arms.right.foreRadius) } };
+  return { body, arm, hand, arms, hipOut, restOut: { left: restOutOf(a, verts, part, 'left', arms.left.foreRadius), right: restOutOf(a, verts, part, 'right', arms.right.foreRadius) } };
 }
 
 /** The gap kept between a hanging hand's mid-line and the widest hip or thigh skin beside it: half a hand's thickness, a slightly curled finger and 1 cm. */
@@ -370,6 +389,42 @@ export function propSurface(prop: Prop): THREE.Vector3[] {
   return out;
 }
 
+/**
+ * Points spread over an object's surface below its middle (world height), the
+ * half that must rest on something: a box face by face on a grid, a round
+ * part on an even spiral.
+ */
+/** How far below the middle the carried cap starts, as a share of the depth from the middle to the bottom. */
+const LOWER_CAP = 0.5;
+export function propLowerHalf(prop: Prop): THREE.Vector3[] {
+  const all: THREE.Vector3[] = [];
+  for (const part of propParts(prop)) {
+    const h = new THREE.Vector3(part.size.x / 2, part.size.y / 2, part.size.z / 2);
+    const local: THREE.Vector3[] = [];
+    if (part.shape === 'box') {
+      const n = 6;
+      for (let axis = 0; axis < 3; axis += 1) for (const side of [-1, 1]) for (let i = 0; i < n; i += 1) for (let j = 0; j < n; j += 1) {
+        const u = ((i + 0.5) / n) * 2 - 1; const v = ((j + 0.5) / n) * 2 - 1;
+        const c = [u, v]; c.splice(axis, 0, side);
+        local.push(new THREE.Vector3(c[0]! * h.x, c[1]! * h.y, c[2]! * h.z));
+      }
+    } else {
+      const n = 240;
+      for (let i = 0; i < n; i += 1) {
+        const y = 1 - (2 * (i + 0.5)) / n; const r = Math.sqrt(1 - y * y); const phi = i * Math.PI * (3 - Math.sqrt(5));
+        local.push(new THREE.Vector3(Math.cos(phi) * r * h.x, y * h.y, Math.sin(phi) * r * h.z));
+      }
+    }
+    for (const v of local) all.push(v.setY(v.y + h.y).applyQuaternion(part.rotation).add(part.at).applyQuaternion(prop.quaternion).add(prop.position));
+  }
+  if (!all.length) return all;
+  const mid = all.reduce((m, v) => m + v.y, 0) / all.length;
+  const low = all.reduce((m, v) => Math.min(m, v.y), Infinity);
+  // The cap below half-way down: fingers that only curl round the sides of a ball held from above reach the equator, not this.
+  const under = mid - LOWER_CAP * (mid - low);
+  return all.filter((v) => v.y < under);
+}
+
 /** A sourced model is its bounds; a built one is its parts. */
 export function propParts(prop: Prop): readonly Part[] {
   if (prop.parts.length) return prop.parts;
@@ -479,27 +534,35 @@ export interface ArmReport {
   /** The worst frame of each measure: value, take time and what. */
   readonly bodyDepth: { value: number; t: number; where: string };
   readonly propDepth: { value: number; t: number; where: string };
+  /** The hand's skin into what it holds. */
+  readonly heldDepth: { value: number; t: number; where: string };
+  /** Per held frame, the deepest skin point into the held object, metres. */
+  readonly held: readonly { t: number; depth: number; where: string }[];
+  /** Per held frame, the share of the held object's lower cap that the hand holds up (0 to 1). */
+  readonly support: readonly { t: number; share: number; where: string }[];
   readonly twist: { value: number; t: number; where: string };
   readonly wristBend: { value: number; t: number; where: string };
   readonly hyperextension: { value: number; t: number; where: string };
   readonly elbowSideways: { value: number; t: number; where: string };
   /** Frames over each limit. */
-  readonly over: Record<'bodyDepth' | 'propDepth' | 'twist' | 'wristBend' | 'hyperextension' | 'elbowSideways', number>;
+  readonly over: Record<'bodyDepth' | 'propDepth' | 'heldDepth' | 'twist' | 'wristBend' | 'hyperextension' | 'elbowSideways', number>;
   readonly frames: number;
 }
 
 export class ArmMeter {
   private readonly worst: { [K in keyof ArmReport['over']]: { value: number; t: number; where: string } } = {
-    bodyDepth: { value: -Infinity, t: 0, where: '' }, propDepth: { value: -Infinity, t: 0, where: '' }, twist: { value: 0, t: 0, where: '' },
+    bodyDepth: { value: -Infinity, t: 0, where: '' }, propDepth: { value: -Infinity, t: 0, where: '' }, heldDepth: { value: -Infinity, t: 0, where: '' }, twist: { value: 0, t: 0, where: '' },
     wristBend: { value: 0, t: 0, where: '' }, hyperextension: { value: -Infinity, t: 0, where: '' }, elbowSideways: { value: 0, t: 0, where: '' }
   };
-  private readonly over = { bodyDepth: 0, propDepth: 0, twist: 0, wristBend: 0, hyperextension: 0, elbowSideways: 0 };
+  private readonly over = { bodyDepth: 0, propDepth: 0, heldDepth: 0, twist: 0, wristBend: 0, hyperextension: 0, elbowSideways: 0 };
   private frames = 0;
+  private readonly held: { t: number; depth: number; where: string }[] = [];
+  private readonly support: { t: number; share: number; where: string }[] = [];
   private readonly skin: BodySkin;
   constructor(private readonly a: LoadedAvatar, readonly body: ArmBody) { this.skin = new BodySkin(body.body); }
 
-  /** Measures the avatar as posed now; `props` are the stage's, `handFree(side, prop)` is true where that hand may touch the prop. */
-  sample(t: number, props: readonly Prop[], handFree: (s: Side, prop: Prop) => boolean): void {
+  /** Measures the avatar as posed now; `props` are the stage's, `handFree(side, prop)` is true where that hand may touch the prop, `heldBy(side)` is what that hand holds. */
+  sample(t: number, props: readonly Prop[], handFree: (s: Side, prop: Prop) => boolean, heldBy: (s: Side) => Prop | undefined = () => undefined): void {
     this.frames += 1;
     const note = (k: keyof ArmReport['over'], value: number, where: string, limit: number): void => {
       if (value > this.worst[k].value) this.worst[k] = { value, t, where };
@@ -519,12 +582,107 @@ export class ArmMeter {
       note('hyperextension', -ang.flex, `${s} elbow`, ARM_LIMITS.hyperextension);
       note('elbowSideways', Math.abs(ang.sideways), `${s} elbow`, ARM_LIMITS.elbowSideways);
     }
+    // A held object: the hand's skin rests on it. Only a skin point that sinks into it counts.
+    let heldD = { depth: -Infinity, where: '' };
+    for (const s of SIDES) {
+      const prop = heldBy(s);
+      if (!prop) continue;
+      for (const x of this.body.hand[s]) {
+        const p = skinned(x, tmp.c);
+        for (const part of propParts(prop)) {
+          const d = partDepth(prop, part, p, 0);
+          if (d > heldD.depth) heldD = { depth: d, where: `${x.part} in ${prop.id}` };
+        }
+      }
+    }
+    // A held object's lower half: how much of it the fingers and the palm hold up.
+    for (const s of SIDES) {
+      const prop = heldBy(s);
+      if (!prop) continue;
+      const skin = this.body.hand[s].map((x) => skinned(x, new THREE.Vector3()));
+      const lower = propLowerHalf(prop);
+      const gap2 = ARM_LIMITS.supportGap ** 2;
+      const held = lower.filter((q) => skin.some((p) => p.distanceToSquared(q) <= gap2)).length;
+      this.support.push({ t, share: lower.length ? held / lower.length : 0, where: `${s} hand under ${prop.id}` });
+    }
+    if (heldD.depth > -Infinity) {
+      this.held.push({ t, depth: heldD.depth, where: heldD.where });
+      note('heldDepth', heldD.depth, heldD.where, ARM_LIMITS.heldDepth);
+    }
     // Per frame, the deepest overlap of either arm counts once.
     note('bodyDepth', bodyD.depth, bodyD.where, ARM_LIMITS.bodyDepth);
     note('propDepth', propD.depth, propD.where, ARM_LIMITS.propDepth);
   }
 
   report(): ArmReport {
-    return { ...this.worst, over: { ...this.over }, frames: this.frames };
+    return { ...this.worst, held: [...this.held], support: [...this.support], over: { ...this.over }, frames: this.frames };
+  }
+}
+
+/** Performer against performer: the deepest skin of one under the other's skin (evidence: B-094). */
+export const PAIR_LIMITS = {
+  /**
+   * Any skin (torso, head, legs, arms, hands) or held object of one performer into another's skin, metres.
+   * A hand that rests on the other's chest presses in up to about 2 cm (goodbye: 2.2 cm for one frame);
+   * the goodbye draft v25, with one head in the other and a hand through his torso, goes 6.3 cm in.
+   */
+  bodyDepth: 0.03
+} as const;
+
+export interface PairReport {
+  readonly a: string;
+  readonly b: string;
+  readonly worst: { value: number; t: number; where: string };
+  /** Frames over the limit. */
+  readonly over: number;
+  readonly frames: number;
+  /** The deepest overlap on each frame, metres (0 or less is apart). */
+  readonly perFrame: readonly { t: number; depth: number; where: string }[];
+}
+
+/**
+ * Two performers who stand or move into each other: each one's skin samples
+ * (and the surface of what each one holds) against the other's skin, on
+ * every frame. Touching is allowed; going in is not.
+ */
+export class PairMeter {
+  private readonly skins: BodySkin[];
+  private readonly pairs: { i: number; j: number; worst: { value: number; t: number; where: string }; over: number; perFrame: { t: number; depth: number; where: string }[] }[] = [];
+  private frames = 0;
+  constructor(private readonly ids: readonly string[], bodies: readonly ArmBody[]) {
+    this.skins = bodies.map((b) => new BodySkin([...b.body, ...b.arm.left, ...b.arm.right]));
+    for (let i = 0; i < ids.length; i += 1) for (let j = i + 1; j < ids.length; j += 1) this.pairs.push({ i, j, worst: { value: -Infinity, t: 0, where: '' }, over: 0, perFrame: [] });
+  }
+
+  /** Measures every performer as posed now; `held[k]` is what performer k holds. */
+  sample(t: number, held: readonly (readonly Prop[])[]): void {
+    if (this.pairs.length === 0) return;
+    this.frames += 1;
+    this.skins.forEach((sk) => sk.pose());
+    const boxes = this.skins.map((sk) => new THREE.Box3().setFromPoints(sk.p).expandByScalar(0.03));
+    for (const pair of this.pairs) {
+      let best = { depth: -Infinity, where: '' };
+      const into = (from: number, to: number): void => {
+        const skin = this.skins[to]!; const box = boxes[to]!;
+        const test = (q: THREE.Vector3, what: string): void => {
+          if (!box.containsPoint(q)) return;
+          const d = skin.depth(q);
+          if (d.depth > best.depth) best = { depth: d.depth, where: `${what} of ${this.ids[from]} in the ${d.part} of ${this.ids[to]}` };
+        };
+        const own = this.skins[from]!;
+        own.p.forEach((q, k) => test(q, own.samples[k]!.part));
+        for (const prop of held[from] ?? []) for (const q of propSurface(prop)) test(q, prop.id);
+      };
+      into(pair.i, pair.j);
+      into(pair.j, pair.i);
+      const depth = Math.max(best.depth, 0);
+      pair.perFrame.push({ t, depth, where: best.depth > 0 ? best.where : '' });
+      if (best.depth > pair.worst.value) pair.worst = { value: best.depth, t, where: best.where };
+      if (best.depth > PAIR_LIMITS.bodyDepth) pair.over += 1;
+    }
+  }
+
+  report(): PairReport[] {
+    return this.pairs.map((p) => ({ a: this.ids[p.i]!, b: this.ids[p.j]!, worst: { ...p.worst, value: Math.max(p.worst.value, 0) }, over: p.over, frames: this.frames, perFrame: [...p.perFrame] }));
   }
 }

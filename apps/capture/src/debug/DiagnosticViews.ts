@@ -22,11 +22,20 @@ interface DiagnosticViewsDeps {
  * step; the extra views draw to the page canvas after the XR frame's draw and
  * never change simulation state.
  */
+export type FaceFrame = 'eyes' | 'whole' | 'mouth';
+// How far in front of the eyes the face view's camera is, and how far below them it looks (m).
+const FACE_FRAMES: Record<FaceFrame, { distance: number; below: number }> = {
+  eyes: { distance: 0.55, below: 0 },
+  whole: { distance: 0.95, below: 0.035 },
+  mouth: { distance: 0.5, below: 0.08 }
+};
+
 export class DiagnosticViews {
   private handOverlay: THREE.InstancedMesh | null = null;
   private heightEvidence: HeightEvidenceView | null = null;
   private spectatorCamera: THREE.PerspectiveCamera | null = null;
   private spectatorMode: SpectatorViewMode = 'off';
+  private faceFrame: FaceFrame = 'eyes';
   private readonly spectatorFocus = new THREE.Vector3();
   private spectatorFocusReady = false;
   private spectatorViewYaw = 0;
@@ -48,8 +57,10 @@ export class DiagnosticViews {
   // world direction with the tracked head path overlaid. `yawOffset` turns
   // that direction about the body's start yaw (0 films the face, π/2 the
   // left side); it defaults to the three-quarter view.
-  setSpectatorView(mode: boolean | SpectatorViewMode, options: { yawOffset?: number } = {}): void {
+  // `faceFrame` chooses what the 'face' view shows: the eyes and brows (the default), the whole face, or the mouth close up.
+  setSpectatorView(mode: boolean | SpectatorViewMode, options: { yawOffset?: number; faceFrame?: FaceFrame } = {}): void {
     this.spectatorYawOffset = options.yawOffset ?? Math.PI * 0.25;
+    this.faceFrame = options.faceFrame ?? 'eyes';
     this.spectatorMode = mode === true ? 'hands' : mode === false ? 'off' : mode;
     this.spectatorCamera = this.spectatorMode === 'off' ? null : (this.spectatorCamera ?? new THREE.PerspectiveCamera(38, 16 / 9, 0.01, 200));
     this.spectatorFocusReady = false;
@@ -182,11 +193,12 @@ export class DiagnosticViews {
     if (!left || !right) return;
     const centre = left.clone().add(right).multiplyScalar(0.5);
     const forward = new THREE.Vector3(0, 1, 0).cross(right.clone().sub(left)).setY(0).normalize();
+    const frame = FACE_FRAMES[this.faceFrame];
     spectator.fov = 20;
     spectator.aspect = width / Math.max(1, height);
     spectator.updateProjectionMatrix();
-    spectator.position.copy(centre).addScaledVector(forward, 0.55).add(new THREE.Vector3(0, 0.01, 0));
-    spectator.lookAt(centre.x, centre.y - 0.025, centre.z);
+    spectator.position.copy(centre).addScaledVector(forward, frame.distance).add(new THREE.Vector3(0, 0.01 - frame.below, 0));
+    spectator.lookAt(centre.x, centre.y - 0.025 - frame.below, centre.z);
     renderer.setViewport(0, 0, width, height);
     avatar.setFirstPersonVisualState('off');
     renderer.render(scene, spectator);

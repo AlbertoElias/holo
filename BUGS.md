@@ -7,6 +7,55 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
+### B-107 — Quick Look check: the cloche refit is 9 cm off the baked cloche on one walk take (once)
+
+- **Area:** apps/viewer-api/tools (`glb_to_usdz.py` `fit_points`, `inspect_usdz.py` cloche refit)
+- **Severity:** P3 (a false failure of the usdz-tools gate; no person has seen a wrong cloche)
+- **Observed:** 2026-11-23, once, in `verify:pr` on `bug/avatar-neck-back-knee` (a loaded Mac).
+- **Evidence:** all five challenged cases of that take: "Cloche foot exceeds tolerance 0.005" (0.0887) and
+  "Cloche radii exceeds tolerance 0.0387" (0.104); the refit foot's z moved from −0.328 to −0.417. The failing
+  take was overwritten. With the same clips, the next full `test:usdz-tools` run and six new walk takes
+  (convert and inspect) all pass with errors under 1e-7.
+- **Expected:** the converter and the inspector fit the same points, on every take.
+- **Reproduction:** not reproduced. Both fits are bounding boxes, so one extreme point that only one side keeps
+  (the bubble's `inside` test, or `array_equal` against `allclose` on a moving mesh) is a suspect. Keep the
+  failing `output/pipeline-takes/walk.glb` when it recurs.
+
+### B-104 — Authored takes: held grips drift since B-092 (stone sD snap, goodbye grip turn, held and support)
+
+- **Area:** apps/capture (`scripts/authoring/lib/direct.ts`: the arm solve and the clearing plan), the sheets
+- **Severity:** P2 (stone sD and goodbye v35 still fail after B-103; pinned in `sheets/regression/pins.json`)
+- **Observed:** 2026-11-23, quick builds at each merge from 1f881a29c2d2 (both pieces pass every arm bar) to main.
+- **Evidence:** stone sD: arms.held 107.6 mm appears at B-092 (7fcd584ec27f, the bar is new there: the 9 cm fist grip
+  on a 24 cm stone is in the sheet); jump.props 5.76 m/s at 4.77 s appears at B-095 (322f09c806e7) and stays after
+  B-103 (5.73 m/s; jump.me 4.69 m/s, turn.me 1008°/s at 5.07 s). Without the clearing the stone jump falls to
+  3.04 m/s, but the forearm goes 5.3 cm into the torso. Goodbye v35: grip.h-bag 1.0 mm 6.4° and arms.held at B-092,
+  jump.props 2.18 m/s at B-095, 3.66 m/s at B-096 (68558995a9e2); after B-103 0.4 mm 8.1°, turn.him 515°/s,
+  jump.props 2.55 m/s at 1.70 s, held 9.3 mm, support 0 %. Baker: jump.b 3.71 m/s and jump.props 4.80 m/s at 4.53 s,
+  held 78 mm, support 3 %.
+- **Expected:** stone sD and goodbye v35 pass their arm bars again with no bar change.
+- **Next fix:** trace the stone at 4.6 to 5.1 s (`HB_TRACE`-style per-frame logs, as in B-103) and find which B-095
+  change moves the left hand off the stone after its grip; for the goodbye, find why the bag fist stays 8° off and
+  under the bag (support 0 %). Run `pnpm --filter @holoim/capture run test:authoring:solver` and lower the pins with
+  `--write-pins` as each piece improves.
+
+### B-091 — verify:pr: the pipeline Playwright run does not exit after test timeouts
+
+- **Area:** `test:smoke:pipeline` (`@holoim/web` `test:e2e:pipeline`, Playwright teardown), `verify:pr` lock
+- **Severity:** P2 (a stuck run holds the machine-wide check lock, so every other `verify:pr` waits)
+- **Observed:** 2026-11-22, two runs: `verify:pr` on `bug/statue-off-centre` (pid 79871) and one in the
+  story session.
+- **Evidence (`bug/statue-off-centre`):** the machine was overloaded (CPU 2% idle, 88 MB unused; `build`
+  took 3183 s). Pipeline tests failed on their timeouts after 12 to 18 min each: `avatar-formats` unreal-cm
+  (16.1 min), vrm0-minus-z (17.0 min), pointing take (15.2 min), `bubble-capture` (12.0 min),
+  `capture-to-viewer` (15.9 min), `hand-traces` ×4 (15.1 to 17.9 min), `hologram-budgets` 3 M splat
+  (15.0 min). Then "Worker teardown timeout of 30000ms exceeded". After that, the Playwright runner stayed for
+  about 3 h with no worker and no browser. Only its web servers stayed (vite preview on 3174 and 5175, the API,
+  the registry fixture server), all at 0% CPU. The run ended only when it was stopped by hand.
+- **Expected:** after test timeouts and a teardown timeout, the runner exits with a failure and `verify:pr`
+  releases the lock.
+- **Reproduction:** run `verify:pr` on a machine with no free CPU or memory, so the pipeline tests time out.
+
 ### B-090 — Phone tilt check cannot click Return on a loaded runner
 
 - **Area:** `apps/viewer-web/e2e/portal.spec.ts` ("tilt: turning the phone turns the camera, past a small deadzone", line 213)
@@ -72,21 +121,6 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Cause (suspected):** the physics of the take diverges (one fall>idle is missing), so the hand
   error follows from a different state, not from the arm solve.
 
-### B-086 — The house avatar sinks to the floor on a floor reach
-
-- **Area:** apps/capture (floor reach, house base avatar)
-- **Severity:** P2
-- **Observed:** 2026-11-20
-- **Evidence:** the capture `object` suite on the house base (the default avatar): in
-  put-down, a still release, a still touch lift and desktop-floor-reach the hips go down
-  to 0.08–0.18 m above the floor (limit 0.27 m), a knee drops to 0.07–0.19 m below its
-  ankle (limit 0.02 m above) and a thigh turns 11.3–11.6° in one step (limit 10°). The
-  stock avatar in the same runs: hips 0.24–0.25 m, no knee or thigh failure (its own
-  failures are B-069). The crouch depth is in metres tuned on the stock avatar's legs;
-  the base's legs are shorter.
-- **Expected:** the reach crouch fits the avatar's leg length; the hips stay above the limit.
-- **Reproduction:** `cd apps/capture && OBJECT_ONLY=desktop,mouse,phone,reach,resizeIwer node --import tsx scripts/run-xr-checks.ts object`
-
 ### B-069 — Desktop and phone object checks fail on `main` (outside `verify:pr`)
 
 - **Area:** apps/capture (objects)
@@ -102,6 +136,9 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   set fails, plus the floor-reach step stopping 0.18 m from the grasp point (needs 0.20–0.30)
   and still releases 1–2 cm higher (bracket put-down 0.043 m, phone lift 0.041 m, limit 0.03),
   since the desktop arms now rest in the Idle's pose instead of the bind pose.
+  After B-086's fix (2026-11-23), on the house base (the default avatar) desktop-object-bracket fails the
+  same way (walking into the prop moves it 0.014–0.096 m across runs, a glancing hit), while on the stock
+  avatar it now passes; the mouse let-go is 0.036 m up and the prop rests at 0.084 m.
 - **Expected:** every object check passes, and the suite runs in `verify:pr`.
 - **Reproduction:** `cd apps/capture && OBJECT_ONLY=desktop,mouse,phone,reach,trench,fetchDesktop node --import tsx scripts/run-xr-checks.ts object`
 
@@ -127,51 +164,6 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Expected:** the CPU budget (`ITIMER_PROF`) fires only when the conversion itself spends 100 s of CPU.
 - **Reproduction:** `bash apps/viewer-api/tools/check_usdz_tools.sh <watering.glb> <out>` on a loaded Mac. It is intermittent (about 1 run in 3 so far). The case with audio is the one that fails, so the ffmpeg child or its teardown is a suspect.
 
-### B-081 — A dark strip of the default scene's mountain floats behind the performer on the card
-
-- **Area:** apps/capture (`SceneBubbleSampler.triangleInsideBubble`), apps/viewer-web (feed dome clip)
-- **Severity:** P3
-- **Observed:** 2026-11-20, phone journey audit, card seen from behind the performer
-- **Evidence:**
-  - The strip is 82 triangles of `Montanha_lambert13_0`, 5.99–8.67 m from the bubble centre.
-  - The export keeps a triangle whose nearest point lies within 6 m of a sample.
-  - The feed's dome (radii about 7 × 4.7 × 7 m) is wider than the 6 m reach, so the card shows the triangles.
-  - The viewer, XR and AR fade the set past the reach, so they do not show it.
-  - Renders and per-mesh measurements are in the session notes `option-b/` folder (`compare.jpg`, `C-compare.jpg`, `clip-reach-3d.txt`).
-- **Expected:** set past the take's reach does not float as a separate shape on the card.
-- **Tried and rejected:**
-  - A hard cut at the reach in the feed: it broke a structure 2 m behind the performer on an old take.
-  - The sphere's soft fade in the feed: it faded the ground under the performer on another old take.
-  - The owner kept the card as it is.
-- **Next:** a take whose spawn keeps the mountain more than 6 m away removes the strip at its source (B-082).
-  On 2026-11-21, B-082 option C (spawn off the statue) exported no mountain triangles, and option E (statue moved,
-  spawn at the centre) exported 113. So only C removes the strip, and C fails the rim bar (see B-082).
-- **Reproduction:** post a phone take on the default scene, then view its card from behind the performer.
-
-### B-082 — A take on the default scene starts on the statue
-
-- **Area:** apps/capture (`CharacterMotor` spawn search), apps/viewer-web (cloche rim)
-- **Severity:** P2
-- **Observed:** 2026-11-20, phone journey audit
-- **Evidence:**
-  - The spawn search takes the scene's centre first, and the statue stands there, so every default-scene take starts on top of it.
-  - The fix 3400acffe803 (branch `bug/spawn-off-statue`) skips a pedestal.
-  - With that fix, `bubble-capture.pipeline.spec.ts` failed twice with "start: bins off the ground". At bin 12 the rim is at 18.67 and the raycast ground at 17.91, edge (7.95, 2.99).
-  - So the fix is not on `main`.
-  - 2026-11-21, both options merged with `main` 22f48373262f, `bubble-capture.pipeline.spec.ts` ×3 under `CI_EMULATE_LOAD=2`:
-    - Option E (branch `bug/statue-off-centre`, only `scene.glb` changed: the statue stands off the centre): 3 of 3 pass.
-      In the last run's rim report, the bins that pass only at the lift cap are none at the start, 32 in the middle (119–150) and 36 at the end (117–152).
-      The export keeps 113 mountain triangles, so the B-081 strip stays.
-    - Option C (branch `bug/spawn-off-statue-2`, commit 1ec5fdc574d6: the spawn takes a level spot off the pedestal): 3 of 3 fail at the start with 10 bins off the ground.
-      The worst is bin 26: rim 17.04, ground 16.23, slope 30°, edge (−1.55, 13.04). The middle and the end each have 4 bins off the ground and 30–33 capped passes (26 at the start).
-      The export has no mountain triangles.
-- **Expected:** the performer starts on the grass beside the statue, and the rim stays on the ground.
-- **Reproduction:** record any take on the default scene in capture.
-- **Next:**
-  - Find what the rim stands on at bin 12 with the spawn fix: geometry that the test's ground list (grass and mountain) leaves out, or an export fault.
-  - A spawn spot off the statue with flat ground at the rim, and with the mountain more than 6 m away, is also acceptable.
-  - Owner decision: merge option E (passes the bar, fixes the statue start, keeps the B-081 strip), or keep working on C (removes the strip, fails the rim on a 30° slope).
-
 ### B-085 — Deep zoom: the camera mode is "follow", not "free", when the wheel stops (hosted, once)
 
 - **Area:** apps/viewer-web (`e2e/deep-zoom.spec.ts`, portal wheel gesture)
@@ -182,6 +174,39 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   changes the card's camera fit, so a slow fit is a suspect.
 - **Expected:** the wheel gesture that stops at the inside end leaves the camera in free mode on every run.
 - **Reproduction:** not tried yet. Try `CI_EMULATE_LOAD=2 scripts/ci-emulate.sh bash -c "cd apps/viewer-web && VITE_IWER_SEM_SCENE=office_small RUN_E2E_PIPELINE=1 XR_TEST_MODE=iwer npx playwright test e2e/deep-zoom.spec.ts --workers=1 --repeat-each=5"` on caf7cad.
+
+### B-100 — Authored crouch: the right arm steps about 8 mm in one frame as the take starts (1.73 s)
+
+- **Area:** `apps/capture/scripts/authoring` (`lib/direct.ts` reach solve, `src/ik/ArmIkSolver.ts` reach stop)
+- **Severity:** P3 (a small draft fault; no bar sees it, the opus review saw a probable stammer at the shin)
+- **Observed:** 2026-11-23, crouch v27 to v43 (`output/authoring/gesture-proof/crouch.json`)
+- **Evidence:** from the shoulder, the right elbow and wrist move 13 mm in the frame at 1.73 s against 2 to 5 mm in the
+  frames around it (v36). The cause has two parts. (1) The wrist goal loop in the reach solve does not converge near
+  full stretch: with a whole step per round the goal swings between two arm lengths 3 mm apart, so the pose depends
+  on the round that ends the loop. Fixed in B-099: the goal moves by half the error, 16 rounds (`EFFECTOR_GAIN`);
+  the step is now 8 mm. (2) At 1.77 s the hand gets to the solver's hard stop 1 cm short of the arm's length and stops
+  there (424 mm from the shoulder). Easing the goal into that stop (tanh over 8 or 20 mm, v41 and v42) did not make
+  the step smaller and put a finger 7 mm into the ball (`arms.held.me` FAIL), so it was taken out.
+- **Expected:** the arm moves on with no one-frame step as the take starts.
+- **Reproduction:** `node --conditions=development --import tsx scripts/authoring/make.ts output/authoring/gesture-proof/crouch.json --quick`
+  in `apps/capture`, then the per-frame step of `rightElbow` and `rightWrist` less `rightShoulder` in `motion.me.json`.
+- **Next fix:** find what moves the elbow 8 mm at 1.73 s with the loop converged: print the solver's clavicle swing
+  (protraction grows near full reach, `ArmIkSolver.ts` line 90) and the elbow hint per frame. If the swing jumps, ease
+  it by the target's distance over a wider band. A bar for a one-frame step of a joint from its parent would catch it.
+
+### B-101 — House avatar: the jumper's sleeve end has a jagged edge at the wrist
+
+- **Area:** `apps/capture/scripts/authoring` house avatar (jumper cuff mesh against the hand skin)
+- **Severity:** P3 (a draft look fault; no bar sees it)
+- **Observed:** 2026-11-23, pinch v14 at 1.0 to 3.9 s (right wrist); the approved pinch v8 has the same edge
+- **Evidence:** the opus review of pinch v14 and crouch v43 saw a saw-tooth edge where the cuff meets the hand skin.
+  It is the line where the two meshes cross, not a gap. The B-099 cuff refit does not make it worse (the same edge is in
+  v8 and v12). In v14 the palm faces the camera, so more of the edge is in view. The crouch sleeve end is smooth.
+- **Expected:** the sleeve ends in a clean ring at the wrist.
+- **Reproduction:** `node --conditions=development --import tsx scripts/authoring/make.ts output/authoring/gesture-proof/pinch.json`
+  in `apps/capture`, then `review.ts` on the take and a crop of the right hand at 3.4 s.
+- **Next fix:** pull the cuff end back to a clean ring of vertices at the wrist and push it out 1 to 2 mm along its
+  normals, so that the cuff covers the skin with no crossing line. If that does not work, hide the hand skin under the cuff.
 
 ## Entry template
 

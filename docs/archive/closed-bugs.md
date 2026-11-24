@@ -3,6 +3,62 @@
 Closed entries moved from `BUGS.md` so the live tracker stays scannable.
 `BUGS.md` remains the authority for open, verified defects.
 
+### B-105 — Desktop avatar: the head turns 90° to the side at each stop and in the idle
+
+- **Area:** apps/capture (`scripts/build-mocap-clips.ts`: the `Idle` clip from 113_21; the slice 2 sway action)
+- **Severity:** P1 (the owner: "why is the neck movement so weird?")
+- **Observed:** 2026-11-23, by the owner after slice 2 (b809399).
+- **Evidence:** desktop-motion samples: in the idle and every stop the head looks 90–96° to the side of the torso
+  with a −30° roll (the walk: about 5°); at the stops it turns on the torso at 1000–3900°/s.
+- **Cause:** 113_21's head data is not a person's pose: the head stands 37–103° (mean 77°) off its neck. Slice 1
+  hid it (the desktop idle kept only its arm tracks); the slice 2 sway plays the idle's neck and head again.
+- **Expected:** the head stays on the neck as the walk holds it; the gaze stays steady.
+- **Reproduction:** `node --import tsx scripts/run-xr-checks.ts desktop-motion` (apps/capture), rows
+  `slice2.idleHeadOffWalkDeg` and `slice2.headTurnRateMaxDegS`.
+- **Fix:** f50f141a2625. The `Idle` clip takes its neck and head keys onto the walk's mean neck and head pose
+  (`headFrom: 'Walk'`), so the sway keeps the idle's small motion on a head that sits on the neck. No limit changed.
+- **Proof:** desktop-motion, shipped and stock: idle head 4.0° and 3.8° off the walk pose (limit 10°), head turn
+  at most 214°/s and 223°/s (limit 400°/s); before: about 90° and 3900°/s.
+
+### B-106 — Desktop avatar: the back walk's legs are stiff
+
+- **Area:** apps/capture (`scripts/build-mocap-clips.ts`: `WalkBackward` from 143_39)
+- **Severity:** P1 (the owner: "the backwards movement has the leg super stiff")
+- **Observed:** 2026-11-23, by the owner after slice 2 (b809399).
+- **Evidence:** back walk at runtime: knee 27–52° on both legs (a 23° range), ankle lift 6 cm; the forward walk
+  4–62° and 16 cm.
+- **Cause:** the mirror build took the source cycle's first half (the right step, knee swing 48°), and the
+  low-pass cut it to 47°. The second half (the left step, frames 71–81) swings the knee to 58° and lands at 10°.
+- **Expected:** the back walk's knee moves as the source's left step moves it.
+- **Reproduction:** the desktop-motion check, rows `slice2.backKneeSwingFlexDeg` and `slice2.backKneeFlexRangeDeg`.
+- **Fix:** f50f141a2625. `WalkBackward` builds its mirrored loop from the source cycle's second half
+  (`secondHalf: true`). The longer left step plays at a lower cadence at the same 0.6 speed, so the back-cadence
+  floor went from 160 to 135 steps/min (measured 150 and 144). The second settle step after the back walk lands at
+  700 ms, so the held window for jitter starts at 800 ms (was 600 ms).
+- **Proof:** desktop-motion, shipped and stock: back knee swing 57.9° and 62.1° (limits 54–76°), knee range 36.1°
+  and 38.5° (was 23°, limit ≥30°).
+
+### B-086 — The house avatar sinks to the floor on a floor reach
+
+- **Area:** `apps/capture/src/avatar/AvatarRig.ts` (crouch drop), `apps/capture/src/objects/ObjectInteraction.ts`
+  and `DesktopReach.ts` (desktop grab and set-down)
+- **Severity:** P2
+- **Observed:** 2026-11-20, the capture `object` suite on the house base: the hips went down to 0.08–0.18 m
+  above the floor (limit 0.27 m), a knee dropped below its ankle and a thigh turned 11.3–11.6° in one step.
+- **Cause:** three parts. (1) The crouch and squat drops were fractions of the avatar's height, tuned on the
+  stock rig; the base's legs are shorter for its height, so the same drop folded them past the knee limit.
+  (2) The desktop reach took a prop as soon as the palm was 0.1 m from its bounds, also from below, so the
+  prop rode 0.10 m above the hand and a set-down squatted to full depth to bring it to the floor. (3) The
+  set-down squat went on at full rate until the let-go, and the relax took another 0.07 m of hips to stop it.
+- **Fix:** every crouch drop scales by the avatar's own leg (thigh plus shin, per metre of height) against the
+  stock rig's (0.507), clamped to 0.7–1.3. The reach takes the prop only when the palm is level with the
+  prop's middle or the shoulder, whichever is lower. The set-down squat slows over the hand's last 0.1 m
+  (to 20 % of its rate), so it is near rest at the let-go. No check limit changed.
+- **Proof:** `OBJECT_ONLY=desktop,mouse,phone,reach,resizeIwer` on the house base and on the stock avatar
+  (`XR_AVATAR_URL=/gltf/models/avatar.glb`): no hips, knee or thigh failure on either (house put-down hips
+  0.287 m); the remaining failures are B-069's. The stock avatar's desktop-object-bracket now passes; on the
+  house base it fails as B-069 lists for the stock avatar (a glancing walk-in, 0.014–0.096 m across runs).
+
 ### B-089 — Phone portal checks: the feed rests 1 px past the last card
 
 - **Area:** `apps/viewer-web/src/styles/global.css` (`.feed-sentinel`), `apps/viewer-web/e2e/portal-helpers.ts` (`settleScroll`)
@@ -1678,3 +1734,323 @@ bug above.)
 - **Cause:** not the arm change or the gate (1 of 5 on `main` and on the gate branch alike). The feed also loads the neighbour cards, paused, and each reports its own probe; the spec kept whichever card reported last, so it sometimes read a paused neighbour (clip time 0, running false).
 - **Fix:** the spec keeps each card's probe by URL and reads the uploaded card's. Bubble-capture at load 2 passed 11 of 11.
 - **Closed:** 2026-11-21.
+
+### B-081 — A dark strip of the default scene's mountain floats behind the performer on the card
+
+- **Area:** apps/capture (`SceneBubbleSampler.triangleInsideBubble`), apps/viewer-web (feed dome clip)
+- **Severity:** P3
+- **Observed:** 2026-11-20, phone journey audit, card seen from behind the performer
+- **Evidence:**
+  - The strip is 82 triangles of `Montanha_lambert13_0`, 5.99–8.67 m from the bubble centre.
+  - The export keeps a triangle whose nearest point lies within 6 m of a sample.
+  - The feed's dome (radii about 7 × 4.7 × 7 m) is wider than the 6 m reach, so the card shows the triangles.
+  - The viewer, XR and AR fade the set past the reach, so they do not show it.
+  - Renders and per-mesh measurements are in the session notes `option-b/` folder (`compare.jpg`, `C-compare.jpg`, `clip-reach-3d.txt`).
+- **Expected:** set past the take's reach does not float as a separate shape on the card.
+- **Tried and rejected:**
+  - A hard cut at the reach in the feed: it broke a structure 2 m behind the performer on an old take.
+  - The sphere's soft fade in the feed: it faded the ground under the performer on another old take.
+  - The owner kept the card as it is.
+- **Next:** a take whose spawn keeps the mountain more than 6 m away removes the strip at its source (B-082).
+  On 2026-11-21, B-082 option C (spawn off the statue) exported no mountain triangles, and option E (statue moved,
+  spawn at the centre) exported 113. So only C removes the strip, and C fails the rim bar (see B-082).
+- **Reproduction:** post a phone take on the default scene, then view its card from behind the performer.
+- **Closed:** 2026-11-21, no change, owner decision (option A). With B-082 option E the take keeps 113 mountain triangles, so the strip stays on the card.
+
+### B-082 — A take on the default scene starts on the statue
+
+- **Area:** apps/capture (`CharacterMotor` spawn search), apps/viewer-web (cloche rim)
+- **Severity:** P2
+- **Observed:** 2026-11-20, phone journey audit
+- **Evidence:**
+  - The spawn search takes the scene's centre first, and the statue stands there, so every default-scene take starts on top of it.
+  - The fix 3400acffe803 (branch `bug/spawn-off-statue`) skips a pedestal.
+  - With that fix, `bubble-capture.pipeline.spec.ts` failed twice with "start: bins off the ground". At bin 12 the rim is at 18.67 and the raycast ground at 17.91, edge (7.95, 2.99).
+  - So the fix is not on `main`.
+  - 2026-11-21, both options merged with `main` 22f48373262f, `bubble-capture.pipeline.spec.ts` ×3 under `CI_EMULATE_LOAD=2`:
+    - Option E (branch `bug/statue-off-centre`, only `scene.glb` changed: the statue stands off the centre): 3 of 3 pass.
+      In the last run's rim report, the bins that pass only at the lift cap are none at the start, 32 in the middle (119–150) and 36 at the end (117–152).
+      The export keeps 113 mountain triangles, so the B-081 strip stays.
+    - Option C (branch `bug/spawn-off-statue-2`, commit 1ec5fdc574d6: the spawn takes a level spot off the pedestal): 3 of 3 fail at the start with 10 bins off the ground.
+      The worst is bin 26: rim 17.04, ground 16.23, slope 30°, edge (−1.55, 13.04). The middle and the end each have 4 bins off the ground and 30–33 capped passes (26 at the start).
+      The export has no mountain triangles.
+- **Expected:** the performer starts on the grass beside the statue, and the rim stays on the ground.
+- **Reproduction:** record any take on the default scene in capture.
+- **Cause:** the default scene's statue stood at the scene's centre, where the spawn search starts, so every take began on it.
+- **Fix:** option E, ae06f9f1636c: `scene.glb` moves the statue off the centre, and the spawn stays at the centre on the grass. The spawn code does not change. Bubble-capture under `CI_EMULATE_LOAD=2` passed 3 of 3; `verify:pr` passed before the merge.
+  - With the statue off the centre, the card's centre can show only sky, so `portal.pipeline.spec.ts` wheeled over no hologram
+    and did not zoom (3 of 4 runs failed). The spec now wheels over a point that the card's hit test finds on the hologram
+    (`hologramPoints`, moved to `portal-helpers.ts`, and it skips controls); 6 of 6 passed.
+- **Closed:** 2026-11-21, owner decision (option E).
+
+### B-092 — Authored takes: the hand sinks into a held ball, and the body stammers at beat borders
+
+- **Area:** `apps/capture/scripts/authoring` (`lib/direct.ts` `fitGrip` and `leanFor`, `lib/hands.ts` `fistPoint`, `lib/beats.ts` `envelope`)
+- **Severity:** P2 (the owner saw both in the crouch draft v41)
+- **Observed:** 2026-11-22, owner feedback on crouch v41: "the ball is still not grabbed but clipped, and the overall take stammers".
+- **Cause, clip:** the grip curl was fixed per finger and scaled only by the grip radius, and `fitGrip` tested only the
+  fingertip and one point 40% of the way to the palm, so the proximal segments curled into the ball. `fistPoint` cleared
+  the palm centre only, so the knuckle skin sat 6.5 mm in the ball. No bar measured the hand skin against what it holds.
+- **Cause, stammer:** the motion, not the recording (review frames are seeked stills joined at 30 fps; v41's mp4 has 181
+  frames and no repeats). `envelope()` had speed jumps at its borders: the anticipation ended at full speed and the attack
+  started from rest, so the hips stopped dead at 1.13 s between two moves the same way. The lean of a take was clamped
+  hard at its limits, chased the ball's first place after the hand took it, and started where the weight crossed zero.
+- **Fix:** `fitGrip` closes each finger joint by joint from the knuckle out until its skin rests on the surface; `fistPoint`
+  keeps the knuckles clear. `envelope()` is velocity-continuous at every border. A hand's own weight (and the lean it asks
+  for) has no dip the other way and starts from rest; the lean limits are soft, and a take's or put's lean eases out after
+  the hand arrives. New bars in `make.ts`: `arms.held` (hand skin ≤ 3 mm into what it holds) and `smooth` (no joint slows
+  under 25% of the speed around it and goes on the same way). The arm clearing out of the body is smoothed over time
+  and solved a second time, and it bends an elbow at most 5° past straight (goodbye had gone to 12°).
+- **Proof:** crouch v41 measures 37.1 mm into the ball (105 of 181 frames over 3 mm) and 20 stalls; crouch v42 measures
+  2.0 mm and 0 stalls (worst 27%). Pinch v9 passes every arm bar and `smooth` (it had 2 stalls); goodbye v10 passes
+  every arm bar (elbows 5°).
+- **Left open:** the visual review of crouch v42 still fails. The left arm snaps in one frame at 2.13 s, the palm-down
+  grip still looks sunk into the ball, the eyes stray, and the take goes still, then fast, then still. Those need a new
+  bug or a sheet change, not this fix.
+
+### B-093 — The live face of the house avatar looks wrong: a smile, a laugh and a sad face do not read, and speech does not move the mouth like a mouth
+
+- **Area:** apps/capture (camera face path, `src/face`), the house base (`scripts/authoring/house-base`)
+- **Severity:** P1
+- **Observed:** 2026-11-21, by the owner on the live avatar: "this is me smiling, laughing and putting on a sad face. they all look wrong and not real. also, when talking, the mouth doesnt really move in a realistic way", and "the mouth also needs to be far more realistic on all of them".
+- **Evidence:** the `live-face` XR check with `LIVE_FACE_RAW=1` (the scores applied one to one, as before): in a smile the cheeks reach 0.05, in a sad face the frown reaches 0.03, and wide eyes reach 0.18.
+- **Expected:** each expression moves the whole face (eyes and cheeks with a smile, brows and mouth corners with a sad face), and the mouth is built and moves like a mouth: lips with volume, teeth, a tongue, lips that close for m, round for o and u, and widen for e.
+- **Reproduction:** `LIVE_FACE_RAW=1 LIVE_FACE_FRAMES=1 pnpm --filter @holoim/capture exec node --import tsx scripts/run-xr-checks.ts live-face`, then look at the frames under `output/ci-live-face/frames`.
+- **Cause:** three faults. (1) The camera face tracker gives weak scores for the parts of an expression that make it read (almost no cheek raise, almost no frown on a sad face, a small share of the range for wide eyes, a resting eye squint of 0.3), and the scores went to the face one to one. (2) The house mouth was a flat patch: thin lips, one teeth row, no tongue, and a raised upper lip that hid the teeth. (3) The model had no normals for its face shapes (`export_morph_normal=False`), so a shape moved the skin but its shading stayed the same: a lifted cheek looked flat from the front. The cheek shape also raised the whole lower lid shell in front of the skin, which showed as a dark band under each eye.
+- **Fix:** `src/face/trackedFace.ts` shapes the scores before they reach the face (gains, a resting level taken off, cheeks and lower lids that follow the mouth corners, a sad face read from the lower lip, the frown and the inner brows, a scowl that wrinkles the nose and presses the lips, a small ring for "oo"). The house mouth is rebuilt in `house-base/build.py`: each lip is a rounded roll that ends in a closed corner, there are an upper teeth row (the lower row stays behind the lip), a tongue and a dark cavity, a round mouth opens as an ellipse, the lips move off the teeth, and the smile moves the cheeks and the fold from the nose to the mouth corner. The model now carries normals for its face shapes (the default avatar file goes from 1.3 MB to 2.7 MB), `sparseMorphTargets` stores them sparse in a recorded take as it does the positions, and the cheek shape raises the lower lid half as far. The `live-face` XR check replays hand-made score sets (neutral, smile, laugh, sad, surprise, anger, a spoken sentence) through the camera's own path and asserts what each must and must not move.
+- **Not covered:** the headset path has no expression tracking (the camera is released in VR; the face there shows blinks, gaze and a jaw that follows the microphone). The check uses hand-made scores, not a person.
+- **Closed:** 2026-11-23.
+
+### B-094 — Authored takes: two performers go into each other, and no bar sees it
+
+- **Area:** `apps/capture/scripts/authoring` (`make.ts`, `lib/arm-quality.ts`, `lib/direct.ts`)
+- **Severity:** P2 (a draft that passes every bar shows two bodies in each other)
+- **Observed:** 2026-11-23, the goodbye draft v25 passed every bar in `make.ts`, while her head went into his and her hand
+  went through his torso.
+- **Cause:** the arm bars measure each performer against their own body and the props only. Nothing measured one
+  performer against another.
+- **Fix:** a new bar, `bodies.<a>-<b>`: on every frame, each skin sample of one performer (torso, head, legs, arms, hands)
+  and the surface of what they hold, against the other performer's skin. The limit is 3 cm. `make.ts` writes the depth of
+  each frame to `bodies.<a>-<b>.json`.
+- **Proof:** the v25 sheet goes 6.3 cm in (her right fingers in his torso at 3.37 s; her head 4.6 cm into his at
+  1.67 s), 84 of 211 frames over 3 cm. The goodbye sheet, where her hand rests on his chest, goes 2.2 cm in at
+  1.97 s and passes. The head centres confirm it: 25 cm apart where the bar reads 4.2 cm, 37–39 cm apart where it reads 0.
+- **Closed:** 2026-11-23.
+
+### B-095 — Authored takes: the crouch pick clips the ball and the right arm snaps, and no bar sees it
+
+- **Area:** `apps/capture/scripts/authoring` (`make.ts`, `lib/arm-quality.ts`, `lib/smoothness.ts`, `lib/direct.ts`)
+- **Severity:** P2 (a draft that passes the held-depth bar shows fingers in the ball and an arm that snaps)
+- **Observed:** 2026-11-23, the crouch draft v42 passed the held-depth bar at 2.0 mm, while the reviewer saw the ball
+  sit on the fingertips, and the right arm snapped between 2.13 s and 2.17 s.
+- **Cause:** two measures were missing. The held-depth bar measures how deep the hand goes into what it holds, not
+  whether the hand holds it up. The smooth bar finds a stammer, not a snap in one frame, and no bar measured a held
+  object: in v45 the ball moved 14.8 cm in one frame at 2.40 s, because the clearing moved the hand out of the shin and
+  the crate after the take had fixed the ball's offset. In the solver, two faults made
+  snaps: the push out of the arm's own thigh could turn inward (between the legs) from one frame to the next, and the
+  goal blend of two overlapping reach beats used only the later envelope, so the end of the earlier beat moved the
+  target in one frame.
+- **Fix:** two new bars. `arms.support.<id>`: the share of the lower half of a carried object that the fingers or the
+  palm hold up, limit 40%, written to `support.<id>.json`. `jump.<id>`: no hand or elbow changes its velocity by more
+  than 2 m/s between two frames. `jump.props`: the same limit for each object. In the solver, the push out of the arm's own thigh or shin has an outward share of at
+  least 0.5, and overlapping reach, take and put goals blend by their combined envelopes. The eyes share one look target
+  (with a small clamped convergence), both lids blink together, and the reach holds get a slow drift.
+- **Proof:** v42 fails both arm bars, and v45 fails `jump.props` (4.85 m/s at 2.40 s). The crouch sheet (v46: crate
+  0.40 m forward and 0.29 m right, take attack 0.7 s) passes smooth (43%), jump (1.42 m/s), jump.props (1.91 m/s), body
+  (1.5 cm), prop (0.7 cm), held (2.5 mm) and support (61%). The rest elbows stay within 2 cm of v41.
+- **Not covered:** the grip angle stays at 15° (bar 5°): the wrist limits stop the side grip. A visual review of v46
+  still sees the pick come from above, with a fingertip in the ball at 1.97 s, and a fast wrist turn at 3.63 s to
+  3.73 s. The committed `sheets/tallest-bar.json` fails `jump.props` (pointer, 3.43 m/s at 6.63 s). The size bar fails at
+  2.70 MB (bar 1.80 MB) for the house base: 84% of its sparse morph normal rows are under 0.002.
+- **Closed:** 2026-11-23.
+
+### B-096 — Authored takes: the house avatar is over the size bar, and the crouch pick turns the hand 15° from its grip
+
+- **Area:** `apps/capture/scripts/authoring` (`house-base.ts`, `lib/quiet-normals.ts`), `apps/capture/assets/house-base`,
+  `apps/capture/public/gltf/models/house-base.glb`
+- **Severity:** P2 (every take with the house avatar fails `size.me`; the crouch draft fails `grip.pick`)
+- **Observed:** 2026-11-23, the crouch draft v46 failed `size.me` (2.70 MB against 1.80 MB) and `grip.pick` (15.0°
+  against 5°).
+- **Cause:** size: the morph normals from B-093. In the 2,695,104-byte house base, the sparse morph NORMAL values take
+  1,267,704 bytes and their indices 211,652 bytes (the mesh attributes take 743,600, the indices 187,836, the morph
+  positions 126,588 and the JSON 149,048). Of the 92,558 normal rows, 84% have no component above 0.002: this is
+  Blender noise, at most 0.1°, under one 8-bit shading step. The grip: the ball's grip axis `[0, 2, -1]` pointed where
+  the wrist cannot turn, so the solver stopped 15° short and the hand came onto the ball from above.
+- **Fix:** `quietMorphNormals` (`lib/quiet-normals.ts`, run by `house-base.ts`) sets each morph normal row under 0.002
+  to zero, so the sparse accessors keep only the rows that change the shading. The house base goes from 2.70 MB to
+  1.58 MB and each wardrobe from 3.15 MB to 1.99 MB. The crouch sheet uses the grip axis `[-1.5, 2, 0]` and the crate
+  at 0.27 m right (was 0.29 m).
+- **Proof:** over the 421 frames of the expressions take (avatar `house:clay`), the largest change of a shaded normal
+  between the old and the new base is 0.00238 (0.137°); N·L changes by at most 0.61 of one 8-bit step. The crouch v47
+  passes grip (0.4 mm, 2.6°), smooth (47%), jump (1.00 m/s), jump.props (1.91 m/s), body (1.5 cm), prop (0.0 cm),
+  held (2.1 mm), support (56%) and size (1.58 MB); the rest elbows stay within 2 cm of v41. The pinch passes jump
+  (0.63 m/s), body (1.5 cm), twist, wrist, elbow and size (1.58 MB); it holds no object.
+- **Closed:** 2026-11-23.
+
+### B-097 — Authored takes: arm joints turn in one frame (the pinch forearm, the crouch shoulder)
+
+- **Area:** `apps/capture/src/ik/ArmIkSolver.ts`, `apps/capture/scripts/authoring` (`lib/pose.ts`, `lib/direct.ts`,
+  `lib/smoothness.ts`, `make.ts`)
+- **Severity:** P2 (the owner saw the crouch "stammer"; no bar measured a turn about a bone's own line)
+- **Observed:** 2026-11-23. The pinch forearm turned 85° in one frame at 4.20 s (a change of 2551°/s in its turning
+  speed between two frames). The crouch hand flipped at 3.6–3.7 s, and the right shoulder, upper arm and forearm
+  jumped at 4.80 s and came back at 4.90 s (804°/s).
+- **Cause:** three faults. (1) The palm roll in `solveArm` is an `atan2` clamped to ±85°, half of it on the forearm:
+  when the wanted palm crossed behind, the roll went from +85° to −85°, and the forearm from +42.5° to −42.5°. (2)
+  The solver swings the shoulder toward a far target by a share that falls as the upper arm comes nearer. It measured
+  from the shoulder the last solve left, so each solve did one step of that loop. The loop is steeper than 1 and does
+  not settle: it went between two shoulders (share 0.95, 0.25, 0.74, 0.27 …), and the pose depended on how many
+  solves ran in that frame. (3) `steadyTwist` limits the turn speed to 540°/s but not its change, so a palm that
+  turned back started at full speed in one frame.
+- **Fix:** `shareTwist` gives the forearm bone half of the twist after `steadyTwist`, so it no longer wraps with the
+  roll. The solver finds the shoulder share that agrees with its own result by halving (12 steps, from the bind
+  shoulder): one target always gives one shoulder. `softLimit` puts a soft knee on the ±85° twist stops, and
+  `TWIST_ACCEL` (6000°/s², 200°/s between frames) limits the change of the twist speed, with braking at the goal. A
+  new bar, `turn.<id>`, fails a change of more than 250°/s between two frames in the turn of a shoulder, upper arm,
+  forearm or hand. Good motion in these takes stays at or under 170°/s (crouch left arm 170, expressions 130, pinch
+  left arm 77).
+- **Proof:** the pinch goes from 2551 to 276°/s (right hand at 1.00 s, 2 frames over; forearm 115). The crouch v19
+  (sheet v47) goes from 804 to 382°/s; all other bars pass, and the rest elbows and wrists stay within 1.7 cm of v41.
+  What is left in the crouch is at 1.77 s, where the right hand lifts past the right shin and the clearing passes stop
+  at a different depth in each frame; that is a sheet and clearing fault, not a solver loop.
+- **Closed:** 2026-11-23 (the crouch `turn.me` stays open as a draft fault).
+
+### B-098 — Authored takes: the crouch hand stops to flip at the lift, and the clearing turns the arm in one frame
+
+- **Area:** `apps/capture/scripts/authoring` (`lib/direct.ts`, `lib/pose.ts`)
+- **Severity:** P2 (the opus review of the B-097 crouch saw the hand stop and turn over at the lift)
+- **Observed:** 2026-11-23, after B-097. The crouch right hand stopped on the crate and turned its palm over before
+  the lift. The right shoulder turned at 382°/s at 1.77 s, where the hand lifts past the right shin. The pinch right
+  hand turned at 276°/s at 1.00 s (2 frames over the 250°/s bar).
+- **Cause:** four faults. (1) The clearing out of the shins and thighs was found again in each frame, after the
+  plan, and it stopped at a different depth in each frame. (2) When a later reach took over the hand from a take,
+  the solver went from the take's goal to the reach's goal by the reach's own attack, and waited at the take. (3)
+  `turnHand` chose the sign of the take's grip axis in each frame from the hand's direction, so it changed sign
+  inside the takeover and turned the hand 180°. (4) The palm roll in `solveArm` used its full angle also when the
+  wanted palm was nearly along the forearm, where that angle is not sure.
+- **Fix:** `solveTake` runs up to three clearing rounds: each round records the turns that the clearing adds after
+  the plan, smooths them over time and adds them to the plan (`addClearing`). A reach that takes the hand over from
+  a take moves the goal by the take's envelope (`1 - w / held`) and keeps the weight at least at the take's weight.
+  The grip-axis sign of a take is fixed at its first frame, per side. The palm roll is multiplied by a smoothstep of
+  the sideways part of the wanted palm (`PALM_ROLL_SURE`, 0.1 to 0.4). No bar changed.
+- **Proof:** crouch v27 (sheet v47): the hand flip is gone (right hand 227°/s at 3.67 s, was 890 in v26), the
+  shoulder at 1.77 s is 119°/s (was 382), and the left arm stays at 124°/s. grip 0.3 mm 2.7°, reach.show 12 mm,
+  jump.me 0.98 m/s, jump.props 1.04 m/s, arms.body 1.4 cm, held 2.0 mm, support 57 %, size 1.58 MB, Quick Look pass;
+  the rest elbows and wrists stay within 1.7 cm. Pinch v8: right hand 211°/s (was 276), all motion bars pass.
+- **Closed:** 2026-11-23. Two crouch bars stay open as draft faults at the takeover from the pick to the show:
+  `turn.me` 333°/s (right forearm, 3.60 s, 1 frame) and `smooth.me` 0 % (right wrist, 3.93 s). The take's grip turn
+  still pulls against the show's palm turn while the show takes over, and the show's goal arrives with no speed when
+  the take ends while the target still moves. Next fix: fade the take's hand turn by the takeover progress, and keep
+  the take's goal moving until the show's attack ends.
+
+### B-099 — Authored takes: a white seam at the wrist cuff, the crouch palm turns late, the pinch ring faces away
+
+- **Area:** `apps/capture/scripts/authoring` (`house-base.ts`, `lib/fit-cuffs.ts`, `lib/direct.ts`, `lib/beats.ts`),
+  `apps/capture/assets/house-base/wardrobe-*.glb`, `apps/capture/public/gltf/models/house-base.glb`
+- **Severity:** P2 (the opus review of the B-098 drafts saw the seam in both pieces, the late palm turn and the pinch)
+- **Observed:** 2026-11-23, after B-098. A white line showed at the right wrist cuff in the crouch and the pinch.
+  The crouch palm turned to the show only after 3.1 s, and two bars stayed open (`turn.me` 333°/s at 3.60 s,
+  `smooth.me` 0 % at 3.93 s). The pinch palm rolled about 50° in 0.2 s at 1.0 s and the ring faced up, not to the
+  camera.
+- **Cause:** (1) Seam: not B-096 (the jumper and body buffers are byte-identical before and after it). The jumper
+  cuff goes about 3 cm into the hand, with a hand weight of 0.18 to 0.44, where the hand skin has up to 1.0. When
+  the wrist turns, the cuff comes out through the hand skin by up to 10 mm. (2) Crouch: the show's palm and goal
+  came in only by the show's own attack, and the take left the blend when its settle ended, while the show target
+  still moved. At 3.83 s the arm was also at full stretch toward a target 0.42 m forward. (3) Pinch: `palm: toward`
+  faces the shoulder-to-target line, which is near the forearm line during the raise.
+- **Fix:** `fitCuffs` (in `house-base.ts`) blends the skin weights into each jumper vertex near the wrist: the mean
+  weights of the hand-skin vertices within 3 cm (each counted by 1/d²), in by the cuff depth over 2.5 cm, so the
+  sleeve end has no jagged edge. The three wardrobes and the public base are redressed. A takeover (a later reach
+  while an earlier take holds) has a progress from the middle of the take's hold to the later's arrival: the later's
+  palm comes in by it, the take's hand turn goes out by it, the take's goal stays in the blend until the later
+  arrives, and the goal moves by the later's envelope. A `reach` takes `palmAt`, a point the palm faces. Sheets:
+  the crouch show target is 0.36 m forward (was 0.42); the pinch lift has `"palmAt": "viewer"`. The reach solve's
+  wrist goal moves by half the hand's error per round, 16 rounds (`EFFECTOR_GAIN`): a whole step swung the goal
+  between two arm lengths near full stretch. No bar changed.
+- **Proof:** the cuff comes out 0.0 mm in all frames of both pieces (was 6 to 10 mm). The refit changes only the
+  jumper: 182 JOINTS and 200 WEIGHTS of its 2563 vertices, all within 4.7 cm of a wrist joint; every other byte,
+  the JSON and the file sizes are the same. On the approved sheets the joints move 0.000 mm in all 181 frames.
+  Crouch v43: all motion bars pass, `turn.me` 231°/s (3.80 s, was 333), `smooth.me` 66 % (was 0 %), `jump.me`
+  1.25 m/s, `jump.props` 1.37 m/s; grip 0.3 mm 2.7°, reach.show 12 mm, held 2.0 mm, support 57 % (the same as v27);
+  the arms at rest 0.0 mm from v27. Pinch v14: `turn.me` 129°/s (was 276), all motion bars pass, the arms at rest
+  0.0 mm from v8, the palm and ring face the camera.
+- **Closed:** 2026-11-23. Open: B-100, the crouch arm still steps 8 mm in one frame at 1.73 s (was 13 mm).
+
+### B-102 — The live face: the laugh and the sad face are too strong
+
+- **Area:** apps/capture (camera face path, `src/face/trackedFace.ts`)
+- **Severity:** P2
+- **Observed:** 2026-11-23, by the owner on the B-093 video: "live face is so much better. i would still improve sad
+  and laughter, those are a bit too exagerated. maybe the mouth is open too much? we should aim for a pixar-like
+  expression".
+- **Evidence:** the `live-face` XR check with `LIVE_FACE_FRAMES=1 LIVE_FACE_VIEW=mouth`. In the laugh the jaw
+  reached 0.65 and the lip gap at the midline was 98 px of the 640 px mouth view (the smile: 21 px). In the sad face
+  the mouth was closed (8 px, the same as neutral), but the frown reached 0.94. So the owner's guess holds for the
+  laugh only; the sad fault was the frown.
+- **Cause:** the shaper sent the full jaw score to the face in a laugh, and it sent the full sad level to the mouth
+  corners. The mouth carried each expression alone.
+- **Fix:** the shaper reads a laugh level (a wide smile together with an open jaw). In a laugh the jaw opens to 0.6
+  of its value, the upper lip rises less and the lower lip drops less, the cheeks get 0.15 more and the eye squint
+  0.06 more. The mouth corners take 0.69 of the sad level, the inner brows 0.9, and the lower lip pushes up with it. A
+  smile and speech have a laugh level of 0, so they do not change. The check holds the laugh jaw in 0.3 to 0.5 and
+  the sad frown in 0.5 to 0.7 (the bars were "at least 0.4" and "at least 0.6", which asked for the strong faces).
+- **Proof:** laugh: jaw 0.65 → 0.39, lip gap 98 → 65 px, cheek raise 0.70 → 0.85, eye squint 0.60 → 0.66, upper lip
+  0.76 → 0.57. Sad: frown 0.94 → 0.65, inner brows 0.75 → 0.85, mouth closed. Neutral, smile, anger and speech:
+  every channel is equal in every frame. Surprise: 0.01 in its first frame only (the tail of the sad face before
+  it). The avatar file does not change (1.58 MB). Two opus design reviews judged the sheets against the clay
+  expression sheet; they disagreed on the eye squint (0.75, then 0.60), and the value is between them.
+- **Not covered:** no person was in the loop; the sets are hand-made scores.
+- **Closed:** 2026-11-23.
+
+### B-103 — Authored takes: a held grip breaks in other pieces after B-099 (stone sD, goodbye v35, baker)
+
+- **Area:** apps/capture (`scripts/authoring/lib/direct.ts`: `solveFrame`'s directions loop, `turnHand`'s take)
+- **Severity:** P1 (pieces that passed fail their grip, held and jump bars; a fit search after the miss ran 1 h 16 min)
+- **Observed:** 2026-11-23, by the story session (round 4): stone sD fails held 109 mm, support 5 %, jump, turn and
+  jump.props; goodbye v35 fails grip.h-bag 14.3 mm 43.3°, held, support and jump.props 15.39 m/s; the baker take
+  misses by 56.7 mm 60°.
+- **Cause, two faults:**
+  1. B-099 (7fb4ffa9ee5c) lets a later reach lead with its palm before it starts. The leading branch ran after the
+     line that sets the point that meets the goal, so the later reach's palm center (9 cm from the fist) replaced
+     the held take's fist point while the goal stayed the take's. The hand jumped about 10 cm in one frame, and the
+     clearing plan made the jump wider. This is the stone 15.3 m/s snap and the baker reach.open miss.
+  2. The take's grip axis kept the sign of its first frame. A hand that comes from a palm-down reach (the baker's
+     oven door) or a held turn takes the far way round, and the fist then turns about 180° to the grip (the baker
+     60°, the goodbye 43.3°).
+- **Fix:** a leading later reach keeps the earlier direction's point. Until the take arrives, the grip axis takes
+  the nearer sign; from its arrival it keeps that sign, as before. No bar changes. A blend of the two points while
+  the later reach takes over also cut the stone snap, but it raised the crouch turn.me to 264°/s, so it is not in.
+- **Proof (quick builds, `MAKE_NO_FIT=1`):** baker grip.take 56.7 mm 60° → 4.0 mm 2.8° (pass), reach.open 37 →
+  12 mm (pass). Goodbye v35 grip.h-bag 14.2 mm 43.3° → 0.4 mm 8.1°, turn.him 2581 → 515°/s, jump.him 2.87 → 1.93 m/s
+  (pass), jump.props 15.28 → 2.55 m/s. Stone sD jump.me 11.63 → 4.69 m/s, turn.me 1845 → 1008°/s, jump.props 15.29
+  → 5.73 m/s. Crouch v43 keeps its numbers (turn.me 231°/s, jump.me 1.25 → 1.09 m/s, jump.props 1.37 → 1.17 m/s, grip
+  0.3 mm 2.7°, held 2.0 mm, support 57 %). Pinch v14 keeps turn.me 129°/s and every motion bar. The rest of the
+  stone, goodbye and baker faults is older than B-098: B-104.
+- **Guard:** `scripts/authoring/solver-regression.ts` quick-builds the pieces in `sheets/regression/` (stone sD,
+  goodbye v35, the baker, crouch v43, pinch v14, slip sO) and fails when a grip, reach, motion or arm row gets worse
+  than its pin. `verify:pr` runs it when a change touches the arm solve. `MAKE_NO_FIT=1` skips the fit search.
+- **Slip sO (the 10.5 m/s snap at 4.47 s):** the story branch had no B-099. On main the later reach takes the hand
+  while the earlier one settles: jump.me 1.73 m/s, no snap at 4.47 s.
+
+### B-108 — The live face: the eyes do not carry the laugh and the sad face
+
+- **Found:** 2026-11-23, by the owner on the B-102 video: "laugh and sad the mouth is fine, but the eyes are not
+  there yet."
+- **Cause:** in a laugh the eye squint (0.66) put the upper lid low and flat across the iris, which reads sleepy,
+  and the raised lower lid's patch shaded dark up to a hard edge at the cheek (a lid that rises leans out from the
+  face to clear the eye, and the patch's normals turned with it). In a sad face the upper lids had only the
+  tracker's small blink score, so the eyes showed much white and read worried.
+- **Fix:** `apps/capture/src/face/trackedFace.ts`: with the laugh level the cheek raise goes to 1.0, the eye squint
+  to 0.58 and eye wide to 0.12 (lower lids up, upper lids open); with the sad level the upper lids come down by
+  0.32 of it, only while the signs of a sad face are there, and the inner brows take the full level.
+  `easeStillNormals` (`scripts/authoring/lib/quiet-normals.ts`, run by `house-base.ts`) gives each normal delta of
+  `eyeSquint` and `cheekSquint` the share `smoothstep(0, 4 mm, move)` of its vertex's move, so the lid patch joins
+  the skin with no edge. No shape moves. `house-base.glb` 1,578,220 → 1,559,348 bytes.
+- **Proof:** `test:xr:live-face`, before → after. Laugh: eyeSquint 0.66 → 0.58, eyeWide 0 → 0.12, cheekSquint
+  0.89/0.81 → 1.00/0.96; mouth and jaw channels: largest difference 0. Sad: eyeBlink 0.36 → 0.45, browInnerUp 0.85
+  → 0.94; mouth and jaw channels: largest difference 0. Neutral, smile, surprise, anger, speech: 0 of 44 channels
+  differ. New bars: laugh eyeSquint 0.5 to 0.62 and cheekSquint ≥ 0.9; sad eyeBlink 0.4 to 0.55 and browInnerUp ≥
+  0.85. `LIVE_FACE_VIEW=eyes` is the close view of the eyes. An Opus design review of the eyes passed the sad face
+  and asked for the laugh's lower lid higher (done).
+- **Not fixed (model):** the lids cannot slant and the brows do not bend (no such shapes); the grey teeth band and
+  the thin lower lip at the laugh corners are in the approved mouth and stay.

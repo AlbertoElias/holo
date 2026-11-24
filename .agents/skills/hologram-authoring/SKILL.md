@@ -151,7 +151,7 @@ story against it.
 | Who | one or two house avatars; build, skin, eyes, hair, glasses; three fixed outfits; stiff worn objects on a bone (`wear`: a hat, an apron, a badge) | cloth that bends; a uniform in place of the outfit |
 | Where | objects made of boxes, spheres and cylinders in any colour; `polyhaven:<id>` models (real-world size) | a room, walls or a floor of its own; anything wider than about 1.2 m without the face falling under 40 px |
 | Event | `take`, `put` and `drop` an object; a `fall` world line (knocked over or off, under gravity); `aim` and `pour` from a held tool; `change` an object (turn, scale, lift, colour, appear or disappear); `burst`, `drift` | a roll; a break into pieces; a hand that pulls a door (time a `change` to the reach instead); walking; sitting |
-| Reaction | look; named expressions and face channels; gestures (`nod`, `head-shake`, `shrug`, `wave`, `rub`, `hand-to-chest`); `bend`; reach; show or offer in both hands | a laugh as a named expression (use face channels); speech without a sound file; a second person who takes a gift |
+| Reaction | look; named expressions and face channels; gestures (`nod`, `head-shake`, `shrug`, `wave`, `rub`, `hand-to-chest`); `bend`; one `step` (`{ "kind": "step", "foot": "right", "by": [left, forward], "follow": true }`, in metres); reach; show or offer in both hands | a laugh as a named expression (use face channels); speech without a sound file; a second person who takes a gift |
 
 An object made of parts can turn about its own origin, the bottom centre of
 its frame. Put a door's parts to one side of the origin, and a `change` with
@@ -313,6 +313,14 @@ production and needs the owner's word.
 | `arms.prop.*` | no arm or hand more than 1 cm into an object it does not hold or touch |
 | `arms.twist.*`, `arms.wrist.*` | the forearm twists at most 90° from neutral (palm up and palm down are each a quarter turn), the wrist bends at most 80° |
 | `arms.elbow.*` | the elbow goes at most 10° past straight and at most 15° off its hinge (an elbow bends only one way) |
+| `arms.held.*` | no finger or palm more than 3 mm into the object the hand holds: the fingers close on its surface (measured on the posed skin, every frame) |
+| `arms.support.*` | while the hand carries an object (not in the first or last 0.4 s of the hold), the fingers or the palm touch at least 40% of the object's bottom cap (below half its lower depth): the hand holds it from below or the side, so the shape of the ball shows in a cupped hand. Take with the palm `in` and carry with the palm `up` |
+| `bodies.*` | no part of one performer (torso, head, legs, arms, hands) or what they hold more than 3 cm into another performer's skin, on every frame. A hand may rest on the other; it does not go through |
+| `smooth.*` | no joint slows under 25% of its speed around it (within 0.3 s, both sides at least 0.15 m/s) and then goes on the same way: that is a stammer. Overlap the moves so one starts before the last one ends |
+| `jump.*` | no wrist or elbow changes its velocity by more than 2 m/s between two frames: that is a snap. A reach target or a clearing that changes inside one frame causes it. Give the beat a longer attack, or move the point so the arm does not pass through the body |
+| `jump.props` | no object changes its velocity by more than 2 m/s between two frames. A held object jumps when the solver moves the hand off it after the grip (a clearing out of the body or out of the object's support). Give the hand room (move the object or the performer) or a longer attack |
+| `turn.<id>` | no arm joint (shoulder, upper arm, forearm, hand) changes its turning speed by more than 250°/s between two frames. It sees a bone that turns about its own line, which the position bars cannot see: a palm turn that starts or flips inside one frame. Start the beat that turns the palm earlier or give it a longer attack; a turn with no beat behind it is a solver fault, so report it with the sheet |
+| `eyes.<id>` | each pupil shows between the lids (neutral lids, seen from in front) on all but at most 2 frames. An eye turned past its lids shows only white, and a reader sees the eyes roll. The look solve keeps each eye within the turn its pupil shows at (measured per avatar from its mesh; about 18° down on the house avatar) and gives the rest of the look to the head, so a fail is a solver fault: report it with the sheet |
 | `story` | the main bar: a fresh reader, told nothing, gets the setup (who and where), the event and the reaction. Fails at once when the sheet has no `story` |
 | `visual` | the `design-reviewer` (opus) passes the arm motion, the clipping and the face |
 | `reading` | a fresh reader reads every beat (each beat needs an `intent`), and the piece as a whole |
@@ -326,6 +334,10 @@ production and needs the owner's word.
   face that tips down or away is shorter on the screen. So:
   - Look at an object mostly with the eyes: `"head": 0.3` or less. A look
     with `"head": 0.8` at a thing on a table cost about 3 px in a test.
+    The eyes turn only as far as the pupil shows between the lids (about
+    18° down on the house avatar); the head takes the rest of the look
+    whatever `head` says, so a low point tips the head down anyway. Put
+    the object higher (chest height) to keep the face up.
   - Look at the viewer (`"at": "viewer"`) for more than half the take. The
     reaction is the best time for this.
   - Keep a forward lean (a reach far forward, a bow) short. A `nod` tips
@@ -392,7 +404,8 @@ production and needs the owner's word.
   open) reads in the close view only: at card size the hand is about 25 px
   and a reader sees a flat hand. Stage it beside the face, not in front of
   the mouth: a `reach` to `{ "of": "<performer>", "forward": 0.3, "right":
-  0.32, "height": "chin" }` with `"palm": "toward"` and the hand `open`, then
+  0.32, "height": "chin" }` with `"palmAt": "viewer"` (the palm, and so the
+  thumb-index ring, faces the card camera) and the hand `open`, then
   a later beat that changes the hand to `pinch`. The close from open is what
   a reader sees. Palm down or the back of the hand to the camera reads as a
   watch check or a flat hand. The gap is 3 to 4 mm on the house base and

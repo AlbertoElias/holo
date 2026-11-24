@@ -39,12 +39,14 @@ import { BUILDS, CLOTHING, EYES, FINISHES, GLASSES, HAIR_COLOUR, HAIR_STYLES, SK
 
 import { actingReport, diffTakes, summarize } from './acting-report.ts';
 import { bodyLine, build, loadSheet, OBJECT_LIMITS, resolveAvatar } from './direct.ts';
+import { measureJumps, measurePropJumps, measureSmoothness, measureTurnJumps, SMOOTH_LIMITS } from './lib/smoothness.ts';
 import { BAR } from './lib/audition-bar.ts';
 import { faceBarPasses, faceBarPx, FACE_AWAY_MAX_SHARE, PAIR_FACE_BAR_PX } from './lib/face-bar.ts';
 import { FACE_CHANNELS } from '@holoim/avatar-face';
 import { DEFAULT_TIMING, FACE_MIXES, GESTURES, houseFinish, parseSheetText, resolveTiming, STATES, STORY_PARTS, storyEventProblem, validateSheet, type BeatSheet, type ObjectSpec, type Place, type Point } from './lib/beats.ts';
 import { solveTake } from './lib/direct.ts';
-import { ARM_LIMITS, type ArmReport } from './lib/arm-quality.ts';
+import { IRIS_OUT_MAX_FRAMES } from './lib/eye-view.ts';
+import { ARM_LIMITS, PAIR_LIMITS, type ArmReport } from './lib/arm-quality.ts';
 import { parseGlb } from './lib/gltf-read.ts';
 import { HAND_SHAPES } from './lib/hands.ts';
 import { LANDMARKS, MEASURES } from './lib/stage.ts';
@@ -219,6 +221,7 @@ function knobsFor(sheet: BeatSheet, m: Miss): { knobs: Knob[]; none?: string } {
  * a second each), so the build can print the edit that lands it.
  */
 async function fitMiss(sheetFile: string, m: Miss): Promise<string> {
+  if (process.env.MAKE_NO_FIT) return '(fit skipped: MAKE_NO_FIT)';
   try { return await fitMissOrThrow(sheetFile, m); } catch (e) { return `(the fit could not run: ${(e as Error).message})`; }
 }
 
@@ -518,7 +521,29 @@ async function make(sheetFile: string, quick: boolean): Promise<boolean> {
   }
   for (const t of built.take.tracks) {
     const line = bodyLine(t.motion);
+    await writeFile(join(dir, `motion.${t.spec.id}.json`), `${JSON.stringify(t.motion)}\n`);
     rows.push({ id: `body.${t.spec.id}`, bar: 'feet planted, joints in range, no pops', value: line.split(';')[0]!, pass: !line.startsWith('FAIL'), advisory: true, ...(line.startsWith('FAIL') ? { fix: 'a step or a bend is too big or too quick: make it smaller or give it more attack time' } : {}) });
+    const sm = measureSmoothness(t.motion);
+    const S = SMOOTH_LIMITS;
+    const w = sm.worst;
+    rows.push({ id: `smooth.${t.spec.id}`, bar: `no joint slows under ${S.stallShare * 100}% of its speed around it and goes on the same way (a stammer)`, value: w ? `worst ${(w.share * 100).toFixed(0)}% at ${w.t.toFixed(2)} s, ${w.joint} ${w.speed.toFixed(2)} m/s between ${w.around.toFixed(2)} m/s; ${sm.over} moments over` : 'no slow moment between two moves', pass: sm.over === 0, ...(sm.over ? { fix: `the body stops between two moves that go the same way (at ${w!.t.toFixed(2)} s): overlap them (start the second before the first arrives, or give the first a longer attack), or make it one move` } : {}) });
+    const jm = measureJumps(t.motion);
+    const jw = jm.worst;
+    rows.push({ id: `jump.${t.spec.id}`, bar: `no hand or elbow changes its velocity by more than ${S.jump} m/s between two frames (a snap)`, value: jw ? `worst ${jw.change.toFixed(2)} m/s at ${jw.t.toFixed(2)} s, ${jw.joint}; ${jm.over} frames over` : 'no hand or elbow tracked', pass: jm.over === 0, ...(jm.over ? { fix: `the arm snaps at ${jw!.t.toFixed(2)} s: a reach target or a clearing changes inside one frame; give the beat a longer attack, or move the point so the arm does not pass through the body` } : {}) });
+    const turnBones = (['left', 'right'] as const).flatMap((side) => {
+      const ch = t.avatar.arms[side];
+      return ([['shoulder', ch.shoulder], ['upper arm', ch.upperArm], ['forearm', ch.foreArm], ['hand', ch.hand]] as const)
+        .flatMap(([name, bone]) => { const rotation = t.rotations.get(bone); return rotation ? [{ joint: `${side} ${name}`, rotation }] : []; });
+    });
+    const tj = measureTurnJumps(built.take.times, turnBones);
+    const tw = tj.worst;
+    rows.push({ id: `turn.${t.spec.id}`, bar: `no arm joint changes its turning speed by more than ${S.turn}°/s between two frames (a snap about its own line)`, value: tw ? `worst ${tw.change.toFixed(0)}°/s at ${tw.t.toFixed(2)} s, ${tw.joint}; ${tj.over} frames over` : 'no arm joint tracked', pass: tj.over === 0, ...(tj.over ? { fix: `the ${tw!.joint} snaps at ${tw!.t.toFixed(2)} s: a palm or a grip turn starts or flips inside one frame; give the beat that turns the palm a longer attack or start it earlier, or report it with the sheet (a solver fault)` } : {}) });
+    await writeFile(join(dir, `smooth.${t.spec.id}.json`), `${JSON.stringify(sm.stalls.map((x) => ({ t: x.t, joint: x.joint, share: Math.round(x.share * 1000) / 1000, speed: Math.round(x.speed * 100) / 100, around: Math.round(x.around * 100) / 100 })))}\n`);
+  }
+  if (built.take.props.length) {
+    const pj = measurePropJumps(built.take.times, built.take.props.map((p) => ({ id: p.prop.id, position: p.position })));
+    const pw = pj.worst;
+    rows.push({ id: 'jump.props', bar: `no object changes its velocity by more than ${SMOOTH_LIMITS.jump} m/s between two frames (a snap)`, value: pw ? `worst ${pw.change.toFixed(2)} m/s at ${pw.t.toFixed(2)} s, ${pw.joint}; ${pj.over} frames over` : 'no object', pass: pj.over === 0, ...(pj.over ? { fix: `${pw!.joint} jumps at ${pw!.t.toFixed(2)} s: the hand is moved off it after the grip (a clearing out of the body or a support); give the hand room (move the object or the performer) or a longer attack` } : {}) });
   }
 
   // Arms: nothing through the body or a prop, every joint in a human range.
@@ -536,6 +561,37 @@ async function make(sheetFile: string, quick: boolean): Promise<boolean> {
     arm('twist', `forearm twist within ${A.twist}° of neutral`, `worst ${r.twist.value.toFixed(0)}° ${at(r.twist)}`, r.over.twist, 'ask for a palm the forearm can turn to (palm up and palm down are each a quarter turn), or turn the body toward the point');
     arm('wrist', `wrist bend within ${A.wristBend}°`, `worst ${r.wristBend.value.toFixed(0)}° ${at(r.wristBend)}`, r.over.wristBend, 'the palm faces a way the wrist cannot bend: change the palm, or bring the point in front of the shoulder');
     arm('elbow', `elbow straight at most ${A.hyperextension}° past straight and at most ${A.elbowSideways}° off its hinge`, `past straight ${Math.max(0, r.hyperextension.value).toFixed(0)}° ${at(r.hyperextension)}, sideways ${r.elbowSideways.value.toFixed(0)}° ${at(r.elbowSideways)}`, r.over.hyperextension + r.over.elbowSideways, 'the elbow bends the wrong way: this is a solver fault, report it with the sheet');
+    if (r.held.length) {
+      arm('held', `no finger or palm more than ${A.heldDepth * 1000} mm into what the hand holds`, `deepest ${(Math.max(0, r.heldDepth.value) * 1000).toFixed(1)} mm ${at(r.heldDepth)}`, r.over.heldDepth, 'the hand sinks into what it holds: this is a solver fault (the fingers must close on its surface), report it with the sheet');
+      // Carried frames: a held run without its first and last 0.4 s (the hand closing on the object where it rests, and setting it down).
+      const runs: { t: number; share: number; where: string }[][] = [];
+      for (const x of r.support) { const run = runs[runs.length - 1]; if (run && x.t - run[run.length - 1]!.t < 0.05) run.push(x); else runs.push([x]); }
+      const carried = runs.flatMap((run) => run.filter((x) => x.t >= run[0]!.t + 0.4 && x.t <= run[run.length - 1]!.t - 0.4));
+      if (carried.length) {
+        const low = carried.reduce((m, x) => (x.share < m.share ? x : m));
+        arm('support', `the hand holds up at least ${A.support * 100}% of the bottom of what it carries`, `least ${(low.share * 100).toFixed(0)}% at ${low.t.toFixed(2)} s, ${low.where}`, carried.filter((x) => x.share < A.support).length, 'the hand holds the object from above, and it looks stuck to the palm: take it from the side ("palm": "in", the grip at its middle) and carry it on the palm ("palm": "up")');
+        await writeFile(join(dir, `support.${t.spec.id}.json`), `${JSON.stringify(carried.map((x) => ({ t: x.t, share: Math.round(x.share * 1000) / 1000 })))}\n`);
+      }
+      await writeFile(join(dir, `held-depth.${t.spec.id}.json`), `${JSON.stringify(r.held.map((h) => ({ t: h.t, mm: Math.round(h.depth * 10000) / 10, where: h.where })))}\n`);
+    }
+  }
+
+  // Two performers do not go into each other (B-094): skin, head, arms and what they hold.
+  for (const pr of built.take.pairs) {
+    const P = PAIR_LIMITS;
+    const w = pr.worst;
+    rows.push({ id: `bodies.${pr.a}-${pr.b}`, bar: `no part of one performer (or what they hold) more than ${P.bodyDepth * 100} cm into the other`, value: `deepest ${(w.value * 100).toFixed(1)} cm at ${w.t.toFixed(2)} s${w.where ? `, ${w.where}` : ''}; ${pr.over} of ${pr.frames} frames over`, pass: pr.over === 0, ...(pr.over ? { fix: `the two bodies go into each other (${w.where} at ${w.t.toFixed(2)} s): stand them further apart, turn one away, or shorten the step or reach toward the other` } : {}) });
+    await writeFile(join(dir, `bodies.${pr.a}-${pr.b}.json`), `${JSON.stringify(pr.perFrame.map((x) => ({ t: Math.round(x.t * 1000) / 1000, cm: Math.round(x.depth * 1000) / 10, where: x.where })))}\n`);
+  }
+
+  // Eyes: each pupil shows between its lids (an eye turned past them shows only white and reads as rolled).
+  for (const t of built.take.tracks) {
+    const e = t.eyes;
+    if (!e) continue;
+    const lim = Object.entries(e.limitsDeg).map(([s, l]) => `${s} up ${l[0]}° down ${l[1]}° left ${l[2]}° right ${l[3]}°`).join('; ');
+    const first = e.first ? `, first at ${e.first.t.toFixed(2)} s, ${e.first.side} eye at yaw ${e.first.yawDeg}° pitch ${e.first.pitchDeg}°` : '';
+    const pass = e.out <= IRIS_OUT_MAX_FRAMES;
+    rows.push({ id: `eyes.${t.spec.id}`, bar: `each pupil in view between the lids (neutral lids, from in front); out on at most ${IRIS_OUT_MAX_FRAMES} frames`, value: `${e.out} of ${e.frames} frames out${first} (in view up to: ${lim || 'no eye bones'})`, pass, ...(pass ? {} : { fix: 'an eye turns past its lids: the look solve keeps the gaze in view, so something else turns the eye bones (an imported take, or an eye pose): report it with the sheet' }) });
   }
 
   // 4. Size per avatar file, and the Quick Look budget.
