@@ -309,7 +309,7 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
 
       <PostPanel input={input} target={target} bottom={aboveDock} hidden={isRecording || findOpen || trayOpen || lookShown} exporting={state.recordingState === 'exporting'} />
 
-      {lookShown && houseLook ? <LookPanel look={houseLook} input={input} target={target} bottom={aboveDock} onChange={(next) => bridge.setLook(next)} onHeight={bridge.setLookPanelHeight} /> : null}
+      {lookShown && houseLook ? <LookPanel look={houseLook} photo={state.lookPhoto} input={input} target={target} bottom={aboveDock} onChange={(next) => bridge.setLook(next)} onPhoto={bridge.pickLookPhoto} onPrevious={bridge.previousLook} onHeight={bridge.setLookPanelHeight} /> : null}
 
       {flat && findOpen ? (
         <FindSheet

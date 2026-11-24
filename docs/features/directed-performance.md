@@ -1518,7 +1518,7 @@ a headset). They pick a photo of their own face. After about a second the
 avatar wears the card that the photo gives, and the sheet says which traits
 came from the photo and which stayed as they were, and why. Every row still
 shows its value as a picture, so they check each one against the photo and
-change any of them, as they do by hand. "Undo" puts back the look from
+change any of them, as they do by hand. "Previous look" puts back the look from
 before the photo. Then they record as before.
 
 **Trait outputs.** The read is 5a's, unchanged (`createLookReader`,
@@ -1600,9 +1600,11 @@ request with the photo.
 **Outlines as data.** The six styles' outlines do not depend on the photo
 (5a evidence). `scripts/authoring/photo-look-data.ts outlines` writes the
 outlines that a full `photo-look.ts` run keeps in `.styles/` into
-`apps/capture/src/avatar/photoLookOutlines.json`, with the key of that
-run. Run it again after a change to the house base, the dressing or the
-read.
+`apps/capture/src/avatar/photoLookOutlines.ts` (a module, so the lazy
+chunk holds it), with `OUTLINES_KEY`: the hash of the default look, its
+wardrobe and the dressing and read code. The phone e2e fails when
+`photo-look-data.ts key` no longer gives that key. Run `outlines` again
+after a change to the house base, the dressing or the read.
 
 **Failure cases.**
 
@@ -1641,16 +1643,16 @@ change or a take ends it.
    --read-only` on the same fixture and changes at least two rows; each
    row's chosen picture is the card's;
    the live avatar wears the card (`__sampleHouseLook`); every request in
-   the read is a GET to capture's origin. "Undo" puts back the look. Pick
+   the read is a GET to capture's origin. "Previous look" puts back the look. Pick
    again, record, post: the posted GLB's extras carry the card, and the feed
    card shows the look (screenshot). A photo with no face and a file that
    is not an image are refused by name and leave the look as it was.
 2. **IWER headset check** (`headset-photo-look` in
    `apps/capture/scripts/lib/look-take.mjs`): a controller ray on "From a
-   photo" asks for a photo; the harness gives the fixture to the file input,
-   as the system picker would (IWER's select events are not user
-   activations, so Chromium opens no picker); the live look changes and the
-   mirror renders it; Record carries the card into the take.
+   photo" asks for a photo; the harness gives the fixture to the file
+   chooser (or to the file input when none opens); the live look changes
+   and the mirror renders it; "Previous look" puts back the start. Whether
+   a Quest opens its picker from the select is a device check.
 3. **Read parity on 5a's photo set.** The capture path (decode, the 2048 px
    cap, the shipped outlines) gives the same card as `photo-look.ts` on the
    public-domain portraits of check 2, plus one of them upscaled past
@@ -1666,12 +1668,22 @@ real person goes into the repository. The proof video and the parity
 check use 5a's public-domain portraits from outside the repository.
 
 **Ownership.** The lead of this brief builds 5b: `src/avatar/photoLook.ts`
-(new), `photoLookOutlines.json` (new), the segmenter in
+(new), `photoLookRead.ts` (new, the lazy chunk), `photoLookOutlines.ts` (new), the segmenter in
 `public/mediapipe/`, and small edits to `LookPanel.tsx`, `VrLookPanel.ts`,
 `VrChrome.ts`, `createCaptureRuntime.ts`, `captureUiBridge.ts`,
 `UIStateStore.ts` and the contracts; `photo-look-data.ts` (new); the e2e
 and the IWER scenario. It does not edit `photo-look.ts` or
 `lib/review-page.ts`, which another session changes for the clay light.
+
+#### Slice 5b evidence (2026-11-24, this Mac, IWER and SwiftShader)
+
+| Check | Result |
+|---|---|
+| Phone e2e (`apps/viewer-web/e2e/phone-photo-look.pipeline.spec.ts`, Pixel 7) | Pass, 3.4 min. A file that is not an image and an image with no face are refused by name and leave the look. The portrait sets four rows (skin Linen, hair colour Wheat, eyes Cool grey, hair Wavy bob; the start was Caramel, Espresso, Dark brown, Swept crop) and equals `photo-look.ts` on the same photo; the read took 472 ms; the reader closes after it. "Previous look" puts back the start. The house render is found as a face but sets no trait, and the kept line gives each reason. From the first pick to the post, every request is a GET to capture's origin; the segmenter served there has the pinned SHA-256. The posted GLB's avatar record carries the read card, and its JSON holds no read numbers or image. The feed card shows the look. `OUTLINES_KEY` equals `photo-look-data.ts key`. Screenshots: `output/test-results/photo-look/` (not committed) |
+| IWER headset (`headset-photo-look`, `SUMMON_ONLY=headset-photo-look pnpm --filter @holoim/capture run test:xr:summon`) | Pass, 21 s. "From a photo" sits on the panel's head row with a ray-size hit and no text within 1 m. The controller select opened Playwright's file chooser (`pickerOpened: true`); Playwright does not hold the picker to user activation, so the Quest check below stays open. The mirror wears the portrait's four rows, and "Previous look" puts back the start |
+| Read parity (the parity test in the same spec, `PHOTO_LOOK_PARITY_DIR` = 5a's nine portraits, one upscaled to 2700 × 3300 px and one stored sideways with EXIF orientation 6) | 11 of 11 equal `photo-look.ts`; the upscaled and the EXIF-6 photo read as their originals. Reads 370 to 1090 ms |
+| Lazy load | `photoLookRead` and the outlines are a 29 KB chunk of their own; the entry holds only the controller. The reader and the models load at the first "From a photo" and close after each read |
+| Open | On a Quest: does the system picker open from the ray's select (activation)? If it does not, remove the headset action (the plan's fallback) |
 
 ### Slice 6: publish a take in one command (2026-11-18)
 
