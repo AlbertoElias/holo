@@ -145,7 +145,7 @@ attempt 1, and `output/verify-hosted.json` holds them in `flaky`.
 | The same tree is gated twice | The merge commit is deterministic (the configured git identity, the message "Merge branch '<branch>'", dates from the newer parent), so the second push is a no-op. Before it pushes, the command looks for a run of that commit and waits for it or reports its result. When the ref holds another commit of the same tree, the command stops and says so. |
 | Gate runs push `main`'s Actions caches out (the 10 GB limit) | A cache missed on a gate ref is saved in that ref's scope. After the run, the command deletes the caches of the gate ref (`gh cache delete --all --ref`). |
 | A gate push runs the branch's own pushes in CI | `on.push.branches` is `[main, 'gate/**']`; a push of `feature/*` still starts nothing. |
-| Deleting a gate ref starts a run | Checked with a run (push events for a deleted ref): see evidence. |
+| Deleting a gate ref starts a run | `on.push` starts no run for a deleted branch. Checked: after the command deleted both gate refs, `gh run list` showed no new run. |
 | The command polls in the agent's context | The command waits by itself and prints one line per finished job. The agent runs it in the background and is told when it exits. |
 | A gate passes but the local-only solver regression would fail | The command runs the solver regression locally when `verify:pr` would (`touchesSolver`). |
 | The usdz-tools check is SKIPPED locally (no Python packages) | Hosted runs it with its packages, so the gate is stronger here than `verify:pr`. |
@@ -262,12 +262,13 @@ conclusion is success. Findings and what changed:
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
 | Small viewer change passes; wall time vs `verify:pr` | `pnpm run verify:hosted`; `pnpm run verify:pr -- --no-cache` on the same commit | pending |
-| Planted failing test | throwaway branch with a failing Playwright test, `pnpm run verify:hosted` | pending |
-| Merge conflict stops the command | a branch that conflicts with `origin/main`, `--dry-run` | pending |
+| Planted failing test | throwaway branch with a failing Playwright test, `pnpm run verify:hosted` | Run 45404331213 (tree 047d8b55), 11m28s: FAILED, exit 1. The command printed `failed job: Viewer and Knowledge browser checks (shard 4/4)` and `✘ 12 e2e/atlas.spec.ts:593:1 › planted gate failure: the atlas title is wrong on purpose`. |
+| Rerun rule: a second failure is red | the new command on the failed planted run | Run 45404331213: the command reran the failed shard once (attempt 2, 4m35s); the planted test failed again; FAILED, exit 1; `output/verify-hosted.json` holds `firstAttemptFailures` and `failures`. The green-rerun path (FLAKY) has no hosted proof: no real flake came up. |
+| Merge conflict stops the command | a branch that conflicts with `origin/main`, `--dry-run` | A throwaway branch that edits a line of `docs/features/your-look.md` that `main` also changed: "FAILED: the branch conflicts with origin/main (docs/features/your-look.md)", exit 2, nothing pushed. |
 | Same selection as `main` | the gate run's "Changed areas" summary against `ci-changed-areas.sh` run locally | pending |
 | `main` skips the gated suites | the run on `main` after the merge: skipped jobs and its summary | pending |
-| A branch run cannot deploy | the conditions in `ci.yml` and `deploy.yml`; deploy jobs skipped in a gate run | pending |
-| Two gate runs do not cancel each other | two gate runs on two refs at the same time | pending |
+| A branch run cannot deploy | the conditions in `ci.yml` and `deploy.yml`; deploy jobs skipped in a gate run | Run 45404255068: "Build API image", "Deploy API (Fly)", "Deploy viewer (Pages)" and "Deploy capture (Pages)" skipped. `api-image` and the deploy jobs name the environment `production` (branch policy `main`). |
+| Two gate runs do not cancel each other | two gate runs on two refs at the same time | Runs 45404255068 (13:31:09–13:37:08 UTC) and 45404331213 (from 13:31:36) overlapped; neither job was cancelled. Their test jobs started 2–3 s after the changes job (no runner queue at that time). |
 | doctor and verify:pr | `pnpm run doctor`, `pnpm run verify:pr` | pending |
 | Proof video | screen recording of the command | pending (not committed) |
 

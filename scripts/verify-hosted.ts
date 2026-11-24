@@ -228,13 +228,16 @@ function jobSeconds(job: Job): string {
   return seconds >= 0 ? ` (${seconds}s)` : "";
 }
 
+/** Jobs already printed, by name and start time: a rerun carries passed jobs over under new ids. */
+const reported = new Set<string>();
+
 async function waitForRun(id: number, started: number): Promise<Run> {
-  const reported = new Set<number>();
   for (;;) {
     const current = viewRun(id);
     for (const job of current.jobs) {
-      if (job.status !== "completed" || reported.has(job.databaseId)) continue;
-      reported.add(job.databaseId);
+      const key = `${job.name}@${job.startedAt ?? ""}`;
+      if (job.status !== "completed" || reported.has(key)) continue;
+      reported.add(key);
       if (job.conclusion === "skipped") continue;
       const mark = job.conclusion === "success" ? "ok  " : "FAIL";
       log(`${mark} ${job.name}${jobSeconds(job)}${job.conclusion === "success" || job.conclusion === "failure" ? "" : ` [${job.conclusion}]`}`);
