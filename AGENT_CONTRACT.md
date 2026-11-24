@@ -133,8 +133,9 @@ hosted CI is still a defect to explain, not something to rerun.
   (capture XR flows, viewer AR checks, pipeline, portal, Quick Look tool check). Keep `STEPS` in
   `scripts/verify-pr.ts` in step with the CI jobs. Only one `verify:pr` (or
   `ci-emulate.sh`) runs at a time on the machine: a second waits, printing the
-  holder's PID, branch and worktree, and takes the lock the moment the holder
-  exits, however it dies. `VERIFY_PR_NO_LOCK=1` skips it for a run on moved
+  holder's PID, branch and worktree, and takes the lock when the holder exits,
+  however it dies. Waiters get the lock in arrival order (a ticket queue in the
+  git common directory). `VERIFY_PR_NO_LOCK=1` skips it for a run on moved
   ports.
 - `verify:pr` does not run a selected step again when the same inputs already
   passed it, in this worktree or another one (`scripts/verify-cache.ts`,
