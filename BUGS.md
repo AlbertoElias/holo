@@ -180,6 +180,24 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   ball before the shoulder is low enough. Do one of these: delay the reach weight `w` against the crouch, or let the
   trunk lean toward the goal when the goal is more than the arm's length from the shoulder. Measure the effector
   error per frame. It must stay under about 5 mm through the take.
+- **Tried (2026-11-24, crouch-v43, `solver-regression.ts crouch-v43`, trace of the reach solve per frame):** the
+  palm point is 505 mm from the shoulder at 1.70 s and 531 mm at 1.90 s. The palm stops at about 514 mm (the
+  wrist stop at 425 mm plus the palm's offset). The error is 5.6 mm at 1.80 s, 24 mm at 1.97 s and 0.5 mm at
+  2.13 s. Baseline elbow step (per frame, from the shoulder): 8 mm at 1.77 s, then 2 mm. Largest change of the step
+  between frames: 6.3 mm.
+  - A soft limit on the point at the reach sphere (tanh knee of 3 or 6 cm below an estimated reach): the error and
+    the step did not change (the estimate was too large); turn.me 244°/s (pin 231), or smooth.me 51 % (pin 58 %)
+    with the 6 cm knee. Taken out.
+  - A lean for the point on its way (the line from the hanging hand to the goal), as well as for `e` of the goal's
+    shortfall: the error from 1.80 to 2.10 s was the same to 0.1 mm. smooth.me 18 % and turn.me 271°/s failed.
+    Taken out.
+  - Why the lean did nothing: `leanFor` measures the shoulder as the bind shoulder plus `hipsLocal`. That includes
+    the crouch's drop and its hips back, but not the crouch's forward spine lean. So `leanFor` puts the goal 82 to
+    89 cm from the shoulder through the take, while the solve's real shoulder is 77 cm from it at 1.60 s and 48 cm
+    at 2.20 s. The lean need is wrong in size and does not track the real gap.
+- **Next fix:** in `leanFor`, measure the shoulder with the crouch's spine lean (or from the posed bones of the
+  frame before), then lean for the reach point on its way. Measure the effector error per frame (under about 5 mm)
+  and the elbow step, and guard all six pinned cases.
 
 ### B-101 — House avatar: the jumper's sleeve end has a jagged edge at the wrist
 
