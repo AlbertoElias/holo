@@ -219,6 +219,7 @@ def garments(human, rig, slots, G):
             under = [used[i] for i in range(n) if near[i] and dist_w[i] <= cuff["skinUnder"]]
         ease = smooth(ease[:, None], adj, pinned, 8)[:, 0]  # spread over the surface, so it has no steps
         P = P0 + NRM[used] * ease[:, None]
+        rings = []
         if cuff:
             # Each sleeve's opening is one ring: a circle on a plane across the forearm, as wide as the widest point
             # of the opening plus the cuff's ease, so the pinned smoothing that follows makes a clean tube to it.
@@ -232,8 +233,10 @@ def garments(human, rig, slots, G):
                 c = P0[ring].mean(axis=0)
                 rel = P0[ring] - c
                 perp = rel - np.outer(rel @ ax, ax)
-                r = np.linalg.norm(perp, axis=1).max() + cuff["ease"]
-                P[ring] = c + perp / np.linalg.norm(perp, axis=1)[:, None] * r
+                rad = np.linalg.norm(perp, axis=1)
+                r = rad.mean() + cuff["ease"]
+                P[ring] = c + perp / rad[:, None] * r
+                rings.append((ring, c, ax, r))
         if "hang" in spec:
             P = hang(P, P0, gdom, None, toMesh, rig, spec)
         for _ in range(spec["rounds"]):
@@ -256,6 +259,29 @@ def garments(human, rig, slots, G):
                     weights.setdefault(nm, ([], []))
                     weights[nm][0].append(i)
                     weights[nm][1].append(g.weight)
+        # Each cuff's edge turns in by one row (a hem), `hem` (m) up the sleeve and in by the cuff's ease, so the
+        # sleeve's inside does not show at the opening.
+        P = np.asarray(P, dtype=float)
+        count, directed = {}, []
+        for f in faces:
+            for a, b in zip(f, f[1:] + f[:1]):
+                key = (min(a, b), max(a, b))
+                count[key] = count.get(key, 0) + 1
+                directed.append((a, b))
+        open_edges = [(a, b) for a, b in directed if count[(min(a, b), max(a, b))] == 1]
+        for ring, c, ax, r in rings:
+            on = set(ring)
+            edges = [(a, b) for a, b in open_edges if a in on and b in on]
+            inner = {}
+            for i in ring:
+                inner[i] = len(P)
+                P = np.vstack([P, c + (P[i] - c) * ((r - 2 * cuff["ease"]) / r) - ax * cuff["hem"]])
+                for nm, (idx, w) in weights.items():
+                    if i in idx:
+                        idx.append(inner[i])
+                        w.append(w[idx.index(i)])
+            for a, b in edges:  # the face beside has a -> b, so the hem's face runs b -> a
+                faces.append([b, a, inner[a], inner[b]])
         shown = ease[ease > 1e-4]
         build.under = set(under)
         return P, faces, weights, {"vertices": n, "maxEaseMm": round(float(ease.max()) * 1000, 1),

@@ -611,10 +611,11 @@
       "overTrousers": 0.004,
       "taper": 0.06,
       "cuff": {
-        "$comment": "The sleeve ends stand `ease` (m) off the wrist at the opening (its boundary on the `at` bones), fading over `taper`; the body's faces within `skinUnder` (m) of the opening stay as skin under the cuff (B-101).",
+        "$comment": "The sleeve ends stand `ease` (m) off the wrist at the opening (its boundary on the `at` bones, a circle of the opening's mean radius), fading over `taper`, and turn in by one row `hem` (m) long; the body's faces within `skinUnder` (m) of the opening stay as skin under the cuff (B-101).",
         "at": ["LeftHand", "RightHand", "LeftForeArm", "RightForeArm"],
-        "ease": 0.008,
-        "skinUnder": 0.04
+        "ease": 0.003,
+        "hem": 0.006,
+        "skinUnder": 0.02
       },
       "taperAt": [
         "Neck",
