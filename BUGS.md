@@ -7,6 +7,31 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
+### B-105 — Desktop avatar: the head turns 90° to the side at each stop and in the idle
+
+- **Area:** apps/capture (`scripts/build-mocap-clips.ts`: the `Idle` clip from 113_21; the slice 2 sway action)
+- **Severity:** P1 (the owner: "why is the neck movement so weird?")
+- **Observed:** 2026-11-23, by the owner after slice 2 (b809399).
+- **Evidence:** desktop-motion samples: in the idle and every stop the head looks 90–96° to the side of the torso
+  with a −30° roll (the walk: about 5°); at the stops it turns on the torso at 1000–3900°/s.
+- **Cause:** 113_21's head data is not a person's pose: the head stands 37–103° (mean 77°) off its neck. Slice 1
+  hid it (the desktop idle kept only its arm tracks); the slice 2 sway plays the idle's neck and head again.
+- **Expected:** the head stays on the neck as the walk holds it; the gaze stays steady.
+- **Reproduction:** `node --import tsx scripts/run-xr-checks.ts desktop-motion` (apps/capture), rows
+  `slice2.idleHeadOffWalkDeg` and `slice2.headTurnRateMaxDegS`.
+
+### B-106 — Desktop avatar: the back walk's legs are stiff
+
+- **Area:** apps/capture (`scripts/build-mocap-clips.ts`: `WalkBackward` from 143_39)
+- **Severity:** P1 (the owner: "the backwards movement has the leg super stiff")
+- **Observed:** 2026-11-23, by the owner after slice 2 (b809399).
+- **Evidence:** back walk at runtime: knee 27–52° on both legs (a 23° range), ankle lift 6 cm; the forward walk
+  4–62° and 16 cm.
+- **Cause:** the mirror build took the source cycle's first half (the right step, knee swing 48°), and the
+  low-pass cut it to 47°. The second half (the left step, frames 71–81) swings the knee to 58° and lands at 10°.
+- **Expected:** the back walk's knee moves as the source's left step moves it.
+- **Reproduction:** the desktop-motion check, rows `slice2.backKneeSwingFlexDeg` and `slice2.backKneeFlexRangeDeg`.
+
 ### B-104 — Authored takes: held grips drift since B-092 (stone sD snap, goodbye grip turn, held and support)
 
 - **Area:** apps/capture (`scripts/authoring/lib/direct.ts`: the arm solve and the clearing plan), the sheets

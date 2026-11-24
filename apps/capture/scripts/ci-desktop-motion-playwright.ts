@@ -214,7 +214,9 @@ type Sample = { timeMs: number; phase: string };
 
 // Idle and stop frames from HELD_AFTER_MS into the phase: the keys are released and
 // the avatar has settled, so any shake there is noise (jitter is judged on these).
-const HELD_AFTER_MS = 600;
+// A stop with a foot in the air closes in two settle steps (TerrainLegSolver STEP_SEC
+// 0.32 s each): after the back walk's longer step (B-106) the second lands at 700 ms.
+const HELD_AFTER_MS = 800;
 function markHeld(frames: MotionFrame[], samples: Sample[]): MotionFrame[] {
   let start = 0;
   return frames.map((f, i) => {
@@ -262,7 +264,17 @@ const hipsOverGround = (b: BodySample) => (b.bones.hips && b.ground.root ? b.bon
 const SLICE2_TARGETS = {
   backWeight: { min: 0.8 },
   backKneeSwingFlexMaxDeg: { min: 40, max: 76 },
-  backCadenceStepsPerMin: { min: 160, max: 220 },
+  // B-106: the source's left step (143_39 frames 71-81) is longer than its right one; played at the desktop's 0.6
+  // walk speed (1.08 m/s) it measures 144-150 steps/min (the short right step measured 171-200).
+  backCadenceStepsPerMin: { min: 135, max: 220 },
+  // B-106: the back walk's knee as the source's left step moves it (10° to 58°); the first-half build measured a
+  // 51-54° swing peak and a 23° range.
+  backKneeSwingFlexDeg: { min: 54, max: 76 },
+  backKneeFlexRangeDeg: { min: 30 },
+  // B-105: the held idle's head stands as the walk holds it (the old idle head measured 90° off), and no frame turns
+  // the head on the torso faster than a person turns it (the old stops measured 1000-3900°/s).
+  idleHeadOffWalkDeg: { max: 10 },
+  headTurnRateMaxDegS: { max: 400 },
   backSwingAlongTravelShare: { min: 0.95 },
   strafeWeight: { min: 0.8 },
   strafeLateralGapRatio: { min: 0.04 },
@@ -285,8 +297,14 @@ const ARM_SEGMENTS = [['leftShoulder', 'leftElbow'], ['leftElbow', 'leftWrist'],
 
 /** A segment's direction in the torso's frame (clavicle line, chest to neck), or null without the bones. */
 function torsoDirection(r: Row, from: string, to: string): Vec | null {
-  const b = r.body.bones, p = b[from], q = b[to];
-  if (!p || !q || !b.chest || !b.neck || !b.leftClavicle || !b.rightClavicle) return null;
+  const p = r.body.bones[from], q = r.body.bones[to];
+  return p && q ? torsoFrameOf(r, p, q) : null;
+}
+
+/** The direction from `p` to `q` in the torso's frame (clavicle line, chest to neck), or null without the bones. */
+function torsoFrameOf(r: Row, p: Vec, q: Vec): Vec | null {
+  const b = r.body.bones;
+  if (!b.chest || !b.neck || !b.leftClavicle || !b.rightClavicle) return null;
   const sub = (x: Vec, y: Vec): Vec => [x[0] - y[0], x[1] - y[1], x[2] - y[2]];
   const dot = (x: Vec, y: Vec) => x[0] * y[0] + x[1] * y[1] + x[2] * y[2];
   const unit = (x: Vec): Vec => { const n = Math.hypot(...x) || 1; return [x[0] / n, x[1] / n, x[2] / n]; };
@@ -310,6 +328,39 @@ function segmentOmega(a: Row, b: Row, from: string, to: string): Vec | null {
   return [axis[0] * k, axis[1] * k, axis[2] * k];
 }
 
+/** The head's look (head to the eyes' midpoint) and up (head to its top) in the torso's frame, or null without them. */
+function headInTorso(r: Row): { look: Vec; up: Vec } | null {
+  const b = r.body.bones, eyes = r.body.eyes;
+  if (!eyes || !b.head || !b.headTop) return null;
+  const mid: Vec = [(eyes.left[0] + eyes.right[0]) / 2, (eyes.left[1] + eyes.right[1]) / 2, (eyes.left[2] + eyes.right[2]) / 2];
+  const look = torsoFrameOf(r, b.head, mid), up = torsoFrameOf(r, b.head, b.headTop);
+  return look && up ? { look, up } : null;
+}
+const angleDeg = (u: Vec, v: Vec) => (Math.acos(Math.max(-1, Math.min(1, (u[0] * v[0] + u[1] * v[1] + u[2] * v[2]) / ((Math.hypot(...u) * Math.hypot(...v)) || 1)))) * 180) / Math.PI;
+const meanVec = (v: Vec[]): Vec => [0, 1, 2].map((k) => mean(v.map((x) => x[k]!))!) as Vec;
+
+/**
+ * B-105: the head on the neck as a person holds it. `idleHeadOffWalkDeg`: how far the held idle's head (its look and
+ * its up, against the torso) stands from the steady walk's; the idle's take once held it 90° to the side, and every
+ * stop turned it there. `headTurnRateMaxDegS`: the fastest the head turns against the torso from frame to frame over
+ * the whole run (walks, stops, view changes).
+ */
+function headSteadiness(samples: Row[], walk: number[], still: number[]): { idleHeadOffWalkDeg: number | null; headTurnRateMaxDegS: number | null } {
+  const pick = (idx: number[]) => idx.map((i) => headInTorso(samples[i]!)).filter((h): h is { look: Vec; up: Vec } => !!h);
+  const w = pick(walk), s = pick(still);
+  const off = w.length && s.length
+    ? Math.max(angleDeg(meanVec(w.map((h) => h.look)), meanVec(s.map((h) => h.look))), angleDeg(meanVec(w.map((h) => h.up)), meanVec(s.map((h) => h.up))))
+    : null;
+  let rate: number | null = null;
+  for (let i = 1; i < samples.length; i++) {
+    const a = headInTorso(samples[i - 1]!), b = headInTorso(samples[i]!);
+    const dt = (samples[i]!.timeMs - samples[i - 1]!.timeMs) / 1000;
+    if (!a || !b || !(dt > 0)) continue;
+    rate = Math.max(rate ?? 0, Math.max(angleDeg(a.look, b.look), angleDeg(a.up, b.up)) / dt);
+  }
+  return { idleHeadOffWalkDeg: off, headTurnRateMaxDegS: rate };
+}
+
 /**
  * The B-097 turn bar on the desktop samples: how much an upper arm's or forearm's angular velocity changes from one
  * frame to the next (°/s), max and p99 over the run. The samples hold world positions only, so each segment is read
@@ -325,6 +376,22 @@ function armTurnJump(samples: Row[]): { maxDegS: number | null; p99DegS: number 
     }
   }
   return { maxDegS: jumps.length ? Math.max(...jumps) : null, p99DegS: quantile(jumps, 0.99) };
+}
+
+/**
+ * B-106: how far the knee bends and straightens over the back walk, the leg that moves least (°, max minus min
+ * flexion). The source step (143_39's left, frames 71-81) goes from 10° to 58°; the first-half build held 19.5-47°.
+ */
+function kneeRanges(samples: Row[], idx: number[]): number | null {
+  const ranges = (['left', 'right'] as const).map((side) => {
+    const flex = idx.map((i) => {
+      const b = samples[i]!.body.bones, h = b[`${side}Hip`], k = b[`${side}Knee`], a = b[`${side}Ankle`];
+      if (!h || !k || !a) return null;
+      return angleDeg([k[0] - h[0], k[1] - h[1], k[2] - h[2]], [a[0] - k[0], a[1] - k[1], a[2] - k[2]]);
+    }).filter((f): f is number => f !== null);
+    return flex.length ? Math.max(...flex) - Math.min(...flex) : null;
+  });
+  return ranges.some((r) => r === null) ? null : Math.min(...(ranges as number[]));
 }
 
 /** The slice 2 measurements of a flat-floor row; null where the avatar has no directional clips. */
@@ -362,6 +429,7 @@ function sliceTwoFlat(samples: Row[], frames: MotionFrame[], heightM: number) {
   const heads = still.map((i) => samples[i]!.body.bones.head).filter((h): h is Vec => !!h);
   const centre = heads.length ? [0, 1, 2].map((k) => mean(heads.map((h) => h[k]!))!) : null;
   const sway = centre ? Math.max(...heads.map((h) => Math.hypot(h[0] - centre[0]!, h[1] - centre[1]!, h[2] - centre[2]!))) : null;
+  const backKnees = kneeRanges(samples, back);
   const weight = (idx: number[], ...keys: string[]) => mean(idx.map((i) => keys.reduce((sum, k) => sum + (samples[i]!.loco.directions[k] ?? 0), 0)));
   return {
     backWeight: weight(back, 'back', 'crouchBack'),
@@ -375,6 +443,9 @@ function sliceTwoFlat(samples: Row[], frames: MotionFrame[], heightM: number) {
     crouchKneeMidStanceFlexDeg: crouchGait.kneeMidStanceFlexDeg,
     idleHeadSwayCm: sway === null ? null : sway * 100,
     idleSwayWeight: mean(still.map((i) => samples[i]!.loco.swayWeight)),
+    backKneeSwingFlexDeg: backGait.kneeSwingFlexDeg,
+    backKneeFlexRangeDeg: backKnees,
+    ...headSteadiness(samples, phaseRun(samples, 'walk', 0, 1000), still),
     ...Object.fromEntries(Object.entries(armTurnJump(samples)).map(([k, v]) => [`armTurnJump${k[0]!.toUpperCase()}${k.slice(1)}`, v]))
   };
 }
