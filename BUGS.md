@@ -164,7 +164,7 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Expected:** the CPU budget (`ITIMER_PROF`) fires only when the conversion itself spends 100 s of CPU.
 - **Reproduction:** `bash apps/viewer-api/tools/check_usdz_tools.sh <watering.glb> <out>` on a loaded Mac. It is intermittent (about 1 run in 3 so far). The case with audio is the one that fails, so the ffmpeg child or its teardown is a suspect.
 
-### B-085 — Deep zoom: the camera mode is "follow", not "free", when the wheel stops (hosted, once)
+### B-085 — Deep zoom: the camera mode is "follow", not "free", when the wheel stops (hosted 3 times; reproduces in CI emulation)
 
 - **Area:** apps/viewer-web (`e2e/deep-zoom.spec.ts`, portal wheel gesture)
 - **Severity:** P3 (test flake; no person has seen a wrong camera)
@@ -173,7 +173,11 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   (44826449489, 12b0a45) passed the same job. caf7cad holds the performer floor (85ee704b62ba, B-083), which
   changes the card's camera fit, so a slow fit is a suspect.
 - **Expected:** the wheel gesture that stops at the inside end leaves the camera in free mode on every run.
-- **Reproduction:** not tried yet. Try `CI_EMULATE_LOAD=2 scripts/ci-emulate.sh bash -c "cd apps/viewer-web && VITE_IWER_SEM_SCENE=office_small RUN_E2E_PIPELINE=1 XR_TEST_MODE=iwer npx playwright test e2e/deep-zoom.spec.ts --workers=1 --repeat-each=5"` on caf7cad.
+- **Observed again:** 2026-11-23, hosted runs 45195106971 (22199d76) and the run on 79475539, same job and line.
+  Later runs on `main` passed it.
+- **Reproduction:** `scripts/ci-emulate.sh bash -c "cd apps/viewer-web && VITE_IWER_SEM_SCENE=office_small XR_TEST_MODE=iwer pnpm exec playwright test e2e/deep-zoom.spec.ts --workers=1 --repeat-each=5"`
+  with no extra load fails at line 241 in 5 of 5 runs on 9cc877c5 and 4 of 5 on 22199d76. On a Mac it passes.
+  So the failure is in the code before 22199d76; the render-order change there (avatar see-through parts) is not the cause.
 
 ### B-100 — Authored crouch: the right arm steps about 8 mm in one frame as the take starts (1.73 s)
 
