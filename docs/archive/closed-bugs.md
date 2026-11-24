@@ -3,6 +3,23 @@
 Closed entries moved from `BUGS.md` so the live tracker stays scannable.
 `BUGS.md` remains the authority for open, verified defects.
 
+### B-111 — Authored face: held lids cover the iris when the eyes look up (goodbye white eyes)
+
+- **Area:** apps/capture (`scripts/authoring/lib/direct.ts` the face pass, `scripts/authoring/lib/eye-view.ts`)
+- **Severity:** P2 (the owner saw white eyes in the goodbye piece)
+- **Observed:** 2026-11-24, goodbye v39 at 4.9 to 6.1 s: her eyes show only white.
+- **Evidence:** at 5.2 s her eyeBlink is 0.53 (held 0.2 and eyes-down 0.55 × 0.6), while the look of beat r-after turns
+  the gaze up. The upper lid covers the iris. The eyes bar passed, because the eye meter measured open lids.
+- **Cause:** the director had no lid-gaze coupling. A held blink stayed the same at any gaze pitch, and the eye meter
+  sampled the aperture with the lids open.
+- **Fix:** `eyeView` measures the eye aperture at five blink levels. `blinkCap(view, pitch)` gives the largest held
+  blink that keeps the pupil in view at that pitch, and the face pass lowers a held blink (below `BLINK_SHUT` 0.85) to
+  that cap. A full blink and the life blink do not change. `EyeMeter.sample` now uses the held lids, so the eyes bar
+  sees what the card shows.
+- **Proof:** goodbye v40 (the same sheet): the only morph change is her eyeBlink L/R at 4.90 to 6.10 s; renders at 4.9,
+  5.2 and 5.6 s show the iris. The approved faces do not change: slip sO (laugh), stone sD (sad, smile, hope,
+  eyes-down) and expressions.json have max |Δ| 0.0000 on every morph channel over 169, 301 and 421 frames.
+
 ### B-100 — Authored crouch: the right arm steps about 8 mm in one frame as the take starts (1.73 s)
 
 - **Area:** `apps/capture/scripts/authoring` (`lib/direct.ts` reach solve, `src/ik/ArmIkSolver.ts` reach stop)
