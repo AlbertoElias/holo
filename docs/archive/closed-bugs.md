@@ -17,10 +17,10 @@ Closed entries moved from `BUGS.md` so the live tracker stays scannable.
 - **Cause:** when the trailing planted foot ran out of reach before push-off, the pelvis reach drop's target jumped
   about 3 cm, and its first-order ease (0.06 s) made the pelvis speed jump. On the stick walk, the recorded hips
   bob's sharp heel-strike dip added to it.
-- **Fix:** the reach drop follows its target on a critically damped spring (ω 14 rad/s), and the recorded bob that
+- **Fix:** the reach drop follows its target on a critically damped spring (ω 30 rad/s while the drop grows, 14 while it shrinks), and the recorded bob that
   only the VR solver reads is smoothed (circular Gaussian, σ 6 samples). The walk-direction check fails a phase
   whose hips move more than 12 m/s² up or down in one frame.
-- **Proof:** head 14.0–20.0 → 3.4–5.3 m/s², stick 16.3–27.2 → 4.4–9.7 m/s²; the new gate fails all 12 rows on the
+- **Proof:** head 14.0–20.0 → 5.1–10.7 m/s², stick 16.3–27.2 → 5.3–9.3 m/s²; the new gate fails all 12 rows on the
   old solver. Brief: `docs/features/archive/vr-motion-gaps.md`.
 
 ### B-110 — verify:pr lock: waiters do not get the lock in arrival order

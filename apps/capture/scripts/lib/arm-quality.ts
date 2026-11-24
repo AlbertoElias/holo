@@ -106,16 +106,18 @@ export function armPose(frame: ArmFrame, side: ArmSide, section: TorsoSection | 
     const c = norm(sub(S, C));
     // The clavicle moves on the ribcage, so measure it in the chest's frame (a
     // chest lean, T-18dd51, must not read as clavicle swing; the hips frame did).
-    // Its heading comes from the line between the clavicle joints, levelled (rigs
-    // place them at unequal heights), and its up from the chest to the neck: the
-    // clavicle swing moves neither.
+    // Its up runs from the chest to the neck (it follows a bend and a roll), and
+    // its heading from the line between the clavicle joints, levelled (rigs place
+    // them at unequal heights) and made square to that up: the clavicle swing
+    // moves neither.
     const lc = frame.bones.leftClavicle;
     const rc = frame.bones.rightClavicle;
     const neck = frame.bones.neck;
-    const across = lc && rc ? reject(sub(rc, lc), torso.up) : null;
-    const chestRight = across && len(across) > 1e-3 ? norm(across) : torso.right;
-    const spine = neck ? reject(sub(neck, torso.chest), chestRight) : null;
-    const chestUp = spine && len(spine) > 1e-3 ? norm(spine) : norm(reject(torso.up, chestRight));
+    const spine = neck ? sub(neck, torso.chest) : null;
+    const chestUp = spine && len(spine) > 1e-3 ? norm(spine) : torso.up;
+    const level = lc && rc ? reject(sub(rc, lc), torso.up) : null;
+    const across = level && len(level) > 1e-3 ? reject(level, chestUp) : null;
+    const chestRight = across && len(across) > 1e-3 ? norm(across) : norm(reject(torso.right, chestUp));
     const chestForward = cross(chestUp, chestRight);
     clavicleElevDeg = deg(Math.asin(Math.max(-1, Math.min(1, dot(c, chestUp)))));
     claviclePushDeg = deg(Math.asin(Math.max(-1, Math.min(1, dot(c, chestForward)))));

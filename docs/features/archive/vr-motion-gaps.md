@@ -35,7 +35,7 @@ sample gets one more optional debug field (`solver.pelvisReachDrop`).
 
 - [x] The hips' vertical acceleration in every walk phase stays at or under
       12 m/s² (new walk-direction gate). Before: head 14.0–20.0, stick
-      16.3–27.2 m/s²; after: head 3.4–5.3, stick 4.4–9.7 m/s². The gate fails
+      16.3–27.2 m/s²; after: head 5.1–10.7, stick 5.3–9.3 m/s². The gate fails
       all 12 rows on the old solver and passes on the new one.
 - [x] The stick-walk bob stays visible (3.3 cm range) and the desktop walk is
       unchanged (the bob table is read only by the VR solver).
@@ -53,7 +53,8 @@ sample gets one more optional debug field (`solver.pelvisReachDrop`).
 | A target that jumps (a lost and regained hand) snaps the chest | The lean eases (0.15 s); a lost hand adds no lean |
 | The chest lean carries the head off the tracked head | The twist keeps the head on its axis; the bend is limited to 12°; the head bone keeps its world rotation |
 | The lean builds up frame on frame | Each frame takes back last frame's lean before it measures (the body solver poses the chest from bind) |
-| The spring overshoots the drop limits | The drop is clamped to 0..max and the speed is set to 0 there |
+| The spring overshoots the drop limits | The wanted drop is in 0..max, so the overshoot is small; only the floor (0) stops the speed, because a stop at max made a knee pop |
+| The landing shock moves from the hips to the planted knee | A growing drop follows faster (30 rad/s); the body replay's pooled pops stay at or under 35 m/s² (walk-ramp 34.9, `main` 34.5) |
 | A chest twist reads as clavicle push in the arms check | The clavicle is measured in the chest's frame (levelled clavicle joints, chest → neck) |
 | The smoothed bob changes the desktop walk | Only `VrBodySolver` reads `walk.bob` |
 
@@ -73,8 +74,10 @@ All three values are the agent's choice, pending owner confirmation:
    target past the arm.
 2. The recorded hips bob, smoothed with a circular Gaussian of σ = 6 samples
    (about 6% of the cycle).
-3. The pelvis reach drop on a critically damped spring of ω = 14 rad/s in place
-   of the 0.06 s ease.
+3. The pelvis reach drop on a critically damped spring in place of the 0.06 s
+   ease: ω = 30 rad/s while the drop grows, 14 while it shrinks. Both margins
+   are small (hips 10.7 against 12, knee pops 34.9 against 35): a landing
+   moves the hips or bends the knee, and a slower spring gives the knee more.
 
 ## Test plan and evidence
 

@@ -30,8 +30,8 @@ const VR_REACH_RESERVE = 0.018;
 // person does: the chest bone (the arms' torso frame) turns about its own
 // joint, so the shoulder comes closer. The lean starts at full reach and turns
 // the shoulder as far as the target is out of reach, within these limits: a
-// twist about the torso's up axis (it moves one shoulder forward and keeps the
-// head on its axis) and a bend (it moves both shoulders and carries the head
+// twist about the torso's up axis (it moves one shoulder forward and, with an
+// upright spine, keeps the head on its axis) and a bend (it moves both shoulders and carries the head
 // with them, a few centimetres off the tracked head). Pending owner confirmation.
 const CHEST_LEAN_START = 1;
 const CHEST_TWIST_MAX_RAD = THREE.MathUtils.degToRad(25);
@@ -95,6 +95,8 @@ export class HandEmbodiment {
   private chestLeanBone: THREE.Object3D | undefined;
   private readonly chestBefore = new THREE.Quaternion();
   private readonly chestAfter = new THREE.Quaternion();
+  private readonly headBefore = new THREE.Quaternion();
+  private readonly headAfter = new THREE.Quaternion(NaN, NaN, NaN, NaN);
   private readonly leanVecA = new THREE.Vector3();
   private readonly leanVecB = new THREE.Vector3();
   private readonly leanPivot = new THREE.Vector3();
@@ -268,7 +270,12 @@ export class HandEmbodiment {
     const bone = this.armChains.left?.torso;
     if (!bone || bone !== this.armChains.right?.torso || !bone.parent) return;
     // Take back last frame's lean when nothing posed the chest since (the body solver poses it from bind each frame).
-    if (this.chestLeanBone === bone && bone.quaternion.equals(this.chestAfter)) bone.quaternion.copy(this.chestBefore);
+    const head = this.avatar.humanoid?.bone('head');
+    if (this.chestLeanBone === bone && bone.quaternion.equals(this.chestAfter)) {
+      bone.quaternion.copy(this.chestBefore);
+      // The head too, when nothing posed it since: else it turns a little further each frame.
+      if (head && head.quaternion.equals(this.headAfter)) head.quaternion.copy(this.headBefore);
+    }
     this.chestLeanBone = bone;
     this.chestBefore.copy(bone.quaternion);
     const wanted = this.chestLeanWanted.set(0, 0, 0);
@@ -307,10 +314,13 @@ export class HandEmbodiment {
     if (!vr && angle < 1e-4) this.chestLean.set(0, 0, 0);
     if (angle < 1e-4) {
       this.chestAfter.copy(bone.quaternion);
+      if (head) this.headAfter.set(NaN, NaN, NaN, NaN);
       return;
     }
-    const head = this.avatar.humanoid?.bone('head');
-    if (head) head.getWorldQuaternion(this.headWorldBefore);
+    if (head) {
+      this.headBefore.copy(head.quaternion);
+      head.getWorldQuaternion(this.headWorldBefore);
+    }
     // world' = lean · world; local' = parentWorld⁻¹ · world'.
     const lean = this.leanQuat.setFromAxisAngle(this.leanVecA.copy(this.chestLean).divideScalar(angle), angle);
     const world = bone.getWorldQuaternion(this.leanQuatB).premultiply(lean);
@@ -319,6 +329,7 @@ export class HandEmbodiment {
     if (head?.parent) {
       head.quaternion.copy(head.parent.getWorldQuaternion(this.leanQuat).invert().multiply(this.headWorldBefore));
       head.updateMatrixWorld(true);
+      this.headAfter.copy(head.quaternion);
     }
     this.chestAfter.copy(bone.quaternion);
   }

@@ -230,6 +230,10 @@ const MAX_PELVIS_REACH_DROP = 0.05;
 // out of reach before push-off: 13–27 m/s² single-frame peaks against a 2–4
 // m/s² walk (B-087). At 14 rad/s a 3 cm drop starts at under 6 m/s².
 const PELVIS_REACH_DROP_OMEGA = 14;
+// A growing drop follows faster. At a foot landing the shock goes either to the
+// hips or to the planted knee: 20 rad/s pushes the body replay's knee pops past
+// 35 m/s², 45 pushes the hips past 12 m/s²; 30 keeps both under their gates.
+const PELVIS_REACH_DROP_OMEGA_GROW = 30;
 const PELVIS_HOLD_STEP_METERS = 0.01;
 // Feet tuck this far (leg lengths) above the capsule's floor level in the air.
 const AIRBORNE_FOOT_TUCK = 0.08;
@@ -1451,16 +1455,19 @@ export class VrBodySolver {
 
   // Critically damped spring toward the wanted drop (exact step for a target held over the frame).
   private easePelvisReachDrop(wanted: number, max: number): void {
-    const omega = PELVIS_REACH_DROP_OMEGA;
+    const omega = wanted > this.pelvisReachDrop ? PELVIS_REACH_DROP_OMEGA_GROW : PELVIS_REACH_DROP_OMEGA;
     const dt = this.lastDt;
     const offset = this.pelvisReachDrop - wanted;
     const decay = Math.exp(-omega * dt);
     const impulse = (this.pelvisReachDropSpeed + omega * offset) * dt;
     this.pelvisReachDropSpeed = (this.pelvisReachDropSpeed - omega * impulse) * decay;
     this.pelvisReachDrop = wanted + (offset + impulse) * decay;
-    if (this.pelvisReachDrop < 0 || this.pelvisReachDrop > max) {
-      this.pelvisReachDrop = clamp(this.pelvisReachDrop, 0, max);
-      this.pelvisReachDropSpeed = 0;
+    // The wanted drop already lies in 0..max, so the spring passes a limit only by a small overshoot; stopping it
+    // there would jump its speed (a knee pop). Only the floor holds: the pelvis never rises above its height.
+    if (this.pelvisReachDrop > max * 1.25) this.pelvisReachDrop = max * 1.25;
+    if (this.pelvisReachDrop < 0) {
+      this.pelvisReachDrop = 0;
+      this.pelvisReachDropSpeed = Math.max(0, this.pelvisReachDropSpeed);
     }
   }
 
