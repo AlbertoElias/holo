@@ -4,6 +4,7 @@ import { type FaceRigBones, FaceRig, type FaceBindingReport } from './FaceRig';
 import type { FaceCameraState, FaceExpressionSource, FaceGaze, FaceGazeSource, FaceSample, FaceWeights } from './faceTypes';
 import { LivenessFace } from './LivenessFace';
 import { VoiceLevel } from './VoiceLevel';
+import { VoiceMouth } from './VoiceMouth';
 import { TrackedFace } from './trackedFace';
 import { WebcamFace } from './WebcamFace';
 import { XrGaze } from './XrGaze';
@@ -50,6 +51,8 @@ export class FaceDriver {
   private rig: FaceRig | null = null;
   private readonly liveness = new LivenessFace();
   private readonly voice = new VoiceLevel();
+  private readonly voiceMouth = new VoiceMouth();
+  private micGranted = false;
   private automation: FaceSample | null = null;
   private replayShaper = new TrackedFace();
   private expressionSource: FaceExpressionSource = 'liveness';
@@ -202,15 +205,21 @@ export class FaceDriver {
     if (this.tracker && !faceTurn && !this.stepped) this.tracker.step(now, this.webcam.headRotation(now), false);
     const rig = this.rig;
     if (!rig?.hasFace) return;
+    // A stream the browser refused is asked for again only when the microphone state changes.
+    if (input.micGranted && !this.micGranted) this.voice.retry();
+    this.micGranted = input.micGranted;
     if (input.micGranted) void this.voice.start();
 
-    const live = this.liveness.sample(input.timeSec, input.deltaSec, this.automation || camera ? 0 : this.voice.read());
+    // The microphone moves the mouth only when nothing tracks the face: a tracked face is the mouth.
+    const sound = this.automation || camera ? null : this.voice.sound();
+    const live = this.liveness.sample(input.timeSec, input.deltaSec, sound?.level ?? 0);
+    const lips = this.voiceMouth.sample(input.deltaSec, sound);
 
     const expression: [FaceExpressionSource, FaceWeights] = this.automation
       ? ['automation', this.automation.weights]
       : camera
         ? ['webcam', camera.weights]
-        : ['liveness', live.weights];
+        : ['liveness', { ...live.weights, ...lips }];
     let gaze: [FaceGazeSource, FaceGaze];
     if (this.automation?.gaze) gaze = ['automation', this.automation.gaze];
     else if (camera?.gaze) gaze = ['webcam', camera.gaze];

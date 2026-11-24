@@ -56,6 +56,8 @@ const CHECKS = {
   face: 'scripts/ci-face-playwright.ts',
   // Recorded camera-tracker scores replayed on the default avatar: every expression moves the whole face (B-093).
   'live-face': 'scripts/ci-live-face-playwright.ts',
+  // A fixed, hand-made sound as the microphone in emulated VR: the mouth follows the voice, live and in the export.
+  'mic-mouth': 'scripts/ci-mic-mouth-playwright.ts',
   // Standard avatar formats: binds generated rigs, replays hands and body on
   // the geometric ones, and runs the face check (on the face server) on one.
   avatars: 'scripts/ci-avatar-formats-playwright.ts',
@@ -105,7 +107,7 @@ const CHECK_TIMEOUT_MS: Partial<Record<CheckName, number>> = {
 // desktop-motion's 50 is its 9 on one avatar times the eight it now grades, an estimate until the next refresh).
 // Parallel runs start the longest first and XR_SHARD balances on it. Refresh
 // it on purpose from the xr-checks-shard-*.json timing artifacts.
-const CHECK_COST: Partial<Record<CheckName, number>> = { 'ar-record': 289, face: 100, 'live-face': 40, body: 56, marks: 44, hands: 29, height: 26, ui: 21, terrain: 21, locomotion: 10, 'loco-states': 10, 'held-states': 20, 'desktop-motion': 50, recording: 5, take: 15, bodycam: 40, 'mock-vr': 4, avatars: 920 };
+const CHECK_COST: Partial<Record<CheckName, number>> = { 'ar-record': 289, face: 100, 'live-face': 40, 'mic-mouth': 45, body: 56, marks: 44, hands: 29, height: 26, ui: 21, terrain: 21, locomotion: 10, 'loco-states': 10, 'held-states': 20, 'desktop-motion': 50, recording: 5, take: 15, bodycam: 40, 'mock-vr': 4, avatars: 920 };
 
 const isCheckName = (name: string): name is CheckName => name in CHECKS;
 const args = process.argv.slice(2);

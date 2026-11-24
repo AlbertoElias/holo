@@ -302,7 +302,8 @@ Still open in the model: the lids cannot slant and the brows do not bend,
 the teeth band is grey, and the lower lip is thin at the laugh corners.
 
 **Not covered.** In a headset the camera is released, so the face there
-shows only blinks, gaze and a jaw that follows the microphone. No person
+shows only blinks, gaze and a mouth that follows the microphone (jaw and
+lips; see `archive/mic-mouth.md`). No person
 was in the loop: the sets are hand-made, so a real camera stays a device
 check.
 
