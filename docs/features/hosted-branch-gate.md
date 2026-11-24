@@ -28,7 +28,11 @@ gate (owner decision, 2026-11-24).
   area selection, the reuse of a gate run's results on `main`, main-only
   bundle uploads.
 - `scripts/ci-gate-reuse.sh` (new): finds a green gate run for a tree.
-- `.github/workflows/deploy.yml`: a condition for main or a tag.
+- `.github/workflows/deploy.yml`: a main-only condition.
+- `environment: production` on `api-image` and every deploy job, in both
+  workflows. The `production` environment (owner's yes, 2026-11-24) has the
+  deployment-branch policy "main only" and holds the three deploy secrets.
+- The one-time rerun of failed browser-suite jobs ("Rerun rule").
 - `ci.yml` deploy concurrency groups: the shared group name only on `main`.
 - Instruction files: `AGENTS.md`, `AGENT_CONTRACT.md`, `docs/FEATURE_WORKFLOW.md`,
   the header of `scripts/ci-changed-areas.sh`.
@@ -41,8 +45,10 @@ gate (owner decision, 2026-11-24).
   and `touchesSolver` from `verify-pr.ts`.
 - `.claude/settings.json` keeps its deny rule for `gh workflow run`. The gate
   does not dispatch; it pushes a `gate/**` ref.
-- Branch protection, repository settings and secrets, unless the owner says
-  yes (see "Open decisions").
+- Branch protection and other repository settings. The owner's yes covers
+  only the `production` environment and its three secrets: the owner enters
+  the values and, after the first green deploy from `main`, deletes the
+  repository-level copies.
 - Pull-request triggers. No fork or outside contributor can start a gate run:
   only a user with write access can push a `gate/**` ref.
 
@@ -81,7 +87,15 @@ lint, typecheck, unit tests or build, never reruns). If the rerun passes, the
 gate is green and the command prints each test that failed in attempt 1; the
 agent adds a `BUGS.md` record for it (new, or "observed again") before the
 merge. If a job fails again, the gate is red: reproduce with
-`scripts/ci-emulate.sh`. **Decision:** pending.
+`scripts/ci-emulate.sh`. **Decision (owner, 2026-11-24):** approved. Only the
+failed jobs rerun (`gh run rerun --failed`), one time. A job counts as a
+browser-suite job when its name starts with "Capture XR checks", "Viewer and
+Knowledge browser checks", "Viewer VR gallery", "Capture to viewer pipeline"
+or "Portal view end-to-end", and its conclusion is failure or timed out. The
+aggregate "CI Gate" job reruns with them and does not count. A failure of the
+area selection, the quality job, the Quick Look tool check or a cancelled job
+never reruns. On a green rerun the command prints "FLAKY" with the tests of
+attempt 1, and `output/verify-hosted.json` holds them in `flaky`.
 
 ## Acceptance criteria
 
@@ -99,8 +113,10 @@ merge. If a job fails again, the gate is red: reproduce with
   number in its summary. When `main` moved after the gate run, the tree is
   different and the suites run.
 - [ ] A branch run cannot deploy: the workflow conditions show it, and a gate
-  run shows every deploy job skipped. `deploy.yml` deploys only from `main` or
-  a tag. A skipped deploy job of a gate run is in no shared deploy group.
+  run shows every deploy job skipped. `deploy.yml` deploys only from `main`.
+  Every job that reads a deploy secret runs in the environment `production`,
+  whose branch policy is main only. A skipped deploy job of a gate run is in
+  no shared deploy group.
 - [ ] No job of a gate run reads a secret (only the test jobs run, and they
   use none).
 - [ ] Two gate runs at the same time do not cancel each other.
@@ -122,9 +138,9 @@ merge. If a job fails again, the gate is red: reproduce with
 | `main` moved after the gate run | The merge commit on `main` has a different tree, no gate run matches, and the suites run as today. |
 | Skipping quality on `main` removes the bundles that the deploys use | When quality is reused and a deploy needs a bundle, the quality job still runs the build and the bundle checks; only lint, typecheck, unit tests and the shard check are skipped. |
 | Reused suites make the CI Gate's "no area selected" check fail | The changes job outputs `reused_suites`; the check accepts a reused suite as a selected one. The reuse script rewrites the areas file before the step writes it to `GITHUB_OUTPUT`, so each key is written once. |
-| A gate run deploys | Every deploy job and `api-image` keep `github.ref == 'refs/heads/main'`. `deploy.yml` gets a condition on its `changes` job, which every deploy job needs: `main` or a tag (a rollback can dispatch on a tag). |
+| A gate run deploys | Every deploy job and `api-image` keep `github.ref == 'refs/heads/main'`. `deploy.yml` gets a main-only condition on its `changes` job, which every deploy job needs. A rollback is a revert on `main`, then a deploy. |
 | A skipped deploy job of a gate run cancels a pending deploy on `main` | The deploy groups have `cancel-in-progress: false`, so a newer pending job replaces an older pending one in the same group. On a ref that is not `main`, each deploy job's group is `gate-deploy-<app>-<run id>`, so it never shares a group with `main` or `deploy.yml`. |
-| An edited workflow on a gate ref reads a deploy secret | The in-file conditions do not stop an edited workflow, and an agent can make that edit by mistake. Only a GitHub environment with a main-only branch policy stops it; that is a settings change for the owner, and the design reviewer makes it a precondition (see "Open decisions"). Today only users with write access can push a gate ref. |
+| An edited workflow on a gate ref reads a deploy secret | The in-file conditions do not stop an edited workflow, and an agent can make that edit by mistake. Only a GitHub environment with a main-only branch policy stops it. The environment `production` holds the three deploy secrets, and every job that reads one names it; GitHub refuses that job on any ref but `main`. The repository-level copies go after the first green deploy from `main`. Only users with write access can push a gate ref. |
 | Two gate runs cancel each other | Each job's cancel group is `ci-<job>-${{ github.ref }}` and each gate ref is different (the tree is in the name). Two branches with the same tree hold the same content. |
 | The same tree is gated twice | The merge commit is deterministic (the configured git identity, the message "Merge branch '<branch>'", dates from the newer parent), so the second push is a no-op. Before it pushes, the command looks for a run of that commit and waits for it or reports its result. When the ref holds another commit of the same tree, the command stops and says so. |
 | Gate runs push `main`'s Actions caches out (the 10 GB limit) | A cache missed on a gate ref is saved in that ref's scope. After the run, the command deletes the caches of the gate ref (`gh cache delete --all --ref`). |
@@ -225,17 +241,21 @@ conclusion is success. Findings and what changed:
 | Runner queue | Recorded above; the test plan records the queue time. |
 | `merge-tree` errors, commit identity, an existing run, deleting the ref | Exit codes split; the configured identity; the command looks for a run of the commit before it pushes; the ref is deleted after the run ends. |
 | Lint, typecheck and unit tests locally without the lock | Kept, because the task names them (see "Local phase"). |
-| `deploy.yml` main-only blocks a rollback dispatched on a tag | The condition allows `main` or a tag. |
+| `deploy.yml` main-only blocks a rollback dispatched on a tag | First the condition allowed a tag. The `production` environment allows only `main`, so a tag deploy fails there anyway: the condition is main only, and a rollback is a revert on `main`. |
 | The gate never builds the API image | Not changed: the image builds on `main` before its deploy, as today. A Dockerfile defect still shows only on `main`. |
 
-## Open decisions
+## Decisions (owner, 2026-11-24)
 
-1. The rerun rule (above).
-2. Secret scoping: a GitHub environment `production` with the deployment-branch
-   policy "main only", holding `FLY_API_TOKEN`, `CLOUDFLARE_API_TOKEN` and
-   `CLOUDFLARE_ACCOUNT_ID`, with `environment: production` on `api-image` and
-   the deploy jobs. Asked on 2026-11-24. The design reviewer makes this a
-   precondition for the merge.
+1. The rerun rule (above): approved.
+2. Secret scoping: approved. The sequence:
+   1. This session creates the environment `production` with the
+      deployment-branch policy "main only". Done: environment id
+      28387246589, one branch policy, `main`.
+   2. The owner enters `FLY_API_TOKEN`, `CLOUDFLARE_API_TOKEN` and
+      `CLOUDFLARE_ACCOUNT_ID` in that environment.
+   3. Only then does the change with `environment: production` merge.
+   4. After the next green deploy from `main`, the owner deletes the three
+      repository-level copies. This session does not delete them.
 
 ## Test plan and evidence
 

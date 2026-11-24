@@ -17,6 +17,11 @@
 //    same tree lands there within 24 hours (scripts/ci-gate-reuse.sh).
 // 4. Waits for the run, prints one line per finished job, then PASSED or
 //    FAILED with the failed jobs and the failed test lines from their logs.
+//    When only browser-suite jobs failed, it reruns those jobs one time
+//    (gh run rerun --failed). A pass on the rerun is green, but the tests
+//    that failed first are flaky: record each in BUGS.md before the merge.
+//    A second failure, or a failure of any other job (lint, typecheck, unit
+//    tests, build, area selection), is red with no rerun.
 //    Writes output/verify-hosted.json and output/verify-hosted.exit, then
 //    deletes the gate ref and the Actions caches saved on it, so gate runs
 //    do not push main's caches out (the run and its results stay).
@@ -42,6 +47,16 @@ const POLL_MS = 20_000;
 const RUN_APPEARS_MS = 180_000;
 const RUN_LIMIT_MS = 60 * 60_000;
 const MAX_TEST_LINES = 12;
+/** Job name prefixes of the browser suites in ci.yml: only these rerun, one time. */
+const BROWSER_SUITES = [
+  "Capture XR checks",
+  "Viewer and Knowledge browser checks",
+  "Viewer VR gallery, foot controls and locomotion",
+  "Capture to viewer pipeline",
+  "Portal view end-to-end",
+];
+/** The aggregate job fails when any job it needs fails; it reruns with them. */
+const AGGREGATE_JOB = "CI Gate";
 
 type Step = ReturnType<typeof selectSteps>[number];
 
@@ -250,8 +265,28 @@ export function failedTestLines(logText: string): string[] {
   return lines;
 }
 
+const failedJobs = (current: Run): Job[] => current.jobs.filter((job) => job.conclusion !== "success" && job.conclusion !== "skipped");
+
+/** True when every failed job (the aggregate job aside) is a browser-suite job that failed or timed out. */
+export function onlyBrowserSuitesFailed(jobs: Pick<Job, "conclusion" | "name">[]): boolean {
+  const failed = jobs.filter((job) => job.conclusion !== "success" && job.conclusion !== "skipped" && !job.name.startsWith(AGGREGATE_JOB));
+  return failed.length > 0 && failed.every((job) =>
+    (job.conclusion === "failure" || job.conclusion === "timed_out") && BROWSER_SUITES.some((prefix) => job.name.startsWith(prefix)));
+}
+
+/** Starts the one rerun of the failed jobs and returns when GitHub shows the new attempt. */
+async function rerunFailed(previous: Run): Promise<void> {
+  run("gh", ["run", "rerun", String(previous.databaseId), "--failed"]);
+  const started = Date.now();
+  while (Date.now() - started < RUN_APPEARS_MS) {
+    if (viewRun(previous.databaseId).attempt > previous.attempt) return;
+    await sleep(5_000);
+  }
+  throw new GateError(`the rerun of run ${previous.databaseId} did not start within ${RUN_APPEARS_MS / 1000}s`);
+}
+
 function reportFailures(current: Run): string[] {
-  const failed = current.jobs.filter((job) => job.conclusion !== "success" && job.conclusion !== "skipped");
+  const failed = failedJobs(current);
   const summary: string[] = [];
   for (const job of failed) {
     log(`failed job: ${job.name} [${job.conclusion}]`);
@@ -317,16 +352,30 @@ async function main(): Promise<void> {
     }
     record.runId = current.databaseId;
     record.url = current.url;
-    const finished = await waitForRun(current.databaseId, Date.now());
+    let finished = await waitForRun(current.databaseId, Date.now());
+    let flaky: string[] = [];
+    if (finished.conclusion !== "success" && finished.attempt === 1 && onlyBrowserSuitesFailed(finished.jobs)) {
+      flaky = reportFailures(finished).filter((line) => !line.startsWith(AGGREGATE_JOB));
+      log("only browser-suite jobs failed: rerunning the failed jobs one time");
+      await rerunFailed(finished);
+      finished = await waitForRun(finished.databaseId, Date.now());
+    }
     record.conclusion = finished.conclusion;
     record.attempt = finished.attempt;
     if (finished.conclusion === "success") {
       status = 0;
-      log(`PASSED in ${elapsed(started)}: tree ${tree} (run ${finished.databaseId})`);
+      if (flaky.length > 0) {
+        record.flaky = flaky;
+        log("FLAKY: these jobs failed on attempt 1 and passed on the rerun:");
+        for (const line of flaky) log(`    ${line}`);
+        log("record each flaky test in BUGS.md (the run URL and the failed test line) before the merge");
+      }
+      log(`PASSED in ${elapsed(started)}: tree ${tree} (run ${finished.databaseId}${finished.attempt > 1 ? `, attempt ${finished.attempt}` : ""})`);
       const land = merged ? `git merge --ff-only ${commit}` : `git merge --ff-only ${branch}`;
       log(`land it while origin/main is ${String(record.mainSha).slice(0, 12)}: in the main checkout, ${land} && git push origin main`);
       log("main then skips the suites this run passed (same tree, within 24 hours); if main moved, merge again and the suites run on main");
     } else {
+      if (flaky.length > 0) record.firstAttemptFailures = flaky;
       record.failures = reportFailures(finished);
       log(`FAILED in ${elapsed(started)}: ${finished.url}`);
       log("reproduce locally (scripts/ci-emulate.sh), fix, commit, and run the gate again; do not debug on hosted CI");

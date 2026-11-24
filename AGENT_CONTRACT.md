@@ -377,13 +377,23 @@ holograms to the agent account (dry run without `--apply`). Background:
   command waits by itself, prints one line per finished job, then PASSED or
   FAILED with the failed jobs and the failed test lines, and writes
   `output/verify-hosted.json` and `output/verify-hosted.exit` (0 pass,
-  1 fail, 2 setup error). It deletes the gate ref and its Actions caches at
-  the end. Run it in the background and wait for it to exit. On PASSED, land
+  1 fail, 2 setup error). When only browser-suite jobs failed (failure or
+  timed out), it reruns the failed jobs one time. A green rerun passes the
+  gate but prints FLAKY with the tests of the first attempt: record each
+  one in `BUGS.md` (new, or "observed again") before the merge. A second
+  failure, or a failure of the quality job (lint, typecheck, unit tests,
+  build), the area selection or the Quick Look tool check, is red with no
+  rerun. It deletes the gate ref and its Actions caches at the end. Run it in the background and wait for it to exit. On PASSED, land
   the exact commit it printed (`git merge --ff-only <commit>` in the main
   checkout, then push): the push to `main` then skips each suite that the
   gate run passed on the same tree within 24 hours
   (`scripts/ci-gate-reuse.sh`); the CI Gate summary names the gate run. If
   `main` moved, merge again; the tree is new and the suites run on `main`.
+- Deploy secrets live in the GitHub environment `production`, whose
+  deployment-branch policy is main only. Every job that reads one
+  (`api-image` and the deploy jobs in `ci.yml` and `deploy.yml`) names
+  `environment: production`, so a run on any other ref cannot read them.
+  `deploy.yml` also runs only on `main`: a rollback is a revert on `main`.
 - Deploy runs inside `ci.yml` on `main`: each app deploys as soon as every
   suite that exercises it has passed (API ← quality, pipeline, portal;
   viewer ← quality, viewer e2e and VR, pipeline, portal; capture ← quality,
