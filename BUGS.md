@@ -215,9 +215,19 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
     the crouch's drop and its hips back, but not the crouch's forward spine lean. So `leanFor` puts the goal 82 to
     89 cm from the shoulder through the take, while the solve's real shoulder is 77 cm from it at 1.60 s and 48 cm
     at 2.20 s. The lean need is wrong in size and does not track the real gap.
-- **Next fix:** in `leanFor`, measure the shoulder with the crouch's spine lean (or from the posed bones of the
-  frame before), then lean for the reach point on its way. Measure the effector error per frame (under about 5 mm)
-  and the elbow step, and guard all six pinned cases.
+  - The shoulder with the crouch's and the bend's spine lean (the hips-to-shoulder vector turned forward by
+    `BEND.deg * bend + CROUCH.deg * crouch` in `leanFor`), with and without the lean for the point on its way:
+    `leanFor` now puts the goal 71 cm from the shoulder at 1.70 s and 56 cm at 2.20 s. The lean gets smaller, so
+    the hand stops short of the ball: the effector error grows to 64 mm from 2.0 s on and does not close.
+    grip.pick 66 mm, arms.held.me 17 mm and arms.support.me 3 % fail where they passed at the pin; jump.props
+    1.26 m/s (pin 1.17). The elbow step falls to 7.5 mm and its largest change to 4.1 mm. Taken out.
+  - What this shows: the take reaches the ball only because the old shoulder is too far back and the lean is too
+    large. The real lean gap is in the spine that the lean itself bends: the lean, the crouch and the bend all
+    turn the same spine bones, and `leanFor` sizes its lean before the crouch's own turn is known to the solve.
+- **Next fix:** measure the shoulder from the posed bones (pose the spine with the crouch and the bend first, read
+  the upper-arm world position, then size the lean), so the lean need is the real gap. Then re-tune
+  `COMFORT_REACH` only if the pinned cases ask for it. Measure the effector error per frame (under about 5 mm),
+  the elbow step, and guard all six pinned cases.
 
 ### B-101 — House avatar: the jumper's sleeve end has a jagged edge at the wrist
 
