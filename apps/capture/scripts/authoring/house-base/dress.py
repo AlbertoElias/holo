@@ -269,7 +269,7 @@ def garments(human, rig, slots, G):
                 count[key] = count.get(key, 0) + 1
                 directed.append((a, b))
         open_edges = [(a, b) for a, b in directed if count[(min(a, b), max(a, b))] == 1]
-        for ring, c, ax, r in rings:
+        for ring, c, ax, r in rings if cuff and cuff["hem"] > 0 else []:
             on = set(ring)
             edges = [(a, b) for a, b in open_edges if a in on and b in on]
             inner = {}
