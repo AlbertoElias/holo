@@ -926,6 +926,40 @@ for poly in human.data.polygons:
     if slots[poly.material_index] in ("skin", "top"):
         poly.material_index = slots.index("top" if c.z < z0 + cl["tilt"] * (c.y - y0) else "skin")
 
+# The sleeve ends: at the wrists the vote leaves a saw-tooth edge where the forearm's and the hand's faces meet
+# (B-101), so a plane across each forearm, `back` (m) up the forearm from the wrist joint, decides there instead
+# (jumper on the forearm's side, skin on the hand's side), on that arm's forearm and hand faces only.
+sl = P["garments"]["sleeveEnd"]
+to_mesh = human.matrix_world.inverted() @ rig.matrix_world
+for side in ("Left", "Right"):
+    wrist = to_mesh @ rig.data.bones[f"{side}Hand"].head_local
+    elbow = to_mesh @ rig.data.bones[f"{side}ForeArm"].head_local
+    n = (wrist - elbow).normalized()  # down the forearm, toward the hand
+    at = wrist - n * sl["back"]
+    arm = {f"{side}ForeArm", f"{side}Hand"}
+    edge = {}
+    for poly in human.data.polygons:
+        if poly.index >= n_body_polys or slots[poly.material_index] not in ("skin", "top"):
+            continue
+        bones = [vbone[i] for i in poly.vertices]
+        if not all(b in arm or b.startswith(f"{side}Hand") for b in bones):
+            continue
+        d = (poly.center - at).dot(n)
+        if abs(d) <= sl["band"]:
+            poly.material_index = slots.index("top" if d < 0 else "skin")
+            kinds = slots[poly.material_index]
+            for i in poly.vertices:
+                edge.setdefault(i, set()).add(kinds)
+    # Faces go whole to one side, so their line is still a saw-tooth: each vertex on it (in a jumper face and a skin
+    # face) moves along the forearm onto the plane, in the mesh and in every shape, so the cuff ends in one ring.
+    for i, kinds in edge.items():
+        if len(kinds) < 2:
+            continue
+        step = -n * (human.data.vertices[i].co - at).dot(n)
+        human.data.vertices[i].co += step
+        for k in human.data.shape_keys.key_blocks:
+            k.data[i].co += step
+
 # The trouser hems: at the ankles the vote leaves a ragged edge too (and the fit moves it), so a level plane
 # `raise` (m) above the top of the feet' faces decides there instead (shoe below, trousers above).
 cf = P["garments"]["cuff"]

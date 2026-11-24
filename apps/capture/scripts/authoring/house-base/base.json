@@ -691,6 +691,11 @@
       "halfWidth": 0.17,
       "below": 0.12
     },
+    "sleeveEnd": {
+      "$comment": "The sleeve ends: an arm's forearm and hand faces within `band` (m) of a plane across the forearm `back` (m) up from the wrist joint are skin on the hand's side and jumper on the forearm's side, so the cuff ends in a clean ring; the vertices on the line between them move onto the plane (B-101).",
+      "back": 0.01,
+      "band": 0.05
+    },
     "cuff": {
       "$comment": "The trouser hems: faces within `band` (m) of a level plane `raise` (m) above the highest toe vertex are shoe below it and trousers above it, so the hem is straight. Decided by the agent on 2026-11-18 (slice 2c2), owner's review pending.",
       "raise": 0.06,
