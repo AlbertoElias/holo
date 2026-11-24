@@ -17,7 +17,6 @@ import {
 } from '@holoim/tooling-testing/xr-env';
 
 import type {} from '../src/runtime/automationHooks';
-import type { FaceSnapshot } from '../src/face/FaceDriver';
 
 // The mouth from the microphone in a headset (docs/features/mic-mouth.md). A fixed sound, made here from numbers
 // (a pulse train through three formant filters, in a low and a high voice: no recorded and no system voice), is
@@ -202,15 +201,15 @@ const check = (ok: boolean, message: string) => {
 };
 const report: Record<string, unknown> = { soundSec: round(soundSec), parts: parts.map((entry) => ({ ...entry, start: round(entry.start), end: round(entry.end) })) };
 
-async function openPage(options: { denied: boolean; label: string }): Promise<Page> {
+async function openPage(options: { denied: boolean; refuseMeter?: boolean; label: string }): Promise<Page> {
   // The software renderer's cost grows with the pixel count: the numbers need only the checks' small canvas.
   const viewport = video ? { width: 1280, height: 720 } : resolveSimulationViewport();
-  const context = await createXrContext(browser, { viewport, acceptDownloads: true, ...(video && !options.denied ? { recordVideo: { dir: path.join(artifactDir, 'video'), size: viewport } } : {}) });
+  const context = await createXrContext(browser, { viewport, acceptDownloads: true, ...(video && !options.denied && !options.refuseMeter ? { recordVideo: { dir: path.join(artifactDir, 'video'), size: viewport } } : {}) });
   const page = await context.newPage();
   // tsx compiles with keepNames, which wraps named inner functions of the page.evaluate callbacks in a helper the page lacks.
   await page.addInitScript('globalThis.__name = globalThis.__name || ((target) => target);');
   wireXrConsoleErrors(page, consoleErrors, { label: options.label });
-  await page.addInitScript((denied) => {
+  await page.addInitScript(({ denied, refuseMeter }) => {
     const w = window as unknown as MicWindow;
     w.__mic = { context: null, bus: null, calls: [], contexts: [], settled: 0, startAt: null, ended: false, rows: [] };
     // Every audio context the page makes, for the report: a suspended one reads silence.
@@ -226,8 +225,9 @@ async function openPage(options: { denied: boolean; label: string }): Promise<Pa
     navigator.mediaDevices.getUserMedia = async (constraints) => {
       const audio = constraints?.audio;
       if (!audio || constraints?.video) throw new DOMException('This check has no camera', 'NotFoundError');
-      w.__mic.calls.push({ meter: typeof audio === 'object' && 'noiseSuppression' in audio, p: performance.now() / 1000 });
-      if (denied) throw new DOMException('Permission denied', 'NotAllowedError');
+      const meter = typeof audio === 'object' && 'noiseSuppression' in audio;
+      w.__mic.calls.push({ meter, p: performance.now() / 1000 });
+      if (denied || (refuseMeter && meter)) throw new DOMException('Permission denied', 'NotAllowedError');
       if (!w.__mic.context) {
         w.__mic.context = new AudioContext({ sampleRate: 48000 });
         w.__mic.bus = w.__mic.context.createGain();
@@ -236,7 +236,7 @@ async function openPage(options: { denied: boolean; label: string }): Promise<Pa
       w.__mic.bus!.connect(destination);
       return destination.stream;
     };
-  }, options.denied);
+  }, { denied: options.denied, refuseMeter: options.refuseMeter === true });
   await attachXrEnvironment(page, { mode: 'iwer', cacheClearState: true });
   await page.route('**/__holoim/input-recordings*', (route: Route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{"path":"(discarded by the mic mouth check)"}' }));
   const pageUrl = new URL(baseUrl);
@@ -248,7 +248,8 @@ async function openPage(options: { denied: boolean; label: string }): Promise<Pa
   // The app asks for the microphone when it loads, and the face's meter opens its stream on the first frame after
   // the grant. Wait for that before any user action: the meter's audio context is then made suspended, which is
   // the hard case (a headset that remembers the grant).
-  if (!options.denied) await page.waitForFunction(() => (window as unknown as MicWindow).__mic.contexts.length >= 2, undefined, { timeout: 60_000 });
+  if (options.refuseMeter) await page.waitForFunction(() => (window as unknown as MicWindow).__mic.calls.some((call) => call.meter), undefined, { timeout: 60_000 });
+  else if (!options.denied) await page.waitForFunction(() => (window as unknown as MicWindow).__mic.contexts.length >= 2, undefined, { timeout: 60_000 });
   await enterIwerSessionFromButton(page, '#VRButton', { readyCheck: () => JSON.parse(window.render_game_to_text()).mode === 'vr' });
   await page.evaluate((hide: boolean) => {
     window.__setSpectatorView('face', { faceFrame: 'mouth' });
@@ -370,6 +371,10 @@ try {
   const download = page.waitForEvent('download', { timeout: 120_000 });
   await clickButton(page, CONTROL_NAMES.stopRecording);
   const file: Download = await download;
+  // The whole take, its stop included: the meter asked one time only.
+  const callsAtEnd = await page.evaluate(() => (window as unknown as MicWindow).__mic.calls);
+  report.requestsAtEnd = callsAtEnd.map((call) => (call.meter ? 'meter' : 'recorder'));
+  check(callsAtEnd.filter((call) => call.meter).length === 1, `microphone requests at the end of the take: ${JSON.stringify(report.requestsAtEnd)}; want the meter one time`);
   const glbPath = path.join(artifactDir, 'mic-mouth-take.glb');
   await file.saveAs(glbPath);
   if (video) {
@@ -549,6 +554,26 @@ try {
   check(deniedCalls.length > 0 && deniedCalls.every((call) => !call.meter), `microphone denied: requests ${JSON.stringify(report.denied)}; the meter must not ask`);
   check(deniedMouth <= CLOSED, `microphone denied: the mouth moves (${deniedMouth.toFixed(3)})`);
   await deniedPage.context().close();
+
+  // ---- A8, third part: the app's request is granted, the meter's own request is refused. The meter does not ask
+  // again on each frame, and the mouth stays closed.
+  const refusedPage = await openPage({ denied: false, refuseMeter: true, label: 'mic-mouth meter refused' });
+  await clickButton(refusedPage, CONTROL_NAMES.startRecording);
+  const refusedRows = await refusedPage.evaluate(() => new Promise<Array<Record<string, number>>>((resolve) => {
+    const out: Array<Record<string, number>> = [];
+    const frame = () => {
+      out.push(window.__sampleFace().weights as Record<string, number>);
+      if (out.length < 30) requestAnimationFrame(frame);
+      else resolve(out);
+    };
+    requestAnimationFrame(frame);
+  }));
+  const refusedCalls = await refusedPage.evaluate(() => (window as unknown as MicWindow).__mic.calls);
+  const refusedMouth = Math.max(0, ...refusedRows.flatMap((weights) => MOUTH.map((name) => weights[name] ?? 0)));
+  report.meterRefused = { requests: refusedCalls.map((call) => (call.meter ? 'meter' : 'recorder')), mouthMax: round(refusedMouth), micState: await micState(refusedPage) };
+  check(refusedCalls.filter((call) => call.meter).length === 1, `meter refused: requests ${JSON.stringify(report.meterRefused)}; want the meter one time`);
+  check(refusedMouth <= CLOSED, `meter refused: the mouth moves (${refusedMouth.toFixed(3)})`);
+  await refusedPage.context().close();
 } finally {
   await browser.close();
 }
@@ -556,7 +581,7 @@ try {
 // A denied microphone is this check's own doing; the browser reports nothing for it, the app shows its notice.
 if (consoleErrors.length) failures.push(`console errors:\n${consoleErrors.join('\n')}`);
 await writeFile(path.join(artifactDir, 'mic-mouth-report.json'), JSON.stringify({ ...report, failures, consoleErrors }, null, 2));
-console.log(`[mic-mouth] ${JSON.stringify({ requests: report.requests, audioContexts: report.audioContexts, meterContextMadeSuspended: report.meterContextMadeSuspended, jaw: report.jaw, loud: report.loud, syllableJawPeaks: report.syllableJawPeaks, silenceMouthMax: report.silenceMouthMax, roomNoiseMouthMax: report.roomNoiseMouthMax, tracked: report.tracked, export: report.export, denied: report.denied, channelsMoved: report.channelsMoved, framesPerSec: report.framesPerSec })}`);
+console.log(`[mic-mouth] ${JSON.stringify({ requests: report.requests, audioContexts: report.audioContexts, meterContextMadeSuspended: report.meterContextMadeSuspended, jaw: report.jaw, loud: report.loud, syllableJawPeaks: report.syllableJawPeaks, silenceMouthMax: report.silenceMouthMax, roomNoiseMouthMax: report.roomNoiseMouthMax, tracked: report.tracked, export: report.export, denied: report.denied, meterRefused: report.meterRefused, requestsAtEnd: report.requestsAtEnd, channelsMoved: report.channelsMoved, framesPerSec: report.framesPerSec })}`);
 if (failures.length) {
   console.error(`[mic-mouth] FAILED\n- ${failures.join('\n- ')}`);
   process.exit(1);

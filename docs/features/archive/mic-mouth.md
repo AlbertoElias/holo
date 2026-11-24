@@ -118,8 +118,10 @@ removes it with the take.
 - [x] A8. No second prompt: the app's own microphone request (when it
   loads, and again at a recording, as before this feature) comes first; the
   voice meter opens its stream only after that request was granted, and one
-  time. With the microphone denied the meter never asks, the mouth stays
-  closed and no error shows.
+  time, counted again at the end of the take. With the microphone denied
+  the meter never asks, the mouth stays closed and the console shows no
+  error. With the meter's own request refused, the meter asks one time and
+  the mouth stays closed.
 - [x] A9. The `live-face` check's rows do not change: every channel of every
   set is equal before and after this change (largest difference 0). The
   `face` check passes with its bars as they are.
@@ -199,11 +201,30 @@ channels to the liveness weights. `FaceRig.apply` stays the only writer.
   audio context stayed silent after the resume (with the check's stand-in
   stream). `VoiceLevel` now connects the stream only in a running context.
 
+**Verification changes** (`verifier` subagent and a code review of the diff,
+2026-11-24; no blocker):
+
+- Taken: the meter's request count is read again at the end of the take; a
+  third page refuses only the meter's request and counts its requests over
+  30 frames; A8 says "the console shows no error", which is what the check
+  reads.
+- Checked, no change: the `face` check gives Chromium's fake microphone (a
+  short beep each second) to the page, and its release bar (0.3 in one
+  step, not changed) now also sees the lips. That check runs on a fixed
+  step of 1/30 s, so the largest lip step is 0.5 × (1 − e^(−0.0333/0.06)) =
+  0.213 at any machine load (measured 0.207 for `mouthFunnel`, 0.165 for
+  `mouthStretch*`).
+- Not taken: a permanent check that compares the `live-face` rows with
+  `main` (the comparison is a one-time proof; the `live-face` check keeps
+  its own bars). Open before and after this change: the meter keeps its
+  stream until the page closes, and does not open a new one when the
+  track ends.
+
 ## Test plan and evidence
 
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
-| A1–A8 | `node --import tsx scripts/run-xr-checks.ts mic-mouth` in `apps/capture`: builds the fixed sound in the script (a pulse train through three formant filters: "ah", "ee", "oo", four syllables of unequal loudness, low noise, silence, in a low and a high voice), gives it to the page as the microphone (a Web Audio stream in place of `getUserMedia`), enters emulated VR, records in real time, samples the face on each frame against the sound's own clock, waits for the sound's end, stops, exports and reads the GLB | `mic-mouth-report.json` (numbers for each criterion), `mic-mouth-rows.json`, `mic-mouth.wav`, the exported GLB. Pass on 2026-11-24 (emulator, 320×180, 18.6 frames a second, 395 sound frames). A1: jaw correlation 0.998 at 0 ms lag; vowel jaw peaks 0.55; syllable peaks (loudness 0.1, 0.04, 0.07, 0.05) low voice 0.55, 0.239, 0.474, 0.32, high voice 0.55, 0.231, 0.457, 0.306. A2: largest mouth value in silence 0.005. A3: 0 in the room noise. A4 (both voices): "oo" `mouthFunnel` 0.5, stretch 0; "ee" `mouthStretch*` 0.4, funnel 0; "ah" both 0. A5: channels moved: `jawOpen`, `mouthFunnel`, `mouthPucker`, `mouthStretchLeft/Right`, `eyeBlinkLeft/Right` (the blink of the idle face). A6: source `automation`, mouth 0 under the loud sound. A7: 637 keys; jaw, funnel and stretch RMS error 0, correlation 0.998–0.999, equal peaks; 426 108 bytes of sound in the take. A8: requests `recorder`, then `meter` one time; with the microphone refused the meter never asks and the mouth stays 0. The meter's audio context was made suspended in this run and resumed. |
+| A1–A8 | `node --import tsx scripts/run-xr-checks.ts mic-mouth` in `apps/capture`: builds the fixed sound in the script (a pulse train through three formant filters: "ah", "ee", "oo", four syllables of unequal loudness, low noise, silence, in a low and a high voice), gives it to the page as the microphone (a Web Audio stream in place of `getUserMedia`), enters emulated VR, records in real time, samples the face on each frame against the sound's own clock, waits for the sound's end, stops, exports and reads the GLB | `mic-mouth-report.json` (numbers for each criterion), `mic-mouth-rows.json`, `mic-mouth.wav`, the exported GLB. Pass on 2026-11-24 (emulator, 320×180, 16.1 frames a second, 350 sound frames). A1: jaw correlation 0.997 at 0 ms lag; vowel jaw peaks 0.55; syllable peaks (loudness 0.1, 0.04, 0.07, 0.05) low voice 0.55, 0.242, 0.477, 0.322, high voice 0.55, 0.229, 0.458, 0.307. A2: largest mouth value in silence 0.005. A3: 0 in the room noise. A4 (both voices): "oo" `mouthFunnel` 0.5, stretch 0; "ee" `mouthStretch*` 0.4, funnel 0; "ah" both 0. A5: channels moved: `jawOpen`, `mouthFunnel`, `mouthPucker`, `mouthStretchLeft/Right`, `eyeBlinkLeft/Right` (the blink of the idle face). A6: source `automation`, mouth 0 under the loud sound. A7: 551 keys; jaw, funnel and stretch RMS error 0, correlation 0.998–0.999, equal peaks; 426 108 bytes of sound in the take. A8: requests `recorder`, then `meter`; at the end of the take `recorder`, `meter`, `recorder` (the meter one time); with the microphone denied the meter never asks and the mouth stays 0; with the meter's request refused the meter asks one time in 30 frames and the mouth stays 0. The meter's audio context was made suspended in this run and resumed. |
 | A9 | `LIVE_FACE_FRAMES=1 … run-xr-checks.ts live-face` on `origin/main` and on the branch; compare the two `live-face-rows.json` | 8550 numbers compared in `live-face-rows.json`: 0 different, largest difference 0. (Run without `LIVE_FACE_FRAMES`; the rows are written in both modes.) |
 | A9 | `run-xr-checks.ts face` | Pass, bars unchanged |
 | Proof video | `MIC_MOUTH_VIDEO=1 MIC_MOUTH_GPU=metal … run-xr-checks.ts mic-mouth`, then the page recording and `mic-mouth.wav` joined on the white start marker | `apps/capture/output/mic-mouth.mp4` (not committed): the live avatar in the emulator speaks the sound, mouth view, with the sound. That run: 120 frames a second, jaw correlation 1 at 20 ms lag. |
