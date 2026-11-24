@@ -1378,7 +1378,7 @@ the phone capture mandate):
 4b changes the recording format, so it waits for both owners to agree;
 4a's loss report is the case for it.
 
-### Slice 5: likeness from a photo (5a approved, 5b after 2e)
+### Slice 5: likeness from a photo (5a built, at the owner's gate; 5b after 2e)
 
 The second finish moved into slice 2 (2f) on 2026-11-17. What is left is
 the deferred half of likeness: a selfie read once into the slice 2 trait
@@ -1465,19 +1465,26 @@ proposed.
 **Checks and evidence.** These are end-to-end, from the photo to the
 dressed avatar:
 
-1. **Stability.** On at least five photos of the owner (different lights,
+1. **Stability.** On online photos of several people (different lights,
    with and without glasses), skin and hair colour are each within one
-   swatch of the most common pick. The numbers go in "Slice 5a evidence".
+   swatch of each person's most common pick. The numbers go in "Slice 5a
+   evidence".
 2. **Spread.** On a small set of photos with a clear licence for this use
    (to be found before building; no photo of a third party without a
    licence), the skin picks follow the photos' lightness order.
 3. **The dressed result.** `card.json` goes through `dressedFile` and the
    audition, which must still pass, because the card holds only values the
    audition already passed.
-4. **The owner's verdict.** The owner looks at `compare.jpg` for their own
-   photos. That verdict is the gate.
+4. **The owner's verdict.** The owner looks at a contact sheet of
+   `compare.jpg` for online portraits, light to dark. That verdict is the
+   gate.
+
 5. **Proof video.** A real-time recording: the photo goes in, the CLI
    runs, the card comes out, and a beat sheet plays with that card.
+
+**Changed on 2026-11-23: online photos, not the owner's own.** The owner
+said: "i dont need to post my photos, just use the online ones". Checks 1
+and 4 above first named the owner's own photos.
 
 **What 5a does not do.** It makes no mesh from the photo, so no face shape
 or proportions come from it. On 2026-11-19 the owner called a face that
@@ -4501,6 +4508,213 @@ the hips to 0.08 m (B-086). The `object` suite's other failures are on
 `main` with the stock avatar too (B-069).
 
 **Emulation only.** None of this was seen on a headset or a phone.
+
+### Slice 5a evidence (2026-11-23): built; approved and merged 2026-11-24
+
+`photo-look.ts` (in `apps/capture/scripts/authoring/`) and the read in
+`packages/avatar-look` (`photo.ts` for the arithmetic, `read.ts` for the
+browser part) are built. Nothing in `apps/capture/src/` changed. The read
+runs in headless Chromium through Playwright. The page loads only from a
+local origin, and the browser aborts every other request, so the photo
+cannot leave the machine. The one download is the segmenter model, once,
+from Google's storage, with a SHA-256 check. The read itself takes 0.7 s.
+The hair styles' outlines and the base's face frame do not depend on the
+photo: the first full run renders them and keeps them as data in
+`output/authoring/photo-look/.styles/`. After that, `--read-only` writes
+the card with the hair style proposal in about 3 s from a cold start: 1.2 s
+to start Node, 1.5 s to build the page, start Chromium and load the
+models, and 0.7 s to read. A full run with `compare.jpg` takes about 22 s:
+the three finish renders are the rest. For slice 5b on a server, the
+target is about 3 s per photo: keep one browser with the models loaded
+(about 0.7 s per photo), ship the outlines as data, and let the client
+render the card, so the server makes no render.
+
+**Licences.** The agent read the model cards before any code used the
+models: the face mesh V2 (in `face_landmarker.task`), BlazeFace short
+range, the blendshape V2 model and the multiclass selfie segmenter. All
+four are Apache 2.0. None has a territory, non-commercial or user-count
+clause, so no question went to the owner and the fallback was not needed.
+
+**How each trait is read.**
+
+- Skin: five discs (the forehead's middle and sides and both cheeks, each
+  0.05 face widths), only the segmenter's face-skin pixels. The middle
+  fifth by luminance of each disc, then the middle disc. The eye whites
+  are the whitest third of each eye outside the iris, drawn in by a fifth
+  from the lids. They are used only when they are light and grey enough
+  (OKLab L 0.55 or more, lowest channel over highest 0.45 or more:
+  `WHITE_MIN`). They set the tint (each channel capped at 1.25×) and the
+  skin's scale: the skin's OKLab lightness over the eye whites' lightness.
+  This ratio cancels the exposure. It is placed on a span of 1.2
+  (porcelain) to 0.6 (espresso) (`SKIN_RATIO`) and takes the swatch of the
+  same rank. When the eye whites are not usable (dark glasses, lids, shade)
+  or the skin areas differ by more than 0.3 in lightness (`SKIN_SPREAD_MAX`:
+  a hat brim, side light), the read is reported and the card keeps the
+  default skin, with a note to use a photo with open eyes in even, front
+  light.
+- Hair colour: the segmenter's hair class, eroded by 1.2% of the face width
+  from its edges. The 60–85% band by luminance (the lit body of the hair,
+  above the shade between strands and below the shine). The nearest
+  `HAIR_COLOUR` in OKLab with lightness at half weight
+  (`HAIR_LIGHTNESS_WEIGHT`). Hair under 0.15 face widths squared is not
+  read.
+- Eyes: each iris disc from 0.35 to 0.85 of its radius, inside the eye
+  outline, without glints. The confidence is the product of the iris size,
+  both eyes agreeing, the margin over the next swatch and the glare. Under
+  0.5 the card keeps the default.
+- Hair style: the hair mask in the face's own frame (a 48 × 62 grid of
+  cells 0.05 face widths square), against the six styles rendered from the
+  same view with their hair keyed green. The best overlap (intersection
+  over union, as-is or mirrored) is the proposal. Its confidence is the
+  margin (full at 0.2) times the best overlap (full at 0.4). Under 0.5
+  (`HAIR_STYLE_MIN_CONFIDENCE`) the card keeps the default style.
+
+**Calibration (by the agent, in the owner's absence).** The first version
+scaled every photo's eye whites to the same lightness with no cap: a shaded
+eye white made 12 of the portraits below read whiter than any real skin.
+The second capped the exposure change at 0.8× to 1.25× and placed the
+absolute skin lightness on a span of 0.92 to 0.52; check 1 showed that it
+is not stable between photos of one person (see below). The third, now in
+the code, reads the skin as a ratio to the eye whites and refuses eye
+whites that are dark or coloured. The thresholds and the span were set on
+the saved reads of check 1 and check 2 before the code changed, then all
+photos were read again. For hair, the middle band read the shade between
+strands: blonde hair read ash brown or silver, and at full lightness
+weight grey-brown hair read chestnut.
+
+**Check 2, spread.** 48 official portraits of members of the US Congress
+(`unitedstates.github.io/images/congress/original/`, about 450 × 550 px;
+the GPO states that they are in the public domain). They are not in the
+repository. Six were refused by name as too small (a face 99 to 166 px
+wide, under the 200 px minimum). Before any read was seen, the agent put
+ten of them into lightness groups by eye (1 lightest to 7 darkest), and
+nine of those were read.
+
+| Portrait | Group by eye | Skin read | Rank (0–7) | Card |
+|---|---|---|---|---|
+| G000555 | 1 | porcelain | 0.00 | porcelain |
+| B001315 | 1 | caramel | 3.44 | default (eye whites not usable, uneven light) |
+| B001243 | 2 | linen | 0.90 | linen |
+| K000397 | 2 | caramel | 2.59 | default |
+| B001287 | 3 | caramel | 4.09 | default |
+| W000788 | 5 | honey | 3.08 | honey |
+| M001229 | 5 | caramel | 3.71 | default |
+| C000537 | 6 | umber | 5.86 | default |
+| D000096 | 7 | umber | 5.93 | umber |
+
+By rank, 28 of the 33 pairs in different groups are in order (85%; 25 of
+33 with the second version). The "Skin read" and "Rank" columns of the
+default cards are the reported read, which the card does not use. B001315 is the main miss: its eye whites were
+not usable and its light is uneven, so the card keeps the default. Of the
+four with a trusted read, all are in order. Darker skin is still
+under-sampled (no portrait reads espresso). Cards over all 42 read
+portraits: honey 10, goldenSand 10, linen 4, porcelain 3, umber 1, and 14
+keep the default skin. Hair: ashBrown
+16, espresso 12, silver 7, black 6, wheat 1 (grey hair reads silver).
+Eyes: 28 read (darkBrown 19, blue 4, coolGrey 2, mossGreen 2, hazel 1),
+14 kept the default for a confidence under 0.5. Hair style proposals
+(full runs): B001243 wavyBob (overlap 0.56, margin 0.21), M001229 wavyBob
+(0.48, 0.13), and D000096, very short hair, with every overlap under 0.13,
+so the default style stays.
+
+**Check 1, stability on online photos (2026-11-23).** The owner asked
+for this check on online photos before their own. The agent took
+public-domain photos (US federal works on Wikimedia Commons) of ten
+people: 25 by name search, then 25 portrait-shaped ones per person. None
+is in the repository.
+
+- Of 110 event photos, 95 were refused, 86 of them as "no face": the
+  short-range face detector does not find a small face in a wide photo.
+  The refusal now says to use a close photo of one face.
+- Of the portrait-shaped photos, 65 were read. By eye, 6 were dropped
+  (the wrong person in 5, one black-and-white). A face-crop hash found
+  that most of the rest are copies of a few official portraits: all six
+  Schumer files are one portrait, Harris's ten are two.
+
+With the second version (absolute lightness, capped exposure), copies of
+one photo were stable but distinct photos were not: Koch's five distinct
+photos gave skin 4 of 5 within one swatch, and across people the pick
+moved by two to five swatches (Blackburn porcelain to umber, Glover linen
+to umber, Harris porcelain to honey). The causes, from each read's
+values: sunglasses gave "eye whites" of RGB 24, 26, 16; a hard hat's
+shadow put the skin at RGB 60, 36, 29 under lit eye whites; and the
+exposure cap left dim photos dark and bright ones light. Many "eye white"
+samples were skin (lowest channel under a third of the highest: lids in
+narrow eyes).
+
+With the ratio to the eye whites (the code now), on the same 64 photos:
+
+- 38 are read, and all 38 are within one skin swatch of their person's
+  most common read (Harris 10 of 10 over two portraits, Blackburn 5 of 5,
+  Glover 4 of 4, Koch 4 of 4).
+- 26 keep the default skin, with the note: 21 for eye whites that are
+  not usable (all six Schumer copies and 7 of Biden's 10), 5 for uneven
+  light (Koch's hard hat among them).
+- Hair colour and eyes were read again with this code. The tint and the
+  capped exposure still come from the eye-white sample, also when the skin
+  refuses it, so they are the same as before: hair colour is within one
+  swatch (the most common pick or its nearest neighbour in OKLab) on 57 of
+  64 photos (Koch 4 of 6, Austin 2 of 4, Blackburn 4 of 6, Glover 6 of 7,
+  all others full). The eyes read darkBrown on nearly every photo;
+  Blackburn reads coolGrey 2, blue 2 and darkBrown 2. The ratio does not
+  depend on the exposure, so the exposure stays only for these two traits.
+
+So the skin read is now stable when it reads, and says so when it cannot.
+The cost is that about a third of these online photos keep the default
+skin. The owner's verdict on online portraits is the final check (check 4).
+
+**Check 3, the dressed result.** Five read cards (B001243 in clay, ink
+and light; M001229 and D000096 in clay) went through `dressedFile` and
+`avatar-audition.ts`, beside the default look in clay. All six give the
+same rows: everything passes except `turn.armR-in-torso` (11 vertices,
+up to 28.4 mm), the house base's known turn-row failure (see "Slice 2d
+evidence"), and the informational `other.tongueOut`. The read adds no
+failing row, because a card holds only values the audition already
+covers.
+
+**Check 4, the owner's verdict on `compare.jpg`.** Online portraits only,
+on the owner's word of 2026-11-23 (see "Changed on 2026-11-23" in the
+slice). A contact sheet of seven full runs with this code, light to dark,
+is in the ignored `apps/capture/output/authoring/photo-look/contact-sheet.jpg`:
+Biden porcelain, Blackburn linen, Harris goldenSand, Watkins honey, Glover
+copper, D000096 umber, and Schumer, whose card keeps the default skin
+(caramel) because the eye whites are not usable. Waits for the owner's
+verdict.
+
+**Why the clay face looks darker than the swatch.** In the B001243 run the
+card's skin is porcelain, and the clay face renders mid-brown, darker than
+the photo and the clothes. The read is right: the photo's skin measured
+RGB 250, 214, 205, and porcelain is the lightest rank. The cause is the
+render. Head and body share one material (`HouseBase_skin`). The clay
+finish is lit PBR with no emissive, and the still render lights the face
+at about 30% of its albedo: the porcelain swatch (RGB 243, 171, 136, a
+saturated peach) gives a cheek of RGB 141, 87, 63. The lighter "body" in
+the render is the oatmealSlate top (RGB 231, 195, 168), at about 36%.
+Ink and light add an emissive term, so their cheeks (RGB 204, 151, 120
+and 204, 168, 144) are near the swatch. No finish changed. The options
+for the owner are more light or exposure on the clay still renders, or a
+lighter clay porcelain swatch.
+
+**Check 5, proof video.** Recorded again on 2026-11-23 with this code
+(B001243), in real time in the ignored
+`apps/capture/output/proof/`: a public-domain portrait goes in,
+`photo-look.ts` runs, the card and `compare.jpg` come out, `direct.ts`
+builds `sheets/expressions.json` with its performer in that card, and the
+take plays. It is not linked from here.
+
+**Approval (2026-11-24).** After the contact sheet and the proof video,
+the owner said: "Approve, merge". Slice 5a merged into `main` that day.
+
+**Follow-ups (open, not fixed in this merge).**
+
+- The clay still renders light the skin at about 30% of its colour, so
+  porcelain shows as mid-brown (see "Why the clay face looks darker than
+  the swatch" above). The owner has not chosen a fix: more light in the
+  renders, or a lighter swatch.
+- The light finish makes all skin tones look pale. On the contact sheet,
+  D000096 (umber) looks pale.
+- The default skin (caramel) is darker than a pale person whose read
+  fails, for example Schumer.
 
 ## Physical-device limits
 
