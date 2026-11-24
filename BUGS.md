@@ -253,11 +253,24 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   within 4 cm of it as skin under the cuff. In close renders of pinch at 3.4 s (Blender, 4 views of the right hand,
   old v14 against new) the opening is now one round ring. But it reads as a wide open tube, its inside shows, and
   the kept skin under it has thin spikes where its faces meet the hand. Not better enough to keep.
-- **Next fix:** keep the ring, but close it on the wrist: a smaller cuff ease (2 to 4 mm) and the radius from the
-  ring's mean, not its widest point; turn the ring's edge in by one face row (a hem) so the inside does not show;
-  and keep the skin under the cuff only where it joins the hand's skin without a gap (or shrink it 2 mm along its
-  normals). Check in the same close renders (scratch tool `handcrop.py`: import the take, frame 3.4 s, a camera
-  0.28 m from the right hand in 4 views).
+- **Tried (2026-11-24, `bug/sleeve-end` 2e84de1953fd and 424b6b138fbd, not merged):** the ring closed on the wrist
+  (ease 3 mm, the opening's mean radius) and turned in by one row (`hem` 6 mm up the sleeve), the skin kept 2 cm
+  under it. In close renders of pinch at 2.0 s (wrist bent) and 3.4 s the saw-tooth is gone: the cuff ends in one
+  clean ring with a thin light hem, and the skin under it shows no spikes. The dressed avatar is 1.56 MB (bar 1.80).
+  But the jumper's vertices feed the arm samples of the solver and the arm checks (`bindVertices` in
+  `arm-quality.ts` takes every visible skinned mesh), so the cuff moves pinned numbers (the files on `main` pass all
+  cases):
+  - with the `sleeveEnd` plane (the jumper ends 1 cm before the wrist): baker arms.prop.b 48 mm (pin 42), goodbye
+    arms.elbow.him 4° (pin 3), stone-sD smooth.me 10 % (pin 19) and arms.support.me 0 % (pin 3). The same without the
+    vertex snap.
+  - the ring at the jumper's own sleeve end (no `sleeveEnd` plane): only stone-sD moves, smooth.me 11 % (pin 19),
+    and arms.prop.me 20 mm (pin 15) with the skin kept under the cuff. Without the kept skin, and without the hem,
+    smooth.me stays at 11 %.
+- **Next fix:** decide which surface the arm samples take. If the solver and the arm checks should see the body and
+  not the clothes, `bindVertices` takes the `Body` mesh only; the cuff then moves no number, but the pins move once
+  for every case (a re-pin that waits for the owner). Otherwise accept stone-sD smooth.me 11 % in the stone re-pin
+  that already waits for the owner. The render tool and the before/after crops are in the shared notes
+  (`b101-cuff/`).
 
 ## Entry template
 
