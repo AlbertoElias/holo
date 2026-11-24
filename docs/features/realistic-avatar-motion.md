@@ -287,7 +287,10 @@ and a real crouch walk, and stands its feet on the slope under them.
   facing frame as the walk (speed along travel, cadence, knee swing):
   - `WalkBackward`: 143_39 frames 62–81 (one left contact to the next,
     mirrored half), 1.23 m/s, 190 steps/min, knee swing 55°, arm swing
-    15–18 cm at correlation −0.6 to −0.7. (136_25/26 back up at 0.5–0.6 m/s
+    15–18 cm at correlation −0.6 to −0.7. The loop mirrors the second half
+    (the left step, frames 71–81: knee 10° to 58°); the first half (the
+    right step) swings only to 48°, and the low-pass cut it to 47°, so the
+    back walk measured a 23° knee range and read stiff (B-106). (136_25/26 back up at 0.5–0.6 m/s
     with no arm swing; 113_01 is irregular.)
   - `StrafeLeft` 141_33 frames 162–180 and `StrafeRight` 141_33 frames
     57–76, 1.1–1.3 m/s, about 190 steps/min, the feet at least 7 cm apart.
@@ -378,7 +381,8 @@ and a real crouch walk, and stands its feet on the slope under them.
     the extra lift bent the swing knee past the source (see the knee swing
     below).
 - Desktop Idle sway (the idle take's sway scaled to 0.37): a second action plays the idle clip's spine, chest,
-  upper chest, neck and head tracks on top of the still idle, at the idle's
+  upper chest, neck and head tracks (the neck and head sway about the walk's mean neck and head pose: 113_21's own
+  head stands 37–103° off its neck, and played back it held the head 90° to the side, B-105) on top of the still idle, at the idle's
   weight times an eased share (VR has no idle, so nothing changes there).
   The share eases to 0 over 0.25 s while a point, carry, reach, set-down or
   plant holds the upper body, and back after: a person who reaches or aims
@@ -432,7 +436,9 @@ All on the shipped avatar and the 7 fixture skeletons, desktop keyboard:
 - [ ] Backing up plays `WalkBackward` at 0.6 of the walk speed: planted feet
       slide under the existing skate target, knees flex in swing (40–76°),
       the swing foot moves backward, cadence within the back targets
-      (anchored on 143_39).
+      (anchored on 143_39's left step: 135–220 steps/min). The lower
+      leg's swing peak is 54–76° and each knee moves through at least 30°
+      (B-106).
 - [ ] First person, A and D side-step with the strafe clips, the feet never
       cross (left ankle stays left of the right by at least 0.04 of the
       height), and the planted feet stay under the skate target.
@@ -457,7 +463,9 @@ All on the shipped avatar and the 7 fixture skeletons, desktop keyboard:
 - [ ] The leg solver allocates nothing per frame (a source scan of its
       `update` path, see above).
 - [ ] Desktop idle: head sway 0.5–3 cm standing, from 2 s into the last stop
-      to its end (3 s); the pointing,
+      to its end (3 s); the held idle's head (look and up against the torso)
+      within 10° of the steady walk's, and the head never turns on the torso
+      faster than 400°/s (B-105); the pointing,
       summon, object (desktop and phone) and held-states checks pass.
 - [ ] Every slice 1 criterion and check still passes.
 - [ ] Proof videos: desktop backward walk, first-person strafe, crouch
@@ -539,7 +547,7 @@ dependency for what a 150-line vertical-only grid does).
 | Every input path (cause 23) | `output/motion-audit/audit.ts` (ignored; drives each path on a frozen clock and grades it with `scripts/lib/motion-quality.ts`) | Before → after, 2026-11-20. Desktop first/third and touch: penetration 2.87 → 0 cm, standing take-off 455 → 99 m/s², walking take-off 463 → 121, pops p99 65 → 62. Mock VR: walk start 459 → 124, take-off 204 → 100, pops p99 84 → 73. VR stick and headset AR: skate 2.77 → 1.08 cm, penetration 2.16 → 0.09 cm, pops p99 65.5 → 59.0, take-off 174 → 136, largest stop spike 170 → 130 |
 | VR checks still pass | `node --import tsx scripts/run-xr-checks.ts desktop-motion body hands locomotion loco-states mock-vr terrain held-states ar-record` | All pass (2026-11-20) |
 | VR arms, every input (cause 24) | `pnpm --filter @holoim/capture run test:xr:arms` (`ARM_REACH_SESSION=ar` for passthrough, `ARM_REACH_VIDEO=1` for video) | `output/ci-arm-reach/{hand,controller}-report.json`, per segment. Before → after 2026-11-20 in cause 24 |
-| Slice 2: directions, crouch, slopes, sway, arms | `node --import tsx scripts/run-xr-checks.ts desktop-motion` (from `apps/capture`) | `output/ci-desktop-motion/summary.json`: PASS on all 10 rows (2026-11-23). Shipped: back walk weight 1.00, back knee swing max 51.5°, swing foot along travel 100%; strafe gap 0.084 of the height; crouch hips 0.106 of the height lower, mid-stance 78.5°; idle head sway 2.95 cm; arm turn jump max 183°/s (p99 83); pops 46.6 m/s². Terrain: slope foot tilt p95 5.6°, lower foot float p95 0.25 cm. Pose cost median 0.2 ms. The terrain, loco-states, walk-direction, held-states, pointing, object, summon and arms checks keep their main results |
+| Slice 2: directions, crouch, slopes, sway, arms | `node --import tsx scripts/run-xr-checks.ts desktop-motion` (from `apps/capture`) | `output/ci-desktop-motion/summary.json`: PASS on all 10 rows (2026-11-23). Shipped: back walk weight 1.00, back knee swing max 51.5°, swing foot along travel 100%; strafe gap 0.084 of the height; crouch hips 0.106 of the height lower, mid-stance 78.5°; idle head sway 2.95 cm; arm turn jump max 183°/s (p99 83); pops 46.6 m/s². Terrain: slope foot tilt p95 5.6°, lower foot float p95 0.25 cm. Pose cost median 0.2 ms. After B-105/B-106 (2026-11-23, PASS on all 10 rows): shipped back knee swing 57.9°, knee range 36.1°, back cadence 150 steps/min (stock 144); idle head 4.0° off the walk's, head turn max 214°/s (was 90° and 3900°/s); held jitter is judged from 800 ms into a stop (two settle steps), 1.1 mm. The terrain, loco-states, walk-direction, held-states, pointing, object, summon and arms checks keep their main results |
 | Looks right | proof video (ignored `output/`, not linked) | A 14 s desktop keyboard walk over the default terrain: arms hang and swing opposite the legs, knees bend through the stride, and the feet stay on the slopes |
 
 ## Physical-device limits
