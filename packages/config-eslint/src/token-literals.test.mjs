@@ -32,13 +32,20 @@ test('ignores colours that are not tokens and look-alikes', () => {
 const pluginPath = join(dirname(fileURLToPath(import.meta.url)), 'oxlint-plugin.mjs');
 const oxlintBin = join(dirname(createRequire(import.meta.url).resolve('oxlint/package.json')), 'bin', 'oxlint');
 
+const pluginRules = {
+  'holoim/no-token-colour-literal': 'error',
+  'holoim/js-ban-ts-comment': 'error',
+  'holoim/js-no-this-alias': 'error',
+  'holoim/js-triple-slash-reference': 'error'
+};
+
 function lint(code, relativePath) {
   const root = mkdtempSync(join(tmpdir(), 'holoim-token-rule-'));
   try {
     writeFileSync(join(root, '.oxlintrc.json'), JSON.stringify({
       categories: { correctness: 'off' },
       jsPlugins: [pluginPath],
-      rules: { 'holoim/no-token-colour-literal': 'error' }
+      rules: pluginRules
     }));
     mkdirSync(dirname(join(root, relativePath)), { recursive: true });
     writeFileSync(join(root, relativePath), code);
@@ -61,4 +68,28 @@ test('the lint rule reports strings, templates and hex numbers outside the token
   assert.ok(messages.every((message) => message.code === 'holoim(no-token-colour-literal)'), JSON.stringify(messages));
   assert.match(messages[0].message, /color\.gold/);
   assert.equal(lint(code, 'packages/design-tokens/src/three.ts').length, 0);
+});
+
+// The ports read comments and `Program` positions through the alpha plugin
+// API; an Oxlint update that changes either would make them silent.
+test('the typescript-eslint ports report in JavaScript files', () => {
+  const code = [
+    '/// <reference path="./types.d.ts" />',
+    '// @ts-ignore',
+    'const a = 1;',
+    '// @ts-expect-error: the value is checked at runtime',
+    'const b = 2;',
+    'export function f() {',
+    '  const self = this;',
+    '  const { x } = this;',
+    '  return [a, b, self, x];',
+    '}',
+    ''
+  ].join('\n');
+  const found = lint(code, 'scripts/tool.mjs').map((message) => `${message.labels[0]?.span.line}:${message.code}`);
+  assert.deepEqual(found.sort(), [
+    '1:holoim(js-triple-slash-reference)',
+    '2:holoim(js-ban-ts-comment)',
+    '7:holoim(js-no-this-alias)'
+  ]);
 });

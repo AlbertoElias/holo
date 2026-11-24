@@ -133,6 +133,16 @@ TypeScript files, so ESLint linted their `.mjs` files with no globals, the
 default `no-unused-vars` options and no token rule. Their override keeps
 that.
 
+Scope outside the old `files` patterns: some packages' ESLint configs
+applied the workspace rules (globals, the `^_` patterns,
+`consistent-type-imports`, the token rule) only inside a `files` pattern
+(`src/**/*.{mjs,ts}` in avatar-face, avatar-look, meaning, objects and
+`xr-runtime`; `src/**/*.ts` and `scripts/**/*.ts` in design-tokens). Oxlint
+applies them to every linted file of the package. No tracked file is
+outside those patterns today (the file lists match), so no result changes.
+A new file there gets the full rule set. This is an accepted
+simplification: the full set is the intended one.
+
 Ignores: each `.oxlintrc.json` lists `**/*.d.ts`, `**/dist/**`,
 `**/coverage/**`, `**/node_modules/**`, `**/.turbo/**` and its own
 (`output/`, `.wrangler/`, `uploads/`, `test-results/`, `playwright-report/`).
@@ -185,9 +195,9 @@ and takes 0 s.
 | Oxlint lints fewer files than ESLint (a glob or ignore differs) | Per-package file-list comparison (a probe JS plugin that reports each file) |
 | An option or severity is lost in translation | Planted defect per rule group, including option edges (`^_` names pass, other unused names fail) |
 | `env` or `ignorePatterns` in the shared file is dropped by `extends` (seen in the prototype) | Globals are set in a `**/*` override, ignores in each package file; a planted `process` use in `.mjs` passes, and an undefined name fails |
-| The JS plugin stops loading after an Oxlint update (alpha API) | The rule's unit test runs Oxlint on a fixture and fails when the rule does not report |
+| The JS plugin stops loading after an Oxlint update (alpha API), or a port goes silent | `packages/config-eslint/src/token-literals.test.mjs` runs the real Oxlint binary on fixtures and fails when the token rule or any of the 3 ports does not report (checked by breaking one port) |
 | An `eslint-disable` comment stops working, so a hidden finding appears or a disabled one is not honoured | Clean-tree run is zero; unused-directive reporting stays as it was (ESLint 9 warns; Oxlint warns) |
-| A package without `.oxlintrc.json` falls back to Oxlint's default rules | Every package with a `lint` script gets one; doctor-style check in the parity script |
+| A package without `.oxlintrc.json` falls back to a parent config or Oxlint's default rules | `pnpm run doctor` fails for a package whose `lint` script runs Oxlint and that has no `.oxlintrc.json` (checked by removing one) |
 | The two compilers differ on a planted error | Stop and report to the owner; no config change hides it |
 
 ## Ownership
@@ -220,8 +230,33 @@ runs the same module, so it is not needed); a text scan for token colours
 | Same clean result and file set | A probe JS plugin reports each file it sees; ESLint at `main` (a detached worktree) and Oxlint on the branch, in all 18 lint scopes | Pass. Identical file lists in all 18 scopes (root 11, capture 351, knowledge 21, viewer-api 55, viewer-web 159, avatar-face 9, avatar-look 7, contracts 3, design-tokens 10, meaning 6, objects 3, place 4, ui-dom 27, xr-runtime 2, xr-ui-core 30, xr-ui-iwsdk 15, xr-ui-r3f 17, xr-ui-three 21). 0 errors and 0 warnings with both tools, after the 3 optional-chain fixes. |
 | Planted lint defects | 61 plants, one or more per rule row and its option edges (`^_` names, `while (true)`, `(a = b)`, capture's type-import off, hooks outside `src/`, the token rule in `.mjs` and in design-tokens, the root-config `.mjs` with no globals, an unused directive), each in a scratch copy, run with ESLint at `main` and Oxlint on the branch | Pass. 60 of 61 give the same rule and exit code. The one difference is the stricter late `@ts-nocheck` (see "Differences that the proof found"). The ports fire on `.mjs` with the original messages. |
 | Planted type errors | 12 edits (wrong argument, missing property, null access under `strict`, wrong generic, bad type import, a package boundary, a `.tsx` prop, an e2e spec, root `scripts/`, an unused `@ts-expect-error`, knowledge `.ts`, knowledge `.tsx`), each run through `tsc` 7.0.2, preview `tsgo` 7.0.0-dev.20260707.2 and TypeScript 6 `tsc` | Pass. All 12 have the same line, column and code on `tsc` and `tsgo`; TypeScript 6 also reports each. On the clean tree `tsc` and `tsgo` give 0 errors in every package. No disagreement to report. |
-| Gates | `check:all`, `doctor`, `check:ci-areas` (4750 assertions), `scripts/verify-changed.test.ts` (9), the config-eslint test (3), capture `verify:changed` (a planted `debugger` fails it), `verify:pr` | `check:all`, `doctor` and the others pass; `verify:pr`: see Status |
+| Gates | `check:all`, `doctor`, `check:ci-areas` (4750 assertions), `scripts/verify-changed.test.ts` (9), the config-eslint test (4), capture `verify:changed` (a planted `debugger` fails it; a changed file that only the ignores match passes), `verify:pr` | `check:all`, `doctor` and the others pass; `verify:pr`: see Status |
 | Times after | same commands as "Times before", each old run beside a new run | "Times after" table |
+
+## Independent verification
+
+The `verifier` subagent (Opus) and a code review (Opus) got only this brief
+and the diff, in fresh contexts. No vendor other than Claude was used.
+
+- Verifier: every criterion passes, except `verify:pr` and the video, which
+  it could not run. Its own evidence: identical file lists in 18 scopes, the
+  88 resolved rules mapped with their options, 24 plant sites with the same
+  results with both tools, 12 type plants with the same line, column and
+  code. Findings and actions:
+  1. Rules now apply outside the old `files` patterns: recorded above as
+     an accepted simplification.
+  2. The brief named a missing-config check that did not exist: added to
+     `pnpm run doctor`.
+  3. No test covered the 3 ports: added to the plugin test.
+  4. The `TODOS.md` link to the archived brief and the index row: done when
+     the brief is archived in the same merge.
+  5. Wording in `AGENTS.md` and `AGENT_CONTRACT.md` (per linted package; the
+     root `.oxlintrc.json` selects quality only): fixed.
+- Both found that `verify:changed` failed when Oxlint ignored every changed
+  file ("No files found to lint"). Fixed with
+  `--no-error-on-unmatched-pattern`.
+- Code review: no defect in the ports (compared with the upstream 8.71.2
+  sources), configs, `verify-changed.mjs`, the test or the two code fixes.
 
 ## Physical-device limits
 
