@@ -245,8 +245,19 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   separate jumper garment (`dress.garments`, called after the sleeve block) is made from the body's jumper faces,
   with ease along the normals, a taper at the openings (`taperAt`), smoothing and a push out. Its own wrist boundary
   makes the flaps, which stand off the skin.
-- **Next fix:** cut the jumper garment itself along the wrist plane in `dress.py`, after its ease and smoothing, so
-  that its boundary is one clean ring. Then check in a close render of the right hand (pinch at 3.4 s).
+- **Tried (2026-11-24, branch `bug/sleeve-end` 9a8883e80aec, not merged):** with the `sleeveEnd` plane 1 cm up the
+  forearm, the sleeve's opening is on the forearm bones, so the jumper's `taperAt` (the hand bones) never tapered
+  it: the opening had the full 16 mm ease and stood off the skin in flaps. In `dress.py` a `cuff` block now takes
+  the opening on the forearm and hand bones, pins it, sets it to a circle on a plane across the forearm (radius
+  28 mm, the widest point plus 8 mm), fades that ease into the sleeve over `taper`, and keeps the body's faces
+  within 4 cm of it as skin under the cuff. In close renders of pinch at 3.4 s (Blender, 4 views of the right hand,
+  old v14 against new) the opening is now one round ring. But it reads as a wide open tube, its inside shows, and
+  the kept skin under it has thin spikes where its faces meet the hand. Not better enough to keep.
+- **Next fix:** keep the ring, but close it on the wrist: a smaller cuff ease (2 to 4 mm) and the radius from the
+  ring's mean, not its widest point; turn the ring's edge in by one face row (a hem) so the inside does not show;
+  and keep the skin under the cuff only where it joins the hand's skin without a gap (or shrink it 2 mm along its
+  normals). Check in the same close renders (scratch tool `handcrop.py`: import the take, frame 3.4 s, a camera
+  0.28 m from the right hand in 4 views).
 
 ## Entry template
 
