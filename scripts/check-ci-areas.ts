@@ -14,13 +14,35 @@
 //      without being a declared no-suite change. -> invariant over every tracked file
 //   6. An empty or unusable diff is silently green. -> empty list, bad base
 //   7. The CI gate stops enforcing the rule.        -> ci.yml wiring check
+//   9. A file selects fewer suites than read it (B-109): a workspace package
+//      an app depends on, capture's avatar model in the viewer's mocked
+//      specs, the API under the portal suite, a root script that a suite
+//      starts. -> package.json dependencies, a scan of each app's
+//      package.json and Playwright config for `../../scripts/`, and one case
+//      per known cross-app read
+//   8. A folder mapped to quality only (offline authoring tools; also left out
+//      of the browser suites' keys in scripts/verify-cache.ts) starts to be
+//      read by a suite, a build or a workflow. -> no file outside names it
 //
 // The invariant behind all of them: every result either selects an area, is
 // docs_only, or sets no_suite (docs and CI plumbing only); never none of these.
 import { execFileSync, spawn } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+
+import { NOT_SUITE_INPUTS, outsideReferences } from "./verify-cache.ts";
+import { STEPS } from "./verify-pr.ts";
+
+/**
+ * verify-pr.ts without the lines of the steps that may run a script of a
+ * NOT_SUITE_INPUTS folder: a step that is not cached, or whose key holds the
+ * whole tree. A "code" key leaves the folder out, so a step with one may not.
+ */
+function withoutOwnSteps(text: string): string {
+  const own = STEPS.filter((step) => step.cache?.inputs !== "code").map((step) => JSON.stringify(step.command));
+  return text.split("\n").map((line) => (own.some((command) => line.includes(command)) ? "" : line)).join("\n");
+}
 
 const root = path.resolve(__dirname, "..");
 const selector = path.join(root, "scripts/ci-changed-areas.sh");
@@ -168,6 +190,85 @@ async function main() {
     stdio: ["ignore", "pipe", "ignore"]
   });
   expect(areaKeys.every((key) => out.includes(`${key}=true`)) && out.includes("no_suite=false"), "unusable base does not fail closed");
+
+  // 9. A workspace package that an app depends on selects that app's suites and deploy.
+  const appAreas: Record<string, string[]> = {
+    "apps/capture": ["capture_xr", "pipeline", "portal", "capture_app"],
+    "apps/viewer-api": ["pipeline", "portal", "api"],
+    "apps/viewer-web": ["pipeline", "portal", "web"]
+  };
+  const manifest = (dir: string) =>
+    JSON.parse(readFileSync(path.join(root, dir, "package.json"), "utf8")) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+      name: string;
+    };
+  const packageDirs = [...new Set(tracked.filter((f) => /^packages\/[^/]+\/package\.json$/.test(f)).map((f) => path.dirname(f)))];
+  const dirByName = new Map(packageDirs.map((dir) => [manifest(dir).name, dir]));
+  const dependenciesOf = (dir: string) => Object.keys({ ...manifest(dir).dependencies, ...manifest(dir).devDependencies });
+  for (const [app, areas] of Object.entries(appAreas)) {
+    // Through other workspace packages too.
+    const reached = new Set<string>();
+    const walk = (dir: string) => {
+      for (const name of dependenciesOf(dir)) {
+        const dependency = dirByName.get(name);
+        if (dependency && !reached.has(dependency)) {
+          reached.add(dependency);
+          walk(dependency);
+        }
+      }
+    };
+    walk(app);
+    expect(reached.size > 0, `${app}: no workspace dependency found (the check is broken)`);
+    for (const dependency of reached) {
+      // Lint rules reach no build and no suite.
+      if (dependency === "packages/config-eslint") continue;
+      const r = await select([`${dependency}/src/index.ts`]);
+      const missing = areas.filter((area) => !r[area]);
+      expect(missing.length === 0, `${dependency} is a dependency of ${app} but does not select ${missing.join(", ")}`);
+    }
+  }
+  const avatar = await select(["apps/capture/public/gltf/models/avatar.glb"]);
+  expect(avatar.web === true && avatar.portal === true && avatar.pipeline === true, "capture's avatar model does not select the viewer suites that load it (web, portal, pipeline)");
+  const apiEdit = await select(["apps/viewer-api/src/server.ts"]);
+  expect(apiEdit.portal === true && apiEdit.pipeline === true, "an API edit does not select the suites that start the test API (pipeline, portal)");
+  // A root script that an app's suite starts selects that suite. A new one fails here until it has a case.
+  const SUITE_SCRIPTS: Record<string, string[]> = { "scripts/test-api.ts": ["pipeline", "portal"] };
+  const started = new Set<string>();
+  for (const file of tracked.filter((f) => /^apps\/[^/]+\/(package\.json|playwright[^/]*\.config\.ts)$/.test(f))) {
+    for (const match of readFileSync(path.join(root, file), "utf8").matchAll(/\.\.\/\.\.\/(scripts\/[A-Za-z0-9_./-]+)/g)) started.add(match[1] ?? "");
+  }
+  for (const script of started) {
+    const areas = SUITE_SCRIPTS[script];
+    expect(areas !== undefined, `${script} is started from an app but has no case in SUITE_SCRIPTS (scripts/check-ci-areas.ts)`);
+    if (!areas) continue;
+    const r = await select([script]);
+    const missing = areas.filter((area) => !r[area]);
+    expect(missing.length === 0, `${script} is started by a suite but does not select ${missing.join(", ")}`);
+  }
+
+  // 8. A folder no suite reads selects only quality, and nothing outside names it.
+  for (const folder of NOT_SUITE_INPUTS) {
+    const inside = tracked.filter((f) => f.startsWith(folder) && !f.endsWith(".md"));
+    expect(inside.length > 0, `${folder}: no tracked file (remove it from NOT_SUITE_INPUTS in scripts/verify-cache.ts)`);
+    await pool(inside, 8, async (file) => {
+      const r = await select([file]);
+      expect(selected(r).join() === "quality" && !r.docs_only && !r.no_suite, `${file}: expected to select only quality, got ${selected(r).join() || "nothing"}`);
+    });
+    // The files that declare the rule name the folder.
+    const declares = ["scripts/ci-changed-areas.sh", "scripts/verify-cache.ts", "scripts/verify-cache.test.ts"];
+    // Untracked files too: a new importer counts before its first commit.
+    const untracked = execFileSync("git", ["ls-files", "-o", "--exclude-standard"], { cwd: root, encoding: "utf8", maxBuffer: 1 << 26 }).split("\n").filter(Boolean);
+    const outside = [...tracked, ...untracked]
+      .filter((f) => existsSync(path.join(root, f)))
+      .filter((f) => !f.startsWith(folder) && !declares.includes(f) && /^(apps\/|packages\/|scripts\/|\.github\/|[^/]+$)/.test(f) && !isDoc(f) && !f.endsWith(".md"))
+      .filter((f) => /\.([cm]?[jt]sx?|json|jsonc|sh|ya?ml|html|toml|py)$/.test(f))
+      .map((f) => ({ path: f, text: f === "scripts/verify-pr.ts" ? withoutOwnSteps(readFileSync(path.join(root, f), "utf8")) : readFileSync(path.join(root, f), "utf8") }));
+    for (const reference of outsideReferences(folder, outside)) {
+      expect(false, `${reference} <- names ${folder}, which the browser suites do not run for. Remove the reference, or remove the folder from NOT_SUITE_INPUTS and from its quality-only case in scripts/ci-changed-areas.sh`);
+    }
+    checked++;
+  }
 
   // 7. The CI gate still enforces the rule.
   const ci = readFileSync(path.join(root, ".github/workflows/ci.yml"), "utf8");

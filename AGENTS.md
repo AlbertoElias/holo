@@ -39,9 +39,12 @@ unless versioning is explicit. Preserve GLTF export → upload → render compat
 
 Read `AGENT_CONTRACT.md` when selecting commands, validation scope, or XR environment
 settings. Use `pnpm run verify:agent` in the edit loop and `pnpm run verify:pr`
-locally before merging. Hosted CI runs only on pushes to `main` (only the
-suites relevant to the merged files) and on manual dispatch; it never runs
-on branches, so local verification is the pre-merge gate.
+locally before merging. `verify:pr` skips a check that already passed with the
+same inputs, so a rerun after a small change is short. `--no-cache` runs every
+selected check (see "Pre-Handoff Check Policy" in `AGENT_CONTRACT.md`). Hosted
+CI runs only on pushes to `main` (only the suites relevant to the merged
+files) and on manual dispatch; it never runs on branches, so local
+verification is the pre-merge gate.
 Documentation-only edits need documentation checks, not every application test.
 Complete relevant checks and fixes before handoff.
 A pre-push git hook (`scripts/hooks/pre-push-checks.mjs`, installed by `pnpm install`
@@ -211,7 +214,9 @@ for git-ignored files and while resolving a merge, cherry-pick or rebase.
   `CAPTURE_RUNTIME_PORT` (the managed runtime), `DEV_PORT` (`run-xr-checks.ts`
   and the capture XR checks) / `E2E_API_PORT`. `verify:pr` and
   `scripts/ci-emulate.sh` share a machine-wide lock: a second run waits and
-  prints who holds it, so start yours and let it queue. To run beside another
+  prints who holds it, so start yours and let it queue. A `verify:pr` run
+  takes the lock only before its first check that really runs, so a run whose
+  checks all passed before with the same inputs does not wait. To run beside another
   anyway, move `E2E_BASE_URL`, `E2E_POLYPIZZA_PORT`, `E2E_POLYHAVEN_PORT`,
   `E2E_CAPTURE_URL` and `KNOWLEDGE_E2E_PORT` off their defaults and set
   `VERIFY_PR_NO_LOCK=1`.
