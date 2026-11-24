@@ -228,6 +228,17 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   the upper-arm world position, then size the lean), so the lean need is the real gap. Then re-tune
   `COMFORT_REACH` only if the pinned cases ask for it. Measure the effector error per frame (under about 5 mm),
   the elbow step, and guard all six pinned cases.
+- **Tried (2026-11-24, crouch-v43):** the lean sized from the posed shoulder. `leanFor` now runs after the hips,
+  the twist, the breath, the state, the bend and the crouch have posed the spine; it reads the upper arm's world
+  position, then moves the hips by its shift and turns the spine. A first estimate from the bind shoulder sets only
+  how much a sigh gives way, and does not record a shortfall.
+  - `COMFORT_REACH` 0.94 (as now): the elbow step falls from 8 mm to 7.1 mm and its largest change from 6.3 to
+    4.7 mm. grip.pick 8 mm (pin 0.3 mm) and arms.held.me 7.3 mm at 2.13 s (a finger in the ball) fail.
+  - `COMFORT_REACH` 0.90 (more lean): step 7.2 mm, change 4.9 mm; grip.pick 2.6 mm and arms.held.me 4.7 mm fail.
+  - Taken out. The step does not go below its bar, and a pinned number gets worse either way. The real shoulder
+    makes the lean smaller, and then the hand comes to the ball late and off its grip. A fix must also change how
+    the reach weight `w` comes in against the crouch (the hand does not leave until the shoulder is low enough),
+    and that changes the approved crouch v43, so it needs the owner's choice.
 
 ### B-101 — House avatar: the jumper's sleeve end has a jagged edge at the wrist
 
