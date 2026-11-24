@@ -221,6 +221,7 @@ function knobsFor(sheet: BeatSheet, m: Miss): { knobs: Knob[]; none?: string } {
  * a second each), so the build can print the edit that lands it.
  */
 async function fitMiss(sheetFile: string, m: Miss): Promise<string> {
+  if (process.env.MAKE_NO_FIT) return '(fit skipped: MAKE_NO_FIT)';
   try { return await fitMissOrThrow(sheetFile, m); } catch (e) { return `(the fit could not run: ${(e as Error).message})`; }
 }
 

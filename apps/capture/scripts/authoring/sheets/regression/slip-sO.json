@@ -1,0 +1,468 @@
+{
+  "title": "A slip laughed off",
+  "intent": "A server knocks a glass over on her counter by accident, startles, then laughs it off with me.",
+  "story": {
+    "request": "a slip laughed off",
+    "setup": {
+      "says": "A woman stands at her counter with two drinks on it: a glass of red drink in front and a white glass behind it.",
+      "see": [
+        "a cream counter in front of her",
+        "a glass of red drink and a white glass on it",
+        "her eyes on the red drink"
+      ]
+    },
+    "event": {
+      "says": "Her hand knocks the glass by accident and it tips over on the counter, spilling red.",
+      "see": [
+        "her right hand reaches the glass",
+        "the glass tips onto its side",
+        "a red spill spreads on the counter"
+      ]
+    },
+    "reaction": {
+      "says": "She startles, then laughs it off with you.",
+      "see": [
+        "open hands up and wide eyes at the glass",
+        "head up to the viewer with an open-mouth laugh",
+        "a big shrug and clear nods"
+      ]
+    },
+    "changes": [
+      "The counter is 25 cm deep and stands 20 cm in front of her, so her hanging hand has room beside her thigh.",
+      "Her hand sweeps across at the glass's own depth and near its top, so the hand, not the forearm, knocks it; the glass tips at 1.7 s, as the hand gets to it.",
+      "The named laugh shape acts it, with the shrug and nods.",
+      "The glass tips on the counter, not to the floor, to keep the face on the card.",
+      "sF: the sA sheet with the counter, the glasses, the spill and the bump 3 cm further from her, so her startled hands come down in front of the counter.",
+      "sG: the white glass is gone, so the red glass falls on a clear counter; the spill is on the side where it falls and shows once it is down (1.9 s); her startled hands go 7 cm wider, so they come down outside the counter; the knock flows into the startle; the laugh has a squint.",
+      "sH: the knock holds 0.2 s (sG 0.1 s missed the bump point by 20 mm).",
+      "sI: the white glass is back, behind the red glass and to her right (forward 0.50, right 0.15), out of the hand path (forward 0.35, from right 0.22) and out of the fall path (to her left); the counter is 15 cm deeper at the back only, so its front edge and her room stay as in sH.",
+      "s8 round 3: the glass falls on its side with its mouth to the camera, and a red spill grows over 0.4 s (sJ); the spill is 1.6 times larger and the sweep stops at right 0.13, clear of the fallen glass (sK); the sweep ends before the startle takes the arm (sL).",
+      "sM: the sweep is its own beat, so each reach is measured at its own end.",
+      "sO: she looks at you from 1.0 s through the knock and looks down only when it has fallen (the accident); the sweep stops at right 0.18, at the glass side; after the startle both hands come down to the sides in front of the counter (no claw, no snap). sO v5: each earlier reach settles until the next reach arrives (sweep settle 0.6 s past the startle's arrival at 2.35 s; startle settle 0.55 s past the lower's arrival at 3.75 s), so no hand jumps when a settle ends; the bump point is 4 cm higher."
+    ]
+  },
+  "duration": 5.6,
+  "performers": [
+    {
+      "id": "me",
+      "avatar": "house:clay",
+      "at": [
+        0,
+        0
+      ],
+      "facing": 0,
+      "seed": 7,
+      "look": {
+        "build": "medium",
+        "skin": "caramel",
+        "eyes": "darkBrown",
+        "hair": {
+          "style": "wavyBob",
+          "colour": "espresso"
+        },
+        "glasses": "none",
+        "clothing": "stormGraphite"
+      }
+    }
+  ],
+  "marks": {
+    "viewer": [
+      0,
+      1.55,
+      2.5
+    ],
+    "glasstop": {
+      "of": "me",
+      "forward": 0.33,
+      "right": 0.07,
+      "height": 1.1
+    },
+    "handL": {
+      "of": "me",
+      "forward": 0.17,
+      "right": -0.32,
+      "height": 1.35
+    },
+    "handR": {
+      "of": "me",
+      "forward": 0.17,
+      "right": 0.32,
+      "height": 1.35
+    },
+    "restL": {
+      "of": "me",
+      "forward": 0.08,
+      "right": -0.26,
+      "height": 0.88
+    },
+    "restR": {
+      "of": "me",
+      "forward": 0.08,
+      "right": 0.26,
+      "height": 0.88
+    }
+  },
+  "objects": {
+    "counter": {
+      "shape": "box",
+      "size": [
+        0.5,
+        0.9,
+        0.4
+      ],
+      "color": "#e6d3a8",
+      "at": {
+        "of": "me",
+        "forward": 0.435
+      },
+      "facing": "me.hips"
+    },
+    "glass": {
+      "name": "glass",
+      "parts": [
+        {
+          "name": "body",
+          "shape": "cylinder",
+          "size": [
+            0.14,
+            0.2,
+            0.14
+          ],
+          "color": "#d6ebf2"
+        },
+        {
+          "name": "drink",
+          "shape": "cylinder",
+          "size": [
+            0.12,
+            0.004,
+            0.12
+          ],
+          "at": [
+            0,
+            0.2,
+            0
+          ],
+          "color": "#b3121c"
+        }
+      ],
+      "on": "counter",
+      "at": {
+        "of": "me",
+        "forward": 0.33,
+        "right": 0.07
+      }
+    },
+    "spill": {
+      "name": "spill",
+      "parts": [
+        {
+          "shape": "cylinder",
+          "size": [
+            0.24,
+            0.004,
+            0.176
+          ],
+          "color": "#b3121c"
+        },
+        {
+          "shape": "cylinder",
+          "size": [
+            0.144,
+            0.005,
+            0.144
+          ],
+          "at": [
+            0.08,
+            0,
+            0.064
+          ],
+          "color": "#b3121c"
+        },
+        {
+          "shape": "cylinder",
+          "size": [
+            0.112,
+            0.006,
+            0.096
+          ],
+          "at": [
+            -0.096,
+            0,
+            0.048
+          ],
+          "color": "#b3121c"
+        },
+        {
+          "shape": "cylinder",
+          "size": [
+            0.08,
+            0.007,
+            0.08
+          ],
+          "at": [
+            0.032,
+            0,
+            -0.08
+          ],
+          "color": "#b3121c"
+        }
+      ],
+      "on": "counter",
+      "at": {
+        "of": "me",
+        "forward": 0.53,
+        "right": -0.02
+      }
+    },
+    "glass2": {
+      "shape": "cylinder",
+      "size": [
+        0.14,
+        0.2,
+        0.14
+      ],
+      "color": "#ffffff",
+      "on": "counter",
+      "at": {
+        "of": "me",
+        "forward": 0.42,
+        "right": -0.22
+      }
+    }
+  },
+  "world": [
+    {
+      "kind": "fall",
+      "object": "glass",
+      "when": 1.64,
+      "push": [
+        0.11,
+        0.07,
+        0.29
+      ]
+    },
+    {
+      "kind": "change",
+      "object": "spill",
+      "when": 1.84,
+      "show": true
+    },
+    {
+      "kind": "change",
+      "object": "spill",
+      "when": 1.86,
+      "over": 0.4,
+      "from": {
+        "scale": [
+          0.2,
+          1,
+          0.2
+        ]
+      }
+    }
+  ],
+  "beats": [
+    {
+      "id": "setup",
+      "performer": "me",
+      "at": 0.2,
+      "hold": 0.8,
+      "intent": "She stands at her counter with two drinks, eyes on the red one.",
+      "directions": [
+        {
+          "kind": "look",
+          "at": "glass.top",
+          "head": 0.6,
+          "attack": 0.3,
+          "hold": 1.8
+        },
+        {
+          "kind": "expression",
+          "shape": "small-smile",
+          "strength": 0.5
+        }
+      ]
+    },
+    {
+      "id": "bump",
+      "performer": "me",
+      "at": 1,
+      "hold": 0.25,
+      "intent": "She looks up at me and chats while her hand goes out to the side of the glass.",
+      "directions": [
+        {
+          "kind": "look",
+          "at": "viewer",
+          "head": 0.7,
+          "attack": 0.25,
+          "hold": 0.75
+        },
+        {
+          "kind": "reach",
+          "side": "right",
+          "at": {
+            "of": "me",
+            "forward": 0.35,
+            "right": 0.22,
+            "height": 1.12
+          },
+          "stopShort": 0,
+          "attack": 0.3,
+          "hold": 0.15,
+          "settle": 0.3,
+          "anticipation": 0
+        }
+      ]
+    },
+    {
+      "id": "sweep",
+      "performer": "me",
+      "at": 1.5,
+      "hold": 0.05,
+      "intent": "Still looking at me, her hand sweeps into the glass in one knock and it tips over.",
+      "directions": [
+        {
+          "kind": "reach",
+          "side": "right",
+          "at": {
+            "of": "me",
+            "forward": 0.35,
+            "right": 0.18,
+            "height": 1.08
+          },
+          "stopShort": 0,
+          "attack": 0.3,
+          "hold": 0.05,
+          "settle": 0.6
+        }
+      ]
+    },
+    {
+      "id": "startle",
+      "performer": "me",
+      "at": 2.0,
+      "hold": 1.0,
+      "intent": "She startles at the tipped glass, hands up.",
+      "directions": [
+        {
+          "kind": "look",
+          "at": "glass.center",
+          "head": 0.3
+        },
+        {
+          "kind": "expression",
+          "shape": {
+            "eyeWideLeft": 0.9,
+            "eyeWideRight": 0.9,
+            "jawOpen": 0.4,
+            "browInnerUp": 0.8
+          },
+          "strength": 1,
+          "attack": 0.2,
+          "hold": 0.9
+        },
+        {
+          "kind": "reach",
+          "side": "right",
+          "at": "handR",
+          "stopShort": 0,
+          "palm": "up",
+          "attack": 0.35,
+          "hold": 0.9,
+          "settle": 1.2
+        },
+        {
+          "kind": "reach",
+          "side": "left",
+          "at": "handL",
+          "stopShort": 0,
+          "palm": "up",
+          "attack": 0.35,
+          "hold": 0.9,
+          "settle": 1.2
+        },
+        {
+          "kind": "hand",
+          "side": "right",
+          "shape": "open"
+        },
+        {
+          "kind": "hand",
+          "side": "left",
+          "shape": "open"
+        }
+      ]
+    },
+    {
+      "id": "lower",
+      "performer": "me",
+      "at": 3.2,
+      "hold": 2.2,
+      "intent": "Her hands come down to her sides as the laugh starts.",
+      "directions": [
+        {
+          "kind": "reach",
+          "side": "right",
+          "at": "restR",
+          "stopShort": 0,
+          "palm": "in",
+          "attack": 0.55,
+          "hold": 1.85
+        },
+        {
+          "kind": "reach",
+          "side": "left",
+          "at": "restL",
+          "stopShort": 0,
+          "palm": "in",
+          "attack": 0.55,
+          "hold": 1.85
+        },
+        {
+          "kind": "hand",
+          "side": "right",
+          "shape": "relaxed"
+        },
+        {
+          "kind": "hand",
+          "side": "left",
+          "shape": "relaxed"
+        }
+      ]
+    },
+    {
+      "id": "laugh",
+      "performer": "me",
+      "at": 3,
+      "hold": 2.6,
+      "intent": "She laughs it off with me.",
+      "directions": [
+        {
+          "kind": "look",
+          "at": "viewer",
+          "head": 0.9,
+          "attack": 0.4,
+          "hold": 2.6
+        },
+        {
+          "kind": "expression",
+          "shape": "laugh",
+          "strength": 1,
+          "hold": 2.6
+        },
+        {
+          "kind": "expression",
+          "shape": {
+            "eyeSquintLeft": 0.4,
+            "eyeSquintRight": 0.4,
+            "cheekSquintLeft": 0.4,
+            "cheekSquintRight": 0.4
+          },
+          "strength": 1,
+          "hold": 2.6
+        }
+      ]
+    }
+  ]
+}

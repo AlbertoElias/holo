@@ -274,7 +274,7 @@ accepted.
 | An edit to a file under `--assume-unchanged` or `--skip-worktree` kept the key | Fixed: those files are hashed from disk; test A |
 | `REUSE_DEV_SERVER` runs the capture checks on a server with unknown code | Fixed: the cache is off |
 | The Knowledge suite reuses a server that already answers on its port | Fixed: no pass is stored for such a run |
-| `scripts/test-api.ts` did not select the suites that start it | Fixed in the selector, with a check; added to B-099 |
+| `scripts/test-api.ts` did not select the suites that start it | Fixed in the selector, with a check; added to B-109 |
 | A scan or `.env` that is a symbolic link was not in the key | Fixed: links are followed; test A |
 | The Python interpreter and its packages were not in the key | Fixed: a hash of both is in the key; test C |
 | The authoring guard missed a path in parts, code after a comment on the same line, a code line that starts with `*`, and uncommitted files | Fixed: test B and `check:ci-areas` |

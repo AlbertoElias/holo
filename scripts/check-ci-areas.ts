@@ -14,7 +14,7 @@
 //      without being a declared no-suite change. -> invariant over every tracked file
 //   6. An empty or unusable diff is silently green. -> empty list, bad base
 //   7. The CI gate stops enforcing the rule.        -> ci.yml wiring check
-//   9. A file selects fewer suites than read it (B-099): a workspace package
+//   9. A file selects fewer suites than read it (B-109): a workspace package
 //      an app depends on, capture's avatar model in the viewer's mocked
 //      specs, the API under the portal suite, a root script that a suite
 //      starts. -> package.json dependencies, a scan of each app's
@@ -32,6 +32,17 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { NOT_SUITE_INPUTS, outsideReferences } from "./verify-cache.ts";
+import { STEPS } from "./verify-pr.ts";
+
+/**
+ * verify-pr.ts without the lines of the steps that may run a script of a
+ * NOT_SUITE_INPUTS folder: a step that is not cached, or whose key holds the
+ * whole tree. A "code" key leaves the folder out, so a step with one may not.
+ */
+function withoutOwnSteps(text: string): string {
+  const own = STEPS.filter((step) => step.cache?.inputs !== "code").map((step) => JSON.stringify(step.command));
+  return text.split("\n").map((line) => (own.some((command) => line.includes(command)) ? "" : line)).join("\n");
+}
 
 const root = path.resolve(__dirname, "..");
 const selector = path.join(root, "scripts/ci-changed-areas.sh");
@@ -252,7 +263,7 @@ async function main() {
       .filter((f) => existsSync(path.join(root, f)))
       .filter((f) => !f.startsWith(folder) && !declares.includes(f) && /^(apps\/|packages\/|scripts\/|\.github\/|[^/]+$)/.test(f) && !isDoc(f) && !f.endsWith(".md"))
       .filter((f) => /\.([cm]?[jt]sx?|json|jsonc|sh|ya?ml|html|toml|py)$/.test(f))
-      .map((f) => ({ path: f, text: readFileSync(path.join(root, f), "utf8") }));
+      .map((f) => ({ path: f, text: f === "scripts/verify-pr.ts" ? withoutOwnSteps(readFileSync(path.join(root, f), "utf8")) : readFileSync(path.join(root, f), "utf8") }));
     for (const reference of outsideReferences(folder, outside)) {
       expect(false, `${reference} <- names ${folder}, which the browser suites do not run for. Remove the reference, or remove the folder from NOT_SUITE_INPUTS and from its quality-only case in scripts/ci-changed-areas.sh`);
     }

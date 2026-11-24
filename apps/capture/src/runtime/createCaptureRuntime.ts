@@ -315,7 +315,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       getBodyYaw: () => body.solver.bodyYaw,
       getHud: () => vrChrome.root
     }),
-    frame: { deltaSec: 0, elapsedSec: 0, steps: 0, xrPresenting: false, arCameraAuthor: false, vrActive: false, bodyTracking: false, character: null },
+    frame: { deltaSec: 0, elapsedSec: 0, steps: 0, xrPresenting: false, arCameraAuthor: false, vrActive: false, bodyTracking: false, character: null, travelLocalYaw: null },
     clockMode: () => loop.clockMode
   };
   world.globals.capture = capture;

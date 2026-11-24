@@ -152,9 +152,10 @@ Routing is the agent's job, not the user's. Do it automatically:
   sets `model` explicitly from the table; the app's model picker or
   `set_session_model` changes a running session only at a task boundary,
   because a model change discards the prompt cache of the whole context.
-- Parallel sessions are fine; going past the limit is not. Before starting
-  another lead session, read the 5-hour percentage with `get_usage` and
-  hold off above about 70%.
+- Parallel sessions are fine, and the owner wants the usage window used.
+  Going past the limit is not fine. Before starting another lead session,
+  read the 5-hour percentage with `get_usage` and hold off above about 90%.
+  The last 10% stays for the owner's own sessions.
 
 - Codex usage is scarce: the user runs out of it fast. Spend it only on the
   independent verifier (when it has quota) and design-screenshot

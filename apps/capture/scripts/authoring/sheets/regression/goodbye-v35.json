@@ -1,0 +1,494 @@
+{
+  "title": "The goodbye",
+  "intent": "Two people part: he leaves, she wants him to stay, nearly stops him, and lets him go.",
+  "duration": 7,
+  "performers": [
+    {
+      "id": "her",
+      "avatar": "house:clay",
+      "at": [
+        0.28,
+        0.05
+      ],
+      "facing": 0,
+      "seed": 11,
+      "look": {
+        "build": "slight",
+        "skin": "honey",
+        "eyes": "darkBrown",
+        "hair": {
+          "style": "wavyBob",
+          "colour": "chestnut"
+        },
+        "glasses": "none",
+        "clothing": "rustWalnut"
+      },
+      "faceAway": [
+        {
+          "from": 3.6,
+          "to": 4.9,
+          "why": "looks down at the floor after he turns away (beat r-down)"
+        },
+        {
+          "from": 6.5,
+          "to": 7,
+          "why": "looks down at the floor at the end (beat r-end)"
+        }
+      ]
+    },
+    {
+      "id": "him",
+      "avatar": "house:clay",
+      "at": [
+        -0.32,
+        -0.05
+      ],
+      "facing": 20,
+      "seed": 23,
+      "look": {
+        "build": "medium",
+        "skin": "goldenSand",
+        "eyes": "mossGreen",
+        "hair": {
+          "style": "sweptCrop",
+          "colour": "espresso"
+        },
+        "glasses": "none",
+        "clothing": "stormGraphite"
+      }
+    }
+  ],
+  "marks": {
+    "door": [
+      -2.2,
+      1.5,
+      1
+    ],
+    "floor": [
+      0.15,
+      0,
+      1
+    ],
+    "viewer": [
+      0,
+      1.55,
+      2.5
+    ]
+  },
+  "beats": [
+    {
+      "id": "h-look",
+      "performer": "him",
+      "at": 0,
+      "hold": 0.7,
+      "note": "He looks at her once more.",
+      "intent": "He looks at her one last time.",
+      "directions": [
+        {
+          "kind": "look",
+          "at": "her.head"
+        }
+      ]
+    },
+    {
+      "id": "r-look",
+      "performer": "her",
+      "at": 0.15,
+      "hold": 1.6,
+      "note": "She holds his eyes, hoping.",
+      "intent": "She looks back at him, hoping he will stay.",
+      "directions": [
+        {
+          "kind": "look",
+          "at": "him.head",
+          "head": 0.6
+        },
+        {
+          "kind": "expression",
+          "strength": 0.8,
+          "shape": "concerned"
+        }
+      ]
+    },
+    {
+      "id": "h-bag",
+      "performer": "him",
+      "at": 0.9,
+      "intent": "He picks up his bag: he is leaving.",
+      "directions": [
+        {
+          "kind": "take",
+          "side": "right",
+          "object": "bag",
+          "hold": 0.3,
+          "palm": "down"
+        },
+        {
+          "kind": "look",
+          "at": "bag.center",
+          "head": 0.6
+        }
+      ]
+    },
+    {
+      "id": "h-turn",
+      "performer": "him",
+      "at": 2,
+      "hold": 2.6,
+      "note": "He turns to go.",
+      "intent": "He turns away to leave.",
+      "directions": [
+        {
+          "kind": "turn",
+          "toward": "door",
+          "body": "whole",
+          "attack": 0.8
+        },
+        {
+          "kind": "look",
+          "at": "door",
+          "head": 0.7,
+          "delay": -0.15
+        }
+      ]
+    },
+    {
+      "id": "h-step",
+      "performer": "him",
+      "at": 2.6,
+      "note": "One step away.",
+      "intent": "He steps away from her.",
+      "directions": [
+        {
+          "kind": "step",
+          "foot": "left",
+          "by": [
+            0,
+            0.28
+          ],
+          "follow": true,
+          "attack": 0.7,
+          "settle": 0.5
+        }
+      ]
+    },
+    {
+      "id": "h-walk",
+      "performer": "him",
+      "at": 3.4,
+      "intent": "He keeps walking away.",
+      "note": "He keeps walking.",
+      "directions": [
+        {
+          "kind": "step",
+          "foot": "right",
+          "by": [
+            0,
+            0.22
+          ],
+          "follow": true,
+          "attack": 0.7,
+          "settle": 0.5
+        }
+      ]
+    },
+    {
+      "id": "r-reach",
+      "performer": "her",
+      "at": 2.7,
+      "hold": 0.9,
+      "note": "Her hand goes after him...",
+      "intent": "She reaches out to stop him.",
+      "directions": [
+        {
+          "kind": "reach",
+          "side": "right",
+          "at": "him.rightUpperArm",
+          "stopShort": 0.28,
+          "palm": "toward",
+          "attack": 0.7,
+          "settle": 1.1,
+          "anticipation": 0.5
+        },
+        {
+          "kind": "weight",
+          "toward": "forward",
+          "amount": 0.6,
+          "attack": 0.5,
+          "hold": 0.6,
+          "settle": 1
+        }
+      ]
+    },
+    {
+      "id": "r-stop",
+      "performer": "her",
+      "at": 3.5,
+      "hold": 1.5,
+      "note": "...and she stops herself.",
+      "intent": "She stops herself before touching him.",
+      "directions": [
+        {
+          "kind": "gesture",
+          "name": "hand-to-chest",
+          "side": "left"
+        },
+        {
+          "kind": "expression",
+          "shape": "held",
+          "hold": 1.5
+        },
+        {
+          "kind": "weight",
+          "toward": "back",
+          "amount": 0.7,
+          "attack": 0.5,
+          "settle": 0.8
+        }
+      ]
+    },
+    {
+      "id": "r-down",
+      "performer": "her",
+      "at": 4.1,
+      "hold": 1.1,
+      "note": "She looks down.",
+      "intent": "She looks down, giving in.",
+      "directions": [
+        {
+          "kind": "look",
+          "at": "floor",
+          "head": 0.25
+        },
+        {
+          "kind": "expression",
+          "shape": "eyes-down",
+          "strength": 0.6
+        }
+      ]
+    },
+    {
+      "id": "h-glance",
+      "performer": "him",
+      "at": 4.8,
+      "hold": 1.1,
+      "note": "He almost looks back.",
+      "intent": "He almost looks back at her, but doesn't.",
+      "directions": [
+        {
+          "kind": "look",
+          "at": "her.head",
+          "head": 1,
+          "attack": 0.6,
+          "settle": 0.8
+        }
+      ]
+    },
+    {
+      "id": "r-after",
+      "performer": "her",
+      "at": 4.9,
+      "hold": 1.6,
+      "note": "She lets him go, with a small brave smile.",
+      "intent": "She lets him go: she looks at us with a big brave smile and nods.",
+      "directions": [
+        {
+          "kind": "look",
+          "at": "viewer",
+          "head": 0.7
+        },
+        {
+          "kind": "expression",
+          "shape": "smile",
+          "strength": 1,
+          "hold": 1.6
+        },
+        {
+          "kind": "gesture",
+          "name": "nod",
+          "count": 1,
+          "strength": 0.9
+        }
+      ]
+    },
+    {
+      "id": "r-end",
+      "performer": "her",
+      "at": 6.5,
+      "hold": 0.4,
+      "intent": "She is sad once he has gone.",
+      "directions": [
+        {
+          "kind": "state",
+          "name": "concerned",
+          "strength": 1,
+          "attack": 0.4
+        },
+        {
+          "kind": "look",
+          "at": "floor",
+          "head": 0.25
+        },
+        {
+          "kind": "weight",
+          "toward": "back",
+          "amount": 0.8,
+          "attack": 0.6
+        },
+        {
+          "kind": "expression",
+          "shape": "sad",
+          "strength": 0.8,
+          "attack": 0.4
+        }
+      ]
+    }
+  ],
+  "style": "directed",
+  "changes": [],
+  "story": {
+    "request": "a goodbye",
+    "setup": {
+      "says": "A man and a woman stand close together; she looks at him, worried.",
+      "see": [
+        "two people close together",
+        "she looks at him, worried"
+      ]
+    },
+    "event": {
+      "says": "He picks up his bag, turns away from her and walks off to the left.",
+      "see": [
+        "he picks up a bag from the bench",
+        "he turns away from her",
+        "he steps away toward the left"
+      ]
+    },
+    "reaction": {
+      "says": "She reaches after him, stops herself, looks down, and then gives us a brave smile and a nod as he goes.",
+      "see": [
+        "her hand goes after him and stops",
+        "she puts her hand to her chest and looks down",
+        "she looks at you with a big smile and a nod, then sad again"
+      ]
+    },
+    "changes": [
+      "He gives back his key before he leaves (the story bar needs a change in the world).",
+      "The two stand closer, so the card frames them tighter and her face is larger.",
+      "Her eyes do more of the looking at him (no head turn from the worried state, a smaller lean and a softer nod), and her body faces the camera.",
+      "v12: the key has a large blue fob and he looks at it as he puts it down, so a viewer sees him give it back; he stands 12 cm further to her side, so she does not hide him; her reach goes nearer his arm and holds longer; her brave smile is a plain smile and her end is sad (at card size smile and sad read best). His glance back turns his whole head and holds 0.9 s. The shelf stands 4 cm further in front of him, so his hand clears it as he turns.",
+      "v15: two reader rounds (v11, v14) did not see the key, so the key, the shelf and the breath beat are gone. He turns sooner (1.4 s), so her reaction has more time, and her look, reach, stop and brave smile are larger. The story bar needs a change in the world, so he now picks up a large blue bag from the shelf (0.9 s) before he turns (1.8 s): a bag reads as leaving at card size, where the key did not.",
+      "v17: the shelf is 20 cm taller and 6 cm nearer him, the bag is at forward 0.24, and the handle stands 12 cm above the bag on two posts, so his fist closes on the handle and not in the bag.",
+      "v18: a smaller bag (30 x 22 x 10 cm), the shelf and bag 5 cm to his side (the grip fit), and a 0.3 s hold on the take, so his arm clears the bag as he lifts it.",
+      "v19: the shelf stands 12 cm further out, so his arm and the bag clear it as he turns; he turns at 2.0 s, after the lift; her reach and the rest of her reaction come 0.4-0.5 s later, after his turn, so her arm clears the bag.",
+      "v20: back to the v18 bag place (the grip fit), with a narrower shelf (20 x 20 cm) under it, so his arm and the bag clear it as he turns; the v19 timing stays.",
+      "v23: the v21 sheet with a shorter bag (28 x 16 cm); the handle and the grip stay, so the bag hangs 18 cm below his fist and his forearm clears it as he turns. (v22, a lower shelf and a higher handle, put his wrist in the shelf.)",
+      "v24: the shelf is a low bench (46 cm), so the handle is near the height of his hand at rest: he takes the bag without a lift, and his hand does not come down through the shelf or swing the bag into her arm.",
+      "v25: the bench is 34 cm and the bag sits 10 cm further forward (the grip fit), so his fist closes on the handle and his wrist clears the posts.",
+      "v26: the two stand 16 cm further apart (her at right 0.28, him at -0.32), so their chests stay at least 45 cm apart until he turns (v25 came to 31 cm at 1.6 s), and his path to the door goes away from her; the bench and the bag stay in the same place relative to him. Her reach stops 28 cm short of his arm (it was 8 cm): from the wider place her hand cannot get to him, so it goes out after him and stops in the air.",
+      "v27: no lean in her first look: the forward weight is gone and her concerned look is a face only (an expression, not a state, which also bends the spine 7 degrees and the head 14). He faces 20 degrees, not 60, and the bench and the bag are on his right, so he takes the bag with his right hand and bends away from her (in v26 his head came 32 cm toward her as he took the bag, and the heads touched at 1.5-1.9 s). The stand places stay as in v26. The bench is shallower (14 cm) and nearer him (17 cm in front), and he takes the bag palm down, so his right fist closes on the handle (grip 20 degrees off at 34 cm).",
+      "s8 round 3: after he turns away her brave smile goes to the camera (look viewer), at full strength, and holds 1.6 s; the sad end starts at 6.5 s."
+    ]
+  },
+  "objects": {
+    "shelf": {
+      "name": "Hall bench",
+      "shape": "box",
+      "size": [
+        0.2,
+        0.34,
+        0.14
+      ],
+      "at": {
+        "of": "him",
+        "forward": 0.17,
+        "right": 0.17
+      },
+      "facing": "him.hips",
+      "color": "#b98a5e"
+    },
+    "bag": {
+      "name": "Bag",
+      "on": "shelf",
+      "at": {
+        "of": "him",
+        "forward": 0.14,
+        "right": 0.17
+      },
+      "facing": "him.hips",
+      "grip": {
+        "at": [
+          0,
+          0.34,
+          0
+        ],
+        "axis": [
+          1,
+          0,
+          0
+        ]
+      },
+      "parts": [
+        {
+          "name": "body",
+          "shape": "box",
+          "size": [
+            0.28,
+            0.16,
+            0.1
+          ],
+          "at": [
+            0,
+            0.08,
+            0
+          ],
+          "color": "#2f7fe0"
+        },
+        {
+          "name": "handle",
+          "shape": "box",
+          "size": [
+            0.14,
+            0.022,
+            0.022
+          ],
+          "at": [
+            0,
+            0.34,
+            0
+          ],
+          "color": "#1b3f73"
+        },
+        {
+          "name": "postL",
+          "shape": "box",
+          "size": [
+            0.012,
+            0.18,
+            0.012
+          ],
+          "at": [
+            -0.065,
+            0.25,
+            0
+          ],
+          "color": "#1b3f73"
+        },
+        {
+          "name": "postR",
+          "shape": "box",
+          "size": [
+            0.012,
+            0.18,
+            0.012
+          ],
+          "at": [
+            0.065,
+            0.25,
+            0
+          ],
+          "color": "#1b3f73"
+        }
+      ]
+    }
+  }
+}

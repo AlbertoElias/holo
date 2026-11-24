@@ -44,7 +44,8 @@ type Area =
   | "pipeline"
   | "portal"
   | "usdz_tools"
-  | "web";
+  | "web"
+  | "authoring_solver";
 
 interface Step {
   area: Area | "always";
@@ -87,6 +88,8 @@ export const STEPS: Step[] = [
   { area: "portal", label: "portal", command: "pnpm run test:portal", cache: viewerSpecs("test-e2e-portal") },
   // Not cached: it passes with SKIPPED when Python packages are missing, and it reads tools outside the repo.
   { area: "usdz_tools", label: "usdz-tools", command: "pnpm run test:usdz-tools" },
+  // Not cached: it builds pieces with the authoring tools, which the suites' keys leave out, and its own inputs are not listed yet.
+  { area: "authoring_solver", label: "solver-regression", command: "pnpm --filter @holoim/capture run test:authoring:solver" },
   { area: "capture_xr", label: "xr-capture", command: "pnpm run test:xr:capture", cache: { inputs: "code" } },
   { area: "web", label: "xr-viewer", command: "pnpm run test:xr:viewer", cache: viewerSpecs("test-e2e-mocked") }
 ];
@@ -108,6 +111,11 @@ function git(args: string[]): string {
   const result = spawnSync("git", args, { encoding: "utf8" });
   if (result.status !== 0) throw new Error(`git ${args.join(" ")} failed: ${result.stderr}`);
   return result.stdout;
+}
+
+/** The arm solve and the pieces that pin it (scripts/authoring/solver-regression.ts). */
+export function touchesSolver(file: string): boolean {
+  return /^apps\/capture\/scripts\/authoring\/(lib\/|make\.ts$|solver-regression\.ts$|sheets\/regression\/)/.test(file);
 }
 
 function changedFiles(base: string): string[] {
@@ -132,7 +140,9 @@ function resolveAreas(full: boolean, fetch: boolean): { areas: Record<string, bo
       env: { ...process.env, CI_AREAS_FILES_FROM: list }
     });
     if (result.status !== 0) return { areas: {}, note: "area script failed; running everything" };
-    return { areas: parseAreas(result.stdout), note: `${files.length} changed file(s) vs origin/main` };
+    // Local only (hosted CI has no such job): the arm solve's pieces quick-build before a solver merge.
+    const areas = { ...parseAreas(result.stdout), authoring_solver: files.some(touchesSolver) };
+    return { areas, note: `${files.length} changed file(s) vs origin/main` };
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -216,7 +226,7 @@ async function main(): Promise<void> {
 
   const { areas, note } = resolveAreas(full, !args.has("--no-fetch"));
   const noAreaInfo = Object.keys(areas).length === 0;
-  const steps = selectSteps(noAreaInfo ? { quality: true, capture_xr: true, e2e: true, pipeline: true, portal: true, usdz_tools: true, web: true } : areas, full || noAreaInfo);
+  const steps = selectSteps(noAreaInfo ? { quality: true, capture_xr: true, e2e: true, pipeline: true, portal: true, usdz_tools: true, web: true, authoring_solver: true } : areas, full || noAreaInfo);
   const skipped = STEPS.filter((step) => !steps.includes(step)).map((step) => step.label);
   console.log(`[verify-pr] ${note}`);
   console.log(`[verify-pr] running: ${steps.map((step) => step.label).join(", ")}`);
