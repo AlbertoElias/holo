@@ -41,8 +41,9 @@ export function toSrgb(c: Linear): SRGB {
 export const luminance = (c: Linear): number => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
 
 /**
- * The lightness of a typical eye white (OKLab L). The skin is read against the
- * photo's own eye whites; when they are not usable, against this value.
+ * The lightness of a typical eye white (OKLab L). The exposure moves the eye
+ * whites toward it (`EXPOSURE_RANGE`). The skin is read against the photo's own
+ * eye whites; when they are not usable, against this value.
  */
 export const SCLERA_L = 0.88;
 
@@ -56,19 +57,32 @@ export const SCLERA_L = 0.88;
  */
 export const WHITE_MIN = { lightness: 0.55, greyness: 0.45 } as const;
 
-/** True when a measured eye white can set the white balance and the skin's scale. */
+/** True when a measured eye white can set the skin's scale. */
 export function usableWhite(white: Linear): boolean {
   return oklab(white)[0] >= WHITE_MIN.lightness && Math.min(...white) / Math.max(1e-4, ...white) >= WHITE_MIN.greyness;
 }
 
 /**
- * The per-channel gains that turn the measured eye white into a neutral grey of
- * the same luminance (a von Kries white balance). The lightness is not changed:
- * the skin is read as a ratio to the eye whites (`pickSkin`).
+ * The most and least the eye whites change the exposure (×), for the hair and
+ * eye colours. The skin is read as a ratio to the eye whites, which the
+ * exposure does not change. Calibrated by the agent on 2026-11-23 on 42
+ * public-domain portraits: without a cap, a shaded eye white made 12 of them
+ * read whiter than any real skin (slice 5a evidence in
+ * docs/features/directed-performance.md).
+ */
+export const EXPOSURE_RANGE = { min: 0.8, max: 1.25 } as const;
+
+/**
+ * The per-channel gains that turn the measured eye white into a neutral grey
+ * (a von Kries white balance), and move its lightness toward `SCLERA_L`
+ * within `EXPOSURE_RANGE`.
  */
 export function whiteGains(white: Linear): Linear {
+  const grey = SCLERA_L ** 3; // OKLab L of a neutral grey is the cube root of its luminance
+  const exposure = Math.min(EXPOSURE_RANGE.max, Math.max(EXPOSURE_RANGE.min, grey / Math.max(luminance(white), 1e-4)));
   // The colour correction is capped: an eye white is a little warm and never far from grey, so a large cast is a bad sample.
-  return white.map((v) => Math.min(WHITE_CAST, Math.max(1 / WHITE_CAST, luminance(white) / Math.max(v, 1e-4)))) as unknown as Linear;
+  const tint = white.map((v) => Math.min(WHITE_CAST, Math.max(1 / WHITE_CAST, luminance(white) / Math.max(v, 1e-4))));
+  return [exposure * tint[0]!, exposure * tint[1]!, exposure * tint[2]!];
 }
 
 /** The most a white balance changes one channel against the luminance (×). */

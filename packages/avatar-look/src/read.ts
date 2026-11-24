@@ -61,12 +61,10 @@ export interface PhotoRead {
   readonly frame: FaceFrame;
   readonly white: {
     readonly method: 'eye whites' | 'brightest pixels';
-    /** True when the eye whites set the skin's scale; false when the skin read is not trusted. */
+    /** True when the eye whites are light and grey enough (`WHITE_MIN`) to set the skin's scale; false when the skin read is not trusted. */
     readonly usable: boolean;
     readonly measured: SRGB;
     readonly pixels: number;
-    /** The eye-white sample that was too dark or coloured to use (`WHITE_MIN`). */
-    readonly rejected?: SRGB;
   };
   readonly skin: SkinRead;
   readonly hairColour: TraitRead<HairColour> & { readonly area: number };
@@ -241,20 +239,17 @@ export async function createLookReader(assets: ReaderAssets): Promise<LookReader
       const whites = sclera.slice(0, Math.floor(sclera.length / 3));
       let white: PhotoRead['white'];
       let whiteLinear: Linear;
-      const eyeWhite = whites.length >= 15 ? middleColour(whites) : null;
-      if (eyeWhite && usableWhite(eyeWhite)) {
-        whiteLinear = eyeWhite;
-        white = { method: 'eye whites', usable: true, measured: toSrgb(whiteLinear), pixels: whites.length };
+      if (whites.length >= 15) {
+        // Too dark or coloured eye whites (dark glasses, lids, shade) still set the tint, capped; they do not set the skin's scale.
+        whiteLinear = middleColour(whites);
+        white = { method: 'eye whites', usable: usableWhite(whiteLinear), measured: toSrgb(whiteLinear), pixels: whites.length };
       } else {
-        // Too little eye white, or too dark or coloured to be one (closed eyes, dark glasses, lids): the photo's brightest 1% sets the tint only.
+        // Too little eye white (closed eyes, dark glasses): the photo's brightest 1% instead.
         const all: Linear[] = [];
         for (let y = 0; y < px.height; y += 4) for (let x = 0; x < px.width; x += 4) all.push(px.at(x, y));
         all.sort((a, b) => luminance(b) - luminance(a));
         whiteLinear = middleColour(all.slice(0, Math.max(1, Math.floor(all.length / 100))));
-        white = {
-          method: 'brightest pixels', usable: false, measured: toSrgb(whiteLinear), pixels: Math.floor(all.length / 100),
-          ...(eyeWhite ? { rejected: toSrgb(eyeWhite) } : {})
-        };
+        white = { method: 'brightest pixels', usable: false, measured: toSrgb(whiteLinear), pixels: Math.floor(all.length / 100) };
       }
       const gains = whiteGains(whiteLinear);
       const balanced = (x: number, y: number): Linear => applyGains(px.at(x, y), gains);
@@ -282,7 +277,7 @@ export async function createLookReader(assets: ReaderAssets): Promise<LookReader
         const lights = usableAreas.map((a) => oklab(a.colour!)[0]);
         const spread = Math.max(...lights) - Math.min(...lights);
         const why = [
-          ...(white.usable ? [] : [white.rejected ? 'the eye whites are too dark or coloured to measure against (dark glasses, lids or shade)' : 'too little eye white showed (closed eyes or dark glasses)']),
+          ...(white.usable ? [] : [white.method === 'eye whites' ? 'the eye whites are too dark or coloured to measure against (dark glasses, lids or shade)' : 'too little eye white showed (closed eyes or dark glasses)']),
           ...(spread > SKIN_SPREAD_MAX ? [`the light is uneven: the skin areas differ by ${spread.toFixed(2)} in lightness (over ${SKIN_SPREAD_MAX}; a hat brim, side light or shadow)`] : [])
         ];
         const ok = why.length === 0;

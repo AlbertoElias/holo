@@ -1465,19 +1465,26 @@ proposed.
 **Checks and evidence.** These are end-to-end, from the photo to the
 dressed avatar:
 
-1. **Stability.** On at least five photos of the owner (different lights,
+1. **Stability.** On online photos of several people (different lights,
    with and without glasses), skin and hair colour are each within one
-   swatch of the most common pick. The numbers go in "Slice 5a evidence".
+   swatch of each person's most common pick. The numbers go in "Slice 5a
+   evidence".
 2. **Spread.** On a small set of photos with a clear licence for this use
    (to be found before building; no photo of a third party without a
    licence), the skin picks follow the photos' lightness order.
 3. **The dressed result.** `card.json` goes through `dressedFile` and the
    audition, which must still pass, because the card holds only values the
    audition already passed.
-4. **The owner's verdict.** The owner looks at `compare.jpg` for their own
-   photos. That verdict is the gate.
+4. **The owner's verdict.** The owner looks at a contact sheet of
+   `compare.jpg` for online portraits, light to dark. That verdict is the
+   gate.
+
 5. **Proof video.** A real-time recording: the photo goes in, the CLI
    runs, the card comes out, and a beat sheet plays with that card.
+
+**Changed on 2026-11-23: online photos, not the owner's own.** The owner
+said: "i dont need to post my photos, just use the online ones". Checks 1
+and 4 above first named the owner's own photos.
 
 **What 5a does not do.** It makes no mesh from the photo, so no face shape
 or proportions come from it. On 2026-11-19 the owner called a face that
@@ -4586,17 +4593,18 @@ nine of those were read.
 | Portrait | Group by eye | Skin read | Rank (0–7) | Card |
 |---|---|---|---|---|
 | G000555 | 1 | porcelain | 0.00 | porcelain |
-| B001315 | 1 | honey | 3.30 | default (no eye white, uneven light) |
+| B001315 | 1 | caramel | 3.44 | default (eye whites not usable, uneven light) |
 | B001243 | 2 | linen | 0.90 | linen |
-| K000397 | 2 | goldenSand | 1.97 | default |
-| B001287 | 3 | copper | 4.66 | default |
+| K000397 | 2 | caramel | 2.59 | default |
+| B001287 | 3 | caramel | 4.09 | default |
 | W000788 | 5 | honey | 3.08 | honey |
-| M001229 | 5 | caramel | 4.43 | default |
-| C000537 | 6 | umber | 6.36 | default |
+| M001229 | 5 | caramel | 3.71 | default |
+| C000537 | 6 | umber | 5.86 | default |
 | D000096 | 7 | umber | 5.93 | umber |
 
-By rank, 27 of the 33 pairs in different groups are in order (82%; 25 of
-33 with the second version). B001315 is the main miss: its eye whites were
+By rank, 28 of the 33 pairs in different groups are in order (85%; 25 of
+33 with the second version). The "Skin read" and "Rank" columns of the
+default cards are the reported read, which the card does not use. B001315 is the main miss: its eye whites were
 not usable and its light is uneven, so the card keeps the default. Of the
 four with a trusted read, all are in order. Darker skin is still
 under-sampled (no portrait reads espresso). Cards over all 42 read
@@ -4642,12 +4650,18 @@ With the ratio to the eye whites (the code now), on the same 64 photos:
 - 26 keep the default skin, with the note: 21 for eye whites that are
   not usable (all six Schumer copies and 7 of Biden's 10), 5 for uneven
   light (Koch's hard hat among them).
-- Hair colour and eyes were not compared again: where the eye whites are
-  refused, the tint now comes from the brightest pixels, which can move them.
+- Hair colour and eyes were read again with this code. The tint and the
+  capped exposure still come from the eye-white sample, also when the skin
+  refuses it, so they are the same as before: hair colour is within one
+  swatch (the most common pick or its nearest neighbour in OKLab) on 57 of
+  64 photos (Koch 4 of 6, Austin 2 of 4, Blackburn 4 of 6, Glover 6 of 7,
+  all others full). The eyes read darkBrown on nearly every photo;
+  Blackburn reads coolGrey 2, blue 2 and darkBrown 2. The ratio does not
+  depend on the exposure, so the exposure stays only for these two traits.
 
 So the skin read is now stable when it reads, and says so when it cannot.
 The cost is that about a third of these online photos keep the default
-skin. The owner's own photos are still the final check (check 4).
+skin. The owner's verdict on online portraits is the final check (check 4).
 
 **Check 3, the dressed result.** Five read cards (B001243 in clay, ink
 and light; M001229 and D000096 in clay) went through `dressedFile` and
@@ -4658,10 +4672,31 @@ evidence"), and the informational `other.tongueOut`. The read adds no
 failing row, because a card holds only values the audition already
 covers.
 
-**Check 4, the owner's verdict on `compare.jpg`.** Waits for the owner's
-photos.
+**Check 4, the owner's verdict on `compare.jpg`.** Online portraits only,
+on the owner's word of 2026-11-23 (see "Changed on 2026-11-23" in the
+slice). A contact sheet of seven full runs with this code, light to dark,
+is in the ignored `apps/capture/output/authoring/photo-look/contact-sheet.jpg`:
+Biden porcelain, Blackburn linen, Harris goldenSand, Watkins honey, Glover
+copper, D000096 umber, and Schumer, whose card keeps the default skin
+(caramel) because the eye whites are not usable. Waits for the owner's
+verdict.
 
-**Check 5, proof video.** Recorded in real time in the ignored
+**Why the clay face looks darker than the swatch.** In the B001243 run the
+card's skin is porcelain, and the clay face renders mid-brown, darker than
+the photo and the clothes. The read is right: the photo's skin measured
+RGB 250, 214, 205, and porcelain is the lightest rank. The cause is the
+render. Head and body share one material (`HouseBase_skin`). The clay
+finish is lit PBR with no emissive, and the still render lights the face
+at about 30% of its albedo: the porcelain swatch (RGB 243, 171, 136, a
+saturated peach) gives a cheek of RGB 141, 87, 63. The lighter "body" in
+the render is the oatmealSlate top (RGB 231, 195, 168), at about 36%.
+Ink and light add an emissive term, so their cheeks (RGB 204, 151, 120
+and 204, 168, 144) are near the swatch. No finish changed. The options
+for the owner are more light or exposure on the clay still renders, or a
+lighter clay porcelain swatch.
+
+**Check 5, proof video.** Recorded again on 2026-11-23 with this code
+(B001243), in real time in the ignored
 `apps/capture/output/proof/`: a public-domain portrait goes in,
 `photo-look.ts` runs, the card and `compare.jpg` come out, `direct.ts`
 builds `sheets/expressions.json` with its performer in that card, and the
