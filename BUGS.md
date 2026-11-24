@@ -20,6 +20,12 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Reproduction:** not reproduced. Both fits are bounding boxes, so one extreme point that only one side keeps
   (the bubble's `inside` test, or `array_equal` against `allclose` on a moving mesh) is a suspect. Keep the
   failing `output/pipeline-takes/walk.glb` when it recurs.
+- **Recurred 2026-11-24, now every local run.** On this Mac, three `test:usdz-tools` runs in a row failed with
+  the same numbers as above (foot 0.0887, radii 0.104, refit foot z −0.328 to −0.417) on all five challenged
+  cases. Each run recorded a new walk take with a different hash, and a clean `origin/main` worktree (234b6bb)
+  failed the same way. So the cause is not one take. One full `verify:pr` run on the same machine, 20 minutes
+  earlier, passed the cloche checks. The hosted Linux check passed on 3db0ba1ba9. A failing take and its reports
+  are kept in the main checkout's ignored `apps/viewer-api/output/b107-2026-11-24/`.
 
 ### B-104 — Authored takes: held grips drift since B-092 (stone sD snap, goodbye grip turn, held and support)
 
