@@ -60,8 +60,24 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
   Each grip that lowers the held gap puts grip.find over its 5° bar, so no grip edit passes. A fist cannot close
   around a 24 cm rock. A story change (a smaller stone, or two hands) is the owner's choice, as for the baker.
-- **Stone accepted (2026-11-24):** the owner accepted the stone hold "for now" ("stone is good enough for now").
-  No more work on the stone sD hold; its pins stay. The goodbye hold and the baker stay open here.
+- **Tried (2026-11-24, goodbye v35 bag grip):** a per-frame wrist trace in `orientHand` (pose.ts) at the grasp
+  (1.70 s) shows two causes of the 8.1°. About 2° is a turn about the fingers' own axis, which the wrist bend drops.
+  The rest is the ulnar limit: the wrist wants 36° of ulnar deviation and stops at 30°, as for the baker.
+  - Roll passes in `orientHand` (a further forearm roll gives back the dropped turn; patch
+    `b104-roll-passes.patch` in the lead's shared notes folder, not on the branch): grip.h-bag 0.3 mm, 6.4° (pin
+    8.1°, bar 5°), turn.him 270°/s (pin 515). But jump.props 3.65 m/s (pin 2.55), held 10.4 mm (pin 9.3),
+    arms.elbow.him 5° (pin 3), jump.her 1.19 m/s (pin 1.04), turn.her 453°/s (pin 426). Not kept.
+  - With the roll passes, bag `facing` as a number instead of `him.hips` (the handle line is a line, so 180° is the
+    same): 0° 38.3°, 20° 37.5°, 45° 26.5°, 70° 16.3°, -25° 5.8° (jump.props 5.62 m/s), -40° 6.4° (jump.props
+    2.52 m/s, turn.him 470°/s, held 10.4 mm, turn.her 455°/s), -55° 6.3° (jump.props 5.24 m/s, held 16.6 mm).
+  - Support 0 % is by design here: the bag hangs from its handle, so no hand is under its lower half. Only a bar
+    change (a hanging carry) clears that row, and no bar is changed.
+  No variant passes grip.h-bag's 5° bar. The ulnar limit leaves a story change (the bag handle across the hand's
+  line, a shoulder strap, or the left hand) or a time-smoothed elbow swing, as for the baker.
+- **Owner verdicts (2026-11-24):** baker approved ("the loaf is fully approved"): the wall-fix draft
+  (`output/proof-b104/baker-wall-fixed-draft.mp4`, solver at b9927e89e78e) is the accepted baker hold. Stone sD
+  accepted "for now" ("stone is good enough for now"); no more work on its hold. Goodbye v35: the story session
+  reworks its grab and face; this entry does not change the goodbye hold.
 
 ### B-091 — verify:pr: the pipeline Playwright run does not exit after test timeouts
 
