@@ -1997,7 +1997,7 @@ bug above.)
 - **Slip sO (the 10.5 m/s snap at 4.47 s):** the story branch had no B-099. On main the later reach takes the hand
   while the earlier one settles: jump.me 1.73 m/s, no snap at 4.47 s.
 
-### B-105 — The live face: the eyes do not carry the laugh and the sad face
+### B-108 — The live face: the eyes do not carry the laugh and the sad face
 
 - **Found:** 2026-11-23, by the owner on the B-102 video: "laugh and sad the mouth is fine, but the eyes are not
   there yet."

@@ -286,7 +286,7 @@ corners take 0.69 of the sad level and the brows and the lower lip carry the
 rest. The check holds the laugh jaw in 0.3 to 0.5 and the sad frown in 0.5
 to 0.7.
 
-**Eyes that carry the laugh and the sad face (B-105).** The owner accepted
+**Eyes that carry the laugh and the sad face (B-108).** The owner accepted
 the mouths and said the eyes were "not there yet". In a laugh the cheeks
 push the lower lids up (cheek raise 1.0) and the upper lids stay open (eye
 squint 0.58 with eye wide 0.12; it was 0.66, which read sleepy). In a sad

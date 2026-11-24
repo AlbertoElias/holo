@@ -52,7 +52,7 @@ const EXPECT_MIN: Array<[string, string, number]> = [
   ['smile', 'smile', 0.6], ['smile', 'cheekSquint', 0.4], ['smile', 'eyeSquint', 0.3],
   ['laugh', 'smile', 0.6], ['laugh', 'cheekSquint', 0.4], ['laugh', 'upperUp', 0.5], ['laugh', 'jawOpen', 0.3],
   ['sad', 'frown', 0.5], ['sad', 'browInnerUp', 0.5],
-  // The eyes carry the laugh and the sad face (B-105): the lower lids up, the upper lids heavy, the inner brows up.
+  // The eyes carry the laugh and the sad face (B-108): the lower lids up, the upper lids heavy, the inner brows up.
   ['laugh', 'cheekSquint', 0.9], ['laugh', 'eyeSquint', 0.5], ['sad', 'eyeBlink', 0.4], ['sad', 'browInnerUp', 0.85],
   ['surprise', 'browInnerUp', 0.5], ['surprise', 'browOuterUp', 0.4], ['surprise', 'eyeWide', 0.35], ['surprise', 'jawOpen', 0.3],
   ['anger', 'browDown', 0.7], ['anger', 'noseSneer', 0.3], ['anger', 'eyeSquint', 0.3],
@@ -63,7 +63,7 @@ const EXPECT_MAX: Array<[string, string, number]> = [
   ['smile', 'frown', 0.1], ['laugh', 'frown', 0.1],
   // A laugh and a sad face stay moderate: the cheeks, eyes and brows carry them, not a wide jaw or a hard frown (B-102).
   ['laugh', 'jawOpen', 0.5], ['sad', 'frown', 0.7],
-  // A laugh's upper lids stay open (not sleepy) and a sad face's lids are heavy, not shut (B-105).
+  // A laugh's upper lids stay open (not sleepy) and a sad face's lids are heavy, not shut (B-108).
   ['laugh', 'eyeSquint', 0.62], ['sad', 'eyeBlink', 0.55],
   ['sad', 'smile', 0.1], ['sad', 'jawOpen', 0.05],
   ['surprise', 'frown', 0.1], ['surprise', 'smile', 0.1],

@@ -41,7 +41,7 @@ export const LID_RAISE = { shapes: ['eyeSquint', 'cheekSquint'], full: 0.004 };
 
 /**
  * A lid that rises leans out from the face to clear the eye, so the whole lid patch under the eye shaded darker
- * than the cheek, up to a hard edge where the patch meets the skin (B-105: dark patches under the eyes in a laugh).
+ * than the cheek, up to a hard edge where the patch meets the skin (B-108: dark patches under the eyes in a laugh).
  * For the named shapes, each normal delta takes the share `smoothstep(0, full, move)` of the vertex's own move: a
  * vertex that stays in its place keeps its shading, so the patch joins the skin with no edge and the shade under
  * the lid falls off toward the cheek. Returns the number of rows changed.

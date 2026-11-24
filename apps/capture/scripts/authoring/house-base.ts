@@ -114,7 +114,7 @@ async function make(build: string, out: string): Promise<void> {
   // Blender's morph normals carry float noise around each shape; the floor drops it (B-096).
   const io = new NodeIO();
   const raw = await io.read(tmp);
-  // A lid that rises keeps the shading of the vertices that stay in place (B-105); before the floor, which then drops the small rows.
+  // A lid that rises keeps the shading of the vertices that stay in place (B-108); before the floor, which then drops the small rows.
   easeStillNormals(raw);
   quietMorphNormals(raw);
   // The jumper's cuff goes into the hand; it takes the hand skin's weights so that it does not come out (B-099).
