@@ -39,7 +39,15 @@ const SHIPPED = fileURLToPath(new URL('../public/gltf/models/avatar.glb', import
  */
 /** `half`: a mirrored loop's right foot contact (frame), where the pose search would miss it (a back-pedal, a crouch). */
 /** `faced`: the loop is turned so the body faces +Z (its thigh line), not so its travel points there: a backward or sideways take keeps its direction. */
-export interface MocapLoop { readonly name: string; readonly take: string; readonly from: number; readonly to: number; readonly mirror?: boolean; readonly sway?: number; readonly once?: boolean; readonly faced?: boolean; readonly half?: number }
+/**
+ * `secondHalf`: a mirrored loop is built from the second half of the range (right contact `half` to the next left
+ * contact), mirrored into the first, where the left leg's swing is the better step.
+ */
+/**
+ * `headFrom`: the neck and head keep their sway, but about that clip's mean neck and head pose (on the target rig),
+ * where the take's own head pose is not a person's (113_21 holds its head 37-103° off its neck, B-105).
+ */
+export interface MocapLoop { readonly name: string; readonly take: string; readonly from: number; readonly to: number; readonly mirror?: boolean; readonly sway?: number; readonly once?: boolean; readonly faced?: boolean; readonly half?: number; readonly secondHalf?: boolean; readonly headFrom?: string }
 
 export const MOCAP_LOOPS: readonly MocapLoop[] = [
   // Subject 7, trial 12, "brisk walk": a 0.9 s cycle at 1.93 m/s, near the desktop walk's 1.8. Its left
@@ -50,7 +58,8 @@ export const MOCAP_LOOPS: readonly MocapLoop[] = [
   // replay on every stop.)
   // Played at 37% of its sway about the mean pose: the full take drifts the head 5 cm in a frame of view
   // that follows the eyes (the desktop camera and aim), where 2 cm reads as standing still and alive.
-  { name: 'Idle', take: '113_21', from: 0, to: 0, sway: 0.37 },
+  // Its own neck and head pose is not usable (B-105): the head stands on the walk's.
+  { name: 'Idle', take: '113_21', from: 0, to: 0, sway: 0.37, headFrom: 'Walk' },
   // Subject 13, trial 42, "jump": a standing jump with a full arm swing that keeps moving through the flight (118_01, the
   // first pick, swings the arms back hard but only to 20° in front, then holds them there). Not a loop (`once`): the
   // squat with the arms going back (frame 24), the arms at their furthest back, 78° behind, as the legs drive (34),
@@ -60,8 +69,10 @@ export const MOCAP_LOOPS: readonly MocapLoop[] = [
   { name: 'Leap', take: '13_42', from: 14, to: 94, once: true },
   // The directional walks (slice 2), each cut at a left foot contact so one shared phase drives them all, and faced
   // (turned by the thighs, not the travel). Subject 143, trial 39, "walk backwards": a brisk back-pedal at 1.23 m/s,
-  // 190 steps/min, arms swinging opposite the legs (136_25/26 back up at 0.5 m/s with the arms still).
-  { name: 'WalkBackward', take: '143_39', from: 62, to: 81, half: 71, mirror: true, faced: true },
+  // 190 steps/min, arms swinging opposite the legs (136_25/26 back up at 0.5 m/s with the arms still). Its left step
+  // (frames 71-81) is the one it walks twice: the knee swings to 58° and lands at 10°, where the right step's swing
+  // reaches only 48° (B-106).
+  { name: 'WalkBackward', take: '143_39', from: 62, to: 81, half: 71, mirror: true, faced: true, secondHalf: true },
   // Subject 141, trial 33, side-steps: 1.1-1.3 m/s, about 190 steps/min, each way, the feet at least 7 cm apart
   // (143_40's brisker side-step crosses them by up to 35 cm, which reads as scissoring). A side-step leads with one
   // leg, so it is not mirrored: left and right are each their own recorded cycle, one left contact to the next.
@@ -274,12 +285,42 @@ function idleWindow(dump: Dump): { from: number; to: number } {
   return best;
 }
 
-async function loadTarget(): Promise<RetargetRig> {
+async function loadTarget(): Promise<RetargetRig & { clips: THREE.AnimationClip[] }> {
   const bytes = await readFile(LOCOMOTION_LIBRARY);
   const gltf = await new GLTFLoader().parseAsync(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer, '');
   const humanoid = HumanoidSkeleton.bind(gltf.scene, { json: gltf.parser.json, associations: gltf.parser.associations as never });
   humanoid.normalizeFacing(gltf.scene);
-  return { root: gltf.scene, humanoid };
+  return { root: gltf.scene, humanoid, clips: gltf.animations };
+}
+
+/** The second half of a cycle (right contact to left contact), mirrored left for right: a half that starts at a left contact. */
+function mirroredSecondHalf(local: Map<string, THREE.Quaternion[]>, contact: number): Map<string, THREE.Quaternion[]> {
+  return new Map([...local.keys()].map((b) => [b, local.get(swapSide(b))!.slice(contact).map(mirrorQ)] as const));
+}
+
+/** The mean of unit quaternions (sign-aligned to the first), normalized. */
+function meanQuaternion(keys: readonly THREE.Quaternion[]): THREE.Quaternion {
+  const sum = new THREE.Vector4();
+  for (const q of keys) {
+    const sign = q.dot(keys[0]!) < 0 ? -1 : 1;
+    sum.x += sign * q.x; sum.y += sign * q.y; sum.z += sign * q.z; sum.w += sign * q.w;
+  }
+  return new THREE.Quaternion(sum.x, sum.y, sum.z, sum.w).normalize();
+}
+
+const trackKeys = (track: THREE.KeyframeTrack) =>
+  Array.from({ length: track.times.length }, (_, i) => new THREE.Quaternion().fromArray(track.values, 4 * i));
+
+/** `clip`'s neck and head keys moved so their mean is `reference`'s: each key keeps its turn from its own mean. */
+function headOnto(clip: THREE.AnimationClip, reference: THREE.AnimationClip, nodes: readonly string[]): void {
+  for (const node of nodes) {
+    const track = clip.tracks.find((t) => t.name === `${node}.quaternion`);
+    const ref = reference.tracks.find((t) => t.name === `${node}.quaternion`);
+    if (!track || !ref) throw new Error(`headFrom: no ${node} track in ${clip.name} or ${reference.name}`);
+    const keys = trackKeys(track);
+    const shift = meanQuaternion(trackKeys(ref)).multiply(meanQuaternion(keys).invert());
+    keys.forEach((q, i) => shift.clone().multiply(q).toArray(track.values, 4 * i));
+  }
 }
 
 /** Each bone's keys drawn toward its mean rotation: `sway` 1 keeps the take, 0 holds the mean pose. */
@@ -311,14 +352,17 @@ export async function buildMocapClips(dumpDir: string): Promise<{ clips: THREE.A
     }
     const dump = JSON.parse(await readFile(file, 'utf8')) as Dump;
     const range = loop.to > loop.from ? loop : { ...loop, ...idleWindow(dump) };
-    ranges.push({ name: loop.name, take: loop.take, from: range.from, to: range.to, ...(loop.mirror ? { mirror: true } : {}), ...(loop.once ? { once: true } : {}), ...(loop.faced ? { faced: true } : {}), ...(loop.half !== undefined ? { half: loop.half } : {}) });
+    ranges.push({ name: loop.name, take: loop.take, from: range.from, to: range.to, ...(loop.mirror ? { mirror: true } : {}), ...(loop.once ? { once: true } : {}), ...(loop.faced ? { faced: true } : {}), ...(loop.half !== undefined ? { half: loop.half } : {}), ...(loop.secondHalf ? { secondHalf: true } : {}) });
     const { root, bones } = buildSourceRig(dump);
     const humanoid = HumanoidSkeleton.bind(root, {});
     humanoid.normalizeFacing(root);
     const cut = localTrack(dump, range.from, range.to, loop.faced === true);
+    const contact = loop.half === undefined ? undefined : loop.half - range.from;
+    if (loop.secondHalf && (contact === undefined || !loop.mirror)) throw new Error(`${loop.name}: secondHalf needs mirror and half`);
+    const half = loop.secondHalf ? mirroredSecondHalf(cut, contact!) : cut;
     const local = loop.once
       ? new Map([...cut].map(([b, keys]) => [b, smoothOnce(keys)] as const))
-      : scaleSway(loopTracks(cut, loop.mirror === true, loop.half === undefined ? undefined : loop.half - range.from), loop.sway ?? 1);
+      : scaleSway(loopTracks(half, loop.mirror === true, loop.secondHalf ? range.to - loop.half! : contact), loop.sway ?? 1);
     const tracks: THREE.KeyframeTrack[] = [];
     const times = Array.from({ length: local.values().next().value!.length }, (_, i) => i / dump.fps);
     for (const [b, keys] of local) {
@@ -334,6 +378,14 @@ export async function buildMocapClips(dumpDir: string): Promise<{ clips: THREE.A
       const node = target.root.getObjectByProperty('uuid', uuid);
       if (!node?.name) throw new Error(`retargeted track ${track.name} has no named node`);
       track.name = `${node.name}.${property}`;
+    }
+    if (loop.headFrom) {
+      // The reference is this run's clip, or the library's committed one when its take was not rebuilt.
+      const reference = clips.find((c) => c.name === loop.headFrom) ?? target.clips.find((c) => c.name === loop.headFrom);
+      if (!reference) throw new Error(`${loop.name}: no ${loop.headFrom} clip to take the head from`);
+      const names = (['neck', 'head'] as const).map((b) => target.humanoid.bone(b)?.name);
+      if (names.some((n) => !n)) throw new Error(`${loop.name}: the target has no neck or head bone`);
+      headOnto(retargeted!, reference, names as string[]);
     }
     clips.push(retargeted!);
   }
@@ -371,5 +423,5 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const doc = await io.read(SHIPPED);
   writeClips(doc, clips);
   await writeFile(SHIPPED, await io.writeBinary(doc));
-  for (const r of ranges) console.log(`[mocap] ${r.name}: CMU ${r.take} frames ${r.from}-${r.to}${r.mirror ? " (first half, mirrored)" : ""}, ${clips.find((c) => c.name === r.name)!.duration.toFixed(2)} s (${clips.find((c) => c.name === r.name)!.tracks.length} tracks)`);
+  for (const r of ranges) console.log(`[mocap] ${r.name}: CMU ${r.take} frames ${r.from}-${r.to}${r.mirror ? (r.secondHalf ? " (second half, mirrored)" : " (first half, mirrored)") : ""}, ${clips.find((c) => c.name === r.name)!.duration.toFixed(2)} s (${clips.find((c) => c.name === r.name)!.tracks.length} tracks)`);
 }

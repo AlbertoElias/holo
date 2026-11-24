@@ -3,6 +3,41 @@
 Closed entries moved from `BUGS.md` so the live tracker stays scannable.
 `BUGS.md` remains the authority for open, verified defects.
 
+### B-105 — Desktop avatar: the head turns 90° to the side at each stop and in the idle
+
+- **Area:** apps/capture (`scripts/build-mocap-clips.ts`: the `Idle` clip from 113_21; the slice 2 sway action)
+- **Severity:** P1 (the owner: "why is the neck movement so weird?")
+- **Observed:** 2026-11-23, by the owner after slice 2 (b809399).
+- **Evidence:** desktop-motion samples: in the idle and every stop the head looks 90–96° to the side of the torso
+  with a −30° roll (the walk: about 5°); at the stops it turns on the torso at 1000–3900°/s.
+- **Cause:** 113_21's head data is not a person's pose: the head stands 37–103° (mean 77°) off its neck. Slice 1
+  hid it (the desktop idle kept only its arm tracks); the slice 2 sway plays the idle's neck and head again.
+- **Expected:** the head stays on the neck as the walk holds it; the gaze stays steady.
+- **Reproduction:** `node --import tsx scripts/run-xr-checks.ts desktop-motion` (apps/capture), rows
+  `slice2.idleHeadOffWalkDeg` and `slice2.headTurnRateMaxDegS`.
+- **Fix:** f50f141a2625. The `Idle` clip takes its neck and head keys onto the walk's mean neck and head pose
+  (`headFrom: 'Walk'`), so the sway keeps the idle's small motion on a head that sits on the neck. No limit changed.
+- **Proof:** desktop-motion, shipped and stock: idle head 4.0° and 3.8° off the walk pose (limit 10°), head turn
+  at most 214°/s and 223°/s (limit 400°/s); before: about 90° and 3900°/s.
+
+### B-106 — Desktop avatar: the back walk's legs are stiff
+
+- **Area:** apps/capture (`scripts/build-mocap-clips.ts`: `WalkBackward` from 143_39)
+- **Severity:** P1 (the owner: "the backwards movement has the leg super stiff")
+- **Observed:** 2026-11-23, by the owner after slice 2 (b809399).
+- **Evidence:** back walk at runtime: knee 27–52° on both legs (a 23° range), ankle lift 6 cm; the forward walk
+  4–62° and 16 cm.
+- **Cause:** the mirror build took the source cycle's first half (the right step, knee swing 48°), and the
+  low-pass cut it to 47°. The second half (the left step, frames 71–81) swings the knee to 58° and lands at 10°.
+- **Expected:** the back walk's knee moves as the source's left step moves it.
+- **Reproduction:** the desktop-motion check, rows `slice2.backKneeSwingFlexDeg` and `slice2.backKneeFlexRangeDeg`.
+- **Fix:** f50f141a2625. `WalkBackward` builds its mirrored loop from the source cycle's second half
+  (`secondHalf: true`). The longer left step plays at a lower cadence at the same 0.6 speed, so the back-cadence
+  floor went from 160 to 135 steps/min (measured 150 and 144). The second settle step after the back walk lands at
+  700 ms, so the held window for jitter starts at 800 ms (was 600 ms).
+- **Proof:** desktop-motion, shipped and stock: back knee swing 57.9° and 62.1° (limits 54–76°), knee range 36.1°
+  and 38.5° (was 23°, limit ≥30°).
+
 ### B-086 — The house avatar sinks to the floor on a floor reach
 
 - **Area:** `apps/capture/src/avatar/AvatarRig.ts` (crouch drop), `apps/capture/src/objects/ObjectInteraction.ts`
