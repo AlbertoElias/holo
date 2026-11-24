@@ -91,11 +91,15 @@ merge. If a job fails again, the gate is red: reproduce with
 failed jobs rerun (`gh run rerun --failed`), one time. A job counts as a
 browser-suite job when its name starts with "Capture XR checks", "Viewer and
 Knowledge browser checks", "Viewer VR gallery", "Capture to viewer pipeline"
-or "Portal view end-to-end", and its conclusion is failure or timed out. The
+or "Portal view end-to-end", and its conclusion is failure, timed out or
+cancelled. GitHub reports a job past its `timeout-minutes` as cancelled (run
+45330508669, B-111), and nothing else cancels a gate run's jobs. The
 aggregate "CI Gate" job reruns with them and does not count. A failure of the
-area selection, the quality job, the Quick Look tool check or a cancelled job
-never reruns. On a green rerun the command prints "FLAKY" with the tests of
-attempt 1, and `output/verify-hosted.json` holds them in `flaky`.
+area selection, the quality job or the Quick Look tool check never reruns. On
+a green rerun the command prints "FLAKY" with the tests of attempt 1, and
+`output/verify-hosted.json` holds them in `flaky`. It then prints no land
+command: the agent commits the `BUGS.md` record on the branch and merges the
+branch. That commit changes the tree, so `main` runs the suites again.
 
 ## Acceptance criteria
 

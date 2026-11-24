@@ -270,11 +270,15 @@ export function failedTestLines(logText: string): string[] {
 
 const failedJobs = (current: Run): Job[] => current.jobs.filter((job) => job.conclusion !== "success" && job.conclusion !== "skipped");
 
-/** True when every failed job (the aggregate job aside) is a browser-suite job that failed or timed out. */
+/**
+ * True when every failed job (the aggregate job aside) is a browser-suite job.
+ * GitHub reports a job past its timeout-minutes as cancelled, and nothing else
+ * cancels a gate run's jobs (each gate ref is new), so cancelled counts.
+ */
 export function onlyBrowserSuitesFailed(jobs: Pick<Job, "conclusion" | "name">[]): boolean {
   const failed = jobs.filter((job) => job.conclusion !== "success" && job.conclusion !== "skipped" && !job.name.startsWith(AGGREGATE_JOB));
   return failed.length > 0 && failed.every((job) =>
-    (job.conclusion === "failure" || job.conclusion === "timed_out") && BROWSER_SUITES.some((prefix) => job.name.startsWith(prefix)));
+    ["failure", "timed_out", "cancelled"].includes(job.conclusion) && BROWSER_SUITES.some((prefix) => job.name.startsWith(prefix)));
 }
 
 /** Starts the one rerun of the failed jobs and returns when GitHub shows the new attempt. */
@@ -319,6 +323,8 @@ async function main(): Promise<void> {
   rmSync(exitFile, { force: true });
   const record: Record<string, unknown> = { startedAt: new Date(started).toISOString() };
   let status = 1;
+  // Set once the gate ref is on the remote: every exit path from then on deletes it.
+  let gateRef: string | null = null;
   try {
     const branch = preflight();
     run("git", ["fetch", "--quiet", "origin", "main"]);
@@ -348,11 +354,13 @@ async function main(): Promise<void> {
         throw new GateError(`${ref} already holds ${remote.slice(0, 12)}, another commit of this tree (another gate is running it); wait for it, or delete the ref when that gate is gone`);
       }
       // One push for both refs; the local checks above ran more than the pre-push hook would.
+      gateRef = ref;
       run("git", ["push", "--no-verify", "--quiet", "origin", `HEAD:refs/heads/${branch}`, `${commit}:refs/heads/${ref}`]);
       log(`pushed ${branch} and ${ref}`);
       current = await findRun(ref, commit);
       log(`run ${current.databaseId}: ${current.url}`);
     }
+    gateRef = ref;
     record.runId = current.databaseId;
     record.url = current.url;
     let finished = await waitForRun(current.databaseId, Date.now());
@@ -367,29 +375,32 @@ async function main(): Promise<void> {
     record.attempt = finished.attempt;
     if (finished.conclusion === "success") {
       status = 0;
+      log(`PASSED in ${elapsed(started)}: tree ${tree} (run ${finished.databaseId}${finished.attempt > 1 ? `, attempt ${finished.attempt}` : ""})`);
       if (flaky.length > 0) {
         record.flaky = flaky;
         log("FLAKY: these jobs failed on attempt 1 and passed on the rerun:");
         for (const line of flaky) log(`    ${line}`);
-        log("record each flaky test in BUGS.md (the run URL and the failed test line) before the merge");
+        log(`before the merge, commit a BUGS.md record of each flaky test (with ${finished.url}) on ${branch}, then merge ${branch} into main;`);
+        log("that commit changes the tree, so main runs the suites again");
+      } else {
+        const land = merged ? `git merge --ff-only ${commit}` : `git merge --ff-only ${branch}`;
+        log(`land it while origin/main is ${String(record.mainSha).slice(0, 12)}: in the main checkout, ${land} && git push origin main`);
+        log("main then skips the suites this run passed (same tree, within 24 hours); if main moved, merge again and the suites run on main");
       }
-      log(`PASSED in ${elapsed(started)}: tree ${tree} (run ${finished.databaseId}${finished.attempt > 1 ? `, attempt ${finished.attempt}` : ""})`);
-      const land = merged ? `git merge --ff-only ${commit}` : `git merge --ff-only ${branch}`;
-      log(`land it while origin/main is ${String(record.mainSha).slice(0, 12)}: in the main checkout, ${land} && git push origin main`);
-      log("main then skips the suites this run passed (same tree, within 24 hours); if main moved, merge again and the suites run on main");
     } else {
       if (flaky.length > 0) record.firstAttemptFailures = flaky;
       record.failures = reportFailures(finished);
       log(`FAILED in ${elapsed(started)}: ${finished.url}`);
       log("reproduce locally (scripts/ci-emulate.sh), fix, commit, and run the gate again; do not debug on hosted CI");
     }
-    cleanUp(ref);
   } catch (error) {
     if (!(error instanceof GateError)) throw error;
     record.error = error.message;
     log(`FAILED: ${error.message}`);
     status = error.message.startsWith("local check") ? 1 : 2;
   } finally {
+    // A run still in progress (the time limit) saves its caches after this; the next gate run of the tree finds it.
+    if (gateRef) cleanUp(gateRef);
     record.exit = status;
     record.seconds = Math.round((Date.now() - started) / 1000);
     writeFileSync(path.join(outDir, "verify-hosted.json"), `${JSON.stringify(record, null, 2)}\n`, "utf8");
