@@ -358,7 +358,7 @@ accepted.
 | Key changes; shared store; partial reports; skips; environment | `scripts/verify-cache.test.ts` on temporary git repositories and the measured Playwright report shapes (tests A to G) | `pnpm run test:tooling`: 34 tests pass (25 of them in `scripts/verify-cache.test.ts`) |
 | Authoring-only selection and guard; selector gaps | `pnpm run check:ci-areas` | `check-ci-areas: 4782 assertions passed (975 source files, 367 docs, 851 other files)` on the tree merged with `main`. A `solver-regression` step with a Code key makes it fail |
 | `--no-cache`, `verify:full` | `pnpm run verify:pr -- --no-cache --dry-run` and the test "a failed step stores nothing; --no-cache does not read but stores" | The plan prints `result cache: not read in this run; passes are stored` and `would run` for each selected step. No full 26-minute run was made with `--no-cache`: the first full run of each code state did the same work |
-| No wait for the lock when all steps are skipped | Hold the lock in a second process, real `verify:pr` | 2026-11-23: the run with no change printed `no step needed the machine-wide lock` and `PASSED in 12s`. The run with one spec file to execute waited 1171 s for another session's lock, then ran |
+| No wait for the lock when all steps are skipped | Hold the lock in a second process, real `verify:pr` | 2026-11-24, commit `30d9c31874d9`: while the `verify:pr` of another session (branch `feature/mic-mouth`) held the lock, a run with no change printed `PASSED in 13s` and `no step needed the machine-wide lock`. The next run, with one spec file to execute, waited 1061 s for that lock, then ran in 175 s |
 
 ## Physical-device limits
 
