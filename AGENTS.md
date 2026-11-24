@@ -39,9 +39,12 @@ unless versioning is explicit. Preserve GLTF export → upload → render compat
 
 Read `AGENT_CONTRACT.md` when selecting commands, validation scope, or XR environment
 settings. Use `pnpm run verify:agent` in the edit loop and `pnpm run verify:pr`
-locally before merging. Hosted CI runs only on pushes to `main` (only the
-suites relevant to the merged files) and on manual dispatch; it never runs
-on branches, so local verification is the pre-merge gate.
+locally before merging. `verify:pr` skips a check that already passed with the
+same inputs, so a rerun after a small change is short. `--no-cache` runs every
+selected check (see "Pre-Handoff Check Policy" in `AGENT_CONTRACT.md`). Hosted
+CI runs only on pushes to `main` (only the suites relevant to the merged
+files) and on manual dispatch; it never runs on branches, so local
+verification is the pre-merge gate.
 Documentation-only edits need documentation checks, not every application test.
 Complete relevant checks and fixes before handoff.
 A pre-push git hook (`scripts/hooks/pre-push-checks.mjs`, installed by `pnpm install`

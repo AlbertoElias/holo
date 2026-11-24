@@ -8,7 +8,7 @@
 //
 // A selected step does not run again when the same inputs already passed it,
 // in this worktree or another one (scripts/verify-cache.ts,
-// docs/features/verify-result-cache.md). A viewer Playwright step runs only
+// docs/features/archive/verify-result-cache.md). A viewer Playwright step runs only
 // the spec files that have no pass with the current inputs.
 //
 // Usage: pnpm run verify:pr [-- --full | --dry-run | --no-fetch | --no-cache]

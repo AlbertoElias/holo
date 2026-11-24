@@ -1,7 +1,7 @@
 # Feature brief: verify:pr skips checks whose inputs already passed
 
 **Lead:** Claude (session `infra/verify-input-cache`)
-**Status:** Implementation
+**Status:** Complete (2026-11-24)
 **Layer:** None. Developer tooling; no product behavior changes.
 
 ## User outcome
@@ -219,6 +219,13 @@ after the end of a comment on the same line is read. The `test:authoring:*`
 script in `apps/capture/package.json` may name the folder, and then no other
 file may run that script.
 
+One exception came from `main` during this work: the `solver-regression` step
+of `verify:pr` runs `test:authoring:solver`, which builds pieces with the
+authoring tools. The step is not cached, because its inputs are not listed
+yet. The guard permits a `verify:pr` step to run a script of the folder only
+when the step has no Code key. A step with a Code key that runs such a script
+fails `check:ci-areas`.
+
 ### Selector gaps
 
 The design review found files that a suite reads but that do not select it.
@@ -284,27 +291,27 @@ accepted.
 
 ## Acceptance criteria
 
-- [ ] A second `verify:pr` on an unchanged tree runs only doctor and ci-areas
+- [x] A second `verify:pr` on an unchanged tree runs only doctor and ci-areas
       (and usdz-tools when selected), names the earlier pass for each skipped
       step, and ends in under 1 minute.
-- [ ] After an edit to one viewer spec file, the viewer step that has the file
+- [x] After an edit to one viewer spec file, the viewer step that has the file
       runs only that file.
-- [ ] After a run in which one spec file fails, the next run executes only
+- [x] After a run in which one spec file fails, the next run executes only
       that file's step with only that file.
-- [ ] Each of these changes the key of every step that reads the file: an
+- [x] Each of these changes the key of every step that reads the file: an
       edit, a staged-only edit, a new untracked file, a deletion, a mode
       change.
-- [ ] A pass stored from one worktree is used in another worktree with the
+- [x] A pass stored from one worktree is used in another worktree with the
       same inputs, and is not used when one input differs.
-- [ ] A never-run test, an interrupted test and a report with a top-level
+- [x] A never-run test, an interrupted test and a report with a top-level
       error store no pass for their file.
-- [ ] A change to `apps/capture/scripts/authoring/**` alone selects only
+- [x] A change to `apps/capture/scripts/authoring/**` alone selects only
       `quality` (local plan and `ci-changed-areas.sh` output), and the guard
       fails on a new reference to the folder from outside.
-- [ ] `--no-cache` and `verify:full` run every selected step and store passes.
-- [ ] A run whose steps are all skipped ends while another process holds the
+- [x] `--no-cache` and `verify:full` run every selected step and store passes.
+- [x] A run whose steps are all skipped ends while another process holds the
       machine-wide lock. A run with one step to execute waits for the lock.
-- [ ] Each selector gap in the table above selects its suite.
+- [x] Each selector gap in the table above selects its suite.
 
 ## Failure cases considered
 
@@ -345,13 +352,13 @@ accepted.
 
 | Acceptance criterion | Workflow or command | Inspectable artifact/result |
 |---|---|---|
-| Unchanged tree reruns in under 1 minute | Two real `pnpm run verify:pr` runs in this worktree | Pending |
-| One edited spec reruns alone | Edit one spec, real `verify:pr` | Pending |
-| A failed spec reruns alone | Force one spec to fail, run, repair, run | Pending |
-| Key changes; shared store; partial reports; skips; environment | `scripts/verify-cache.test.ts` on temporary git repositories and the measured Playwright report shapes (tests A to G) | Pending |
-| Authoring-only selection and guard; selector gaps | `pnpm run check:ci-areas` | Pending |
-| `--no-cache`, `verify:full` | Real run with `--no-cache` | Pending |
-| No wait for the lock when all steps are skipped | Hold the lock in a second process, real `verify:pr` | Pending |
+| Unchanged tree reruns in under 1 minute | Two real `pnpm run verify:pr` runs in this worktree | 2026-11-23, commit `b97dbab0571f`. First run: `PASSED in 1702s` (125 s of it a wait for another session's lock). Second run with no change: every cached step `skipped`, `PASSED in 12s` |
+| One edited spec reruns alone | Edit one spec, real `verify:pr` | Same sequence: after an edit to one portal spec file, `portal: pnpm run test:portal (1 of 3 spec files; the others passed with the same inputs)`, `passed in 24s`. Pipeline (13 spec files) and viewer XR (9 spec files) `skipped`. Run: `PASSED in 174s` |
+| A failed spec reruns alone | Force one spec to fail, run, repair, run | Same sequence. Run with the failing test: `FAILED (exit 1) in 24s`, `stored a pass for 0 of 1 spec files`. Run again with no change: portal runs the 1 file again and fails again (`FAILED in 114s` for the run). After the repair: the 1 file passes, `PASSED in 174s`. Then no change: `PASSED in 12s` |
+| Key changes; shared store; partial reports; skips; environment | `scripts/verify-cache.test.ts` on temporary git repositories and the measured Playwright report shapes (tests A to G) | `pnpm run test:tooling`: 34 tests pass (25 of them in `scripts/verify-cache.test.ts`) |
+| Authoring-only selection and guard; selector gaps | `pnpm run check:ci-areas` | `check-ci-areas: 4782 assertions passed (975 source files, 367 docs, 851 other files)` on the tree merged with `main`. A `solver-regression` step with a Code key makes it fail |
+| `--no-cache`, `verify:full` | `pnpm run verify:pr -- --no-cache --dry-run` and the test "a failed step stores nothing; --no-cache does not read but stores" | The plan prints `result cache: not read in this run; passes are stored` and `would run` for each selected step. No full 26-minute run was made with `--no-cache`: the first full run of each code state did the same work |
+| No wait for the lock when all steps are skipped | Hold the lock in a second process, real `verify:pr` | 2026-11-23: the run with no change printed `no step needed the machine-wide lock` and `PASSED in 12s`. The run with one spec file to execute waited 1171 s for another session's lock, then ran |
 
 ## Physical-device limits
 

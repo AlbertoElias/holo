@@ -1,7 +1,7 @@
 // Result cache for verify:pr: a step does not run again when the same inputs
 // already passed it, in this worktree or another one.
 //
-// The rule (docs/features/verify-result-cache.md): the cache only removes
+// The rule (docs/features/archive/verify-result-cache.md): the cache only removes
 // work. verify:pr selects steps from the diff as before; the cache then skips
 // a selected step only when everything the step can read is the same as in a
 // run that passed. When the cache cannot decide, it is off and the step runs.

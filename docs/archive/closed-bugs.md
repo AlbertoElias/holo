@@ -7,7 +7,7 @@ Closed entries moved from `BUGS.md` so the live tracker stays scannable.
 
 - **Area:** `scripts/ci-changed-areas.sh` (the mapping `verify:pr` and hosted CI use), `scripts/check-ci-areas.ts`
 - **Severity:** P2 (a change could merge and deploy without the suite that exercises it; no bad merge is known)
-- **Observed:** 2026-11-23, in the design review of `docs/features/verify-result-cache.md`
+- **Observed:** 2026-11-23, in the design review of `docs/features/archive/verify-result-cache.md`
 - **Evidence:** three kinds of file selected fewer suites than read them. (1) `packages/meaning`,
   `packages/objects`, `packages/avatar-look`, `packages/tooling-scripts` and `packages/config-ts` selected
   only `quality`, but capture, the viewer and the API depend on them. (2) `apps/capture/public/gltf/*` did

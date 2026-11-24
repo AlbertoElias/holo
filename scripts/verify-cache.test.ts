@@ -1,7 +1,7 @@
 // The result cache decides that a check does not need to run. A wrong "skip"
 // is a stale pass: the only failure that matters here. Each test below comes
 // from one way the real system can make a stale pass (the table in
-// docs/features/verify-result-cache.md), on real git repositories and with
+// docs/features/archive/verify-result-cache.md), on real git repositories and with
 // Playwright's JSON report shape as measured for each end state:
 //
 //   A. A change is not seen: an unstaged or staged edit, a new untracked file,
