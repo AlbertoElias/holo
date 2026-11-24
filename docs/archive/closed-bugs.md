@@ -3,6 +3,30 @@
 Closed entries moved from `BUGS.md` so the live tracker stays scannable.
 `BUGS.md` remains the authority for open, verified defects.
 
+### B-090 — Phone tilt check cannot click Return on a loaded runner
+
+- **Area:** `apps/viewer-web/e2e/portal.spec.ts` ("tilt: turning the phone turns the camera, past a small deadzone", line 213)
+- **Severity:** P2 (fails under `CI_EMULATE_LOAD=2`; red hosted `main` run 45269930460 on 2026-11-23)
+- **Observed:** 2026-11-21, while closing B-089
+- **Evidence:** under `CI_EMULATE_LOAD=2`, one worker, the check failed 8 of 8 on `main` (a0ad1998) and 5 of 6
+  after the trials below: `locator.click` on "Return to the author's view" times out ("element is not
+  stable", once "detached from the DOM") until the 60 s test timeout. All other phone checks pass.
+  Tried without success: `pressReach` for both presses (1 of 5 failed: tilt did not turn on after the
+  press), pressing only while tilt is off (3 of 6), and `force: true` on Return (5 of 6).
+- **Suspect:** `usePlayHeldMiddle` (`HologramCard.tsx`) shifts the controls chip on each resize so Play
+  stays centred, and the timecode's width changes while the hologram plays, so Return keeps moving.
+  Not confirmed.
+- **Cause:** the test, not the product (the suspect above was wrong). Under load the portal controls fold
+  (B-043) before the click. Playwright's click then scrolls the control into view again with another
+  alignment; the feed scrolls smoothly, so the glide passes half a card, focus moves to the next card and
+  the tested card resets to Follow with tilt off. A person cannot cause this scroll.
+- **Fix:** 9a73943f (merged in 80afb248): `pressShown` brings the controls out, clicks with no scroll and
+  checks that the press took effect, else it tries again.
+- **Proof:** on `main` 3db0ba1b, the reproduction below with `--repeat-each=5`: 5 of 5 pass (8 of 8 failed
+  before). Hosted runs 45286309843 and the three after it passed the portal job.
+- **Expected:** the check presses Return once Free mode is on, on a loaded runner too.
+- **Reproduction:** `CI_EMULATE_LOAD=2 scripts/ci-emulate.sh env VITE_IWER_SEM_SCENE=office_small XR_TEST_MODE=iwer pnpm --filter @holoim/web exec playwright test e2e/portal.spec.ts -g "past a small deadzone" --repeat-each=6 --workers=1`
+
 ### B-105 — Desktop avatar: the head turns 90° to the side at each stop and in the idle
 
 - **Area:** apps/capture (`scripts/build-mocap-clips.ts`: the `Idle` clip from 113_21; the slice 2 sway action)
