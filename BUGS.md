@@ -44,6 +44,22 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   change moves the left hand off the stone after its grip; for the goodbye, find why the bag fist stays 8° off and
   under the bag (support 0 %). Run `pnpm --filter @holoim/capture run test:authoring:solver` and lower the pins with
   `--write-pins` as each piece improves.
+- **Tried (2026-11-24, stone sD held gap):** the held gap comes from the sheet, not the solver. The 9 cm fist radius
+  on the 24 cm rock puts the left thumb about 10 cm into it. Grip trials on `stone-sD.json` (solver at b9927e89e78e,
+  `solver-regression.ts stone-sD`; the sheet is unchanged after the trials):
+
+  | grip (at, radius) | grip.find (bar 5°) | arms.held.me (pin 109.2 mm) | other rows |
+  |---|---|---|---|
+  | [0,0.06,-0.08], 0.09 (now) | 0.3 mm, 4.5° | 109.2 mm | at the pins |
+  | [0,0.06,-0.08], 0.105 | 0.4 mm, 5.5° X | 92.7 mm | smooth 12 % (pin 19 %), turn.me 514°/s |
+  | [0,0.06,-0.08], 0.11 | 0.4 mm, 5.8° X | 87.0 mm | smooth 10 % |
+  | [0,0.06,-0.08], 0.12 | 0.4 mm, 6.5° X | 76.2 mm | smooth 9 % |
+  | [0,0.04,-0.055], 0.105 | 0.4 mm, 5.9° X | 60.8 mm | turn.me 1584°/s, arms.prop 20 mm |
+  | [0,0.02,-0.03], 0.12 | 2.4 mm, 6.8° X | 44.7 mm | look-at-it 33 mm, turn.me 2145°/s |
+  | [0,0,0], axis x, 0.10 | 80.5 mm, 12.3° X | — | turn.me 5004°/s, jump.props 8.25 m/s |
+
+  Each grip that lowers the held gap puts grip.find over its 5° bar, so no grip edit passes. A fist cannot close
+  around a 24 cm rock. A story change (a smaller stone, or two hands) is the owner's choice, as for the baker.
 - **Stone accepted (2026-11-24):** the owner accepted the stone hold "for now" ("stone is good enough for now").
   No more work on the stone sD hold; its pins stay. The goodbye hold and the baker stay open here.
 
