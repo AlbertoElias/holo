@@ -182,6 +182,15 @@ def garments(human, rig, slots, G):
         if kind == "top":
             ease = np.where(np.isin(used, list(hem_v)), spec["easeHem"], ease)
         ease = ease * smoothstep(0.0, spec["taper"], dist)
+        cuff = spec.get("cuff")
+        if cuff:
+            # The sleeve ends stand off the wrist by `ease` (m): an opening tapered to the skin lets the hand's skin
+            # cross the cloth when the wrist bends, in a saw-tooth line (B-101). The skin goes on under the cuff.
+            wrist = [v for v in boundary if gdom[v].startswith(tuple(cuff["at"]))]
+            dist_w = dijkstra(n, adj, wrist)
+            near = dist_w <= dist + 1e-9
+            s_w = smoothstep(0.0, spec["taper"], dist_w)
+            ease = np.where(near, ease * s_w + cuff["ease"] * (1 - s_w), ease)
         if "soleBelow" in spec:
             # The sole stays on the floor: faces turned down (normal's z under -soleBelow) take no ease.
             ease = ease * smoothstep(-spec["soleBelow"] - 0.3, -spec["soleBelow"], NRM[used, 2])
@@ -203,8 +212,28 @@ def garments(human, rig, slots, G):
                 ease[i] = min(ease[i], spec["gapShare"] * gap)
         pinned = np.zeros(n, dtype=bool)
         pinned[taper] = True
+        if cuff:
+            pinned[wrist] = True
+        under = []
+        if cuff:
+            under = [used[i] for i in range(n) if near[i] and dist_w[i] <= cuff["skinUnder"]]
         ease = smooth(ease[:, None], adj, pinned, 8)[:, 0]  # spread over the surface, so it has no steps
         P = P0 + NRM[used] * ease[:, None]
+        if cuff:
+            # Each sleeve's opening is one ring: a circle on a plane across the forearm, as wide as the widest point
+            # of the opening plus the cuff's ease, so the pinned smoothing that follows makes a clean tube to it.
+            for side in ("Left", "Right"):
+                ring = [i for i in wrist if gdom[i].startswith(side)]
+                if not ring:
+                    continue
+                hand = toMesh @ rig.data.bones[f"{side}Hand"].head_local
+                elbow = toMesh @ rig.data.bones[f"{side}ForeArm"].head_local
+                ax = np.array((hand - elbow).normalized())
+                c = P0[ring].mean(axis=0)
+                rel = P0[ring] - c
+                perp = rel - np.outer(rel @ ax, ax)
+                r = np.linalg.norm(perp, axis=1).max() + cuff["ease"]
+                P[ring] = c + perp / np.linalg.norm(perp, axis=1)[:, None] * r
         if "hang" in spec:
             P = hang(P, P0, gdom, None, toMesh, rig, spec)
         for _ in range(spec["rounds"]):
@@ -228,6 +257,7 @@ def garments(human, rig, slots, G):
                     weights[nm][0].append(i)
                     weights[nm][1].append(g.weight)
         shown = ease[ease > 1e-4]
+        build.under = set(under)
         return P, faces, weights, {"vertices": n, "maxEaseMm": round(float(ease.max()) * 1000, 1),
                                    "meanEaseMm": round(float(shown.mean()) * 1000, 1) if len(shown) else 0.0}
 
@@ -238,6 +268,12 @@ def garments(human, rig, slots, G):
     tb = mesh_bvh(Pt, Ft)
     Pj, Fj, Wj, rj = build(top_f + hem_f, G["top"], "top", [(tb, G["top"]["overTrousers"])])
     jumper = skinned("HouseBase_Jumper", Pj, Fj, Wj, [me.materials[ti]], rig, human)
+    # The body's faces under the cuffs stay, as skin, so no hole shows inside the sleeve's end.
+    keep = [k for k in top_f if all(v in build.under for v in polys[k])]
+    for k in keep:
+        me.polygons[k].material_index = slots.index("skin")
+    keep = set(keep)
+    top_f = [k for k in top_f if k not in keep]
     worn, report = [jumper, trousers], {"jumper": rj, "trousers": rt, "hemFaces": len(hem_f)}
     if sh_f:
         # Shoes: the feet eased out and smoothed into one rounded shape (no toes), under the trouser hems.
