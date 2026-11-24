@@ -1,7 +1,7 @@
 # Feature brief: lint with Oxlint, typecheck with the native compiler
 
 **Lead:** Claude (session `infra/oxlint-tsgo`)
-**Status:** Reviewed
+**Status:** Delivered 2026-11-24
 **Layer:** None. Developer tooling; no product behavior changes.
 
 ## User outcome
