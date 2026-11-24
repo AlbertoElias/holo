@@ -36,24 +36,35 @@ it from the item below instead of duplicating its status here.
 
 - [ ] VR arms, the gaps left by <!-- T-18dd51 -->
   [`docs/features/archive/vr-arm-natural.md`](docs/features/archive/vr-arm-natural.md):
-  the chest does not lean toward a far target (`VrBodySolver`), so a reach
-  past the arm still leaves the wrist up to 12 cm short on controllers and
-  about 1 cm short on the Quest hand take; a wrist behind the back lies
-  outside the recorded arms, and hands put the elbow up there (swivel −169°)
-  while controllers do not; the overall arms-check gates also apply to a
-  partial `ARM_REACH_ONLY` run, and the hand-replay swivel bar (0°–70°) may
-  not suit a future take of mostly overhead reaches. The owner checks the elbows at rest, on
-  reaches and on a full controller reach on a Quest 3.
+  the chest now leans toward a reach past the arm (2026-11-24,
+  [`vr-motion-gaps.md`](docs/features/archive/vr-motion-gaps.md); the limits are
+  pending owner confirmation), and a partial `ARM_REACH_ONLY` run judges only
+  its own segments. Still open: with a still head the controller wrist stays
+  10–11 cm short on the far forward and overhead reaches (the hand 3–4 cm;
+  a larger bend would move the avatar's head off the tracked head); a wrist
+  behind the back lies outside the recorded arms, where hands put the elbow up
+  (swivel 157°) and controllers do not (80°, the more natural pose for a back
+  pocket), and both flip twice there, which fails the arms check's flip gate
+  on `main` too; the overall clavicle elevation range reads 36° (bar 30); the
+  hand-replay swivel bar (0°–70°) may not suit a future take of mostly overhead
+  reaches. The owner checks the elbows at rest, on reaches and on a full
+  controller reach on a Quest 3.
 
 - [ ] Recorded VR walk, the gaps left by <!-- T-3be7a9 -->
   [`docs/features/archive/vr-recorded-walk.md`](docs/features/archive/vr-recorded-walk.md)
-  (see its Deviations): the stick-walk stance share (0.55 against the desktop
-  0.46; the toe pivots too long at push-off), the walk-start, back → stop and
-  crouch → crouch-walk transition peaks above the baseline, the house avatar's
-  knee swing (16° under its desktop walk), the turn-walk knee (48°), the
-  head-walk mid-stance knee (42°, limit 40), and a crouch-walk gait window
-  long enough to measure. The owner also checks a room-scale walk and a stick
-  walk on a Quest.
+  (see its Deviations). Checked 2026-11-24
+  ([`vr-motion-gaps.md`](docs/features/archive/vr-motion-gaps.md)); none is
+  closed. The motion-audit harness that measured them is gone, so a gait check
+  for the VR walks comes first (a 9 s forward walk read by `measureGait` gives
+  the head-walk mid-stance knee 42.1°, as the audit did). Open: the stick-walk
+  stance share (0.62 / 0.54 in that reading, against the desktop 0.46; a
+  shorter push-off hold or lift ease moves it by 0.01 only, so the cause is the
+  lift timing, not the toe pivot); the walk-start, back → stop and crouch →
+  crouch-walk transition peaks above the baseline, the house avatar's knee
+  swing (16° under its desktop walk), the turn-walk knee (48°) and a
+  crouch-walk gait window long enough to measure (all need the audit's walks:
+  no check records them now); the head-walk mid-stance knee (42°, limit 40).
+  The owner also checks a room-scale walk and a stick walk on a Quest.
 
 - [x] Realistic avatar motion, slice 2 (follow-up to <!-- T-fca791 -->
   [`docs/features/realistic-avatar-motion.md`](docs/features/realistic-avatar-motion.md)):

@@ -65,6 +65,31 @@ export interface WalkTrajectory {
 
 export const WALK_TRAJECTORY_SAMPLES = 96;
 
+// The clip's hips dip sharply at each heel strike (the impact in the mocap). Laid under a VR body, that dip and the
+// pelvis reach drop meet at the landing and read as a one-frame drop (B-087: 13–16 m/s² against a 2–4 m/s² stick
+// walk). A Gaussian over this many samples (σ, about 6% of the cycle) rounds its bottom; the stick walk's bob stays
+// about 3 cm deep, and its peak falls under 10 m/s².
+// The desktop walk plays the clip's own hips, unchanged.
+const WALK_BOB_SMOOTH_SAMPLES = 6;
+
+/** Circular Gaussian smoothing of a per-phase array (`sigma` in samples). */
+function smoothCircular(values: Float32Array, sigma: number): Float32Array {
+  const n = values.length;
+  const reach = Math.ceil(3 * sigma);
+  const out = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    let sum = 0;
+    let weight = 0;
+    for (let k = -reach; k <= reach; k++) {
+      const w = Math.exp(-(k * k) / (2 * sigma * sigma));
+      sum += values[(((i + k) % n) + n) % n]! * w;
+      weight += w;
+    }
+    out[i] = sum / weight;
+  }
+  return out;
+}
+
 /** Linear interpolation of a per-phase trajectory array, circular in phase (0..1). */
 export function sampleWalkTrajectory(values: Float32Array, phase: number): number {
   const n = values.length;
@@ -896,7 +921,7 @@ export class LocomotionAnimator {
       gait, duration,
       stanceSpeed: stanceSpeed / restHips,
       legs,
-      bob: Float32Array.from(hipsYs, (y) => (y - top) / restHips)
+      bob: smoothCircular(Float32Array.from(hipsYs, (y) => (y - top) / restHips), WALK_BOB_SMOOTH_SAMPLES)
     };
   }
 

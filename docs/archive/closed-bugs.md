@@ -3,6 +3,26 @@
 Closed entries moved from `BUGS.md` so the live tracker stays scannable.
 `BUGS.md` remains the authority for open, verified defects.
 
+### B-087 — VR head walk: the pelvis drops in one frame at each foot landing
+
+- **Area:** apps/capture (`VrBodySolver` pelvis height in the gait)
+- **Severity:** P3 (found by measurement, not yet seen by the owner)
+- **Observed:** 2026-11-20, on `bug/vr-legs-direction`
+- **Evidence:** `test:xr:walk-direction`, head rows, with the head moved on every XR frame. In the steady walk the hips'
+  vertical acceleration averages 1.8–4.1 m/s², but single frames at a foot landing reach 12.8 (forward), 20.7 (left),
+  16.8 (back), 20.2 (right), 18.8 and 18.6 m/s² (diagonals). The head bobs smoothly (2 cm).
+- **Expected:** the pelvis rises and falls smoothly with the stride, with no single-frame drop.
+- **Reproduction:** `pnpm --filter @holoim/capture run test:xr:walk-direction`, then the hips' vertical second
+  difference against the sample time `t` in `output/ci-walk-direction/head-samples.json`.
+- **Cause:** when the trailing planted foot ran out of reach before push-off, the pelvis reach drop's target jumped
+  about 3 cm, and its first-order ease (0.06 s) made the pelvis speed jump. On the stick walk, the recorded hips
+  bob's sharp heel-strike dip added to it.
+- **Fix:** the reach drop follows its target on a critically damped spring (ω 14 rad/s), and the recorded bob that
+  only the VR solver reads is smoothed (circular Gaussian, σ 6 samples). The walk-direction check fails a phase
+  whose hips move more than 12 m/s² up or down in one frame.
+- **Proof:** head 14.0–20.0 → 3.4–5.3 m/s², stick 16.3–27.2 → 4.4–9.7 m/s²; the new gate fails all 12 rows on the
+  old solver. Brief: `docs/features/archive/vr-motion-gaps.md`.
+
 ### B-110 — verify:pr lock: waiters do not get the lock in arrival order
 
 - **Area:** `scripts/verify-lock.ts` (the machine-wide lock of `verify:pr` and `scripts/ci-emulate.sh`)

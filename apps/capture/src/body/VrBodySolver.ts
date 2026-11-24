@@ -107,6 +107,8 @@ export interface BodySolverDebug {
   steps: number;
   // Steps laid on the recorded walk (a subset of steps).
   recordedSteps: number;
+  // The pelvis drop that keeps planted feet in reach (metres, eased).
+  pelvisReachDrop: number;
   feet: Record<'left' | 'right', { swinging: boolean; planted: [number, number, number] }>;
 }
 
@@ -222,7 +224,12 @@ const NECK_HEAD_SHARE = 0.4;
 const PELVIS_PASSES = 5;
 const SPINE_LEAN_PASSES = 3;
 const MAX_PELVIS_REACH_DROP = 0.05;
-const PELVIS_REACH_DROP_TIME_SEC = 0.06;
+// The reach drop follows its target on a critically damped spring of this
+// angular frequency (rad/s), so the pelvis speed never jumps. A first-order
+// ease (0.06 s) moved the pelvis 3 cm in two frames when the trailing foot ran
+// out of reach before push-off: 13–27 m/s² single-frame peaks against a 2–4
+// m/s² walk (B-087). At 14 rad/s a 3 cm drop starts at under 6 m/s².
+const PELVIS_REACH_DROP_OMEGA = 14;
 const PELVIS_HOLD_STEP_METERS = 0.01;
 // Feet tuck this far (leg lengths) above the capsule's floor level in the air.
 const AIRBORNE_FOOT_TUCK = 0.08;
@@ -358,6 +365,7 @@ export class VrBodySolver {
   private readonly swingGroundNormal = new THREE.Vector3();
   private headSpeed = 0;
   private pelvisReachDrop = 0;
+  private pelvisReachDropSpeed = 0;
   private leanDrop = 0;
   private lastDt = 1 / 60;
   private standingHeadHeight = 0;
@@ -834,6 +842,7 @@ export class VrBodySolver {
       bodyYaw: this.bodyYawValue,
       steps: this.stepCount,
       recordedSteps: this.recordedStepCount,
+      pelvisReachDrop: this.pelvisReachDrop,
       feet: { left: foot('left'), right: foot('right') }
     };
   }
@@ -1423,7 +1432,7 @@ export class VrBodySolver {
     // Only a few centimetres, eased: a foot further out than that has to
     // step instead.
     const wantedDrop = this.faults.has('feet-float') || this.airborne ? 0 : clamp(this.pelvisExcessOverFeet(), 0, MAX_PELVIS_REACH_DROP * leg);
-    this.pelvisReachDrop += (wantedDrop - this.pelvisReachDrop) * (1 - Math.exp(-this.lastDt / PELVIS_REACH_DROP_TIME_SEC));
+    this.easePelvisReachDrop(wantedDrop, MAX_PELVIS_REACH_DROP * leg);
     if (this.pelvisReachDrop > 1e-4) {
       hips.y -= this.pelvisReachDrop;
       this.placeHips(hips);
@@ -1438,6 +1447,21 @@ export class VrBodySolver {
 
     for (const side of ['left', 'right'] as const) this.poseLeg(side, rootQuat);
     this.avatarRig.avatar?.updateMatrixWorld(true);
+  }
+
+  // Critically damped spring toward the wanted drop (exact step for a target held over the frame).
+  private easePelvisReachDrop(wanted: number, max: number): void {
+    const omega = PELVIS_REACH_DROP_OMEGA;
+    const dt = this.lastDt;
+    const offset = this.pelvisReachDrop - wanted;
+    const decay = Math.exp(-omega * dt);
+    const impulse = (this.pelvisReachDropSpeed + omega * offset) * dt;
+    this.pelvisReachDropSpeed = (this.pelvisReachDropSpeed - omega * impulse) * decay;
+    this.pelvisReachDrop = wanted + (offset + impulse) * decay;
+    if (this.pelvisReachDrop < 0 || this.pelvisReachDrop > max) {
+      this.pelvisReachDrop = clamp(this.pelvisReachDrop, 0, max);
+      this.pelvisReachDropSpeed = 0;
+    }
   }
 
   // How far the hip joints sit above where planted feet can reach them.
