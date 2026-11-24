@@ -168,6 +168,11 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Reproduction:** `scripts/ci-emulate.sh bash -c "cd apps/viewer-web && VITE_IWER_SEM_SCENE=office_small XR_TEST_MODE=iwer pnpm exec playwright test e2e/deep-zoom.spec.ts --workers=1 --repeat-each=5"`
   with no extra load fails at line 241 in 5 of 5 runs on 9cc877c5 and 4 of 5 on 22199d76. On a Mac it passes.
   So the failure is in the code before 22199d76; the render-order change there (avatar see-through parts) is not the cause.
+- **Seen in the same job, a different test (2026-11-24):** hosted run 45340950168 (8107f752, a tooling-only merge),
+  attempt 1. `portal.pipeline.spec.ts:120`: after two wheel steps on a point of the hologram, the camera distance
+  stayed 7.14 (expected the inside distance, 1.6) for the 10 s of the poll. `deep-zoom.spec.ts` passed in that
+  attempt. Attempt 2 of the same commit passed the job, and four local runs of the file passed that day. It is
+  possibly the same cause (a wheel on the hologram that the slow runner does not take as a zoom); not examined.
 
 ### B-100 — Authored crouch: the right arm steps about 8 mm in one frame as the take starts (1.73 s)
 
