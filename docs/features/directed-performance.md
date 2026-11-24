@@ -4509,7 +4509,7 @@ the hips to 0.08 m (B-086). The `object` suite's other failures are on
 
 **Emulation only.** None of this was seen on a headset or a phone.
 
-### Slice 5a evidence (2026-11-23): built, at the owner's gate
+### Slice 5a evidence (2026-11-23): built; approved and merged 2026-11-24
 
 `photo-look.ts` (in `apps/capture/scripts/authoring/`) and the read in
 `packages/avatar-look` (`photo.ts` for the arithmetic, `read.ts` for the
@@ -4701,6 +4701,20 @@ lighter clay porcelain swatch.
 `photo-look.ts` runs, the card and `compare.jpg` come out, `direct.ts`
 builds `sheets/expressions.json` with its performer in that card, and the
 take plays. It is not linked from here.
+
+**Approval (2026-11-24).** After the contact sheet and the proof video,
+the owner said: "Approve, merge". Slice 5a merged into `main` that day.
+
+**Follow-ups (open, not fixed in this merge).**
+
+- The clay still renders light the skin at about 30% of its colour, so
+  porcelain shows as mid-brown (see "Why the clay face looks darker than
+  the swatch" above). The owner has not chosen a fix: more light in the
+  renders, or a lighter swatch.
+- The light finish makes all skin tones look pale. On the contact sheet,
+  D000096 (umber) looks pale.
+- The default skin (caramel) is darker than a pale person whose read
+  fails, for example Schumer.
 
 ## Physical-device limits
 
