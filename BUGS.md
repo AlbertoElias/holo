@@ -44,6 +44,8 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   change moves the left hand off the stone after its grip; for the goodbye, find why the bag fist stays 8° off and
   under the bag (support 0 %). Run `pnpm --filter @holoim/capture run test:authoring:solver` and lower the pins with
   `--write-pins` as each piece improves.
+- **Stone accepted (2026-11-24):** the owner accepted the stone hold "for now" ("stone is good enough for now").
+  No more work on the stone sD hold; its pins stay. The goodbye hold and the baker stay open here.
 
 ### B-091 — verify:pr: the pipeline Playwright run does not exit after test timeouts
 
