@@ -64,37 +64,37 @@ not reachable while a take runs.
 
 ## Acceptance criteria
 
-- [ ] On a phone viewport, with the house avatar, the look panel opens
+- [x] On a phone viewport, with the house avatar, the look panel opens
   before the first Record in the selfie journey, and each trait change shows
   on the live avatar (the right hair mesh, the right colours) without a page
   reload.
-- [ ] The posted take's GLB carries the chosen look: the chosen hair and
+- [x] The posted take's GLB carries the chosen look: the chosen hair and
   glasses meshes only, the card's colours on the skin, iris, hair, top and
   trousers materials, and the card and finish in the avatar's extras.
-- [ ] The feed card and the viewer show that look (screenshot of the feed
+- [x] The feed card and the viewer show that look (screenshot of the feed
   card).
-- [ ] A reload, or the next take, starts with the saved look; `?look=` and
+- [x] A reload, or the next take, starts with the saved look; `?look=` and
   `?finish=` override it; a bad value is ignored with a console warning, not
   a failure.
-- [ ] Changing the hairstyle does not change the avatar's fitted height or
+- [x] Changing the hairstyle does not change the avatar's fitted height or
   eye height.
-- [ ] The phone journey keeps its time: capture load with a saved look is
+- [x] The phone journey keeps its time: capture load with a saved look is
   no more than 1.5 s slower than without one in the e2e.
-- [ ] The stock avatar and `?avatar=` outside avatars show no Look control
+- [x] The stock avatar and `?avatar=` outside avatars show no Look control
   and behave as before.
-- [ ] Desktop (a 1280 × 800 viewport) sets a look, records and posts it in
+- [x] Desktop (a 1280 × 800 viewport) sets a look, records and posts it in
   the same journey.
 - [x] Slice 2: in the IWER headset harness, the look panel beside the mirror
   changes the look, and the take carries it.
-- [ ] A live change from clay to ink, then a take: the posted GLB has face
+- [x] A live change from clay to ink, then a take: the posted GLB has face
   morph tracks, one skeleton (every skin names the same joint nodes, and
   no bone is there twice), and no leftover meshes.
-- [ ] After a live build change, the skinned vertices are within 3 mm of a
+- [x] After a live build change, the skinned vertices are within 3 mm of a
   fresh load of the same look.
-- [ ] Twelve look changes do not grow `renderer.info.memory`.
-- [ ] Feed card screenshots in the clay, ink and light finishes; an ink take
+- [x] Twelve look changes do not grow `renderer.info.memory`.
+- [x] Feed card screenshots in the clay, ink and light finishes; an ink take
   stays under the upload cap.
-- [ ] Quick Look conversion passes on posted ink and light takes, and on a
+- [x] Quick Look conversion passes on posted ink and light takes, and on a
   take recorded after a live build change.
 
 ## Failure cases considered
