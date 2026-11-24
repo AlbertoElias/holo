@@ -7,6 +7,18 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
+### B-111 — Viewer browser shard hits its 10-minute limit when the Playwright cache misses and apt is slow (once)
+
+- **Area:** CI (`.github/actions/setup`, job "Viewer and Knowledge browser checks")
+- **Severity:** P3 (CI flake; no product effect)
+- **Observed:** 2026-11-24, hosted run 45330508669 (af3e48fa), attempt 1, shard 2/4: the job was cancelled at
+  `timeout-minutes: 10`. The Playwright Chromium cache missed, and `playwright install --with-deps chromium`
+  took about 7 minutes on a slow apt mirror, so the tests did not finish. Attempt 2 passed.
+- **Expected:** a cache miss costs at most a few minutes and never takes a shard past its limit.
+- **Reproduction:** not reproduced; it needs a cold Playwright cache and a slow Ubuntu mirror at the same time.
+  `scripts/ci-apt.sh 240` bounds only the apt part with a fallback mirror (B-024).
+- **Found by:** the first-attempt failure count in `docs/features/hosted-branch-gate.md`.
+
 ### B-107 — Quick Look check: the cloche refit is 9 cm off the baked cloche on one walk take (once)
 
 - **Area:** apps/viewer-api/tools (`glb_to_usdz.py` `fit_points`, `inspect_usdz.py` cloche refit)
@@ -163,8 +175,8 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   (44826449489, 12b0a45) passed the same job. caf7cad holds the performer floor (85ee704b62ba, B-083), which
   changes the card's camera fit, so a slow fit is a suspect.
 - **Expected:** the wheel gesture that stops at the inside end leaves the camera in free mode on every run.
-- **Observed again:** 2026-11-23, hosted runs 45195106971 (22199d76) and the run on 79475539, same job and line.
-  Later runs on `main` passed it.
+- **Observed again:** 2026-11-23, hosted run 45195106971 (22199d76), same job and line. Later runs on `main` passed it.
+  (An earlier line also named run 45269930460 on 79475539; its log shows `portal.spec.ts:214`, which is B-090.)
 - **Reproduction:** `scripts/ci-emulate.sh bash -c "cd apps/viewer-web && VITE_IWER_SEM_SCENE=office_small XR_TEST_MODE=iwer pnpm exec playwright test e2e/deep-zoom.spec.ts --workers=1 --repeat-each=5"`
   with no extra load fails at line 241 in 5 of 5 runs on 9cc877c5 and 4 of 5 on 22199d76. On a Mac it passes.
   So the failure is in the code before 22199d76; the render-order change there (avatar see-through parts) is not the cause.

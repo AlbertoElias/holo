@@ -73,10 +73,12 @@ Run automation from these scripts unless a task explicitly requires lower-level 
   docs-only pushes skip. Bypass only with `git push --no-verify`.
 - For documentation-only changes, check the edited content and references; do not
   run application suites solely because a Markdown file changed.
-- Required before merging into `main`: run `pnpm run verify:pr` locally. Hosted
-  CI does not run on branches, so this local run is the pre-merge gate; do not dispatch hosted CI to substitute for it.
-  Hosted CI is only the final check on `main` before deployment: never use it
-  to reproduce, debug or verify a change.
+- Required before merging into `main`: pass one pre-merge gate, either
+  `pnpm run verify:pr` locally or `pnpm run verify:hosted` (see "Hosted
+  gate" below). Do not dispatch hosted CI to substitute for either. Never use
+  hosted CI to reproduce or debug a change: after a red gate run, reproduce
+  the failure locally (`scripts/ci-emulate.sh`), fix it, and run the gate
+  again.
 
 ### Emulating CI
 
@@ -115,7 +117,7 @@ timer) fails here instead of on hosted CI, the cause of most CI flakes so far.
 Prove a flake fix with `CI_EMULATE_LOAD=2` and `--repeat-each=5` or more. The container is a
 close emulation, not the runner image: a failure that reproduces only on
 hosted CI is still a defect to explain, not something to rerun.
-- `pnpm run verify:pr` is the pre-merge gate. It runs only the suites the change
+- `pnpm run verify:pr` is the local pre-merge gate. It runs only the suites the change
   can affect: `scripts/verify-pr.ts` fetches `origin/main`, takes every file that
   differs from the merge-base (commits, uncommitted and untracked), and maps
   them with `scripts/ci-changed-areas.sh`, the mapping hosted CI uses. Doctor
@@ -181,8 +183,9 @@ before pushing. Measured locally on Node 24 (M-series, shared machine):
 | One replay fixture | `XR_REPLAY_ONLY=walk-forward pnpm --filter @holoim/capture run test:xr:body` | ~25 s |
 | All capture XR checks | `pnpm run test:xr:capture` (checks run in parallel) | ~1.5 min |
 | Body fault matrix | `BODY_REPLAY_FAULTS=1 pnpm --filter @holoim/capture run test:xr:body` (`BODY_REPLAY_FAULT=<name>` for one) | ~2 min |
+| Hosted gate (pre-merge) | `pnpm run verify:hosted` (in the background) | local fast checks, then the hosted jobs for the changed areas |
 | Hosted CI (manual, full) | `gh workflow run CI --ref main` | ~3.5–4.5 min |
-| Hosted CI (push to main) | automatic on merge/push | only suites for the changed areas; docs-only runs no suites |
+| Hosted CI (push to main) | automatic on merge/push | only suites for the changed areas, minus suites a green gate run passed on the same tree; docs-only runs no suites |
 
 - Run anything that can pass two minutes (the full XR suite, `verify:pr`,
   CI) in the background and wait for its completion notice. To wait on CI, run
@@ -330,15 +333,15 @@ holograms to the agent account (dry run without `--apply`). Background:
 | Agent edit loop | `pnpm run verify:agent` |
 | API upload or GLTF contract change | `pnpm run verify:agent` + `pnpm run test:smoke:pipeline` (real capture export → upload → viewer render) |
 | XR behavior change | `pnpm run verify:agent` + `pnpm run verify:xr` |
-| Pre-merge | `pnpm run verify:pr` locally (hosted CI does not run on branches) |
+| Pre-merge | `pnpm run verify:pr` locally, or `pnpm run verify:hosted` |
 
 ## CI Contract
 
 - `.github/workflows/ci.yml` exposes one stable check on main: `CI Gate`.
-  It triggers only on pushes to `main` and on manual dispatch — never on
-  branches. Agents verify locally instead:
-  `pnpm run verify:agent` in the edit loop and `pnpm run verify:pr` before
-  merging (see Pre-Handoff Check Policy).
+  It triggers on pushes to `main`, on pushes to `gate/<tree>` refs (the
+  hosted gate) and on manual dispatch, never on other branches. Agents use
+  `pnpm run verify:agent` in the edit loop and `pnpm run verify:pr` or
+  `pnpm run verify:hosted` before merging (see Pre-Handoff Check Policy).
 - On a push to `main`, a `changes` job (`scripts/ci-changed-areas.sh`,
   diffing from the last successful CI run on `main` found by
   `scripts/ci-push-base.sh`, falling back to the push's `before`) selects
@@ -355,12 +358,32 @@ holograms to the agent account (dry run without `--apply`). Background:
   deploy. `pnpm-lock.yaml`, shared packages (`contracts`, `tooling-testing`,
   `ui-dom`, `xr-*`) and unclassified
   files select every suite (fail closed). The `changes` job runs the
-  selection scripts on every push; to exercise an edited CI job, dispatch
-  CI manually, which always runs every suite. Jobs share
+  selection scripts on every push; to exercise an edited CI job, run the
+  hosted gate (`pnpm run verify:hosted`), which runs the jobs your change
+  selects, or dispatch CI manually, which always runs every suite. Jobs share
   `.github/actions/setup` (pnpm, Node, install, Prisma, cached Playwright
   Chromium). Wall time follows the slowest selected job, not their sum.
   There is no separate heavy tier and no weekly schedule; dispatch CI
   manually to check runner-image or dependency drift on unchanged code.
+- Hosted gate: `pnpm run verify:hosted` (`scripts/verify-hosted.ts`,
+  design in `docs/features/hosted-branch-gate.md`). It needs a committed,
+  clean tree on a branch. It runs doctor, `check:ci-areas`, lint and
+  typecheck, unit tests and (when `verify:pr` would) the solver regression
+  for the changed areas, with the `verify:pr` result cache and no lock. Then
+  it pushes the branch and `refs/heads/gate/<tree>`: the branch merged with
+  `origin/main` (origin/main first parent, "Merge branch '<branch>'"), or
+  `HEAD` when it already holds `origin/main`. The gate run selects the suites
+  that `main` would select, never deploys and never builds the API image. The
+  command waits by itself, prints one line per finished job, then PASSED or
+  FAILED with the failed jobs and the failed test lines, and writes
+  `output/verify-hosted.json` and `output/verify-hosted.exit` (0 pass,
+  1 fail, 2 setup error). It deletes the gate ref and its Actions caches at
+  the end. Run it in the background and wait for it to exit. On PASSED, land
+  the exact commit it printed (`git merge --ff-only <commit>` in the main
+  checkout, then push): the push to `main` then skips each suite that the
+  gate run passed on the same tree within 24 hours
+  (`scripts/ci-gate-reuse.sh`); the CI Gate summary names the gate run. If
+  `main` moved, merge again; the tree is new and the suites run on `main`.
 - Deploy runs inside `ci.yml` on `main`: each app deploys as soon as every
   suite that exercises it has passed (API ← quality, pipeline, portal;
   viewer ← quality, viewer e2e and VR, pipeline, portal; capture ← quality,
