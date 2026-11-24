@@ -449,6 +449,11 @@ production and needs the owner's word.
   clothing colours or garments, so say so rather than inventing one.
   `house:clay`, `house:ink` and `house:light` are three finishes of the same
   avatar.
+- **A look from a photo.** `photo-look.ts <photo>` reads skin, hair colour
+  and eye colour from a photo into a card, and proposes a hair style. Use
+  only the author's own photo: the tool cannot check who is in it. Never
+  use a photo of another person. Show the author `compare.jpg` and let the
+  author confirm or change each value before the card goes into a sheet.
 
 Everything else (sound and speech, a recorded take as the base, the
 six-second test, every field) is in `apps/capture/scripts/authoring/README.md`.

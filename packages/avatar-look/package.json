@@ -6,7 +6,8 @@
   "main": "./dist/index.js",
   "types": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./read": "./src/read.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -17,7 +18,8 @@
     "verify:full": "pnpm run verify:fast && pnpm run test && pnpm run build"
   },
   "dependencies": {
-    "@gltf-transform/core": "4.3.0"
+    "@gltf-transform/core": "4.3.0",
+    "@mediapipe/tasks-vision": "0.10.17"
   },
   "devDependencies": {
     "@holoim/config-eslint": "workspace:*",
