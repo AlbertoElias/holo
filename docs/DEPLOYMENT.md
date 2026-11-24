@@ -20,8 +20,8 @@ afterwards. Required secrets, in the GitHub environment `production`
 environment): `FLY_API_TOKEN` (a Fly deploy token scoped to `holoim-api`),
 `CLOUDFLARE_API_TOKEN` (scoped token with Cloudflare Pages edit
 permission), and `CLOUDFLARE_ACCOUNT_ID`. Manual redeploys: Actions →
-Deploy → Run workflow on `main` (`.github/workflows/deploy.yml`, which runs
-on no other ref); a rollback is a revert on `main`. The manual steps below remain
+Deploy → Run workflow on `main` (`.github/workflows/deploy.yml`; on another
+ref, a dispatch starts a run, but every job in it skips); a rollback is a revert on `main`. The manual steps below remain
 the fallback and the way the accounts/projects were first created.
 
 ## 0. Accounts and CLIs (one-time, operator)

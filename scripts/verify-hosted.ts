@@ -201,21 +201,34 @@ function gateCommit(branch: string): { commit: string; tree: string; merged: boo
   return { commit, tree, merged: true };
 }
 
-function listRuns(ref: string): Run[] {
-  const fields = "attempt,conclusion,databaseId,headSha,status,url";
-  return JSON.parse(gh("run", "list", "--workflow", "ci.yml", "--branch", ref, "--event", "push", "--limit", "5", "--json", fields)) as Run[];
-}
-
-function viewRun(id: number): Run {
-  return JSON.parse(gh("run", "view", String(id), "--json", "attempt,conclusion,databaseId,headSha,jobs,status,url")) as Run;
-}
-
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms)); // wall-clock: waits on GitHub between status reads
 
-async function findRun(ref: string, commit: string): Promise<Run> {
+/** A status read from GitHub, tried 3 times: one network or 5xx error must not end a long wait. */
+async function ghJson<T>(...args: string[]): Promise<T> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return JSON.parse(gh(...args)) as T;
+    } catch (error) {
+      if (attempt >= 3) throw error instanceof GateError ? error : new GateError(`gh ${args.join(" ")}: ${String(error)}`);
+      log(`gh ${args[0]} ${args[1]} failed (try ${attempt} of 3); trying again in 10s`);
+      await sleep(10_000);
+    }
+  }
+}
+
+function listRuns(ref: string): Promise<Run[]> {
+  const fields = "attempt,conclusion,databaseId,headSha,status,url";
+  return ghJson<Run[]>("run", "list", "--workflow", "ci.yml", "--branch", ref, "--event", "push", "--limit", "5", "--json", fields);
+}
+
+function viewRun(id: number): Promise<Run> {
+  return ghJson<Run>("run", "view", String(id), "--json", "attempt,conclusion,databaseId,headSha,jobs,status,url");
+}
+
+async function findRun(ref: string, commit: string, older: Set<number>): Promise<Run> {
   const started = Date.now();
   while (Date.now() - started < RUN_APPEARS_MS) {
-    const found = listRuns(ref).find((candidate) => candidate.headSha === commit);
+    const found = (await listRuns(ref)).find((candidate) => candidate.headSha === commit && !older.has(candidate.databaseId));
     if (found) return found;
     await sleep(5_000);
   }
@@ -233,7 +246,7 @@ const reported = new Set<string>();
 
 async function waitForRun(id: number, started: number): Promise<Run> {
   for (;;) {
-    const current = viewRun(id);
+    const current = await viewRun(id);
     for (const job of current.jobs) {
       const key = `${job.name}@${job.startedAt ?? ""}`;
       if (job.status !== "completed" || reported.has(key)) continue;
@@ -286,7 +299,7 @@ async function rerunFailed(previous: Run): Promise<void> {
   run("gh", ["run", "rerun", String(previous.databaseId), "--failed"]);
   const started = Date.now();
   while (Date.now() - started < RUN_APPEARS_MS) {
-    if (viewRun(previous.databaseId).attempt > previous.attempt) return;
+    if ((await viewRun(previous.databaseId)).attempt > previous.attempt) return;
     await sleep(5_000);
   }
   throw new GateError(`the rerun of run ${previous.databaseId} did not start within ${RUN_APPEARS_MS / 1000}s`);
@@ -301,7 +314,7 @@ function reportFailures(current: Run): string[] {
     const lines = logs.code === 0 ? failedTestLines(logs.out) : [];
     if (lines.length === 0) log("    (no failed test line in the log; open the job)");
     for (const line of lines) log(`    ${line}`);
-    summary.push(`${job.name}: ${lines[0] ?? job.conclusion}`);
+    summary.push(`${job.name}: ${lines.find((line) => !line.startsWith("##[error]")) ?? lines[0] ?? job.conclusion}`);
   }
   return summary;
 }
@@ -325,6 +338,14 @@ async function main(): Promise<void> {
   let status = 1;
   // Set once the gate ref is on the remote: every exit path from then on deletes it.
   let gateRef: string | null = null;
+  for (const signal of ["SIGINT", "SIGTERM"] as const) {
+    process.once(signal, () => {
+      log(`${signal}: stopping`);
+      if (gateRef) cleanUp(gateRef);
+      writeFileSync(exitFile, "2\n", "utf8");
+      process.exit(2);
+    });
+  }
   try {
     const branch = preflight();
     run("git", ["fetch", "--quiet", "origin", "main"]);
@@ -345,19 +366,25 @@ async function main(): Promise<void> {
     if (!args.has("--no-local")) await localChecks(areas);
     log(`local checks done in ${elapsed(started)}`);
 
-    let current = listRuns(ref).find((candidate) => candidate.headSha === commit);
+    // A run of this commit that is running or green is the result. After a red
+    // run, a new run starts: the agent fixed something outside the tree (an
+    // outage, a runner problem) or wants the result again.
+    const earlier = (await listRuns(ref)).filter((candidate) => candidate.headSha === commit);
+    let current = earlier.find((candidate) => candidate.status !== "completed" || candidate.conclusion === "success");
     if (current) {
       log(`run ${current.databaseId} already tested this commit: ${current.url}`);
     } else {
+      if (earlier.length > 0) log(`run ${earlier[0]!.databaseId} of this commit was red (${earlier[0]!.conclusion}); starting a new run`);
       const remote = run("git", ["ls-remote", "origin", `refs/heads/${ref}`]).out.split("\t")[0]?.trim();
       if (remote && remote !== commit) {
         throw new GateError(`${ref} already holds ${remote.slice(0, 12)}, another commit of this tree (another gate is running it); wait for it, or delete the ref when that gate is gone`);
       }
       // One push for both refs; the local checks above ran more than the pre-push hook would.
-      gateRef = ref;
-      run("git", ["push", "--no-verify", "--quiet", "origin", `HEAD:refs/heads/${branch}`, `${commit}:refs/heads/${ref}`]);
+      // Atomic: when the branch push is refused (a rewritten branch), no gate ref
+      // is made and no run starts.
+      run("git", ["push", "--atomic", "--no-verify", "--quiet", "origin", `HEAD:refs/heads/${branch}`, `${commit}:refs/heads/${ref}`]);
       log(`pushed ${branch} and ${ref}`);
-      current = await findRun(ref, commit);
+      current = await findRun(ref, commit, new Set(earlier.map((candidate) => candidate.databaseId)));
       log(`run ${current.databaseId}: ${current.url}`);
     }
     gateRef = ref;

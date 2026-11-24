@@ -26,6 +26,7 @@ Run automation from these scripts unless a task explicitly requires lower-level 
 - `pnpm run doctor`
 - `pnpm run verify:agent`
 - `pnpm run verify:pr`
+- `pnpm run verify:hosted`
 - `pnpm run verify:fast`
 - `pnpm run verify:xr`
 - `pnpm run verify:full`
@@ -129,7 +130,7 @@ hosted CI is still a defect to explain, not something to rerun.
   packages in `apps/viewer-api/tools/requirements.txt`; `USDZ_PYTHON` picks
   the interpreter (default `python3`). When they are missing the step prints
   `SKIPPED` with the install commands and passes, so read the log: hosted CI
-  is then the first run of that check, and a failure there skips the deploys. The solver regression (`pnpm --filter @holoim/capture run test:authoring:solver`) runs only in `verify:pr`, not on hosted CI, when a change touches `apps/capture/scripts/authoring/lib/`, `make.ts` or `sheets/regression/`: it quick-builds each piece in `sheets/regression/` and fails when a grip, reach, motion or arm row gets worse than its pin in `pins.json` (`--write-pins` sets new pins; the diff shows each number that moved). The mapping fails closed (lockfile, unclassified file, no
+  is then the first run of that check, and a failure there skips the deploys. The solver regression (`pnpm --filter @holoim/capture run test:authoring:solver`) runs only locally (in `verify:pr` and in the local part of `verify:hosted`), not on hosted CI, when a change touches `apps/capture/scripts/authoring/lib/`, `make.ts` or `sheets/regression/`: it quick-builds each piece in `sheets/regression/` and fails when a grip, reach, motion or arm row gets worse than its pin in `pins.json` (`--write-pins` sets new pins; the diff shows each number that moved). The mapping fails closed (lockfile, unclassified file, no
   merge-base: everything runs). `pnpm run verify:pr -- --dry-run` prints the
   plan; `pnpm run verify:full` (or `verify:pr -- --full`) runs every suite
   (capture XR flows, viewer AR checks, pipeline, portal, Quick Look tool check). Keep `STEPS` in
@@ -377,7 +378,9 @@ holograms to the agent account (dry run without `--apply`). Background:
   command waits by itself, prints one line per finished job, then PASSED or
   FAILED with the failed jobs and the failed test lines, and writes
   `output/verify-hosted.json` and `output/verify-hosted.exit` (0 pass,
-  1 fail, 2 setup error). When only browser-suite jobs failed (a timeout
+  1 fail, 2 setup error: a dirty tree, a conflict with `origin/main`, a run that did not start or finish in time, a GitHub API error after 3 tries, or a stop by signal; the gate ref is deleted on each of these after the push).
+  A red run of the same commit does not count again: the next gate run starts a new run.
+  The branch and gate ref go up in one atomic push. When only browser-suite jobs failed (a timeout
   shows as cancelled), it reruns the failed jobs one time. A green rerun
   passes the gate but prints FLAKY with the tests of the first attempt:
   commit a `BUGS.md` record of each (new, or "observed again") on the branch

@@ -101,6 +101,20 @@ a green rerun the command prints "FLAKY" with the tests of attempt 1, and
 command: the agent commits the `BUGS.md` record on the branch and merges the
 branch. That commit changes the tree, so `main` runs the suites again.
 
+The owner approved "the failed browser-suite jobs". The count of a cancelled
+job as a failed one is this session's reading of that approval, added after
+it (B-111 showed that a timeout reports as cancelled). The owner can reverse
+it: remove "cancelled" from `onlyBrowserSuitesFailed` in
+`scripts/verify-hosted.ts`.
+
+Three rules keep a gate run's result honest. The branch and the gate ref go
+up in one atomic push, so a refused branch push makes no gate ref. A red run
+of the same commit does not count again: the next `verify:hosted` starts a
+new run, and a running or green run is reused. A status read from GitHub
+is tried 3 times, 10 s apart, before the command stops with exit 2; the gate
+ref is deleted on every exit after the push, a stop by SIGINT or SIGTERM
+included.
+
 ## Acceptance criteria
 
 - [ ] `pnpm run verify:hosted` on a branch with a small change in
@@ -274,7 +288,7 @@ conclusion is success. Findings and what changed:
 | A branch run cannot deploy | the conditions in `ci.yml` and `deploy.yml`; deploy jobs skipped in a gate run | Run 45404255068: "Build API image", "Deploy API (Fly)", "Deploy viewer (Pages)" and "Deploy capture (Pages)" skipped. `api-image` and the deploy jobs name the environment `production` (branch policy `main`). |
 | Two gate runs do not cancel each other | two gate runs on two refs at the same time | Runs 45404255068 (13:31:09–13:37:08 UTC) and 45404331213 (from 13:31:36) overlapped; neither job was cancelled. Their test jobs started 2–3 s after the changes job (no runner queue at that time). |
 | doctor and verify:pr | `pnpm run doctor`, `pnpm run verify:pr` | pending |
-| Proof video | screen recording of the command | pending (not committed) |
+| Proof video | screen recording of the command | `output/hosted-gate-proof/verify-hosted-green.mp4` (H.264, 9m12s, real time, the green run 45404255068); not committed |
 
 ## Physical-device limits
 
