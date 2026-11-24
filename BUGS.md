@@ -189,9 +189,17 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Expected:** the arm moves on with no one-frame step as the take starts.
 - **Reproduction:** `node --conditions=development --import tsx scripts/authoring/make.ts output/authoring/gesture-proof/crouch.json --quick`
   in `apps/capture`, then the per-frame step of `rightElbow` and `rightWrist` less `rightShoulder` in `motion.me.json`.
-- **Next fix:** find what moves the elbow 8 mm at 1.73 s with the loop converged: print the solver's clavicle swing
-  (protraction grows near full reach, `ArmIkSolver.ts` line 90) and the elbow hint per frame. If the swing jumps, ease
-  it by the target's distance over a wider band. A bar for a one-frame step of a joint from its parent would catch it.
+- **Cause found (2026-11-24, crouch v43 sheet, trace of the reach solve):** the elbow does not jump because of the
+  clavicle or the hint. The reach goal runs ahead of the arm. At 1.77 s the arm is at its stop (424 mm upper arm to
+  hand), and the goal continues: the effector is 5 mm short at 1.80 s, 24 mm at 1.97 s and 37 mm at 2.00 s, and then
+  it comes back to 5 mm at 2.10 s. While the arm comes straight, the bend changes fast, and the bend stops when the
+  arm is at its stop. That stop is the step. A soft stop in the solver (an exponential knee from 1 cm to 1 mm short,
+  authoring only) made it worse: the elbow steps went to 14 to 16 mm, and `arms.held.me` and `turn.me` failed. So
+  that change was taken out.
+- **Next fix:** keep the reach goal within the arm's reach while the body goes down. The hand must not leave for the
+  ball before the shoulder is low enough. Do one of these: delay the reach weight `w` against the crouch, or let the
+  trunk lean toward the goal when the goal is more than the arm's length from the shoulder. Measure the effector
+  error per frame. It must stay under about 5 mm through the take.
 
 ### B-101 — House avatar: the jumper's sleeve end has a jagged edge at the wrist
 
@@ -204,8 +212,13 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Expected:** the sleeve ends in a clean ring at the wrist.
 - **Reproduction:** `node --conditions=development --import tsx scripts/authoring/make.ts output/authoring/gesture-proof/pinch.json`
   in `apps/capture`, then `review.ts` on the take and a crop of the right hand at 3.4 s.
-- **Next fix:** pull the cuff end back to a clean ring of vertices at the wrist and push it out 1 to 2 mm along its
-  normals, so that the cuff covers the skin with no crossing line. If that does not work, hide the hand skin under the cuff.
+- **Tried (2026-11-24, not merged):** in `house-base/build.py` (the `sleeveEnd` block), each vertex in a face that
+  crosses the cut plane moved onto the plane, in the base mesh and in every shape key. The saw-tooth stayed. The
+  separate jumper garment (`dress.garments`, called after the sleeve block) is made from the body's jumper faces,
+  with ease along the normals, a taper at the openings (`taperAt`), smoothing and a push out. Its own wrist boundary
+  makes the flaps, which stand off the skin.
+- **Next fix:** cut the jumper garment itself along the wrist plane in `dress.py`, after its ease and smoothing, so
+  that its boundary is one clean ring. Then check in a close render of the right hand (pinch at 3.4 s).
 
 ## Entry template
 
