@@ -1996,3 +1996,26 @@ bug above.)
   than its pin. `verify:pr` runs it when a change touches the arm solve. `MAKE_NO_FIT=1` skips the fit search.
 - **Slip sO (the 10.5 m/s snap at 4.47 s):** the story branch had no B-099. On main the later reach takes the hand
   while the earlier one settles: jump.me 1.73 m/s, no snap at 4.47 s.
+
+### B-105 — The live face: the eyes do not carry the laugh and the sad face
+
+- **Found:** 2026-11-23, by the owner on the B-102 video: "laugh and sad the mouth is fine, but the eyes are not
+  there yet."
+- **Cause:** in a laugh the eye squint (0.66) put the upper lid low and flat across the iris, which reads sleepy,
+  and the raised lower lid's patch shaded dark up to a hard edge at the cheek (a lid that rises leans out from the
+  face to clear the eye, and the patch's normals turned with it). In a sad face the upper lids had only the
+  tracker's small blink score, so the eyes showed much white and read worried.
+- **Fix:** `apps/capture/src/face/trackedFace.ts`: with the laugh level the cheek raise goes to 1.0, the eye squint
+  to 0.58 and eye wide to 0.12 (lower lids up, upper lids open); with the sad level the upper lids come down by
+  0.32 of it, only while the signs of a sad face are there, and the inner brows take the full level.
+  `easeStillNormals` (`scripts/authoring/lib/quiet-normals.ts`, run by `house-base.ts`) gives each normal delta of
+  `eyeSquint` and `cheekSquint` the share `smoothstep(0, 4 mm, move)` of its vertex's move, so the lid patch joins
+  the skin with no edge. No shape moves. `house-base.glb` 1,578,220 → 1,559,348 bytes.
+- **Proof:** `test:xr:live-face`, before → after. Laugh: eyeSquint 0.66 → 0.58, eyeWide 0 → 0.12, cheekSquint
+  0.89/0.81 → 1.00/0.96; mouth and jaw channels: largest difference 0. Sad: eyeBlink 0.36 → 0.45, browInnerUp 0.85
+  → 0.94; mouth and jaw channels: largest difference 0. Neutral, smile, surprise, anger, speech: 0 of 44 channels
+  differ. New bars: laugh eyeSquint 0.5 to 0.62 and cheekSquint ≥ 0.9; sad eyeBlink 0.4 to 0.55 and browInnerUp ≥
+  0.85. `LIVE_FACE_VIEW=eyes` is the close view of the eyes. An Opus design review of the eyes passed the sad face
+  and asked for the laugh's lower lid higher (done).
+- **Not fixed (model):** the lids cannot slant and the brows do not bend (no such shapes); the grey teeth band and
+  the thin lower lip at the laugh corners are in the approved mouth and stay.

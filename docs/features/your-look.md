@@ -276,8 +276,8 @@ hand-made score sets (`scripts/fixtures/live-face-sets.ts`: neutral, smile,
 laugh, sad, surprise, anger and a spoken sentence, with the tracker's weak
 and uneven values) through the camera's own path and asserts what each set
 must and must not move. `LIVE_FACE_FRAMES=1` writes a picture of each frame
-and fails on a missing or repeated frame; `LIVE_FACE_VIEW=mouth` is the
-close view; `LIVE_FACE_RAW=1` shows the scores one to one, as before.
+and fails on a missing or repeated frame; `LIVE_FACE_VIEW=mouth` and
+`LIVE_FACE_VIEW=eyes` are the close views; `LIVE_FACE_RAW=1` shows the scores one to one, as before.
 
 **A moderate laugh and sad face (B-102).** The owner asked for less strong,
 "pixar-like" faces. In a laugh (a wide smile with an open jaw) the jaw opens
@@ -285,6 +285,21 @@ less far and the cheeks and eyes carry more of it; in a sad face the mouth
 corners take 0.69 of the sad level and the brows and the lower lip carry the
 rest. The check holds the laugh jaw in 0.3 to 0.5 and the sad frown in 0.5
 to 0.7.
+
+**Eyes that carry the laugh and the sad face (B-105).** The owner accepted
+the mouths and said the eyes were "not there yet". In a laugh the cheeks
+push the lower lids up (cheek raise 1.0) and the upper lids stay open (eye
+squint 0.58 with eye wide 0.12; it was 0.66, which read sleepy). In a sad
+face the upper lids come down by 0.32 of the sad level (blink 0.45 with the
+lid that follows a look down) and the inner brows go to the full sad level.
+The mouth and jaw channels of both, and every channel of the other five
+sets, are equal to before. The model build (`easeStillNormals` in
+`scripts/authoring/lib/quiet-normals.ts`) eases the shading of the shapes
+that raise the lower lid: the dark patch with a hard edge under each eye is
+now a soft shade. No shape moves; the avatar file is 1.56 MB. The check
+holds the laugh eye squint in 0.5 to 0.62 and the sad blink in 0.4 to 0.55.
+Still open in the model: the lids cannot slant and the brows do not bend,
+the teeth band is grey, and the lower lip is thin at the laugh corners.
 
 **Not covered.** In a headset the camera is released, so the face there
 shows only blinks, gaze and a jaw that follows the microphone. No person
