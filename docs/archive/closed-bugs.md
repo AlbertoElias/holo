@@ -3,6 +3,21 @@
 Closed entries moved from `BUGS.md` so the live tracker stays scannable.
 `BUGS.md` remains the authority for open, verified defects.
 
+### B-110 — verify:pr lock: waiters do not get the lock in arrival order
+
+- **Area:** `scripts/verify-lock.ts` (the machine-wide lock of `verify:pr` and `scripts/ci-emulate.sh`)
+- **Severity:** P2 (a run can wait for hours while later runs pass it)
+- **Observed:** 2026-11-23: one `verify:pr` waited 1 h 40 min while runs that started later got the lock.
+- **Cause:** each waiter tried the lock port every 5 s. When the holder exited, the first waiter to poll got the
+  lock, whatever its arrival time; a run that started later and polled at a lucky moment went first.
+- **Fix:** each waiter writes a ticket (arrival time and PID) to `holoim-verify-lock-queue-<port>/` in the git common
+  directory, which every worktree shares, and tries the port only while its ticket is the oldest ticket of a live
+  process. The first waiter polls every 1 s. A ticket of a dead PID, or one older than a day, is removed. The
+  ticket goes when its run gets the lock or exits.
+- **Proof:** a scratch check starts a holder (1.5 s), then a waiter that polls every 5 s, then a later waiter that
+  polls every 0.1 s. Before the fix the later waiter got the lock first (4 s before the earlier one); after it the
+  earlier waiter got the lock 13 ms after the release and the later one followed.
+
 ### B-109 — The area selector skipped suites that read the changed file
 
 - **Area:** `scripts/ci-changed-areas.sh` (the mapping `verify:pr` and hosted CI use), `scripts/check-ci-areas.ts`

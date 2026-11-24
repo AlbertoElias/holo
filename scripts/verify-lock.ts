@@ -14,12 +14,23 @@
 // Run any command under the lock:
 //   tsx scripts/verify-lock.ts <label> -- <command...>
 //
+// Waiters take turns in arrival order (B-110): each run writes a ticket file
+// (arrival time and PID) to `holoim-verify-lock-queue/` in the git common
+// directory, which every worktree shares, and tries the port only while its
+// ticket is the oldest one whose PID is alive. Before this, every waiter polled
+// every 5 s and the first poll after a release won, so one run waited 1 h 40 min
+// while later runs got the lock. A dead waiter's ticket (or one older than a
+// day, whose PID can be reused) is skipped and removed.
+//
 // Escape hatch: a run whose suites use moved ports (AGENTS.md, "Sharing work
 // between agents") can skip the lock with VERIFY_PR_NO_LOCK=1 (for
 // ci-emulate, CI_EMULATE_NO_LOCK=1).
 // VERIFY_PR_LOCK_PORT moves the lock itself (default 39417).
 import { spawn, spawnSync } from "node:child_process";
+import fs from "node:fs";
 import net from "node:net";
+import os from "node:os";
+import path from "node:path";
 
 export interface LockOwner {
   tool: "holoim-verify-pr";
@@ -106,8 +117,52 @@ function describe(owner: LockOwner): string {
   return `${owner.label ?? "verify-pr"}, PID ${owner.pid}, branch ${owner.branch}, worktree ${owner.worktree}, running ${minutes} min`;
 }
 
+/** The shared queue directory: the git common directory, else the temp directory. */
+function queueDir(port: number): string {
+  const common = spawnSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], { encoding: "utf8" });
+  const base = common.status === 0 && common.stdout.trim() ? common.stdout.trim() : os.tmpdir();
+  return path.join(base, `holoim-verify-lock-queue-${port}`);
+}
+
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+/** A ticket name sorts by arrival: zero-padded milliseconds, then the PID. */
+function ticketName(pid: number): string {
+  return `${String(Date.now()).padStart(15, "0")}-${pid}`;
+}
+
+/** True when this ticket is the oldest ticket of a live process. Removes dead tickets. */
+function isFirst(dir: string, mine: string): boolean {
+  let names: string[];
+  try {
+    names = fs.readdirSync(dir).sort();
+  } catch {
+    return true;
+  }
+  for (const name of names) {
+    if (name === mine) return true;
+    const [at, pidText] = name.split("-");
+    const pid = Number(pidText);
+    // A ticket older than a day belongs to a reused PID, not to a waiter.
+    const fresh = Date.now() - Number(at) < 24 * 3600 * 1000;
+    if (fresh && Number.isInteger(pid) && pid > 0 && alive(pid)) return false;
+    fs.rmSync(path.join(dir, name), { force: true });
+  }
+  // My ticket is gone (removed by hand): do not wait for ever.
+  return true;
+}
+
 export interface AcquireOptions {
   port?: number;
+  /** The queue directory; tests move it. */
+  queue?: string;
   pollMs?: number;
   label?: string;
   log?: (line: string) => void;
@@ -122,9 +177,19 @@ export async function acquireLock(options: AcquireOptions = {}): Promise<HeldLoc
   const owner = currentOwner(label);
   let lastReport = "";
   let waitedSince = 0;
+  const dir = options.queue ?? queueDir(port);
+  fs.mkdirSync(dir, { recursive: true });
+  const ticket = ticketName(process.pid);
+  const ticketPath = path.join(dir, ticket);
+  fs.writeFileSync(ticketPath, `${JSON.stringify(owner)}\n`);
+  const dropTicket = () => fs.rmSync(ticketPath, { force: true });
+  process.once("exit", dropTicket);
   for (;;) {
-    const server = await tryListen(port, owner);
+    const first = isFirst(dir, ticket);
+    const server = first ? await tryListen(port, owner) : null;
     if (server) {
+      dropTicket();
+      process.off("exit", dropTicket);
       if (waitedSince) log(`[${label}] lock acquired after ${((Date.now() - waitedSince) / 1000).toFixed(0)}s of waiting`);
       else log(`[${label}] lock acquired (127.0.0.1:${port})`);
       return {
@@ -134,17 +199,20 @@ export async function acquireLock(options: AcquireOptions = {}): Promise<HeldLoc
     }
     if (!waitedSince) waitedSince = Date.now();
     const holder = await readOwner(port);
+    const ahead = first ? "" : " (an earlier run is first in the queue)";
     const report =
       holder === "free"
-        ? "lock holder just exited; retrying"
+        ? first
+          ? "lock holder just exited; retrying"
+          : `lock is free; an earlier run takes it first`
         : holder === "foreign"
           ? `port ${port} is held by a process that is not verify:pr; free it or set VERIFY_PR_LOCK_PORT`
-          : `waiting for the machine-wide check lock (${describe(holder)})`;
+          : `waiting for the machine-wide check lock (${describe(holder)})${ahead}`;
     if (report !== lastReport) {
       log(`[${label}] ${report}`);
       lastReport = report;
     }
-    if (holder !== "free") await new Promise((resolve) => setTimeout(resolve, pollMs));
+    if (holder !== "free" || !first) await new Promise((resolve) => setTimeout(resolve, first ? Math.min(pollMs, 1000) : pollMs));
   }
 }
 
