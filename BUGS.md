@@ -56,22 +56,6 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   releases the lock.
 - **Reproduction:** run `verify:pr` on a machine with no free CPU or memory, so the pipeline tests time out.
 
-### B-090 — Phone tilt check cannot click Return on a loaded runner
-
-- **Area:** `apps/viewer-web/e2e/portal.spec.ts` ("tilt: turning the phone turns the camera, past a small deadzone", line 213)
-- **Severity:** P3 (fails under `CI_EMULATE_LOAD=2` only; not seen on hosted CI so far)
-- **Observed:** 2026-11-21, while closing B-089
-- **Evidence:** under `CI_EMULATE_LOAD=2`, one worker, the check failed 8 of 8 on `main` (a0ad1998) and 5 of 6
-  after the trials below: `locator.click` on "Return to the author's view" times out ("element is not
-  stable", once "detached from the DOM") until the 60 s test timeout. All other phone checks pass.
-  Tried without success: `pressReach` for both presses (1 of 5 failed: tilt did not turn on after the
-  press), pressing only while tilt is off (3 of 6), and `force: true` on Return (5 of 6).
-- **Suspect:** `usePlayHeldMiddle` (`HologramCard.tsx`) shifts the controls chip on each resize so Play
-  stays centred, and the timecode's width changes while the hologram plays, so Return keeps moving.
-  Not confirmed.
-- **Expected:** the check presses Return once Free mode is on, on a loaded runner too.
-- **Reproduction:** `CI_EMULATE_LOAD=2 scripts/ci-emulate.sh env VITE_IWER_SEM_SCENE=office_small XR_TEST_MODE=iwer pnpm --filter @holoim/web exec playwright test e2e/portal.spec.ts -g "past a small deadzone" --repeat-each=6 --workers=1`
-
 ### B-088 — Feed card: R3F events connect to a null div (seen once, not reproduced)
 
 - **Area:** apps/viewer-web (`HologramCardCanvas`, R3F 8.18 `Canvas`)
