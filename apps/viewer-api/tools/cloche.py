@@ -48,6 +48,24 @@ def cloche_value(base, radii, exponent, point):
     return sum(abs((point[i] - base[i]) / radii[i]) ** exponent for i in range(3))
 
 
+# The diorama clip scales every cut point onto the bubble's sphere, then
+# stores it as float32, so those points sit on the edge within a few
+# micrometres. The converter and the inspector compose the bubble's centre
+# from different matrices (about 1e-8 m apart), so a strict test keeps such a
+# point on one side and drops it on the other, and one point moves the
+# fitted dome by centimetres (B-107). Both count the edge as inside.
+BUBBLE_EDGE_METERS = 1e-4
+
+
+def inside_bubble(point, center, radius):
+    """Whether a drawn point is inside the recorded bubble, counting the
+    clip's own edge (BUBBLE_EDGE_METERS) as inside. Always true with no
+    bubble (center None)."""
+    if center is None:
+        return True
+    return math.dist(point, center) <= radius + BUBBLE_EDGE_METERS
+
+
 def fit_cloche(points):
     """The dome around every drawn point: foot on the lowest, the content's
     proportions, scaled until the furthest point is inside, plus the margin;

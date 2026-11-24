@@ -7,26 +7,6 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
-### B-107 — Quick Look check: the cloche refit is 9 cm off the baked cloche on one walk take (once)
-
-- **Area:** apps/viewer-api/tools (`glb_to_usdz.py` `fit_points`, `inspect_usdz.py` cloche refit)
-- **Severity:** P3 (a false failure of the usdz-tools gate; no person has seen a wrong cloche)
-- **Observed:** 2026-11-23, once, in `verify:pr` on `bug/avatar-neck-back-knee` (a loaded Mac).
-- **Evidence:** all five challenged cases of that take: "Cloche foot exceeds tolerance 0.005" (0.0887) and
-  "Cloche radii exceeds tolerance 0.0387" (0.104); the refit foot's z moved from −0.328 to −0.417. The failing
-  take was overwritten. With the same clips, the next full `test:usdz-tools` run and six new walk takes
-  (convert and inspect) all pass with errors under 1e-7.
-- **Expected:** the converter and the inspector fit the same points, on every take.
-- **Reproduction:** not reproduced. Both fits are bounding boxes, so one extreme point that only one side keeps
-  (the bubble's `inside` test, or `array_equal` against `allclose` on a moving mesh) is a suspect. Keep the
-  failing `output/pipeline-takes/walk.glb` when it recurs.
-- **Recurred 2026-11-24, now every local run.** On this Mac, three `test:usdz-tools` runs in a row failed with
-  the same numbers as above (foot 0.0887, radii 0.104, refit foot z −0.328 to −0.417) on all five challenged
-  cases. Each run recorded a new walk take with a different hash, and a clean `origin/main` worktree (234b6bb)
-  failed the same way. So the cause is not one take. One full `verify:pr` run on the same machine, 20 minutes
-  earlier, passed the cloche checks. The hosted Linux check passed on 3db0ba1ba9. A failing take and its reports
-  are kept in the main checkout's ignored `apps/viewer-api/output/b107-2026-11-24/`.
-
 ### B-104 — Authored takes: held grips drift since B-092 (stone sD snap, goodbye grip turn, held and support)
 
 - **Area:** apps/capture (`scripts/authoring/lib/direct.ts`: the arm solve and the clearing plan), the sheets
