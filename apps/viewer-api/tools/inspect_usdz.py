@@ -444,7 +444,7 @@ class Inspection:
             primitive = source.doc["meshes"][node["mesh"]]["primitives"][0]
             center = worlds[source.bubble][:3, 3]
             radius = float(np.linalg.norm(source.accessor(primitive["attributes"]["POSITION"]), axis=1).max() * np.linalg.norm(worlds[source.bubble][:3, :3], axis=0).max())
-        inside = (lambda point: np.linalg.norm(point - center) <= radius) if center is not None else (lambda point: True)
+        inside = lambda point: cloche_rules.inside_bubble(point, center, radius)
         drawn, moving, shells = [], [], []
         for prim in stage.Traverse():
             if not prim.IsA(UsdGeom.Mesh) or prim.GetCustomDataByKey("quickLookBackFaces") or prim.GetCustomDataByKey("quickLookCloche"):
