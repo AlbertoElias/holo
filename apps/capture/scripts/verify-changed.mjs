@@ -47,7 +47,9 @@ function main() {
         .map((file) => file.slice(prefix.length));
 
   if (lintTargets.length > 0) {
-    run("pnpm", ["exec", "oxlint", ...lintTargets]);
+    // A changed file that the ignore patterns skip (a `.d.ts` file, `output/`)
+    // leaves no file to lint; that is not a failure.
+    run("pnpm", ["exec", "oxlint", "--no-error-on-unmatched-pattern", ...lintTargets]);
   } else {
     console.log("[verify:changed] No lintable changed files detected.");
   }
