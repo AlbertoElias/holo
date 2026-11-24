@@ -34,7 +34,7 @@ type Row = { set: string; frame: number; head: Record<string, number> };
 const baseUrl = process.env.BASE_URL ?? 'https://127.0.0.1:5174/';
 const artifactDir = process.env.XR_TEST_ARTIFACT_DIR ?? 'output/ci-live-face';
 const wantFrames = process.env.LIVE_FACE_FRAMES === '1';
-const faceFrame = process.env.LIVE_FACE_VIEW === 'mouth' ? ('mouth' as const) : ('whole' as const);
+const faceFrame = process.env.LIVE_FACE_VIEW === 'mouth' ? ('mouth' as const) : process.env.LIVE_FACE_VIEW === 'eyes' ? ('eyes' as const) : ('whole' as const);
 const rawMode = process.env.LIVE_FACE_RAW === '1';
 // LIVE_FACE_TRACK names a JSON file of the same form to replay in place of the hand-made sets.
 const track: FaceTrack = process.env.LIVE_FACE_TRACK ? JSON.parse(await readFile(process.env.LIVE_FACE_TRACK, 'utf8')) : liveFaceTrack();
@@ -52,6 +52,8 @@ const EXPECT_MIN: Array<[string, string, number]> = [
   ['smile', 'smile', 0.6], ['smile', 'cheekSquint', 0.4], ['smile', 'eyeSquint', 0.3],
   ['laugh', 'smile', 0.6], ['laugh', 'cheekSquint', 0.4], ['laugh', 'upperUp', 0.5], ['laugh', 'jawOpen', 0.3],
   ['sad', 'frown', 0.5], ['sad', 'browInnerUp', 0.5],
+  // The eyes carry the laugh and the sad face (B-108): the lower lids up, the upper lids heavy, the inner brows up.
+  ['laugh', 'cheekSquint', 0.9], ['laugh', 'eyeSquint', 0.5], ['sad', 'eyeBlink', 0.4], ['sad', 'browInnerUp', 0.85],
   ['surprise', 'browInnerUp', 0.5], ['surprise', 'browOuterUp', 0.4], ['surprise', 'eyeWide', 0.35], ['surprise', 'jawOpen', 0.3],
   ['anger', 'browDown', 0.7], ['anger', 'noseSneer', 0.3], ['anger', 'eyeSquint', 0.3],
   ['speech', 'jawOpen', 0.3], ['speech', 'round', 0.6], ['speech', 'wide', 0.3]
@@ -61,6 +63,8 @@ const EXPECT_MAX: Array<[string, string, number]> = [
   ['smile', 'frown', 0.1], ['laugh', 'frown', 0.1],
   // A laugh and a sad face stay moderate: the cheeks, eyes and brows carry them, not a wide jaw or a hard frown (B-102).
   ['laugh', 'jawOpen', 0.5], ['sad', 'frown', 0.7],
+  // A laugh's upper lids stay open (not sleepy) and a sad face's lids are heavy, not shut (B-108).
+  ['laugh', 'eyeSquint', 0.62], ['sad', 'eyeBlink', 0.55],
   ['sad', 'smile', 0.1], ['sad', 'jawOpen', 0.05],
   ['surprise', 'frown', 0.1], ['surprise', 'smile', 0.1],
   ['anger', 'frown', 0.15],
@@ -183,6 +187,7 @@ try {
       smile: peak(set.name, 'mouthSmileLeft', 'mouthSmileRight'),
       cheekSquint: peak(set.name, 'cheekSquintLeft', 'cheekSquintRight'),
       eyeSquint: peak(set.name, 'eyeSquintLeft', 'eyeSquintRight'),
+      eyeBlink: peak(set.name, 'eyeBlinkLeft', 'eyeBlinkRight'),
       upperUp: peak(set.name, 'mouthUpperUpLeft', 'mouthUpperUpRight'),
       frown: peak(set.name, 'mouthFrownLeft', 'mouthFrownRight'),
       browInnerUp: peak(set.name, 'browInnerUp'),
