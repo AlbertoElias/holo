@@ -1,0 +1,726 @@
+{
+  "title": "Just a stone",
+  "intent": "She opens a big present from me, finds only a plain stone inside, and is let down.",
+  "story": {
+    "request": "a stone given as a gift",
+    "setup": {
+      "says": "A woman has a big red present with a yellow bow on a table.",
+      "see": [
+        "a table in front of her",
+        "a big red gift box with a ribbon and a large yellow bow",
+        "she looks at you, hopeful, then at the box"
+      ]
+    },
+    "event": {
+      "says": "She lifts the lid and finds only a plain grey stone inside.",
+      "see": [
+        "she lifts the lid open",
+        "she takes a rough dark grey stone out of the box",
+        "she looks into the box again: it is empty",
+        "she looks at the stone"
+      ]
+    },
+    "reaction": {
+      "says": "She is let down: she looks at you, sad, with the stone in her open hand.",
+      "see": [
+        "she looks at you",
+        "a sad face",
+        "she holds the stone out in her open hand and shakes her head",
+        "her eyes go down to the stone"
+      ]
+    },
+    "changes": [
+      "Option B, the owner's idea: the present is a let-down, not a treasure.",
+      "Disappointment, not a laugh: the owner judged the slip's laughter badly, and a sad face and shrug read with the faces and gestures we have.",
+      "The box is about 0.44 m wide and 0.29 m high with the lid, so it reads at card size.",
+      "Premise review: a lighter stone held clear of her dark top, an 'empty' look into the box, and the lid put clear of the box on a wider table.",
+      "lB: she holds the lid by its edge (grip [0, 0.13, -0.2]), so her forearm stays off the lid top; she holds the stone lower (1.35 m) and further out, so her left fingers stay clear of her head.",
+      "lB3: the bow is smaller and sits on her left side of the lid, off the line of her forearm as she lifts the lid by its back edge.",
+      "lB5: she keeps the lid up in her right hand and does not let it fall, because a dropped lid lands against the front of the box, in the path of her left arm, in a different place each build.",
+      "lB7: she holds the lid by its near edge (grip [0, 0.13, 0.2]), so the lid reaches away from her and not back along her right forearm.",
+      "s8 round 3, sA: the stone is twice the size (0.24 m) so it reads on the card; she holds it palm-up below her face; no shrug; the lid is put down on a wider table; her eyes do more of each look down, so her face stays larger on the card.",
+      "sB: the lid opens on a hinge on its right edge (a change, as the oven door), when her left hand lifts it; she does not carry it, so nothing swings to her legs; the put that dropped it on the floor (sA) is gone.",
+      "sC: the stone grip is lower and nearer her, with a 7 cm fist, so her open palm stays under the stone; the lid reach point is 3 cm higher, above the lid top.",
+      "sD: her left hand is open and flat under the stone (a 9 cm fist), so her fingers stay out of it; the lid reach stops 3 cm short of the lid top.",
+      "sE: the stone is about 1.4 times larger, flat, rough and dark grey (a rock, not an egg); a ribbon crosses the box and the lid both ways with a large bow and tails; the head takes 0.55 of each down look, so the eyes do not roll."
+    ]
+  },
+  "duration": 10,
+  "performers": [
+    {
+      "id": "me",
+      "avatar": "house:clay",
+      "at": [
+        0,
+        0
+      ],
+      "facing": 0,
+      "seed": 7,
+      "look": {
+        "build": "medium",
+        "skin": "caramel",
+        "eyes": "darkBrown",
+        "hair": {
+          "style": "wavyBob",
+          "colour": "espresso"
+        },
+        "glasses": "none",
+        "clothing": "stormGraphite"
+      }
+    }
+  ],
+  "marks": {
+    "viewer": [
+      0,
+      1.55,
+      2.5
+    ]
+  },
+  "objects": {
+    "table": {
+      "shape": "box",
+      "size": [
+        0.75,
+        0.62,
+        0.45
+      ],
+      "at": {
+        "of": "me",
+        "forward": 0.45,
+        "right": 0.2
+      },
+      "facing": "me.hips",
+      "color": "#e8c98f"
+    },
+    "giftbox": {
+      "parts": [
+        {
+          "name": "floor",
+          "shape": "box",
+          "size": [
+            0.42,
+            0.01,
+            0.42
+          ],
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "color": "#e0262f"
+        },
+        {
+          "name": "wallF",
+          "shape": "box",
+          "size": [
+            0.42,
+            0.12,
+            0.01
+          ],
+          "at": [
+            0,
+            0,
+            0.205
+          ],
+          "color": "#e0262f"
+        },
+        {
+          "name": "wallB",
+          "shape": "box",
+          "size": [
+            0.42,
+            0.12,
+            0.01
+          ],
+          "at": [
+            0,
+            0,
+            -0.205
+          ],
+          "color": "#e0262f"
+        },
+        {
+          "name": "wallL",
+          "shape": "box",
+          "size": [
+            0.01,
+            0.12,
+            0.42
+          ],
+          "at": [
+            -0.205,
+            0,
+            0
+          ],
+          "color": "#e0262f"
+        },
+        {
+          "name": "wallR",
+          "shape": "box",
+          "size": [
+            0.01,
+            0.12,
+            0.42
+          ],
+          "at": [
+            0.205,
+            0,
+            0
+          ],
+          "color": "#e0262f"
+        },
+        {
+          "name": "band",
+          "shape": "box",
+          "size": [
+            0.07,
+            0.122,
+            0.425
+          ],
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "color": "#fff3b0"
+        },
+        {
+          "name": "bandX",
+          "shape": "box",
+          "size": [
+            0.425,
+            0.122,
+            0.07
+          ],
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "color": "#fff3b0"
+        }
+      ],
+      "at": {
+        "of": "me",
+        "forward": 0.42,
+        "right": 0.06
+      },
+      "on": "table",
+      "facing": "me.hips"
+    },
+    "stone": {
+      "parts": [
+        {
+          "name": "rock",
+          "shape": "sphere",
+          "size": [
+            0.3,
+            0.11,
+            0.25
+          ],
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "color": "#56544f"
+        },
+        {
+          "name": "lump1",
+          "shape": "sphere",
+          "size": [
+            0.13,
+            0.07,
+            0.11
+          ],
+          "at": [
+            0.07,
+            0.025,
+            0.05
+          ],
+          "color": "#4a4844"
+        },
+        {
+          "name": "lump2",
+          "shape": "sphere",
+          "size": [
+            0.11,
+            0.06,
+            0.12
+          ],
+          "at": [
+            -0.08,
+            0.02,
+            -0.04
+          ],
+          "color": "#615e58"
+        },
+        {
+          "name": "chip",
+          "shape": "box",
+          "size": [
+            0.06,
+            0.03,
+            0.05
+          ],
+          "at": [
+            0.1,
+            0.01,
+            -0.07
+          ],
+          "color": "#3f3d3a"
+        }
+      ],
+      "grip": {
+        "at": [
+          0,
+          0.04,
+          -0.09
+        ],
+        "axis": [
+          0.01,
+          0.73,
+          0.68
+        ],
+        "radius": 0.09
+      },
+      "at": {
+        "of": "me",
+        "forward": 0.42,
+        "right": 0.06
+      },
+      "on": "giftbox"
+    },
+    "lid": {
+      "parts": [
+        {
+          "name": "skirtF",
+          "shape": "box",
+          "size": [
+            0.44,
+            0.14,
+            0.01
+          ],
+          "at": [
+            -0.22,
+            0,
+            0.215
+          ],
+          "color": "#c81d27"
+        },
+        {
+          "name": "skirtB",
+          "shape": "box",
+          "size": [
+            0.44,
+            0.14,
+            0.01
+          ],
+          "at": [
+            -0.22,
+            0,
+            -0.215
+          ],
+          "color": "#c81d27"
+        },
+        {
+          "name": "skirtL",
+          "shape": "box",
+          "size": [
+            0.01,
+            0.14,
+            0.44
+          ],
+          "at": [
+            -0.435,
+            0,
+            0
+          ],
+          "color": "#c81d27"
+        },
+        {
+          "name": "skirtR",
+          "shape": "box",
+          "size": [
+            0.01,
+            0.14,
+            0.44
+          ],
+          "at": [
+            -0.005,
+            0,
+            0
+          ],
+          "color": "#c81d27"
+        },
+        {
+          "name": "lidtop",
+          "shape": "box",
+          "size": [
+            0.44,
+            0.03,
+            0.44
+          ],
+          "at": [
+            -0.22,
+            0.14,
+            0
+          ],
+          "color": "#c81d27"
+        },
+        {
+          "name": "lidband",
+          "shape": "box",
+          "size": [
+            0.07,
+            0.035,
+            0.445
+          ],
+          "at": [
+            -0.22,
+            0.14,
+            0
+          ],
+          "color": "#fff3b0"
+        },
+        {
+          "name": "lidbandX",
+          "shape": "box",
+          "size": [
+            0.445,
+            0.035,
+            0.07
+          ],
+          "at": [
+            -0.22,
+            0.14,
+            0
+          ],
+          "color": "#fff3b0"
+        },
+        {
+          "name": "bowL",
+          "shape": "sphere",
+          "size": [
+            0.17,
+            0.1,
+            0.13
+          ],
+          "at": [
+            -0.31,
+            0.19,
+            0
+          ],
+          "color": "#ffd21f"
+        },
+        {
+          "name": "bowR",
+          "shape": "sphere",
+          "size": [
+            0.17,
+            0.1,
+            0.13
+          ],
+          "at": [
+            -0.13,
+            0.19,
+            0
+          ],
+          "color": "#ffd21f"
+        },
+        {
+          "name": "knot",
+          "shape": "sphere",
+          "size": [
+            0.06,
+            0.06,
+            0.06
+          ],
+          "at": [
+            -0.22,
+            0.18,
+            0
+          ],
+          "color": "#f2b705"
+        },
+        {
+          "name": "tailF",
+          "shape": "box",
+          "size": [
+            0.04,
+            0.01,
+            0.12
+          ],
+          "at": [
+            -0.25,
+            0.16,
+            0.08
+          ],
+          "color": "#ffd21f"
+        },
+        {
+          "name": "tailB",
+          "shape": "box",
+          "size": [
+            0.04,
+            0.01,
+            0.12
+          ],
+          "at": [
+            -0.19,
+            0.16,
+            -0.08
+          ],
+          "color": "#ffd21f"
+        }
+      ],
+      "at": {
+        "of": "me",
+        "forward": 0.42,
+        "right": 0.28
+      },
+      "on": "giftbox",
+      "facing": "me.hips"
+    }
+  },
+  "beats": [
+    {
+      "id": "hello",
+      "performer": "me",
+      "at": 0.1,
+      "hold": 1.0,
+      "intent": "She looks at me, hopeful: the big present is from me.",
+      "directions": [
+        {
+          "kind": "look",
+          "at": "viewer",
+          "head": 0.8,
+          "hold": 1.0
+        },
+        {
+          "kind": "expression",
+          "shape": "hope",
+          "strength": 0.7,
+          "hold": 1.0
+        }
+      ]
+    },
+    {
+      "id": "box",
+      "performer": "me",
+      "at": 1.2,
+      "hold": 0.4,
+      "intent": "She looks down at the big red box and smiles.",
+      "directions": [
+        {
+          "kind": "look",
+          "at": "lid.center",
+          "head": 0.55
+        },
+        {
+          "kind": "expression",
+          "shape": "smile",
+          "strength": 0.6,
+          "hold": 2.0
+        }
+      ]
+    },
+    {
+      "id": "lid",
+      "performer": "me",
+      "at": 1.7,
+      "intent": "She lifts the lid of the box open.",
+      "directions": [
+        {
+          "kind": "reach",
+          "side": "left",
+          "at": {
+            "of": "me",
+            "forward": 0.36,
+            "right": -0.12,
+            "height": 0.95
+          },
+          "stopShort": 0.03,
+          "palm": "down",
+          "attack": 0.4,
+          "hold": 0.2
+        },
+        {
+          "kind": "look",
+          "at": "lid.center",
+          "head": 0.55
+        }
+      ]
+    },
+    {
+      "id": "aside",
+      "performer": "me",
+      "at": 2.6,
+      "intent": "She looks into the open box.",
+      "directions": [
+        {
+          "kind": "look",
+          "at": "stone.center",
+          "head": 0.55
+        }
+      ]
+    },
+    {
+      "id": "find",
+      "performer": "me",
+      "at": 3.6,
+      "intent": "She takes a grey stone out of the box.",
+      "directions": [
+        {
+          "kind": "take",
+          "side": "left",
+          "object": "stone",
+          "hold": 0.3
+        },
+        {
+          "kind": "look",
+          "at": "stone.center",
+          "head": 0.55
+        }
+      ]
+    },
+    {
+      "id": "empty",
+      "performer": "me",
+      "at": 4.2,
+      "hold": 0.4,
+      "intent": "She looks into the box again: there is nothing else.",
+      "directions": [
+        {
+          "kind": "look",
+          "at": "giftbox.center",
+          "head": 0.55,
+          "hold": 0.4
+        }
+      ]
+    },
+    {
+      "id": "look-at-it",
+      "performer": "me",
+      "at": 4.8,
+      "hold": 0.9,
+      "intent": "She holds the stone up and looks at it: that is all there is.",
+      "directions": [
+        {
+          "kind": "reach",
+          "side": "left",
+          "at": {
+            "of": "me",
+            "forward": 0.34,
+            "right": -0.1,
+            "height": 1.15
+          },
+          "stopShort": 0,
+          "palm": "up",
+          "hold": 0.9
+        },
+        {
+          "kind": "look",
+          "at": "stone.center",
+          "head": 0.55,
+          "hold": 0.9
+        },
+        {
+          "kind": "state",
+          "name": "concerned",
+          "hold": 0.9
+        }
+      ]
+    },
+    {
+      "id": "you",
+      "performer": "me",
+      "at": 5.9,
+      "hold": 1.5,
+      "intent": "She looks at me, sad, with the stone in her open hand.",
+      "directions": [
+        {
+          "kind": "look",
+          "at": "viewer",
+          "head": 0.8,
+          "hold": 1.5
+        },
+        {
+          "kind": "expression",
+          "shape": "sad",
+          "strength": 0.9,
+          "hold": 3.8
+        },
+        {
+          "kind": "reach",
+          "side": "left",
+          "at": {
+            "of": "me",
+            "forward": 0.36,
+            "right": -0.08,
+            "height": 1.15
+          },
+          "stopShort": 0,
+          "palm": "up",
+          "hold": 3.9
+        }
+      ]
+    },
+    {
+      "id": "no",
+      "performer": "me",
+      "at": 7.5,
+      "hold": 0.6,
+      "intent": "She shakes her head a little.",
+      "directions": [
+        {
+          "kind": "gesture",
+          "name": "head-shake",
+          "count": 2,
+          "strength": 0.6
+        }
+      ]
+    },
+    {
+      "id": "down",
+      "performer": "me",
+      "at": 8.4,
+      "hold": 1.4,
+      "intent": "Her eyes go down to the stone in her hand.",
+      "directions": [
+        {
+          "kind": "look",
+          "at": "stone.center",
+          "head": 0.55,
+          "hold": 1.4
+        },
+        {
+          "kind": "expression",
+          "shape": "eyes-down",
+          "strength": 0.6,
+          "hold": 1.4
+        }
+      ]
+    }
+  ],
+  "world": [
+    {
+      "kind": "change",
+      "object": "lid",
+      "when": 2.1,
+      "over": 0.6,
+      "from": {
+        "turn": [
+          0,
+          0,
+          0
+        ]
+      },
+      "turn": [
+        0,
+        0,
+        -100
+      ]
+    }
+  ]
+}

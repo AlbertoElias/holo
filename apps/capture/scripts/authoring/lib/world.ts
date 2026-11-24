@@ -10,7 +10,7 @@ import * as THREE from 'three';
 
 import { aimTargetOf, cueTime, holdingsOf, type BeatSheet, type ChangeState, type Color, type Point, type WorldChange } from './beats.ts';
 import type { PropTrack, SolvedTake } from './direct.ts';
-import { parseColor } from './props.ts';
+import { parseColor, type ChangePose } from './props.ts';
 
 const DEG = Math.PI / 180;
 const G = 9.81;
@@ -82,6 +82,48 @@ function stream(salt: number): () => number {
 const smoother = (x: number): number => { const t = Math.min(1, Math.max(0, x)); return t * t * t * (t * (6 * t - 15) + 10); };
 const r3 = (v: number): number => Math.round(v * 1000) / 1000;
 const sameColors = (a: readonly Rgb[], b: readonly Rgb[]): boolean => a.every((c, i) => c.every((x, k) => x === b[i]![k]));
+
+/** The moves of an object's world changes (turn, scale, lift; colours too), in order, and its state at a time. */
+function changeTimeline(sheet: BeatSheet, object: string): { initial: Full; segments: { t0: number; t1: number; a: Full; b: Full; steps: number }[]; stateAt: (t: number) => { a: Full; b: Full; u: number } } {
+  const moves = (sheet.world ?? []).filter((w): w is Extract<WorldChange, { kind: 'change' }> => w.kind === 'change' && w.object === object && w.show === undefined)
+    .map((w) => ({ w, t: cueTime(sheet, w.when)! })).sort((a, b) => a.t - b.t);
+  const neutral: Full = { turn: [0, 0, 0], scale: 1, lift: 0 };
+  /** A state with what it leaves out taken from `base`. */
+  const over = (s: ChangeState, base: Full): Full => {
+    const color = 'color' in s ? s.color : base.color;
+    return { turn: s.turn ?? base.turn, scale: s.scale ?? base.scale, lift: s.lift ?? base.lift, ...(color !== undefined ? { color } : {}) };
+  };
+  // Each change runs from its `from` (or where the one before left it) to its own values (or as the sheet made it).
+  const segments: { t0: number; t1: number; a: Full; b: Full; steps: number }[] = [];
+  const initial = moves[0]?.w.from ? over(moves[0].w.from, neutral) : neutral;
+  let state = initial;
+  for (const { w, t } of moves) {
+    const a = w.from ? over(w.from, state) : state;
+    const b = over({ ...(w.turn ? { turn: w.turn } : {}), ...(w.scale !== undefined ? { scale: w.scale } : {}), ...(w.lift !== undefined ? { lift: w.lift } : {}), ...(w.color !== undefined ? { color: w.color } : {}) }, { ...neutral });
+    segments.push({ t0: t, t1: t + (w.over ?? 1.5), a, b, steps: w.steps ?? 4 });
+    state = b;
+  }
+  const stateAt = (t: number): { a: Full; b: Full; u: number } => {
+    let s = initial;
+    for (const seg of segments) {
+      if (t < seg.t0) return { a: s, b: s, u: 0 };
+      if (t < seg.t1) return { a: seg.a, b: seg.b, u: smoother((t - seg.t0) / Math.max(1e-6, seg.t1 - seg.t0)) };
+      s = seg.b;
+    }
+    return { a: s, b: s, u: 0 };
+  };
+  return { initial, segments, stateAt };
+}
+
+/** The pose a world change gives an object's shape at `t`, in the object's frame (as the take's change node), or undefined when the sheet changes no shape of it. */
+export function changePoseAt(sheet: BeatSheet, object: string, t: number): ChangePose | undefined {
+  const { segments, stateAt } = changeTimeline(sheet, object);
+  if (!segments.length) return undefined;
+  const { a, b, u } = stateAt(t);
+  const quat = (turn: Full['turn']): THREE.Quaternion => new THREE.Quaternion().setFromEuler(new THREE.Euler(turn[0] * DEG, turn[1] * DEG, turn[2] * DEG, 'XYZ'));
+  const vec = (s: Full['scale']): THREE.Vector3 => (typeof s === 'number' ? new THREE.Vector3(s, s, s) : new THREE.Vector3(...s));
+  return { quaternion: quat(a.turn).slerp(quat(b.turn), u), lift: a.lift + (b.lift - a.lift) * u, scale: vec(a.scale).lerp(vec(b.scale), u) };
+}
 
 interface Flight { readonly from: THREE.Vector3; readonly to: THREE.Vector3; readonly vy: number; readonly te: number; readonly T: number }
 
@@ -269,33 +311,8 @@ export function solveWorld(sheet: BeatSheet, take: SolvedTake): SolvedWorld {
     const mine = world.filter((w): w is Extract<WorldChange, { kind: 'change' }> => w.kind === 'change' && w.object === object)
       .map((w) => ({ w, t: cueTime(sheet, w.when)! })).sort((a, b) => a.t - b.t);
     const shows = mine.filter((m) => m.w.show !== undefined);
-    const moves = mine.filter((m) => m.w.show === undefined);
+    const { initial, segments, stateAt } = changeTimeline(sheet, object);
     const original: Rgb[] = prop.parts.map((p) => p.color);
-    const neutral: Full = { turn: [0, 0, 0], scale: 1, lift: 0 };
-    /** A state with what it leaves out taken from `base`. */
-    const over = (s: ChangeState, base: Full): Full => {
-      const color = 'color' in s ? s.color : base.color;
-      return { turn: s.turn ?? base.turn, scale: s.scale ?? base.scale, lift: s.lift ?? base.lift, ...(color !== undefined ? { color } : {}) };
-    };
-    // Each change runs from its `from` (or where the one before left it) to its own values (or as the sheet made it).
-    const segments: { t0: number; t1: number; a: Full; b: Full; steps: number }[] = [];
-    const initial = moves[0]?.w.from ? over(moves[0].w.from, neutral) : neutral;
-    let state = initial;
-    for (const { w, t } of moves) {
-      const a = w.from ? over(w.from, state) : state;
-      const b = over({ ...(w.turn ? { turn: w.turn } : {}), ...(w.scale !== undefined ? { scale: w.scale } : {}), ...(w.lift !== undefined ? { lift: w.lift } : {}), ...(w.color !== undefined ? { color: w.color } : {}) }, { ...neutral });
-      segments.push({ t0: t, t1: t + (w.over ?? 1.5), a, b, steps: w.steps ?? 4 });
-      state = b;
-    }
-    const stateAt = (t: number): { a: Full; b: Full; u: number } => {
-      let s = initial;
-      for (const seg of segments) {
-        if (t < seg.t0) return { a: s, b: s, u: 0 };
-        if (t < seg.t1) return { a: seg.a, b: seg.b, u: smoother((t - seg.t0) / Math.max(1e-6, seg.t1 - seg.t0)) };
-        s = seg.b;
-      }
-      return { a: s, b: s, u: 0 };
-    };
     const vec = (s: Full['scale']): THREE.Vector3 => (typeof s === 'number' ? new THREE.Vector3(s, s, s) : new THREE.Vector3(...s));
     const quat = (turn: Full['turn']): THREE.Quaternion => new THREE.Quaternion().setFromEuler(new THREE.Euler(turn[0] * DEG, turn[1] * DEG, turn[2] * DEG, 'XYZ'));
     const n = take.times.length;

@@ -427,6 +427,7 @@ export function propLowerHalf(prop: Prop): THREE.Vector3[] {
 
 /** A sourced model is its bounds; a built one is its parts. */
 export function propParts(prop: Prop): readonly Part[] {
+  if (prop.changed) return prop.changed;
   if (prop.parts.length) return prop.parts;
   const size = prop.bounds.getSize(new THREE.Vector3());
   const at = prop.bounds.getCenter(new THREE.Vector3()); at.y = prop.bounds.min.y;
