@@ -1,0 +1,39 @@
+{
+  "$schema": "../../node_modules/oxlint/configuration_schema.json",
+  "extends": [
+    "../../packages/config-eslint/oxlint/base.json"
+  ],
+  "ignorePatterns": [
+    "**/*.d.ts",
+    "**/dist/**",
+    "**/coverage/**",
+    "**/node_modules/**",
+    "**/.turbo/**",
+    "uploads/**"
+  ],
+  "overrides": [
+    {
+      "files": [
+        "**/*.js",
+        "**/*.mjs",
+        "**/*.cjs"
+      ],
+      "env": {
+        "browser": false,
+        "node": false
+      },
+      "rules": {
+        "no-unused-vars": [
+          "error",
+          {
+            "vars": "all",
+            "args": "after-used",
+            "caughtErrors": "all",
+            "ignoreRestSiblings": false
+          }
+        ],
+        "holoim/no-token-colour-literal": "off"
+      }
+    }
+  ]
+}

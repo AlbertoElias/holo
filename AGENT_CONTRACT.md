@@ -350,7 +350,7 @@ holograms to the agent account (dry run without `--apply`). Background:
   passes on skips: docs and `.md`, workflows and `.github/actions`, shell
   and Node scripts, agent tooling, editor and package-manager config, and
   `package.json` / `pnpm-workspace.yaml` (dependency edits also change
-  `pnpm-lock.yaml`). `scripts/*.ts`, `tsconfig*.json` and `eslint.config.*`
+  `pnpm-lock.yaml`). `scripts/*.ts`, `tsconfig*.json` and `.oxlintrc.json`
   select quality only; `fly.toml` and `.dockerignore` select only the API
   deploy. `pnpm-lock.yaml`, shared packages (`contracts`, `tooling-testing`,
   `ui-dom`, `xr-*`) and unclassified

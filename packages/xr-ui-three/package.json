@@ -9,7 +9,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "lint": "eslint .",
+    "lint": "oxlint",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "verify:fast": "pnpm run lint && pnpm run typecheck",
@@ -24,8 +24,8 @@
     "@holoim/config-eslint": "workspace:*",
     "@holoim/config-ts": "workspace:*",
     "@types/three": "catalog:",
-    "eslint": "catalog:",
     "jsdom": "^26.0.0",
+    "oxlint": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

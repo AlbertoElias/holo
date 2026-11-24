@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --host",
     "build": "tsc -p tsconfig.app.json && vite build",
-    "lint": "eslint . && node ../../packages/config-eslint/src/check-css-literals.mjs src",
+    "lint": "oxlint && node ../../packages/config-eslint/src/check-css-literals.mjs src",
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.e2e.json --noEmit",
     "test": "vitest run",
     "verify:fast": "pnpm run lint && pnpm run typecheck && pnpm run test",
@@ -74,8 +74,8 @@
     "@types/three": "catalog:",
     "@vitejs/plugin-react": "^4.7.0",
     "@zappar/msdf-generator": "^1.2.4",
-    "eslint": "catalog:",
     "jsdom": "^26.0.0",
+    "oxlint": "catalog:",
     "three-viewport-gizmo": "^2.2.0",
     "typescript": "catalog:",
     "vite": "catalog:",

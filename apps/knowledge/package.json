@@ -5,10 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "pnpm run check:docs && tsgo --noEmit && vite build",
+    "build": "pnpm run check:docs && tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1 --port 4176 --strictPort",
-    "lint": "eslint . && node ../../packages/config-eslint/src/check-css-literals.mjs src",
-    "typecheck": "tsgo --noEmit",
+    "lint": "oxlint && node ../../packages/config-eslint/src/check-css-literals.mjs src",
+    "typecheck": "tsc --noEmit",
     "check:docs": "tsx tooling/check-docs.ts",
     "test:e2e": "pnpm run check:docs && playwright test",
     "verify:fast": "pnpm run check:docs && pnpm run lint && pnpm run typecheck",
@@ -31,9 +31,9 @@
     "@types/node": "^24.0.0",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
-    "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "@vitejs/plugin-react": "^4.7.0",
-    "eslint": "catalog:",
+    "oxlint": "catalog:",
+    "typescript": "catalog:",
     "vite": "catalog:"
   }
 }

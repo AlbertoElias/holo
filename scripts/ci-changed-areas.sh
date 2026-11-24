@@ -108,7 +108,7 @@ else
       scripts/test-api.ts)
         saw_code=true; quality=true; pipeline=true; portal=true ;;
       # Lint, typecheck and tooling unit tests cover these.
-      scripts/*.ts|tsconfig*.json|eslint.config.*)
+      scripts/*.ts|tsconfig*.json|.oxlintrc.json)
         saw_code=true; quality=true ;;
       pnpm-lock.yaml)
         saw_code=true; all ;;

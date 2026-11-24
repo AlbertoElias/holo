@@ -282,8 +282,10 @@ is convention.
   handed to you (a brief from another session) has no repo line to fix: tell
   that session which part was wrong. `pnpm run doctor` (in `verify:pr`) fails
   on any `--filter` naming a package that does not exist.
-- Typecheck with each package's own `typecheck` script (root uses `tsc`;
-  `apps/knowledge` uses `tsgo`).
+- Lint and typecheck with each package's own `lint` and `typecheck` scripts.
+  Lint is Oxlint (rules in `packages/config-eslint/oxlint/`, one
+  `.oxlintrc.json` per package); typecheck is `tsc` from TypeScript 7, the
+  native compiler, in every package and at the root.
 - Skills: add skill directories under `.agents/skills/`. `.claude/skills` is a
   symlink to that directory, so never create files inside `.claude/skills` directly.
 - MCP servers: put launch logic in an executable `scripts/mcp/<name>.sh`, then
