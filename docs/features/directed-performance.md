@@ -1502,6 +1502,11 @@ capture already ships.
 
 #### Slice 5b: a photo in the look step (plan, 2026-11-24)
 
+The design review (2026-11-24) approved it with changes, which are in
+the text below: a separate photo result in the UI state, "Previous look"
+for "Undo", the current hair style as its fallback, the Quest activation
+check, and more cases in the checks.
+
 The owner said "Start 5b" on 2026-11-24. 2e put the look step in both
 capture flows, and 5a gave a read that runs in a browser. 5b joins them: a
 "From a photo" action in the phone's look sheet and on the headset's look
@@ -1538,22 +1543,31 @@ no button or pill; styleguide 6, a sheet action shows its word) with its
 44 px touch target, and one muted caption line, "Use a photo of your own
 face. It stays on this device." While it runs, the status line says
 "Getting the photo reader ready" (first use, the models load) and then
-"Reading your photo". After a read the status line names each trait the
-photo set ("From your photo: skin Linen, hair colour Wheat, eyes Cool grey,
-hair Wavy bob. Check each row.") and a muted line for each trait kept, with
-its reason in words. "Undo" is a second sheet action beside "From a
-photo" until the next change. A refusal (no face, two faces, a face too
+"Reading your photo". After a read one line names the traits the photo set ("From your
+photo: skin Linen, hair colour Wheat, eyes Cool grey, hair Wavy bob. Check
+each row.") and one muted line gives the reasons for the traits kept, so
+the rows do not move far down a sheet that is at most 46% of the screen.
+This photo result is a separate field of the UI state (`lookPhoto`), not
+the look's status, so the change's "dressing" and "ready" do not replace
+it. "Previous look" is a second sheet action beside "From a photo" until
+the next change or the next take. (Not "Undo": styleguide 6 gives that word
+to the Halo's authoring undo, which does not cover the look.) A refusal (no face, two faces, a face too
 small, a file that is not an image) says why in the status line, and the
 look does not change. The values come from `tokens.json` through
 `@holoim/design-tokens`, as the rest of the sheet.
 
 **UI on a headset.** The look panel's top row gets "From a photo" between
 the tabs and Close: a gold word, at least a ray's 56 apx high (6.1), as
-Close is. Selecting it opens the same hidden file input, from the
-controller's select event (a WebXR select event is a user activation). The
-panel's status line shows the same words as the phone, and the mirror shows
-the change. "Undo" takes the place of "From a photo" in that row until the
-next change, so the row keeps its width.
+Close is. Selecting it opens the same hidden file input. The panel's
+UIKit click runs in the frame after the WebXR select event, so the picker
+opens only if Chromium on Quest still counts that select as the user's
+activation (transient activation lasts some seconds); this is a Quest check,
+with what the session does while the system picker is open. If it fails, the
+headset action is removed and the creator uses the flat sheet in Quest
+Browser before they enter VR. The panel's status line shows the same words
+as the phone, and the mirror shows the change. "Previous look" sits beside
+"From a photo" in that row until the next change, so a second photo is one
+select.
 
 **Where the models load from, and their size.** All from capture's own
 origin. Nothing is fetched from a CDN, and nothing is fetched before the
@@ -1570,8 +1584,11 @@ The reader code (`@holoim/avatar-look/read` and the outlines) is a lazy
 chunk, so the capture bundle does not grow for a person who does not use
 it. Cloudflare Pages takes files up to 25 MiB, so the segmenter fits. The
 reader loads its two models when the person selects "From a photo", at the
-same time as the picker opens, and closes after each read, so the memory
-goes back.
+same time as the picker opens; the picker's `cancel` event stops that load.
+The reader closes after each read, so the memory goes back (each MediaPipe
+task has its own WebAssembly heap, so a read has three beside the selfie
+face's for about a second). The browser keeps the segmenter in its HTTP
+cache only after a load completes.
 
 **The photo stays on the device.** The file goes into an image bitmap (with
 its EXIF orientation), then into a canvas with its longest side capped at
@@ -1599,7 +1616,10 @@ read.
 | A large phone photo (12 to 48 MP) uses too much memory | Capped at 2048 px on its longest side before the read; a face must still be 200 px wide, which a selfie at that size is |
 | EXIF rotation (phone photos are often stored sideways) | `createImageBitmap` with `imageOrientation: 'from-image'` |
 | A HEIC file on a browser that cannot decode it | The decode fails and the status line says to use a JPEG or PNG; iOS Safari gives a JPEG to a file input |
-| The read stalls the face or the UI on a phone | It runs once per photo, about 0.7 s on a desktop CPU (5a); the e2e measures it in emulation; a Worker is a later option |
+| The read stalls the face or the UI on a phone | It runs once per photo, about 0.7 s on a desktop CPU (5a), after one painted frame of "Reading your photo"; the e2e measures it in emulation; the time and peak memory on a physical phone are a device check; a Worker is a later option |
+| The hair style has no fallback in the read | The capture path passes the whole current card; a proposal under 0.5 keeps the current style |
+| The outlines or the segmenter are out of date | The e2e checks the outlines' key against the house base's wardrobe and the dressing code, and the segmenter's SHA-256 |
+| The photo's measures reach the take | The e2e checks that the GLB extras hold only the card, and no file name shows in a status line or the log |
 | The model download fails (offline) | The status line says the reader did not load; the look does not change |
 | A take starts while the photo is read | `setLook` refuses a change when the take is not idle, and the result is dropped with a status line |
 | A second pick while the first reads | Each read has a number; only the latest one is applied |
@@ -1607,21 +1627,24 @@ read.
 | The headset's picker does not open during an immersive session | Not testable in IWER; a Quest check. The select event is a user activation by the WebXR spec |
 | The read's numbers differ in the page from the CLI | The parity check below on 5a's photo set |
 
-**Undo.** As in 2e, the look is set before a take and is not in a take's
-undo history. A photo changes up to four rows at once, so "Undo" puts back
-the look from before the photo in one step. Any later change ends it.
+**Previous look.** As in 2e, the look is set before a take and is not in a
+take's undo history. A photo changes up to four rows at once, so "Previous
+look" puts back the look from before the photo in one step. Any later
+change or a take ends it.
 
 **Checks.**
 
 1. **Phone e2e** (`apps/viewer-web/e2e/phone-photo-look.pipeline.spec.ts`,
    Pixel 7 viewport, IWER and SwiftShader as the look e2e): open the look
    sheet, "From a photo", the fixture photo through the file chooser. The
-   status line names the traits; each row's chosen picture is the card's;
+   status line names the traits; the card equals `photo-look.ts
+   --read-only` on the same fixture and changes at least two rows; each
+   row's chosen picture is the card's;
    the live avatar wears the card (`__sampleHouseLook`); every request in
    the read is a GET to capture's origin. "Undo" puts back the look. Pick
    again, record, post: the posted GLB's extras carry the card, and the feed
-   card shows the look (screenshot). A photo with no face is refused by
-   name and leaves the look as it was.
+   card shows the look (screenshot). A photo with no face and a file that
+   is not an image are refused by name and leave the look as it was.
 2. **IWER headset check** (`headset-photo-look` in
    `apps/capture/scripts/lib/look-take.mjs`): a controller ray on "From a
    photo" asks for a photo; the harness gives the fixture to the file input,
@@ -1630,8 +1653,9 @@ the look from before the photo in one step. Any later change ends it.
    mirror renders it; Record carries the card into the take.
 3. **Read parity on 5a's photo set.** The capture path (decode, the 2048 px
    cap, the shipped outlines) gives the same card as `photo-look.ts` on the
-   public-domain portraits of check 2. The numbers go in "Slice 5b
-   evidence".
+   public-domain portraits of check 2, plus one of them upscaled past
+   2048 px (so the cap runs) and one stored sideways with EXIF orientation
+   6. The numbers go in "Slice 5b evidence".
 4. **Proof video**, real time, phone viewport, zoomed so the sheet is
    legible: pick a public-domain portrait from 5a's set, see the card and
    the avatar change, record, post, and the feed card shows the look.
