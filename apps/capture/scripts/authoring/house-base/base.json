@@ -261,7 +261,8 @@
       "rows": 3
     },
     "browShapes": {
-      "$comment": "Moves (m) in the face's plane, then back onto the skin: browDown lowers the inner end by downInner and the outer by downOuter and draws it in by downIn; browInnerUp raises the inner end and draws it out; browOuterUp raises the outer end.",
+      "$comment": "Moves (m) in the face's plane, then back onto the skin: browDown lowers the inner end by downInner and the outer by downOuter and draws it in by downIn; browInnerUp raises the inner end and draws it out; browOuterUp raises the outer end. Shapes add up on a face that is not flat, so every mix of the three (each at 0, `mixSteps` steps, 1) is kept in front of the face: the shape that goes deepest gives way.",
+      "mixSteps": 2,
       "downInner": 0.03,
       "downOuter": -0.008,
       "downIn": 0.011,
@@ -602,7 +603,7 @@
     }
   },
   "garments": {
-    "$comment": "A loose jumper and trousers made from the body's top and trouser faces (painted by bone): each vertex eased out along the body's normal (m; limb = sleeves or trouser legs), the ease tapering to nothing over `taper` (m) from the openings that close on the body (dominant bone named in taperAt), kept under gapShare of the gap to another part (inner thighs, arms by the side), then smoothed (`rounds` of `smooth` passes) and pushed back out to `clear` of the ease from the body; the jumper's hem takes the trouser faces within `hem` (m) of the waist and stays `overTrousers` (m) outside them. The body under both is removed.",
+    "$comment": "A loose jumper and trousers made from the body's top and trouser faces (painted by bone): each vertex eased out along the body's normal (m; limb = sleeves or trouser legs), the ease tapering to nothing over `taper` (m) from the openings that close on the body (dominant bone named in taperAt; an opening with a taperWhole bone on it is tapered all the way round, so the neck's rim lies on the skin at the front and the back too), kept under gapShare of the gap to another part (inner thighs, arms by the side), then smoothed (`rounds` of `smooth` passes) and pushed back out to `clear` of the ease from the body; the jumper's hem takes the trouser faces within `hem` (m) of the waist and stays `overTrousers` (m) outside them. The body under both is removed.",
     "top": {
       "easeBody": 0.016,
       "easeLimb": 0.016,
@@ -615,6 +616,10 @@
         "Head",
         "LeftHand",
         "RightHand"
+      ],
+      "taperWhole": [
+        "Neck",
+        "Head"
       ],
       "limbBones": [
         "LeftArm",
@@ -685,7 +690,7 @@
       "reach": 0.06
     },
     "collar": {
-      "$comment": "The jumper's neckline: across the shoulders (|x| under `halfWidth` m, from `below` m under the neck's base up), faces below a plane through the neck's base (raised `raise` m), tilting down to the front by `tilt` (m per m), are jumper; above it, skin.",
+      "$comment": "The jumper's neckline: across the shoulders (|x| under `halfWidth` m, from `below` m under the neck's base up), faces below a plane through the neck's base (raised `raise` m), tilting down to the front by `tilt` (m per m), are jumper; above it, skin. The vertices on that line then slide along their own edges onto the plane, in every face shape alike, so the neckline is level and not stepped.",
       "raise": 0.035,
       "tilt": 0.45,
       "halfWidth": 0.17,
@@ -713,8 +718,12 @@
     }
   },
   "hair": {
-    "$comment": "Hair styles (clay-traits.png): shells cast from the head's centre onto the scalp, `columns` round and `rows` up to `poleRow` degrees, tucked `tuck` (m) under the scalp at the hairline. line: the hairline as [degrees round from the front, degrees up from level]; over the brows it is raised until it sits browMargin (m) above the brows raised all the way (no style crosses the brow line). Thickness (m): sides, top (reached `rise` degrees above the hairline), back, a front volume over frontWidth degrees; locks ripple the thickness (ridges: n round, swept; bumps: n round by m up). A curtain hangs from the hairline from `from` degrees round (ramping over `ramp`), to an end per angle [degrees, landmark, offset m], `clear` (m) outside the body, flaring and waving; below the chin it is carried by the chest. Decided by the agent in the owner's absence on 2026-11-18, for review.",
+    "$comment": "Hair styles (clay-traits.png): shells cast from the head's centre onto the scalp, `columns` round (`fine` times as many within `fineWithin` degrees of the front, where the fringe shows its edge) and `rows` up to `poleRow` degrees, tucked `tuck` (m) under the scalp at the hairline. line: the hairline as [degrees round from the front, degrees up from level]; over the brows it is raised until it sits browMargin (m) above the brows raised all the way (no style crosses the brow line). Thickness (m): sides, top (reached `rise` degrees above the hairline), back, a front volume over frontWidth degrees; where no curtain hangs the thickness comes down to `rim` of itself at the hairline, in a quarter round over `rimOver` degrees (a soft edge, not a slab's corner); locks ripple the thickness (ridges: n round, swept; bumps: n round by m up). A curtain hangs from the hairline from `from` degrees round (ramping over `ramp`), to an end per angle [degrees, landmark, offset m], `clear` (m) outside the body, flaring and waving only where it hangs (not over the face, where it has no length and would stand out as a flat shelf); below the chin it is carried by the chest. Decided by the agent in the owner's absence on 2026-11-18, for review.",
     "columns": 56,
+    "fine": 2,
+    "fineWithin": 90,
+    "rim": 0.5,
+    "rimOver": 10,
     "rows": 14,
     "poleRow": 86,
     "tuck": 0.004,

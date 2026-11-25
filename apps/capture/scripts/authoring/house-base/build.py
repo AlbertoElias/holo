@@ -551,14 +551,35 @@ for side, E in eyes.items():
             plan.append((t, E[0] + sg * u * R, E[2] + (low + thick * j / (rows - 1)) * R))
     verts = np.array([on_face(x, z, bro["lift"]) for _, x, z in plan])
 
-    def shaped(fn):
-        return np.array([on_face(x + dx, z + dz, bro["lift"]) for (t, x, z), (dx, dz) in zip(plan, (fn(t) for t, _, _ in plan))]) - verts
-
-    offs = {
-        f"browDown{side}": shaped(lambda t: (-sg * bs["downIn"] * (1 - t), -(bs["downOuter"] + (bs["downInner"] - bs["downOuter"]) * (1 - t)))),
-        f"browOuterUp{side}": shaped(lambda t: (0.0, bs["outerUp"] * t ** 1.5)),
-        "browInnerUp": shaped(lambda t: (sg * bs["innerOut"] * (1 - t), bs["innerUp"] * (1 - t) ** 1.5)),
+    # Each shape slides the brow in the face's plane; the brow then goes back onto the face there.
+    slides = {
+        f"browDown{side}": lambda t: (-sg * bs["downIn"] * (1 - t), -(bs["downOuter"] + (bs["downInner"] - bs["downOuter"]) * (1 - t))),
+        f"browOuterUp{side}": lambda t: (0.0, bs["outerUp"] * t ** 1.5),
+        "browInnerUp": lambda t: (sg * bs["innerOut"] * (1 - t), bs["innerUp"] * (1 - t) ** 1.5),
     }
+    slide = {c: np.array([fn(t) for t, _, _ in plan]) for c, fn in slides.items()}
+    offs = {c: np.array([on_face(x + dx, z + dz, bro["lift"]) for (_, x, z), (dx, dz) in zip(plan, slide[c])]) - verts for c in slides}
+    # Shapes add up, and the face is not flat: a lowered brow goes back into the socket's hollow, and with the
+    # inner ends raised at the same time (a worried face) it was back at its own height, but still that deep,
+    # under the skin. So for every mix of the three (each at none, `mixSteps` steps, all) no point may lie
+    # deeper than the face where the mix puts it; the shape that goes deepest there gives way, and stands
+    # that much in front of the hollow when it plays alone.
+    cs = list(slides)
+    mixes = [w for w in itertools.product(np.linspace(0.0, 1.0, bs["mixSteps"] + 1), repeat=len(cs)) if sum(1 for x in w if x > 0) > 1]
+    for _ in range(12):
+        worst = 0.0
+        for w in mixes:
+            for i, (_, x, z) in enumerate(plan):
+                dx, dz = sum(wk * slide[c][i] for wk, c in zip(w, cs))
+                over = verts[i][1] + sum(wk * offs[c][i][1] for wk, c in zip(w, cs)) - on_face(x + dx, z + dz, bro["lift"])[1]
+                if over > 1e-6:
+                    wk, c = max(((wk, c) for wk, c in zip(w, cs) if wk > 0), key=lambda p: p[0] * offs[p[1]][i][1])
+                    offs[c][i][1] -= over / wk
+                    worst = max(worst, over)
+        if worst <= 1e-6:
+            break
+    else:
+        raise SystemExit(f"the brow shapes still go under the face when mixed ({worst * 1000:.2f} mm)")
     add_part(verts, grid_faces(n + 1, rows), ["brow"] * (n * (rows - 1)), offs, front)
 
 # The mouth: lips on the skin, an upper and a lower one standing a little out of it, and between them a dark
@@ -925,6 +946,37 @@ for poly in human.data.polygons:
         continue
     if slots[poly.material_index] in ("skin", "top"):
         poly.material_index = slots.index("top" if c.z < z0 + cl["tilt"] * (c.y - y0) else "skin")
+# Whole faces fall on one side of the plane or the other, so the edge between them steps up and down
+# round the neck. Each point of that edge slides along one of its own mesh edges to the plane (the edge that
+# crosses the plane most squarely), in every face shape alike, and the neckline is a level line.
+above = lambda p: p[2] - (z0 + cl["tilt"] * (p[1] - y0))
+co = np.array([v.co[:] for v in human.data.vertices])
+of = {"skin": set(), "top": set()}
+nbr = {}
+for poly in human.data.polygons:
+    c = poly.center
+    if poly.index >= n_body_polys or abs(c.x) > cl["halfWidth"] or c.z < z0 - cl["below"]:
+        continue
+    vs = list(poly.vertices)
+    if slots[poly.material_index] in of:
+        of[slots[poly.material_index]].update(vs)
+    for a, b in zip(vs, vs[1:] + vs[:1]):
+        nbr.setdefault(a, set()).add(b)
+        nbr.setdefault(b, set()).add(a)
+neckline = of["skin"] & of["top"]
+moves = {}
+for v in neckline:
+    s = above(co[v])
+    across = [u for u in nbr[v] if u not in neckline and above(co[u]) * s < 0]
+    # In the middle of an upright step the only vertices across the plane are on the neckline too.
+    across = across or [u for u in nbr[v] if above(co[u]) * s < 0]
+    if across:
+        u = max(across, key=lambda u: abs(above(co[u])) / np.linalg.norm(co[u] - co[v]))
+        moves[v] = (co[u] - co[v]) * (s / (s - above(co[u])))
+for v, d in moves.items():
+    human.data.vertices[v].co = co[v] + d
+    for k in human.data.shape_keys.key_blocks:
+        k.data[v].co = np.array(k.data[v].co) + d
 
 # The trouser hems: at the ankles the vote leaves a ragged edge too (and the fit moves it), so a level plane
 # `raise` (m) above the top of the feet' faces decides there instead (shoe below, trousers above).

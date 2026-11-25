@@ -176,6 +176,20 @@ def garments(human, rig, slots, G):
         gdom = [dom[v] for v in used]
         # Openings that close on the body (the neck, the wrists; the ankles, the waist under the hem) taper to it.
         taper = [v for v in boundary if gdom[v].startswith(tuple(spec["taperAt"]))]
+        if spec.get("taperWhole"):
+            # A neck opening closes on the body all the way round. By its points' own bones only the sides of
+            # the collar did (the neck carries them); the front and the back (the chest carries them) kept
+            # their ease, so the rim stood off the neck there and lay on it at the sides, with the inside
+            # of the jumper showing in between.
+            on_rim = set(boundary)
+            seen = set(taper)
+            todo = [v for v in taper if gdom[v].startswith(tuple(spec["taperWhole"]))]
+            while todo:
+                for j, _ in adj[todo.pop()]:
+                    if j in on_rim and j not in seen:
+                        seen.add(j)
+                        todo.append(j)
+            taper = sorted(seen)
         dist = dijkstra(n, adj, taper)
         limb = np.array([gdom[i].startswith(tuple(spec["limbBones"])) for i in range(n)])
         ease = np.where(limb, spec["easeLimb"], spec["easeBody"]).astype(float)
@@ -281,9 +295,24 @@ def hair(S, H, bvh, C, land):
     """One hair style as (verts, faces, weights): a shell over the scalp from its hairline up, the locks a
     ripple on its thickness; for the long styles a curtain hanging from the hairline at the sides and back,
     outside the face; a bun for the high bun."""
-    cols = H["columns"]
     rows = H["rows"]
     nc = S["curtain"]["rows"] if "curtain" in S else 0
+    # The columns round the head, `fine` times as many within `fineWithin` degrees of the front: the hairline
+    # over the face is the edge that is looked at, and a lock sampled by too few columns shows as straight spikes.
+    step = 2 * math.pi / H["columns"]
+    angles = []
+    for c in range(H["columns"]):
+        a = -math.pi + c * step
+        n_sub = H["fine"] if abs(a + step / 2) < math.radians(H["fineWithin"]) else 1
+        angles.extend(a + step * k / n_sub for k in range(n_sub))
+    cols = len(angles)
+
+    def hangs(a):
+        """How much of a curtain hangs at this angle: none over the face, all of it from the temples back."""
+        if not nc:
+            return 0.0
+        cu = S["curtain"]
+        return float(smoothstep(math.radians(cu["from"]), math.radians(cu["from"] + cu["ramp"]), abs(a)))
 
     def scalp(a, b):
         d = direction(a, b)
@@ -307,11 +336,15 @@ def hair(S, H, bvh, C, land):
             fa = max(0.0, 1 - abs(a) / math.radians(S.get("frontWidth", 50)))
             fb = float(smoothstep(bh, bh + math.radians(12), b)) * (1 - float(smoothstep(bh + math.radians(25), bh + math.radians(55), b)))
             t += S["front"] * fa * fa * fb
-        return t * (1 + lock(a, b))
+        # The edge at the hairline is rounded: `rim` of the thickness at the hairline, all of it `rimOver`
+        # degrees up, so the shell ends in a soft lip and not in a slab's corner. A curtain hangs from the
+        # full thickness, so where one hangs the edge keeps it.
+        e = min(1.0, max(0.0, (b - bh) / math.radians(H["rimOver"])))
+        lip = H["rim"] + (1 - H["rim"]) * math.sqrt(1 - (1 - e) ** 2)
+        return t * (1 + lock(a, b)) * (lip + (1 - lip) * hangs(a))
 
     V, prof = [], []
-    for c in range(cols):
-        a = -math.pi + 2 * math.pi * c / cols
+    for a in angles:
         bh = math.radians(float(np.interp(abs(math.degrees(a)), [p[0] for p in S["line"]], [p[1] for p in S["line"]])))
         # Over the brows the hairline stays above the brows raised all the way.
         for _ in range(60):
@@ -330,7 +363,7 @@ def hair(S, H, bvh, C, land):
         if nc:
             cu = S["curtain"]
             hd = np.array((math.sin(a), -math.cos(a), 0.0))
-            amount = float(smoothstep(math.radians(cu["from"]), math.radians(cu["from"] + cu["ramp"]), abs(a)))
+            amount = hangs(a)
             z_end = float(np.interp(abs(math.degrees(a)), [p[0] for p in cu["end"]], [land[p[1]] + p[2] for p in cu["end"]]))
             L = max(0.0, S_pt[2] - z_end) * amount
             run = math.hypot(S_pt[0] - C[0], S_pt[1] - C[1])
@@ -341,7 +374,9 @@ def hair(S, H, bvh, C, land):
                 hit, _, _, dist = bvh.ray_cast(Vector((C[0], C[1], z)) + Vector(hd) * 0.6, Vector(-hd))
                 if hit is not None:
                     run = max(run, 0.6 - dist + cu["clear"])  # hair falls; it never tucks back in under the jaw
-                rho = run + cu["flare"] * f ** 1.5 + cu.get("wave", 0.0) * math.cos(cu.get("waves", 0) * a) * f
+                # The flare and the wave belong to hair that hangs: over the face, where the curtain has no
+                # length, they made a flat shelf that stood out from the hairline.
+                rho = run + amount * (cu["flare"] * f ** 1.5 + cu.get("wave", 0.0) * math.cos(cu.get("waves", 0) * a) * f)
                 inner.append(np.array((C[0], C[1], z)) + hd * rho)
             tc = min(cu["thick"], t_edge) if L < 1e-4 else cu["thick"]
             for i in range(nc):

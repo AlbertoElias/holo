@@ -2114,3 +2114,43 @@ bug above.)
   and asked for the laugh's lower lid higher (done).
 - **Not fixed (model):** the lids cannot slant and the brows do not bend (no such shapes); the grey teeth band and
   the thin lower lip at the laugh corners are in the approved mouth and stay.
+
+### B-112 — House avatar: brows in pieces, a hard fringe edge, a gap at the neck
+
+- **Found:** 2026-11-24, by the owner on a goodbye draft (her face at 5.2 s, head down, camera high). The story
+  session made the first renders.
+- **Area:** `apps/capture/scripts/authoring/house-base` (`build.py`, `dress.py`, `base.json`),
+  `apps/capture/assets/house-base`, `apps/capture/public/gltf/models/house-base.glb`, `public/look-pictures`
+- **Cause, brows:** not the camera and not the 3 mm lift. Each brow shape is "the point moved in the face's plane,
+  put back on the skin, less the rest point", and shapes add as straight lines on a face that is not flat.
+  `browDown` takes the inner end back into the socket's hollow; with `browInnerUp` added the brow is at its own
+  height again but still that deep. At rest and in each shape alone the ribbon is 0.8 mm or more clear. With
+  `browInnerUp` 1 and `browDown` 1, 40 of the 102 brow vertices are under the skin (to 8.7 mm, 40 % hidden). In the
+  "concerned" state face (inner up 0.6, down 0.3), 24 are under (1.75 mm, 21 % hidden), from every camera.
+- **Cause, fringe:** not mainly the 56 columns. In the curtain styles (wavyBob, centrePart) the curtain's flare and
+  wave were added over the face too, where the curtain has no length: a flat sheet with no thickness stood out
+  from the hairline, as far as 4 cm, with a polygon edge, and hung across the brows from a high camera. In every
+  style the front rim was a slab's corner, and a lock had 4 columns.
+- **Cause, neck:** the ease did not go to nothing all round. Only the rim vertices whose main bone is the neck or
+  the head were tapered (the sides, 0 mm). The front and the back of the rim (main bone Spine2) kept 3 to 14.6 mm
+  of ease, so the rim was on the neck in two places and off it in two, with the inside in view. The neckline also
+  went up and down in steps (z 1.382 to 1.408 m), because a plane test on face centres decides whole faces.
+- **Fix:** brows: `build.py` examines every mix of the three brow shapes (each at 0, 0.5 and 1) and, where a brow
+  point would go under the skin, the shape that goes deepest gives way (`face.browShapes.mixSteps`). Fringe:
+  `dress.py` flares and waves the curtain only where it hangs; the shell has twice the columns within 90° of the
+  front (`hair.fine`, `fineWithin`), and where no curtain hangs the thickness comes down to half in a quarter round
+  at the hairline (`rim`, `rimOver`). Neck: an opening with a `taperWhole` bone is tapered and pinned all the way
+  round, and `build.py` slides each neckline vertex along its own edge onto the collar plane, in every face shape.
+- **Proof:** brows: 0 of 102 vertices under the skin, 1.0 mm or more clear, 0 % hidden, at rest, in the concerned
+  face and in each tested mix (inner up + down at 1, with outer up, at 0.5, and 0.3 + 0.8), on the slight, medium
+  and broad builds. Fringe: no sheet in wavyBob or centrePart; no hair vertex below the top of the brows; the front
+  rim's edges 10 mm → 5 mm; examined in the six styles. Neck: the rim's clearance 0 to 14.6 mm → 0.0 mm all
+  round; 100 of 100 neckline vertices on the plane; examined in clay, ink and light. `house-base.glb` 1,559,348 →
+  1,582,852 bytes (bar 1,800,000); her look (wavyBob) 1,613,284 → 1,663,428 bytes; each wardrobe 1.97 → 2.17 MB.
+- **Pins:** the solver regression holds on baker, crouch v43, goodbye v35, pinch v14 and slip sO. On stone sD three
+  rows of the snap at 4.77 s (open as B-104) moved and are pinned again: `jump.me` 4.69 → 5.49 m/s (3 → 2 frames
+  over), `jump.props` 5.73 → 6.93 m/s (7 → 5 frames over), `arms.support.me` 3 → 0 %. The reason: the arm solve
+  keeps the arm clear of the body's skin, and the jumper's front rim is now 3 to 15 mm nearer the body, so the
+  solve comes out of the same snap in a different pose (`turn.me` got better, 1008 → 740°/s). A build without the
+  new hair columns gives the same numbers. `grip.find` did not move (0.3 mm, 4.5°).
+- **Not fixed:** the brows do not bend and the lids do not slant (no such shapes).
