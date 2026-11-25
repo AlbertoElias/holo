@@ -58,6 +58,12 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   (`output/proof-b104/baker-wall-fixed-draft.mp4`, solver at b9927e89e78e) is the accepted baker hold. Stone sD
   accepted "for now" ("stone is good enough for now"); no more work on its hold. Goodbye v35: the story session
   reworks its grab and face; this entry does not change the goodbye hold.
+- **Baker re-pin (owner approved the draft on 2026-11-24):** the main code gives the draft's baker to 0.0 mm
+  (256 frames), so the pins follow the draft. No bar and no wrist limit changes. Old → new: grip.take pass 4 mm,
+  2.8° → fail 0.3 mm, 12.7°; reach.offer#2 pass 15 → fail 34 mm; reach.offer 13 → 14 mm; reach.carry 15 → 14 mm;
+  reach.open 12 → 8 mm; arms.elbow.b 4° → 5°; arms.held.b fail 78 → 80.5 mm; arms.prop.b fail 42 → 25 mm;
+  arms.support.b fail 3 → 25 %; jump.b fail 3.71 → pass 1.47 m/s; jump.props fail 4.8 → pass 0.64 m/s;
+  turn.b 835 → 691 °/s; smooth.b 4 → 3 %. The new stone-sE case (the lid-edge reach) gets its first 15 pins.
 
 ### B-091 — verify:pr: the pipeline Playwright run does not exit after test timeouts
 

@@ -1,14 +1,14 @@
 {
   "baker": {
     "grip.take": {
-      "pass": true,
+      "pass": false,
       "numbers": [
         [
-          4,
+          0.3,
           "mm"
         ],
         [
-          2.8,
+          12.7,
           "°"
         ]
       ]
@@ -17,7 +17,7 @@
       "pass": true,
       "numbers": [
         [
-          12,
+          8,
           "mm"
         ]
       ]
@@ -26,7 +26,7 @@
       "pass": true,
       "numbers": [
         [
-          15,
+          14,
           "mm"
         ]
       ]
@@ -44,16 +44,16 @@
       "pass": true,
       "numbers": [
         [
-          13,
+          14,
           "mm"
         ]
       ]
     },
     "reach.offer#2": {
-      "pass": true,
+      "pass": false,
       "numbers": [
         [
-          15,
+          34,
           "mm"
         ]
       ]
@@ -62,7 +62,7 @@
       "pass": false,
       "numbers": [
         [
-          4,
+          3,
           "%"
         ],
         [
@@ -72,10 +72,10 @@
       ]
     },
     "jump.b": {
-      "pass": false,
+      "pass": true,
       "numbers": [
         [
-          3.71,
+          1.47,
           "m/s"
         ]
       ]
@@ -84,16 +84,16 @@
       "pass": false,
       "numbers": [
         [
-          835,
+          691,
           "°/s"
         ]
       ]
     },
     "jump.props": {
-      "pass": false,
+      "pass": true,
       "numbers": [
         [
-          4.8,
+          0.64,
           "m/s"
         ]
       ]
@@ -111,7 +111,7 @@
       "pass": false,
       "numbers": [
         [
-          42,
+          25,
           "mm"
         ]
       ]
@@ -138,7 +138,7 @@
       "pass": true,
       "numbers": [
         [
-          4,
+          5,
           "°"
         ],
         [
@@ -151,7 +151,7 @@
       "pass": false,
       "numbers": [
         [
-          78,
+          80.5,
           "mm"
         ]
       ]
@@ -160,7 +160,7 @@
       "pass": false,
       "numbers": [
         [
-          3,
+          25,
           "%"
         ]
       ]
@@ -879,6 +879,155 @@
       "numbers": [
         [
           3,
+          "%"
+        ]
+      ]
+    }
+  },
+  "stone-sE": {
+    "grip.find": {
+      "pass": true,
+      "numbers": [
+        [
+          0.4,
+          "mm"
+        ],
+        [
+          4.7,
+          "°"
+        ]
+      ]
+    },
+    "reach.lid": {
+      "pass": true,
+      "numbers": [
+        [
+          38,
+          "mm"
+        ]
+      ]
+    },
+    "reach.look-at-it": {
+      "pass": true,
+      "numbers": [
+        [
+          12,
+          "mm"
+        ]
+      ]
+    },
+    "reach.you": {
+      "pass": true,
+      "numbers": [
+        [
+          6,
+          "mm"
+        ]
+      ]
+    },
+    "smooth.me": {
+      "pass": false,
+      "numbers": [
+        [
+          6,
+          "%"
+        ],
+        [
+          0.03,
+          "m/s"
+        ]
+      ]
+    },
+    "jump.me": {
+      "pass": false,
+      "numbers": [
+        [
+          4.85,
+          "m/s"
+        ]
+      ]
+    },
+    "turn.me": {
+      "pass": false,
+      "numbers": [
+        [
+          4443,
+          "°/s"
+        ]
+      ]
+    },
+    "jump.props": {
+      "pass": false,
+      "numbers": [
+        [
+          4.31,
+          "m/s"
+        ]
+      ]
+    },
+    "arms.body.me": {
+      "pass": false,
+      "numbers": [
+        [
+          20,
+          "mm"
+        ]
+      ]
+    },
+    "arms.prop.me": {
+      "pass": false,
+      "numbers": [
+        [
+          20,
+          "mm"
+        ]
+      ]
+    },
+    "arms.twist.me": {
+      "pass": true,
+      "numbers": [
+        [
+          77,
+          "°"
+        ]
+      ]
+    },
+    "arms.wrist.me": {
+      "pass": true,
+      "numbers": [
+        [
+          45,
+          "°"
+        ]
+      ]
+    },
+    "arms.elbow.me": {
+      "pass": true,
+      "numbers": [
+        [
+          5,
+          "°"
+        ],
+        [
+          0,
+          "°"
+        ]
+      ]
+    },
+    "arms.held.me": {
+      "pass": false,
+      "numbers": [
+        [
+          136.3,
+          "mm"
+        ]
+      ]
+    },
+    "arms.support.me": {
+      "pass": false,
+      "numbers": [
+        [
+          1,
           "%"
         ]
       ]
