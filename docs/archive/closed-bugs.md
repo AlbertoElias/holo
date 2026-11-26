@@ -2170,12 +2170,14 @@ bug above.)
   face and in each tested mix (inner up + down at 1, with outer up, at 0.5, and 0.3 + 0.8), on the slight, medium
   and broad builds. Fringe: no sheet in wavyBob or centrePart; no hair vertex below the top of the brows; the front
   rim's edges 10 mm → 5 mm; examined in the six styles. Neck: the rim's clearance 0 to 14.6 mm → 0.0 mm all
-  round; 100 of 100 neckline vertices on the plane; examined in clay, ink and light. `house-base.glb` 1,559,348 →
+  round; 100 of 100 neckline vertices on the plane (the build stops if one cannot move); examined in clay, ink and light. `house-base.glb` 1,559,348 →
   1,582,852 bytes (bar 1,800,000); her look (wavyBob) 1,613,284 → 1,663,428 bytes; each wardrobe 1.97 → 2.17 MB.
 - **Pins:** the solver regression holds on baker, crouch v43, goodbye v35, pinch v14 and slip sO. On stone sD three
   rows of the snap at 4.77 s (open as B-104) moved and are pinned again: `jump.me` 4.69 → 5.49 m/s (3 → 2 frames
   over), `jump.props` 5.73 → 6.93 m/s (7 → 5 frames over), `arms.support.me` 3 → 0 %. The reason: the arm solve
   keeps the arm clear of the body's skin, and the jumper's front rim is now 3 to 15 mm nearer the body, so the
-  solve comes out of the same snap in a different pose (`turn.me` got better, 1008 → 740°/s). A build without the
-  new hair columns gives the same numbers. `grip.find` did not move (0.3 mm, 4.5°).
+  solve comes out of the same snap in a different pose. Two rows got better and are pinned tighter: `turn.me`
+  1008 → 740°/s and `arms.prop.me` 15 → 14 mm. A build without the new hair columns gives the same numbers.
+  `grip.find` did not move (0.3 mm, 4.5°). At 0 % the `arms.support.me` row cannot fail any more; it gets a
+  floor again when B-104 is fixed. The pins were written with `--write-pins`.
 - **Not fixed:** the brows do not bend and the lids do not slant (no such shapes).

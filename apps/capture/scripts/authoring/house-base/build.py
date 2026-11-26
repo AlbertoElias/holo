@@ -973,6 +973,8 @@ for v in neckline:
     if across:
         u = max(across, key=lambda u: abs(above(co[u])) / np.linalg.norm(co[u] - co[v]))
         moves[v] = (co[u] - co[v]) * (s / (s - above(co[u])))
+if len(moves) != len(neckline):
+    raise SystemExit(f"neckline: {len(neckline) - len(moves)} of {len(neckline)} vertices have no neighbour across the collar plane")
 for v, d in moves.items():
     human.data.vertices[v].co = co[v] + d
     for k in human.data.shape_keys.key_blocks:
