@@ -28,6 +28,46 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   change moves the left hand off the stone after its grip; for the goodbye, find why the bag fist stays 8° off and
   under the bag (support 0 %). Run `pnpm --filter @holoim/capture run test:authoring:solver` and lower the pins with
   `--write-pins` as each piece improves.
+- **Tried (2026-11-24, stone sD held gap):** the held gap comes from the sheet, not the solver. The 9 cm fist radius
+  on the 24 cm rock puts the left thumb about 10 cm into it. Grip trials on `stone-sD.json` (solver at b9927e89e78e,
+  `solver-regression.ts stone-sD`; the sheet is unchanged after the trials):
+
+  | grip (at, radius) | grip.find (bar 5°) | arms.held.me (pin 109.2 mm) | other rows |
+  |---|---|---|---|
+  | [0,0.06,-0.08], 0.09 (now) | 0.3 mm, 4.5° | 109.2 mm | at the pins |
+  | [0,0.06,-0.08], 0.105 | 0.4 mm, 5.5° X | 92.7 mm | smooth 12 % (pin 19 %), turn.me 514°/s |
+  | [0,0.06,-0.08], 0.11 | 0.4 mm, 5.8° X | 87.0 mm | smooth 10 % |
+  | [0,0.06,-0.08], 0.12 | 0.4 mm, 6.5° X | 76.2 mm | smooth 9 % |
+  | [0,0.04,-0.055], 0.105 | 0.4 mm, 5.9° X | 60.8 mm | turn.me 1584°/s, arms.prop 20 mm |
+  | [0,0.02,-0.03], 0.12 | 2.4 mm, 6.8° X | 44.7 mm | look-at-it 33 mm, turn.me 2145°/s |
+  | [0,0,0], axis x, 0.10 | 80.5 mm, 12.3° X | — | turn.me 5004°/s, jump.props 8.25 m/s |
+
+  Each grip that lowers the held gap puts grip.find over its 5° bar, so no grip edit passes. A fist cannot close
+  around a 24 cm rock. A story change (a smaller stone, or two hands) is the owner's choice, as for the baker.
+- **Tried (2026-11-24, goodbye v35 bag grip):** a per-frame wrist trace in `orientHand` (pose.ts) at the grasp
+  (1.70 s) shows two causes of the 8.1°. About 2° is a turn about the fingers' own axis, which the wrist bend drops.
+  The rest is the ulnar limit: the wrist wants 36° of ulnar deviation and stops at 30°, as for the baker.
+  - Roll passes in `orientHand` (a further forearm roll gives back the dropped turn; patch
+    `b104-roll-passes.patch` in the lead's shared notes folder, not on the branch): grip.h-bag 0.3 mm, 6.4° (pin
+    8.1°, bar 5°), turn.him 270°/s (pin 515). But jump.props 3.65 m/s (pin 2.55), held 10.4 mm (pin 9.3),
+    arms.elbow.him 5° (pin 3), jump.her 1.19 m/s (pin 1.04), turn.her 453°/s (pin 426). Not kept.
+  - With the roll passes, bag `facing` as a number instead of `him.hips` (the handle line is a line, so 180° is the
+    same): 0° 38.3°, 20° 37.5°, 45° 26.5°, 70° 16.3°, -25° 5.8° (jump.props 5.62 m/s), -40° 6.4° (jump.props
+    2.52 m/s, turn.him 470°/s, held 10.4 mm, turn.her 455°/s), -55° 6.3° (jump.props 5.24 m/s, held 16.6 mm).
+  - Support 0 % is by design here: the bag hangs from its handle, so no hand is under its lower half. Only a bar
+    change (a hanging carry) clears that row, and no bar is changed.
+  No variant passes grip.h-bag's 5° bar. The ulnar limit leaves a story change (the bag handle across the hand's
+  line, a shoulder strap, or the left hand) or a time-smoothed elbow swing, as for the baker.
+- **Owner verdicts (2026-11-24):** baker approved ("the loaf is fully approved"): the wall-fix draft
+  (`output/proof-b104/baker-wall-fixed-draft.mp4`, solver at b9927e89e78e) is the accepted baker hold. Stone sD
+  accepted "for now" ("stone is good enough for now"); no more work on its hold. Goodbye v35: the story session
+  reworks its grab and face; this entry does not change the goodbye hold.
+- **Baker re-pin (owner approved the draft on 2026-11-24):** the main code gives the draft's baker to 0.0 mm
+  (256 frames), so the pins follow the draft. No bar and no wrist limit changes. Old → new: grip.take pass 4 mm,
+  2.8° → fail 0.3 mm, 12.7°; reach.offer#2 pass 15 → fail 34 mm; reach.offer 13 → 14 mm; reach.carry 15 → 14 mm;
+  reach.open 12 → 8 mm; arms.elbow.b 4° → 5°; arms.held.b fail 78 → 80.5 mm; arms.prop.b fail 42 → 25 mm;
+  arms.support.b fail 3 → 25 %; jump.b fail 3.71 → pass 1.47 m/s; jump.props fail 4.8 → pass 0.64 m/s;
+  turn.b 835 → 691 °/s; smooth.b 4 → 3 %. The new stone-sE case (the lid-edge reach) gets its first 15 pins.
 
 ### B-091 — verify:pr: the pipeline Playwright run does not exit after test timeouts
 
@@ -165,25 +205,6 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   attempt. Attempt 2 of the same commit passed the job, and four local runs of the file passed that day. It is
   possibly the same cause (a wheel on the hologram that the slow runner does not take as a zoom); not examined.
 
-### B-100 — Authored crouch: the right arm steps about 8 mm in one frame as the take starts (1.73 s)
-
-- **Area:** `apps/capture/scripts/authoring` (`lib/direct.ts` reach solve, `src/ik/ArmIkSolver.ts` reach stop)
-- **Severity:** P3 (a small draft fault; no bar sees it, the opus review saw a probable stammer at the shin)
-- **Observed:** 2026-11-23, crouch v27 to v43 (`output/authoring/gesture-proof/crouch.json`)
-- **Evidence:** from the shoulder, the right elbow and wrist move 13 mm in the frame at 1.73 s against 2 to 5 mm in the
-  frames around it (v36). The cause has two parts. (1) The wrist goal loop in the reach solve does not converge near
-  full stretch: with a whole step per round the goal swings between two arm lengths 3 mm apart, so the pose depends
-  on the round that ends the loop. Fixed in B-099: the goal moves by half the error, 16 rounds (`EFFECTOR_GAIN`);
-  the step is now 8 mm. (2) At 1.77 s the hand gets to the solver's hard stop 1 cm short of the arm's length and stops
-  there (424 mm from the shoulder). Easing the goal into that stop (tanh over 8 or 20 mm, v41 and v42) did not make
-  the step smaller and put a finger 7 mm into the ball (`arms.held.me` FAIL), so it was taken out.
-- **Expected:** the arm moves on with no one-frame step as the take starts.
-- **Reproduction:** `node --conditions=development --import tsx scripts/authoring/make.ts output/authoring/gesture-proof/crouch.json --quick`
-  in `apps/capture`, then the per-frame step of `rightElbow` and `rightWrist` less `rightShoulder` in `motion.me.json`.
-- **Next fix:** find what moves the elbow 8 mm at 1.73 s with the loop converged: print the solver's clavicle swing
-  (protraction grows near full reach, `ArmIkSolver.ts` line 90) and the elbow hint per frame. If the swing jumps, ease
-  it by the target's distance over a wider band. A bar for a one-frame step of a joint from its parent would catch it.
-
 ### B-101 — House avatar: the jumper's sleeve end has a jagged edge at the wrist
 
 - **Area:** `apps/capture/scripts/authoring` house avatar (jumper cuff mesh against the hand skin)
@@ -195,8 +216,37 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Expected:** the sleeve ends in a clean ring at the wrist.
 - **Reproduction:** `node --conditions=development --import tsx scripts/authoring/make.ts output/authoring/gesture-proof/pinch.json`
   in `apps/capture`, then `review.ts` on the take and a crop of the right hand at 3.4 s.
-- **Next fix:** pull the cuff end back to a clean ring of vertices at the wrist and push it out 1 to 2 mm along its
-  normals, so that the cuff covers the skin with no crossing line. If that does not work, hide the hand skin under the cuff.
+- **Tried (2026-11-24, not merged):** in `house-base/build.py` (the `sleeveEnd` block), each vertex in a face that
+  crosses the cut plane moved onto the plane, in the base mesh and in every shape key. The saw-tooth stayed. The
+  separate jumper garment (`dress.garments`, called after the sleeve block) is made from the body's jumper faces,
+  with ease along the normals, a taper at the openings (`taperAt`), smoothing and a push out. Its own wrist boundary
+  makes the flaps, which stand off the skin.
+- **Tried (2026-11-24, branch `bug/sleeve-end` 9a8883e80aec, not merged):** with the `sleeveEnd` plane 1 cm up the
+  forearm, the sleeve's opening is on the forearm bones, so the jumper's `taperAt` (the hand bones) never tapered
+  it: the opening had the full 16 mm ease and stood off the skin in flaps. In `dress.py` a `cuff` block now takes
+  the opening on the forearm and hand bones, pins it, sets it to a circle on a plane across the forearm (radius
+  28 mm, the widest point plus 8 mm), fades that ease into the sleeve over `taper`, and keeps the body's faces
+  within 4 cm of it as skin under the cuff. In close renders of pinch at 3.4 s (Blender, 4 views of the right hand,
+  old v14 against new) the opening is now one round ring. But it reads as a wide open tube, its inside shows, and
+  the kept skin under it has thin spikes where its faces meet the hand. Not better enough to keep.
+- **Tried (2026-11-24, `bug/sleeve-end` 2e84de1953fd and 424b6b138fbd, not merged):** the ring closed on the wrist
+  (ease 3 mm, the opening's mean radius) and turned in by one row (`hem` 6 mm up the sleeve), the skin kept 2 cm
+  under it. In close renders of pinch at 2.0 s (wrist bent) and 3.4 s the saw-tooth is gone: the cuff ends in one
+  clean ring with a thin light hem, and the skin under it shows no spikes. The dressed avatar is 1.56 MB (bar 1.80).
+  But the jumper's vertices feed the arm samples of the solver and the arm checks (`bindVertices` in
+  `arm-quality.ts` takes every visible skinned mesh), so the cuff moves pinned numbers (the files on `main` pass all
+  cases):
+  - with the `sleeveEnd` plane (the jumper ends 1 cm before the wrist): baker arms.prop.b 48 mm (pin 42), goodbye
+    arms.elbow.him 4° (pin 3), stone-sD smooth.me 10 % (pin 19) and arms.support.me 0 % (pin 3). The same without the
+    vertex snap.
+  - the ring at the jumper's own sleeve end (no `sleeveEnd` plane): only stone-sD moves, smooth.me 11 % (pin 19),
+    and arms.prop.me 20 mm (pin 15) with the skin kept under the cuff. Without the kept skin, and without the hem,
+    smooth.me stays at 11 %.
+- **Next fix:** decide which surface the arm samples take. If the solver and the arm checks should see the body and
+  not the clothes, `bindVertices` takes the `Body` mesh only; the cuff then moves no number, but the pins move once
+  for every case (a re-pin that waits for the owner). Otherwise accept stone-sD smooth.me 11 % in the stone re-pin
+  that already waits for the owner. The render tool and the before/after crops are in the shared notes
+  (`b101-cuff/`).
 
 ### B-113 — VR spatial audio check: the bell is not louder in the right ear (seen once under load)
 
