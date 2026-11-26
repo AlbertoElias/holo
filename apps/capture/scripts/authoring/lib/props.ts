@@ -65,6 +65,38 @@ export interface Prop {
   /** Where it is now (world). */
   readonly position: THREE.Vector3;
   readonly quaternion: THREE.Quaternion;
+  /** Its parts as a world change has moved them now (a door swung open), in the object frame; undefined when no change moves it. */
+  changed?: readonly Part[];
+  /** The world change's pose now, kept so an anchor moves with the parts (a hand on a door's handle follows the door). */
+  changePose?: ChangePose;
+}
+
+/** A world change's pose of an object's shape, in the object frame: the take's change node (B-104). */
+export interface ChangePose { readonly quaternion: THREE.Quaternion; readonly lift: number; readonly scale: THREE.Vector3 }
+
+/**
+ * Moves a prop's parts by a world change's pose, as the take's change node does
+ * (scale, then turn, then lift), so collisions and the arm meter see the shape
+ * the viewer sees: an oven door that has swung open no longer stands in the
+ * oven mouth (B-104). A scale that is not even is applied along the part's own
+ * axes, which is exact for a part that the change does not turn against.
+ */
+export function setChange(prop: Prop, pose: ChangePose | undefined): void {
+  if (!pose) { delete prop.changed; delete prop.changePose; return; }
+  prop.changePose = pose;
+  const lift = new THREE.Vector3(0, pose.lift, 0);
+  prop.changed = prop.parts.map((part) => ({
+    ...part,
+    size: part.size.clone().multiply(pose.scale),
+    at: part.at.clone().multiply(pose.scale).applyQuaternion(pose.quaternion).add(lift),
+    rotation: pose.quaternion.clone().multiply(part.rotation),
+  }));
+}
+
+/** A point of the object frame where a world change has moved it now (unmoved when no change moves the object). */
+export function changedPoint(prop: Prop, local: THREE.Vector3): THREE.Vector3 {
+  const pose = prop.changePose;
+  return pose ? local.clone().multiply(pose.scale).applyQuaternion(pose.quaternion).add(new THREE.Vector3(0, pose.lift, 0)) : local;
 }
 
 /** Loads every sourced object of a sheet: local GLBs relative to the sheet, Poly Haven models from the API (cached under `cacheDir`). */
