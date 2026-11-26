@@ -1,12 +1,11 @@
-import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { devices, type Page, type Request } from "@playwright/test";
 import { createXrContext } from "@holoim/tooling-testing/xr-env";
 
+import { outlinesKey } from "../../capture/scripts/lib/photo-look-key.ts";
 import type { Finish, LookCard } from "../../../packages/avatar-look/src/index.ts";
 import { expect, test } from "./bootstrap";
 import { captureUrl, lookPanel, openCaptureOnHouseBase, press, recordAndPost, signInToCapture } from "./look-capture";
@@ -18,7 +17,8 @@ import { installProbe, waitForPortalReady } from "./portal-helpers";
 // from slice 5a's read on the device, and the posted hologram wears the card.
 // The photo is not uploaded: while it is read, the page makes only GET
 // requests to capture's own origin. The read must equal the authoring CLI's
-// (`photo-look.ts`) on the same photo. Screenshots and numbers land in
+// (`photo-look.ts`) on the same photo: its card for the portrait is pinned
+// here, and the opt-in parity test compares a whole photo set. Screenshots and numbers land in
 // output/test-results/photo-look/.
 
 const CAPTURE_APP = path.resolve(import.meta.dirname, "../../capture");
@@ -33,21 +33,22 @@ const captureOrigin = new URL(captureUrl).origin;
 const outDir = path.resolve(import.meta.dirname, "../../../output/test-results/photo-look");
 
 type HouseLook = { look: LookCard; finish: Finish };
-type PhotoSample = { picks: number; lastReadMs: number | null; card: LookCard | null; set: Array<{ trait: string; value: string }>; kept: Array<{ trait: string; why: string }>; hairStyleConfidence: number | null; readerOpen: boolean };
+type PhotoSample = { picks: number; lastReadMs: number | null; card: LookCard | null; set: Array<{ trait: string; value: string }>; kept: Array<{ trait: string; why: string }>; hairStyleConfidence: number | null; readerOpen: boolean; opened: number; closed: number; previous: boolean };
 type Hooks = { __sampleHouseLook: () => { look: HouseLook | null }; __samplePhotoLook: () => PhotoSample };
 
 const sampleLook = async (page: Page) => (await page.evaluate(() => (window as unknown as Hooks).__sampleHouseLook())).look!;
 const samplePhoto = (page: Page) => page.evaluate(() => (window as unknown as Hooks).__samplePhotoLook());
 
-const node = (args: string[]): string => execFileSync(process.execPath, ["--conditions=development", "--import", "tsx", ...args], { cwd: CAPTURE_APP, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
+/**
+ * \`photo-look.ts\`'s card for the portrait from the shipped default look,
+ * made by \`photo-look-data.ts cards\` (capture's authoring tools) with the
+ * outlines of OUTLINES_KEY. Make it again when that key changes.
+ */
+const PORTRAIT_CARD = { skin: "linen", eyes: "coolGrey", hairColour: "wheat", hairStyle: "wavyBob" };
 
-/** The authoring CLI's card for a photo: the read the app must match. */
-async function cliCard(photo: string): Promise<LookCard> {
-  const out = path.join(await mkdtemp(path.join(tmpdir(), "photo-look-")), "card.json");
-  // A first run renders the six styles' outlines (about 15 s); later runs read in about 3 s.
-  const styles = await readdir(path.join(CAPTURE_APP, "output/authoring/photo-look/.styles")).catch(() => [] as string[]);
-  node(["scripts/authoring/photo-look.ts", photo, "--out", out, ...(styles.some((file) => file.endsWith(".json")) ? ["--read-only"] : [])]);
-  return JSON.parse(await readFile(out, "utf8")) as LookCard;
+/** Every reader that opened has closed: \`close()\` ran, not only the reference dropped. */
+async function expectReaderClosed(page: Page, why: string): Promise<void> {
+  await expect.poll(async () => { const s = await samplePhoto(page); return { open: s.readerOpen, unclosed: s.opened - s.closed }; }, { message: why }).toEqual({ open: false, unclosed: 0 });
 }
 
 /** A plain image with no face: the ground colour, drawn in the page. */
@@ -86,8 +87,8 @@ test.describe("your look from a photo", () => {
     test.setTimeout(300_000);
     const outlinesFile = await readFile(path.join(CAPTURE_APP, "src/avatar/photoLookOutlines.ts"), "utf8");
     const shipped = /OUTLINES_KEY = '([0-9a-f]+)'/.exec(outlinesFile)?.[1];
-    expect(shipped, "the outlines are made from the current default look, wardrobe and read code: run photo-look-data.ts outlines").toBe(node(["scripts/authoring/photo-look-data.ts", "key"]).trim());
-    const want = await cliCard(PORTRAIT);
+    expect(shipped, "the outlines are made from the current house base, wardrobes and read code: run photo-look-data.ts outlines, then cards for PORTRAIT_CARD").toBe(await outlinesKey());
+    const want = PORTRAIT_CARD;
 
     const context = await createXrContext(browser, { ...devices["Pixel 7"], baseURL: testInfo.project.use.baseURL });
     try {
@@ -119,12 +120,13 @@ test.describe("your look from a photo", () => {
       const read = await pickPhoto(page, PORTRAIT);
       const photo = await samplePhoto(page);
       const live = await sampleLook(page);
-      expect(TRAITS(live.look), "the app's read equals photo-look.ts on the same photo").toEqual(TRAITS(want));
+      expect(TRAITS(live.look), "the app's read equals photo-look.ts on the same photo").toEqual(want);
       expect({ build: live.look.build, glasses: live.look.glasses, clothing: live.look.clothing, finish: live.finish }, "a photo does not set build, glasses, clothes or finish").toEqual({ build: start.look.build, glasses: start.look.glasses, clothing: start.look.clothing, finish: start.finish });
       const changed = Object.entries(TRAITS(live.look)).filter(([trait, value]) => TRAITS(start.look)[trait as keyof ReturnType<typeof TRAITS>] !== value);
       expect(changed.length, "the portrait changes at least two rows").toBeGreaterThanOrEqual(2);
-      expect(read).toMatch(/^From your photo: .+\. Check each row\.$/);
-      expect(photo.readerOpen, "the reader closes after the read").toBe(false);
+      expect(read, "the status line names each trait the photo set").toMatch(/^From your photo: skin [^,]+, hair colour [^,]+, eyes [^,]+, hair [^,]+\. Check each row\.$/);
+      expect(photo.opened, "one reader for each pick (the two refusals and this read), opened only when asked").toBe(photo.picks);
+      await expectReaderClosed(page, "the reader closes after the read");
       await expect(lookPanel(page).getByTestId("look-previous")).toBeVisible();
       await mkdir(outDir, { recursive: true });
       await page.screenshot({ path: path.join(outDir, "phone-read.png") });
@@ -149,7 +151,7 @@ test.describe("your look from a photo", () => {
       // The portrait again, then a take.
       await pickPhoto(page, PORTRAIT);
       const dressed = await sampleLook(page);
-      expect(TRAITS(dressed.look)).toEqual(TRAITS(want));
+      expect(TRAITS(dressed.look)).toEqual(want);
 
       const offOrigin = requests.filter((r) => !r.url().startsWith("data:") && !r.url().startsWith("blob:") && (r.method() !== "GET" || new URL(r.url()).origin !== captureOrigin));
       expect(offOrigin.map((r) => `${r.method()} ${r.url()}`), "while photos are read, only GETs to capture's own origin").toEqual([]);
@@ -158,8 +160,11 @@ test.describe("your look from a photo", () => {
       const model = await page.request.get(segmenter!.url());
       expect(createHash("sha256").update(await model.body()).digest("hex"), "the segmenter is the pinned model").toBe(SEGMENTER_SHA256);
 
-      const posted = await recordAndPost(page);
-      await expect(page.getByTestId("look-previous"), "a take ends Previous look").toBeHidden();
+      expect((await samplePhoto(page)).previous, "Previous look is there before the take").toBe(true);
+      const posted = await recordAndPost(page, async () => {
+        expect((await samplePhoto(page)).previous, "a take ends Previous look").toBe(false);
+        await expectReaderClosed(page, "no reader stays open into the take");
+      });
       const glbResponse = await page.request.get(posted.url);
       const bytes = await glbResponse.body();
       const gltf = readGlbJson(bytes) as unknown as { nodes?: Array<{ extras?: Record<string, unknown> }>; scenes?: Array<{ extras?: Record<string, unknown> }> };
@@ -186,12 +191,16 @@ test.describe("your look from a photo", () => {
     }
   });
 
-  // Slice 5a's photo set (not committed: PHOTO_LOOK_PARITY_DIR names a folder of photos):
+  // Slice 5a's photo set (not committed: PHOTO_LOOK_PARITY_DIR names a folder of photos, and
+  // PHOTO_LOOK_PARITY_CARDS the file \`photo-look-data.ts cards <that folder> --out <file>\` wrote):
   // the app's read equals photo-look.ts on each, upscaled past 2048 px and EXIF-rotated ones too.
   test("parity: the app's read equals photo-look.ts on each photo", async ({ browser }, testInfo) => {
     const dir = process.env.PHOTO_LOOK_PARITY_DIR;
-    test.skip(!dir, "PHOTO_LOOK_PARITY_DIR names no photo folder.");
+    const cardsFile = process.env.PHOTO_LOOK_PARITY_CARDS;
+    test.skip(!dir || !cardsFile, "PHOTO_LOOK_PARITY_DIR and PHOTO_LOOK_PARITY_CARDS name no photo set.");
     test.setTimeout(600_000);
+    const made = JSON.parse(await readFile(cardsFile!, "utf8")) as { outlinesKey: string; cards: Record<string, LookCard | null> };
+    expect(made.outlinesKey, "the cards were made with the current outlines").toBe(await outlinesKey());
     const photos = (await readdir(dir!)).filter((file) => /\.(jpe?g|png)$/i.test(file)).sort();
     const context = await createXrContext(browser, { ...devices["Pixel 7"], baseURL: testInfo.project.use.baseURL });
     const rows: Array<{ photo: string; app: unknown; cli: unknown; same: boolean; readMs: number | null; refused: string | null }> = [];
@@ -209,13 +218,9 @@ test.describe("your look from a photo", () => {
         await expect(lookPanel(page)).toHaveAttribute("data-look-status", "ready", { timeout: 30_000 });
         const message = await pickPhoto(page, file);
         const sample = await samplePhoto(page);
-        let cli: LookCard | null = null;
-        let refused: string | null = null;
-        try {
-          cli = await cliCard(file);
-        } catch {
-          refused = "photo-look.ts refused it";
-        }
+        expect(photo in made.cards, `${photo} is in ${cardsFile}`).toBe(true);
+        const cli = made.cards[photo] ?? null;
+        const refused = cli ? null : "photo-look.ts refused it";
         const app = message.startsWith("From your photo") || message.startsWith("The photo set no trait") ? TRAITS((await sampleLook(page)).look) : message;
         const want = cli ? TRAITS(cli) : refused;
         rows.push({ photo, app, cli: want, same: JSON.stringify(app) === JSON.stringify(want) || (cli === null && typeof app === "string"), readMs: sample.lastReadMs, refused });

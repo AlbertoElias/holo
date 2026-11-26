@@ -4,29 +4,40 @@
  *
  *   photo-look-data.ts outlines [--from <.styles/key.json>]
  *     Writes the six hair styles' outlines that a full `photo-look.ts` run
- *     keeps in `output/authoring/photo-look/.styles/` into
- *     `src/avatar/photoLookOutlines.ts`, with `outlinesKey()`: the hash of
- *     the default look, its wardrobe and the dressing and read code. The phone
- *     e2e fails when that key no longer matches. To refresh: run
- *     `photo-look.ts <any photo>` once, then this.
+ *     keeps in `output/authoring/photo-look/.styles/` (the file for the
+ *     current code) into
+ *     `src/avatar/photoLookOutlines.ts`, with `outlinesKey()`
+ *     (`scripts/lib/photo-look-key.ts`). The phone e2e fails when that key no
+ *     longer matches. To refresh: run `photo-look.ts <any photo>` once, then
+ *     this, then `cards` for the e2e's portrait.
  *
  *   photo-look-data.ts key
- *     Prints \`outlinesKey()\`, for the e2e to compare with \`OUTLINES_KEY\`.
+ *     Prints `outlinesKey()`.
+ *
+ *   photo-look-data.ts cards <photo or folder> [--out <cards.json>]
+ *     Runs `photo-look.ts --read-only` on each photo (from the shipped default
+ *     look) and writes { photo name: card, or null when refused }. The phone
+ *     e2e pins the portrait's card from it, and its parity test reads one
+ *     (PHOTO_LOOK_PARITY_CARDS) for PHOTO_LOOK_PARITY_DIR.
  *
  *   photo-look-data.ts fixture [--finish clay|ink|light] [--out <file.jpg>]
- *     Renders the house base close up in `FIXTURE_CARD`, as a photo of a face
- *     for the e2e: no photo of a real person goes into the repository.
+ *     Renders the house base close up in `FIXTURE_CARD`, as a face for the
+ *     e2e's kept-traits case. The e2e's other photo is one public-domain
+ *     portrait (see the README beside the fixtures).
  */
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Page } from 'playwright';
 
 import { FINISHES, HAIR_STYLES, type Finish, type HairGrid, type HairStyle, type LookCard } from '@holoim/avatar-look';
 import { tokens } from '@holoim/design-tokens';
 
+import { outlinesKey } from '../lib/photo-look-key.ts';
 import { build } from './direct.ts';
 import { defaultLook, dressedFile, wardrobeFile } from './lib/house-look.ts';
 import { REVIEW_PAGE } from './lib/review-page.ts';
@@ -34,8 +45,8 @@ import { openTake, startViewer } from './lib/viewer-session.ts';
 
 const APP = fileURLToPath(new URL('../../', import.meta.url));
 const STYLE_CACHE = join(APP, 'output/authoring/photo-look/.styles');
-export const OUTLINES_FILE = join(APP, 'src/avatar/photoLookOutlines.ts');
 const AVATAR_LOOK_SRC = fileURLToPath(new URL('../../../../packages/avatar-look/src/', import.meta.url));
+export const OUTLINES_FILE = join(APP, 'src/avatar/photoLookOutlines.ts');
 export const FIXTURE_FILE = join(APP, '../viewer-web/e2e/fixtures/photo-look/house-face.jpg');
 
 /** The fixture's look: far from the shipped default in skin, hair and eyes, so a read changes several rows. */
@@ -48,25 +59,25 @@ export const FIXTURE_CARD: LookCard = {
   clothing: 'oatmealSlate'
 };
 
-/** What the outlines depend on: the default look, its wardrobe, and the code that dresses and reads. */
-export async function outlinesKey(): Promise<string> {
-  const defaults = await defaultLook();
-  const hash = createHash('sha256').update(JSON.stringify(defaults)).update(await readFile(wardrobeFile(defaults.build)));
-  for (const file of ['dress.ts', 'photo.ts', 'read.ts', 'traits.ts']) hash.update(await readFile(join(AVATAR_LOOK_SRC, file)));
-  return hash.digest('hex').slice(0, 16);
-}
-
 /** One grid as a string of its cells, 0, 1 or 2 (`HairGrid`), row by row. */
 const packGrid = (grid: HairGrid): string => grid.cells.join('');
 
+/**
+ * The name `photo-look.ts` gives its outlines in `.styles/` (its own
+ * `outlinesKey`, made the same way): so `outlines` takes the file made from
+ * the current code, never an older one.
+ */
+async function cliStylesFile(): Promise<string> {
+  const defaults = await defaultLook();
+  const hash = createHash('sha256').update(JSON.stringify(defaults)).update(await readFile(wardrobeFile(defaults.build)));
+  const sources = [join(APP, 'scripts/authoring/photo-look.ts'), join(APP, 'scripts/authoring/lib/house-look.ts'), ...['photo.ts', 'read.ts', 'look.ts', 'traits.ts'].map((f) => join(AVATAR_LOOK_SRC, f))];
+  for (const file of sources) if (existsSync(file)) hash.update(await readFile(file));
+  return join(STYLE_CACHE, `${hash.digest('hex').slice(0, 16)}.json`);
+}
+
 async function outlines(from: string | undefined): Promise<void> {
-  let source = from ? resolve(from) : undefined;
-  if (!source) {
-    const kept = existsSync(STYLE_CACHE) ? readdirSync(STYLE_CACHE).filter((f) => f.endsWith('.json')).map((f) => join(STYLE_CACHE, f)) : [];
-    kept.sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs);
-    source = kept[0];
-  }
-  if (!source) throw new Error(`no outlines in ${STYLE_CACHE}: run photo-look.ts <photo> once (without --read-only)`);
+  const source = from ? resolve(from) : await cliStylesFile();
+  if (!existsSync(source)) throw new Error(`no outlines for the current code at ${source}: run photo-look.ts <photo> once (without --read-only)`);
   const kept = JSON.parse(await readFile(source, 'utf8')) as { grids: Record<HairStyle, HairGrid> };
   const first = kept.grids[HAIR_STYLES[0]];
   const key = await outlinesKey();
@@ -88,6 +99,32 @@ ${grids}
   );
   const out = { key };
   console.log(`wrote ${OUTLINES_FILE} (key ${out.key}) from ${source}`);
+}
+
+/** `photo-look.ts`'s card for one photo, or null when it refuses the photo. */
+async function cliCard(photo: string): Promise<LookCard | null> {
+  const out = join(mkdtempSync(join(tmpdir(), 'photo-look-')), 'card.json');
+  // A first run renders the six styles' outlines (about 15 s); later runs read in about 3 s.
+  const styles = existsSync(await cliStylesFile());
+  try {
+    execFileSync(process.execPath, ['--conditions=development', '--import', 'tsx', 'scripts/authoring/photo-look.ts', photo, '--out', out, ...(styles ? ['--read-only'] : [])], { cwd: APP, stdio: ['ignore', 'inherit', 'inherit'] });
+  } catch {
+    return null;
+  }
+  return JSON.parse(readFileSync(out, 'utf8')) as LookCard;
+}
+
+async function cards(from: string, out: string | undefined): Promise<void> {
+  const source = resolve(from);
+  const photos = statSync(source).isDirectory() ? readdirSync(source).filter((file) => /\.(jpe?g|png)$/i.test(file)).sort().map((file) => join(source, file)) : [source];
+  const result: Record<string, LookCard | null> = {};
+  for (const photo of photos) result[basename(photo)] = await cliCard(photo);
+  const text = `${JSON.stringify({ outlinesKey: await outlinesKey(), cards: result }, null, 2)}\n`;
+  if (out) {
+    await mkdir(dirname(resolve(out)), { recursive: true });
+    await writeFile(resolve(out), text);
+    console.log(`wrote ${resolve(out)} (${photos.length} photo(s))`);
+  } else process.stdout.write(text);
 }
 
 /** The fixture view: the head from the eyes' height, close enough that the face is about 400 px wide. */
@@ -137,12 +174,13 @@ if (isMain) {
   };
   if (command === 'outlines') await outlines(flag('--from'));
   else if (command === 'key') console.log(await outlinesKey());
+  else if (command === 'cards' && args[0]) await cards(args[0], flag('--out'));
   else if (command === 'fixture') {
     const finish = (flag('--finish') ?? 'clay') as Finish;
     if (!FINISHES.includes(finish)) throw new Error(`--finish: one of ${FINISHES.join(', ')}`);
     await fixture(finish, resolve(flag('--out') ?? FIXTURE_FILE));
   } else {
-    console.error('photo-look-data.ts outlines [--from <file>] | key | fixture [--finish clay|ink|light] [--out <file.jpg>]');
+    console.error('photo-look-data.ts outlines [--from <file>] | key | cards <photo or folder> [--out <cards.json>] | fixture [--finish clay|ink|light] [--out <file.jpg>]');
     process.exitCode = 1;
   }
 }

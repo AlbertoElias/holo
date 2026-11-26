@@ -57,8 +57,8 @@ export async function choose(page: Page, row: string, option: string): Promise<v
   await expect(lookPanel(page)).toHaveAttribute("data-look-status", "ready", { timeout: 30_000 });
 }
 
-/** Records a short take and posts it; returns the new hologram's id and model URL. */
-export async function recordAndPost(page: Page): Promise<{ id: string; url: string }> {
+/** Records a short take and posts it; returns the new hologram's id and model URL. `duringTake` runs while the take records. */
+export async function recordAndPost(page: Page, duringTake?: () => Promise<void>): Promise<{ id: string; url: string }> {
   await press(page.getByRole("button", { name: CONTROL_NAMES.startRecording }));
   await expect(lookPanel(page), "the panel closes for the take").toBeHidden();
   await expect(page.getByTestId("dock-look"), "no Look control while a take runs").toBeHidden();
@@ -70,6 +70,7 @@ export async function recordAndPost(page: Page): Promise<{ id: string; url: stri
     const match = /(\d+):(\d{2})/.exec((await page.locator("[data-capture-running-time]").textContent()) ?? "");
     return match ? Number(match[1]) * 60 + Number(match[2]) : 0;
   };
+  await duringTake?.();
   await expect.poll(runningSeconds, { timeout: 30_000 }).toBeGreaterThanOrEqual(TAKE_SECONDS);
   await press(page.getByRole("button", { name: CONTROL_NAMES.stopRecording }));
   const post = page.locator("[data-capture-post]");

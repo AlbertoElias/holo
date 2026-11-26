@@ -60,6 +60,11 @@ export class PhotoLookController {
   private lastCard: PhotoCard | null = null;
   /** Picks whose read has ended, refused or not. */
   private picks = 0;
+  /** Reads that have started and not ended: the reader is closed only when none holds it. */
+  private reading = 0;
+  /** For the e2e: readers opened and closed (a close counts when `close()` returns). */
+  private opened = 0;
+  private closed = 0;
 
   constructor(private readonly deps: PhotoLookDeps) {
     // A take ends "Previous look" (the look is not in a take's history).
@@ -94,9 +99,12 @@ export class PhotoLookController {
   }
 
   /** For the e2e: the last read's time and card. Holds no photo pixels. */
-  sample(): { picks: number; lastReadMs: number | null; card: LookCard | null; set: PhotoCard['set']; kept: PhotoCard['kept']; hairStyleConfidence: number | null; readerOpen: boolean } {
+  sample(): { picks: number; lastReadMs: number | null; card: LookCard | null; set: PhotoCard['set']; kept: PhotoCard['kept']; hairStyleConfidence: number | null; readerOpen: boolean; opened: number; closed: number; previous: boolean } {
     return {
       picks: this.picks,
+      opened: this.opened,
+      closed: this.closed,
+      previous: this.before !== null,
       lastReadMs: this.lastReadMs,
       card: this.lastCard?.card ?? null,
       set: this.lastCard?.set ?? [],
@@ -118,10 +126,13 @@ export class PhotoLookController {
       // The same photo can be picked again.
       input.value = '';
       if (file) void this.readFile(file);
-      else this.dropReader();
+      else if (this.reading === 0) this.dropReader();
     });
-    // The picker closed with no photo: the reader that started to load is dropped.
-    input.addEventListener('cancel', () => this.dropReader());
+    // The picker closed with no photo: the reader that started to load is
+    // dropped, unless a read still holds it (that read closes it at its end).
+    input.addEventListener('cancel', () => {
+      if (this.reading === 0) this.dropReader();
+    });
     document.body.append(input);
     this.input = input;
     return input;
@@ -136,7 +147,12 @@ export class PhotoLookController {
 
   private startReader(): Promise<Reader> {
     if (!this.reader) {
-      const reader = this.loadModule().then((m) => m.openReader());
+      const reader = this.loadModule()
+        .then((m) => m.openReader())
+        .then((r) => {
+          this.opened += 1;
+          return r;
+        });
       this.reader = reader;
       reader.catch(() => {
         if (this.reader === reader) this.reader = null;
@@ -149,7 +165,12 @@ export class PhotoLookController {
   private dropReader(): void {
     const reader = this.reader;
     this.reader = null;
-    void reader?.then((r) => r.close()).catch(() => undefined);
+    void reader
+      ?.then((r) => {
+        r.close();
+        this.closed += 1;
+      })
+      .catch(() => undefined);
   }
 
   private show(status: LookPhotoUi['status'], message: string | null, kept: string | null = null): void {
@@ -161,60 +182,68 @@ export class PhotoLookController {
     const stale = (): boolean => id !== this.latest;
     const { houseLook, recording } = this.deps;
     const loading = this.startReader();
-    let ready = false;
-    void loading.then(() => (ready = true)).catch(() => undefined);
-    await Promise.resolve();
-    if (!ready) this.show('loading', 'Getting the photo reader ready');
-    let m: ReadModule;
-    let reader: Reader;
-    try {
-      [m, reader] = await Promise.all([this.loadModule(), loading]);
-    } catch (error) {
-      console.error('[look photo] the reader did not load', error);
-      if (!stale()) this.show('error', 'The photo reader did not load. Check the connection and try again.');
-      this.picks += 1;
-      return;
-    }
-    if (stale()) return;
-    this.show('reading', 'Reading your photo');
+    this.reading += 1;
     let canvas: HTMLCanvasElement | null = null;
+    let m: ReadModule | null = null;
     try {
+      let ready = false;
+      void loading.then(() => (ready = true)).catch(() => undefined);
+      await Promise.resolve();
+      if (!ready) this.show('loading', 'Getting the photo reader ready');
+      let reader: Reader;
+      try {
+        [m, reader] = await Promise.all([this.loadModule(), loading]);
+      } catch (error) {
+        console.error('[look photo] the reader did not load', error);
+        if (!stale()) this.show('error', 'The photo reader did not load. Check the connection and try again.');
+        return;
+      }
+      if (stale()) return;
+      this.show('reading', 'Reading your photo');
       canvas = await m.photoCanvas(file);
       await painted();
       if (stale()) return;
       const current = houseLook.look;
-      if (!current) return;
+      if (!current) {
+        // The house base is gone (another avatar loaded): nothing to fill.
+        this.deps.ui.setLookPhoto(IDLE);
+        return;
+      }
+      // A take that started during the load or the decode: no read, so the take's frames do not stall.
+      if (recording.isTakeBusy()) {
+        this.before = null;
+        this.show('refused', 'A take started, so the look did not change.');
+        return;
+      }
       const startedAt = performance.now();
       const result = m.readCard(reader, canvas, current.look);
       this.lastReadMs = performance.now() - startedAt;
       this.lastCard = result;
       console.info(`[look photo] read in ${Math.round(this.lastReadMs)} ms: ${result.set.length} trait(s) set`);
       if (stale()) return;
-      if (recording.isTakeBusy()) {
+      const next: HouseLook = { look: result.card, finish: current.finish };
+      if (recording.isTakeBusy() || (result.set.length > 0 && !houseLook.setLook(next))) {
+        // A take ends "Previous look" too, so the refusal shows without it.
+        this.before = null;
         this.show('refused', 'A take started, so the look did not change.');
         return;
       }
-      const next: HouseLook = { look: result.card, finish: current.finish };
-      if (result.set.length > 0) {
-        if (!houseLook.setLook(next)) {
-          this.show('refused', 'A take started, so the look did not change.');
-          return;
-        }
-        this.before = current;
-      }
+      if (result.set.length > 0) this.before = current;
       this.show('read', setLine(result.set), keptLine(result.kept));
     } catch (error) {
       if (stale()) return;
-      if (error instanceof m.NotAnImage) this.show('refused', 'That file did not open as a photo. Use a JPEG or PNG.');
-      else if (error instanceof m.PhotoRefused) this.show('refused', REFUSED[error.reason] ?? 'That photo could not be read. Try another one.');
+      if (m && error instanceof m.NotAnImage) this.show('refused', 'That file did not open as a photo. Use a JPEG or PNG.');
+      else if (m && error instanceof m.PhotoRefused) this.show('refused', REFUSED[error.reason] ?? 'That photo could not be read. Try another one.');
       else {
         console.error('[look photo] the read failed', error);
         this.show('error', 'That photo could not be read. Try another one.');
       }
     } finally {
-      // The photo's pixels go: the canvas is emptied and the reader closed.
+      // The photo's pixels go: the canvas is emptied, and the reader is
+      // closed once no read holds it (a newer pick may share it).
       if (canvas) canvas.width = canvas.height = 0;
-      if (this.reader === loading) this.dropReader();
+      this.reading -= 1;
+      if (this.reading === 0 && this.reader === loading) this.dropReader();
       this.picks += 1;
     }
   }

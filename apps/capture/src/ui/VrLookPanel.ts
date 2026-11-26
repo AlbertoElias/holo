@@ -265,6 +265,9 @@ export class VrLookPanel {
     this.kept = look && look.status !== 'error' && photo.status === 'read' ? (photo.kept ?? '') : '';
     say(this.keptText, this.kept);
     this.keptText.setProperties({ display: this.kept ? 'flex' : 'none', opacity: this.readableAt(this.keptText) ? 1 : 0 });
+    // While a photo loads or reads, "From a photo" takes no hits (as on the phone): a second pick must not close the reader in use.
+    const photoBusy = photo.status === 'loading' || photo.status === 'reading';
+    this.targets.get('photo')!.shown = !photoBusy;
     const previous = this.targets.get('previous')!;
     previous.shown = photo.previous;
     previous.hit.setProperties({ display: photo.previous ? 'flex' : 'none' });
@@ -288,7 +291,7 @@ export class VrLookPanel {
       const chosen = pick && look ? lookValue(look, pick.row) === pick.value : target.id === `tab:${this.tab}`;
       for (const label of target.labels) {
         // A picture's word is full text colour when chosen, muted otherwise; a control's word is gold.
-        const rest = pick ? (chosen ? COLOR.text : COLOR.textMuted) : target.id.startsWith('tab:') && !chosen ? COLOR.textMuted : COLOR.gold;
+        const rest = pick ? (chosen ? COLOR.text : COLOR.textMuted) : (target.id.startsWith('tab:') && !chosen) || (target.id === 'photo' && photoBusy) ? COLOR.textMuted : COLOR.gold;
         label.setProperties({ color: hovered || pressed ? COLOR.highlight : rest, opacity: !readable ? 0 : pressed ? GLYPH.pressedOpacity : 1 });
       }
       target.hit.setProperties({ pointerEvents: readable && target.shown ? 'auto' : 'none' });

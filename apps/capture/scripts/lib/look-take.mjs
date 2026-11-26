@@ -253,7 +253,10 @@ export async function runIwerPhotoLookTake({ browser, baseUrl, artifactDir, cons
     const changed = Object.entries(traits(afterPhoto.look)).filter(([k, v]) => traits(start.look)[k] !== v).map(([k]) => k);
     if (changed.length < 2) fail(`the portrait changed ${changed.length} rows (${changed.join(', ')})`);
     if (JSON.stringify(afterPhoto.look) !== JSON.stringify(read.card)) fail(`the live look ${JSON.stringify(afterPhoto.look)} is not the read card ${JSON.stringify(read.card)}`);
-    if (read.readerOpen) fail('the reader stayed open after the read');
+    // close() ran, not only the reference dropped (the counts are the controller's).
+    for (let i = 0; i < 60 && (await samplePhoto(page)).closed < (await samplePhoto(page)).opened; i += 1) await step(2);
+    const after = await samplePhoto(page);
+    if (after.readerOpen || after.opened !== 1 || after.closed !== 1) fail(`the reader did not close after the read (opened ${after.opened}, closed ${after.closed})`);
     const photoStatus = vr.look.panel.status;
     const kept = vr.look.panel.kept;
     // A second in the mirror, so a proof video shows the change.

@@ -1599,12 +1599,18 @@ request with the photo.
 
 **Outlines as data.** The six styles' outlines do not depend on the photo
 (5a evidence). `scripts/authoring/photo-look-data.ts outlines` writes the
-outlines that a full `photo-look.ts` run keeps in `.styles/` into
+outlines that a full `photo-look.ts` run keeps in `.styles/` (the file
+for the current code, by the CLI's own key) into
 `apps/capture/src/avatar/photoLookOutlines.ts` (a module, so the lazy
-chunk holds it), with `OUTLINES_KEY`: the hash of the default look, its
-wardrobe and the dressing and read code. The phone e2e fails when
-`photo-look-data.ts key` no longer gives that key. Run `outlines` again
-after a change to the house base, the dressing or the read.
+chunk holds it), with `OUTLINES_KEY`: the hash of the shipped house base,
+the wardrobes and the dressing and read code
+(`apps/capture/scripts/lib/photo-look-key.ts`, outside the authoring
+folder, so CI's browser suites run when one of them changes). The phone
+e2e fails when the key no longer matches. Run `outlines` again after a
+change to the house base, the dressing or the read, then
+`photo-look-data.ts cards` for the e2e's pinned portrait card. The e2e
+does not run the authoring CLI: `scripts/check-ci-areas.ts` fails a suite
+that reads the authoring folder.
 
 **Failure cases.**
 
@@ -1662,10 +1668,16 @@ change or a take ends it.
    legible: pick a public-domain portrait from 5a's set, see the card and
    the avatar change, record, post, and the feed card shows the look.
 
-**The e2e photo.** A render of the house base in a known card, made by
-`photo-look-data.ts fixture`, is committed with the e2e. No photo of a
-real person goes into the repository. The proof video and the parity
-check use 5a's public-domain portraits from outside the repository.
+**The e2e photo.** The plan was a committed render of the house base in a
+known card (`photo-look-data.ts fixture`). The read finds the render as a
+face but sets no trait, so it cannot show that a photo changes the card.
+Decision (owner, 2026-11-26): commit one public-domain portrait as the e2e
+photo, `apps/viewer-web/e2e/fixtures/photo-look/portrait.jpg` (B001243,
+from `unitedstates.github.io/images/congress/original/`, a work of the US
+government). Its source, status and SHA-256 are in the README beside it.
+The render stays as the kept-traits case. No other photo of a real person
+goes into the repository: the parity check and the proof video use 5a's
+other portraits from outside it.
 
 **Ownership.** The lead of this brief builds 5b: `src/avatar/photoLook.ts`
 (new), `photoLookRead.ts` (new, the lazy chunk), `photoLookOutlines.ts` (new), the segmenter in
@@ -1679,10 +1691,12 @@ and the IWER scenario. It does not edit `photo-look.ts` or
 
 | Check | Result |
 |---|---|
-| Phone e2e (`apps/viewer-web/e2e/phone-photo-look.pipeline.spec.ts`, Pixel 7) | Pass, 3.4 min. A file that is not an image and an image with no face are refused by name and leave the look. The portrait sets four rows (skin Linen, hair colour Wheat, eyes Cool grey, hair Wavy bob; the start was Caramel, Espresso, Dark brown, Swept crop) and equals `photo-look.ts` on the same photo; the read took 472 ms; the reader closes after it. "Previous look" puts back the start. The house render is found as a face but sets no trait, and the kept line gives each reason. From the first pick to the post, every request is a GET to capture's origin; the segmenter served there has the pinned SHA-256. The posted GLB's avatar record carries the read card, and its JSON holds no read numbers or image. The feed card shows the look. `OUTLINES_KEY` equals `photo-look-data.ts key`. Screenshots: `output/test-results/photo-look/` (not committed) |
-| IWER headset (`headset-photo-look`, `SUMMON_ONLY=headset-photo-look pnpm --filter @holoim/capture run test:xr:summon`) | Pass, 21 s. "From a photo" sits on the panel's head row with a ray-size hit and no text within 1 m. The controller select opened Playwright's file chooser (`pickerOpened: true`); Playwright does not hold the picker to user activation, so the Quest check below stays open. The mirror wears the portrait's four rows, and "Previous look" puts back the start |
+| Phone e2e (`apps/viewer-web/e2e/phone-photo-look.pipeline.spec.ts`, Pixel 7) | Pass, 2.9 min (after the review fixes). A file that is not an image and an image with no face are refused by name and leave the look. The portrait sets four rows (skin Linen, hair colour Wheat, eyes Cool grey, hair Wavy bob; the start was Caramel, Espresso, Dark brown, Swept crop) and equals `photo-look.ts` on the same photo (its card is pinned in the spec, made by `photo-look-data.ts cards`); the read took 404 ms. One reader opens for each pick, and `close()` runs for each (counted, not only the reference dropped). A take ends "Previous look" (checked while the take records), and no reader is open into the take. "Previous look" puts back the start. The house render is found as a face but sets no trait, and the kept line gives each reason. From the first pick to the post, every request is a GET to capture's origin; the segmenter served there has the pinned SHA-256. The posted GLB's avatar record carries the read card, and its JSON holds no read numbers or image. The feed card shows the look. `OUTLINES_KEY` equals `outlinesKey()` in `scripts/lib/photo-look-key.ts`. Screenshots: `output/test-results/photo-look/` (not committed) |
+| IWER headset (`headset-photo-look`, `SUMMON_ONLY=headset-photo-look pnpm --filter @holoim/capture run test:xr:summon`) | Pass, 19 s. "From a photo" sits on the panel's head row with a ray-size hit and no text within 1 m. The controller select opened Playwright's file chooser (`pickerOpened: true`); Playwright does not hold the picker to user activation, so the Quest check below stays open. The mirror wears the portrait's four rows, and "Previous look" puts back the start |
 | Read parity (the parity test in the same spec, `PHOTO_LOOK_PARITY_DIR` = 5a's nine portraits, one upscaled to 2700 × 3300 px and one stored sideways with EXIF orientation 6) | 11 of 11 equal `photo-look.ts`; the upscaled and the EXIF-6 photo read as their originals. Reads 370 to 1090 ms |
 | Lazy load | `photoLookRead` and the outlines are a 29 KB chunk of their own; the entry holds only the controller. The reader and the models load at the first "From a photo" and close after each read |
+| Review fixes (independent verifier and code review, 2026-11-24) | A read that goes stale while the reader loads now closes the reader (one `finally` for every exit). A cancelled picker or an older read does not close a reader that a newer read holds (a count of reads in flight). On the headset, "From a photo" takes no hits while a photo loads or reads, as on the phone. A take that starts during the load or decode stops the read before it runs, and a refusal during a take ends "Previous look" and stays shown. A house look gone during a read sets the status back to idle. `outlines` takes the `.styles/` file named by the CLI's own key, not the newest file. The e2e no longer runs the authoring CLI, which `check:ci-areas` refused (CI's browser suites do not run for that folder) |
+| Not covered | The cancel path and a row tap during "Getting the photo reader ready" are in the code only: the e2e cannot close a file chooser or time a tap inside the model load |
 | Open | On a Quest: does the system picker open from the ray's select (activation)? If it does not, remove the headset action (the plan's fallback) |
 
 ### Slice 6: publish a take in one command (2026-11-18)
