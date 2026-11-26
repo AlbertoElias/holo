@@ -174,6 +174,9 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   stayed 7.14 (expected the inside distance, 1.6) for the 10 s of the poll. `deep-zoom.spec.ts` passed in that
   attempt. Attempt 2 of the same commit passed the job, and four local runs of the file passed that day. It is
   possibly the same cause (a wheel on the hologram that the slow runner does not take as a zoom); not examined.
+- **`portal.pipeline.spec.ts:120` observed again (2026-11-26):** gate run 45847778751 (`verify:hosted`, tree a7cd7367,
+  `infra/hosted-branch-gate`, no viewer-web change), attempt 1: the same numbers (7.14 against 1.6 for the 10 s poll).
+  The gate's one rerun of the job passed.
 
 ### B-100 — Authored crouch: the right arm steps about 8 mm in one frame as the take starts (1.73 s)
 
