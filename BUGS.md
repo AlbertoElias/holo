@@ -7,6 +7,15 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
+### B-112 — viewer-api unit test "waits past the deadline" times out on a heavily loaded Mac (once)
+
+- **Area:** apps/viewer-api (`test/object-routes.test.ts`, "object search with a stalled Poly Pizza download")
+- **Severity:** P3 (test flake; no product effect)
+- **Observed:** 2026-11-26, once, in `verify:pr --no-cache` on `infra/hosted-branch-gate` (no viewer-api change)
+  at load average 22: "Test timed out in 5000ms" after 54.9 s. In the same run, lint and typecheck took 29 minutes.
+- **Expected:** the test finishes inside its limit on a loaded machine, or its limit fits a loaded machine.
+- **Reproduction:** not reproduced. Alone, the file passes in 4.5 s (this test takes 1.5 s).
+
 ### B-111 — Viewer browser shard hits its 10-minute limit when the Playwright cache misses and apt is slow (once)
 
 - **Area:** CI (`.github/actions/setup`, job "Viewer and Knowledge browser checks")
