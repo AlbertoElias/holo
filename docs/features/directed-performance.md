@@ -1378,7 +1378,7 @@ the phone capture mandate):
 4b changes the recording format, so it waits for both owners to agree;
 4a's loss report is the case for it.
 
-### Slice 5: likeness from a photo (5a merged 2026-11-24; 5b in flight)
+### Slice 5: likeness from a photo (5a merged 2026-11-24; 5b merged 2026-11-26)
 
 The second finish moved into slice 2 (2f) on 2026-11-17. What is left is
 the deferred half of likeness: a selfie read once into the slice 2 trait
@@ -1387,6 +1387,10 @@ phone journey's two minutes, kept on the device and made only from the
 creator's own photo. It changes no trait and no file format: it only
 fills the card a creator can already set by hand. 2e (built, on `main`)
 put the trait card in both capture flows.
+
+**5b approved on 2026-11-26.** The owner saw the 5b proof video and the
+report and answered "Approve, merge". The Quest picker check on a physical
+headset stays open.
 
 **Split on 2026-11-23 (5a approved, decision 16).** The owner asked for "a
 feature where the avatar configuration is based on a photo of the user".
