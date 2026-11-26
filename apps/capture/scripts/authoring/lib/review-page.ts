@@ -17,7 +17,7 @@
  *   face vertex (`faceBound`, which must hold `face`; slow, so only on a few
  *   frames); per recorded object, its box the same way. The face pass
  *   leaves the canvas unfit to show unless `restore` (default true).
- * - `close(i, view)`: renders performer `i` with the viewer's renderer and
+ * - `close(i, view)` (`view.exposure` multiplies the tone-mapping exposure for that render): renders performer `i` with the viewer's renderer and
  *   scene from a camera placed by `view`, returns a JPEG data URL (and,
  *   with `view.faceBox`, the face's box: brow line to chin when `init` had
  *   regions, else every vertex a face shape moves).
@@ -342,7 +342,11 @@ export const REVIEW_PAGE = String.raw`
       r.setPixelRatio(1);
       r.setSize(view.width, view.height, false);
       r.setClearColor(view.background, 1);
+      // view.exposure: a multiplier on the viewer's tone-mapping exposure for this render only (the clay finish is lit and has no emissive).
+      const exposure = r.toneMappingExposure;
+      if (view.exposure) r.toneMappingExposure = exposure * view.exposure;
       r.render(state.probe.scene, cam);
+      r.toneMappingExposure = exposure;
       const out = document.createElement('canvas');
       out.width = view.width; out.height = view.height;
       const ctx = out.getContext('2d');
