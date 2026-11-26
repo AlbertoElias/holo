@@ -258,14 +258,20 @@ async function main(): Promise<void> {
   const file = args[0];
   if (!file) { console.error('usage: viewer-check.ts <take.glb> [--video out.mp4] [--frames dir] [--audio out.webm] [--captions] [--report out.json]'); process.exit(2); }
   const videoDir = videoOut ? await tempDir('viewer-check-') : undefined;
+  let since = performance.now();
   const servers = await startViewer();
+  // `phase <name>: <s> s` lines: make.ts reads them into the build's phase times.
+  console.log(`phase viewer start: ${((performance.now() - since) / 1000).toFixed(1)} s`);
   try {
+    since = performance.now();
     const open = await openTake(servers, file, { viewport: { width: 900, height: 900 }, ...(framesOut ? { deviceScaleFactor: 2 } : {}), ...(videoDir ? { recordVideoDir: videoDir.path } : {}), ...(audioOut ? { recordAudio: true } : {}) });
     const { page, card } = open;
     const uploaded = { id: open.id, url: open.url };
     const result = await read(page, uploaded.url);
     const shot = resolve(`${file.replace(/\.glb$/, '')}-viewer.png`);
     await card.screenshot({ path: shot });
+    console.log(`phase viewer open and read: ${((performance.now() - since) / 1000).toFixed(1)} s`);
+    since = performance.now();
     if (framesOut) {
       // Twelve stills at exact take times, paused, framed on the cast: what a critic is shown.
       await mkdir(framesOut, { recursive: true });
@@ -285,6 +291,7 @@ async function main(): Promise<void> {
         const p = Object.entries((window as unknown as { __feedProbes: Record<string, { actions: Record<string, { paused: boolean } | null> }> }).__feedProbes).find(([k]) => k.endsWith(u))![1];
         for (const a of Object.values(p.actions)) if (a) a.paused = false;
       }, uploaded.url);
+      console.log(`phase stills: ${((performance.now() - since) / 1000).toFixed(1)} s`);
     }
     // The feed starts muted, so the captions pass comes first; `--audio` unmutes after it.
     let captions: CaptionsReading | undefined = captionsOn ? await watchCaptions(page, uploaded.url, file, result.duration) : undefined;

@@ -29,7 +29,7 @@ import { actingReport, diffTakes, summarize } from './acting-report.ts';
 import { loadAvatar, type LoadedAvatar } from './lib/avatar.ts';
 import { houseFinish, parseSheetText, validateSheet, type BeatSheet } from './lib/beats.ts';
 import { defaultLook, dressedFile, HOUSE_BASE } from './lib/house-look.ts';
-import { solveTake, type ObjectReport, type SolvedTake } from './lib/direct.ts';
+import { solveTake, type ObjectReport, type SolveOptions, type SolvedTake } from './lib/direct.ts';
 import { describeAttend, describeLife } from './lib/life.ts';
 import { loadSources, type LoadedSource } from './lib/props.ts';
 import { parseGlb } from './lib/gltf-read.ts';
@@ -37,6 +37,7 @@ import { addCaptions, takeCaptions } from './lib/captions.ts';
 import { addAudio, padAndEncode, prepareEffects, prepareLine, probeSeconds, type AudioSource, type Effect, type Line } from './lib/sound.ts';
 import { solveWorld } from './lib/world.ts';
 import { writeTake } from './lib/write-glb.ts';
+import { phaseLine, phaseMark, startPhases, type Phase } from './lib/phases.ts';
 
 const OUTPUT = fileURLToPath(new URL('../../output/authoring/', import.meta.url));
 
@@ -101,10 +102,13 @@ export interface BuildResult {
   readonly audio: readonly { name: string; onset: number; seconds: number; padded: number; bytes: number; file: string }[];
   /** The `HOLOIM_captions` the take carries, or null when nothing is said. */
   readonly captions: CaptionsExtension | null;
+  /** Wall-clock seconds of each phase: setup, each solve pass, world and sound, export. */
+  readonly phases: readonly Phase[];
 }
 
-export async function build(sheetFile: string, out?: string, style?: BeatSheet['style'], avatarOverride?: string): Promise<BuildResult> {
+export async function build(sheetFile: string, out?: string, style?: BeatSheet['style'], avatarOverride?: string, solve: SolveOptions = {}): Promise<BuildResult> {
   const started = performance.now();
+  const phases = startPhases();
   const loaded = await loadSheet(sheetFile, avatarOverride);
   const sheet: BeatSheet = style ? { ...loaded.sheet, style } : loaded.sheet;
   const { avatars, sources } = loaded;
@@ -113,9 +117,13 @@ export async function build(sheetFile: string, out?: string, style?: BeatSheet['
   for (const b of sheet.beats) if (b.say) lines.push(await prepareLine(b, sheetFile, soundCache));
   const speech = new Map<string, { at: number; lips: Line['lips'] }[]>();
   for (const l of lines) speech.set(l.performer, [...(speech.get(l.performer) ?? []), { at: l.at, lips: l.lips }]);
-  const take = solveTake(sheet, avatars, sources, speech);
+  phaseMark('setup', started);
+  const take = solveTake(sheet, avatars, sources, speech, solve);
+  let since = performance.now();
   const world = solveWorld(sheet, take);
   const effects = await prepareEffects(take, sheetFile, soundCache);
+  phaseMark('world and sound', since);
+  since = performance.now();
   const written = await writeTake(take, {
     author: 'HoloIM direction',
     title: sheet.title,
@@ -159,7 +167,8 @@ export async function build(sheetFile: string, out?: string, style?: BeatSheet['
   // The sheet as solved (with any --style override), beside the take.
   await writeFile(`${file.replace(/\.glb$/, '')}.beats.json`, `${JSON.stringify(sheet, null, 2)}\n`);
   if (take.props.length) await writeFile(`${file.replace(/\.glb$/, '')}.objects.json`, `${JSON.stringify(take.objects, null, 2)}\n`);
-  return { out: file, take, world: world.lines, channels: written.channels, seconds: (performance.now() - started) / 1000, bytes: glb.byteLength, lines, effects, audio, captions };
+  phaseMark('export', since);
+  return { out: file, take, world: world.lines, channels: written.channels, seconds: (performance.now() - started) / 1000, bytes: glb.byteLength, lines, effects, audio, captions, phases };
 }
 
 async function main(): Promise<void> {
@@ -178,6 +187,7 @@ async function main(): Promise<void> {
     process.exit(2);
   }
   const r = await build(sheetFile, out, style, avatar);
+  console.log(`  phases: ${phaseLine(r.phases)}`);
   console.log(`${basename(r.out)}: ${r.take.tracks.length} performer(s), ${r.take.times.length} frames at ${r.take.fps} fps, ${r.channels} channels, ${(r.bytes / 1e6).toFixed(1)} MB, built in ${r.seconds.toFixed(1)} s`);
   for (const a of r.audio) console.log(`  ${a.name}: ${a.seconds.toFixed(2)} s from ${a.onset.toFixed(2)} s, padded to ${a.padded.toFixed(3)} s, ${(a.bytes / 1e3).toFixed(0)} KB`);
   for (const t of r.captions?.tracks ?? []) for (const c of t.cues) console.log(`  caption ${t.language} ${c.from.toFixed(2)}-${c.to.toFixed(2)} s (${c.speaker}): ${c.text}`);

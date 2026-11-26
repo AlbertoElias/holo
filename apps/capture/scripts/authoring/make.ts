@@ -45,6 +45,7 @@ import { faceBarPasses, faceBarPx, FACE_AWAY_MAX_SHARE, PAIR_FACE_BAR_PX } from 
 import { FACE_CHANNELS } from '@holoim/avatar-face';
 import { DEFAULT_TIMING, FACE_MIXES, GESTURES, houseFinish, parseSheetText, resolveTiming, STATES, STORY_PARTS, storyEventProblem, validateSheet, type BeatSheet, type ObjectSpec, type Place, type Point } from './lib/beats.ts';
 import { solveTake } from './lib/direct.ts';
+import { phaseLine, type Phase } from './lib/phases.ts';
 import { IRIS_OUT_MAX_FRAMES } from './lib/eye-view.ts';
 import { ARM_LIMITS, PAIR_LIMITS, type ArmReport } from './lib/arm-quality.ts';
 import { parseGlb } from './lib/gltf-read.ts';
@@ -492,6 +493,8 @@ async function make(sheetFile: string, quick: boolean): Promise<boolean> {
   try { built = await build(sheetFile, take); } catch (e) { console.error(`THE BUILD STOPPED: ${(e as Error).message}`); return false; }
   await copyFile(sheetFile, join(dir, basename(sheetFile)));
   console.log(`  built: ${built.take.times.length} frames, ${(built.take.times.length / built.take.fps).toFixed(1)} s, ${mb(built.bytes)}`);
+  const phases: Phase[] = [...built.phases];
+  console.log(`  phases: ${phaseLine(phases)}`);
   const glb = new Uint8Array(await readFile(take));
   const doc = parseGlb(glb);
   const looks = ((doc.json.asset as { extras?: { holoim?: { looks?: unknown[] } } }).extras?.holoim?.looks ?? []) as { performer?: string; card?: unknown; finish?: string }[];
@@ -619,6 +622,7 @@ async function make(sheetFile: string, quick: boolean): Promise<boolean> {
     if (staticFailed && !quick) notes.push('review skipped: a bar above failed, so fix it first');
     const frames = join(dir, 'frames');
     const r = spawnSync('node', ['--conditions=development', '--import', 'tsx', fileURLToPath(new URL('./viewer-check.ts', import.meta.url)), take, '--frames', frames], { cwd: CAPTURE, encoding: 'utf8' });
+    for (const m of (r.stdout ?? '').matchAll(/^phase (.+): ([\d.]+) s$/gm)) phases.push({ name: m[1]!, seconds: Number(m[2]) });
     if (r.status === 0) {
       spawnSync('node', ['packages/tooling-testing/src/preview.mjs', frames], { cwd: ROOT, encoding: 'utf8' });
       notes.push(`twelve stills: ${rel(frames)}-sheet.jpg (look at it before the full review)`);
@@ -636,6 +640,8 @@ async function make(sheetFile: string, quick: boolean): Promise<boolean> {
     rows.push(await storyRow(reviewDir, sheet), await visualRow(reviewDir), await readingRow(reviewDir));
   }
 
+  notes.push(`phases: ${phaseLine(phases)}`);
+  await writeFile(join(dir, 'phases.json'), `${JSON.stringify(phases, null, 2)}\n`);
   const verdict = await writeReport(dir, sheetFile, rows, notes);
   console.log(`\n${formatRows(rows)}\n`);
   for (const n of notes) console.log(`  - ${n}`);

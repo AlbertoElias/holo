@@ -24,6 +24,7 @@ import { speakingAt, visemesAt, type LineLips } from './lips.ts';
 import { busy, faceAt, fidgetAt, finishedBy, GLANCE_BLINK_DEG, glanceAt, glanceChest, LIFE_FIDGET, LIFE_SIGH, LIFE_WEIGHT, lifeSchedule, MASK_PAD, MASKED_BY, postureAt, sighAt, weightAt, attendArmsAt, attendGate, attendNodAt, attendSchedule, ATTEND_ARMS, type AttendSchedule, type LifeSchedule } from './life.ts';
 import { buildProp, changedPoint, propWorld, setChange, type LoadedSource, type Prop } from './props.ts';
 import { changePoseAt } from './world.ts';
+import { phaseSync } from './phases.ts';
 import { isPlace, measureBody, resolvePlace, type Body, type PlaceFrame } from './stage.ts';
 
 const SIDES = ['left', 'right'] as const;
@@ -287,10 +288,10 @@ const yawOf = (q: THREE.Quaternion): number => { const z = new THREE.Vector3(0, 
  * wrist and the elbow, carry the clearing: a wrist target and an elbow hint
  * do not give back the clavicle and the twist the passes found.
  */
-export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources: ReadonlyMap<string, LoadedSource> = new Map(), speech: ReadonlyMap<string, readonly Speech[]> = new Map()): SolvedTake {
+export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources: ReadonlyMap<string, LoadedSource> = new Map(), speech: ReadonlyMap<string, readonly Speech[]> = new Map(), options: SolveOptions = {}): SolvedTake {
   clearing.plan = undefined;
   clearing.record = new Map();
-  const first = solveOnce(sheet, avatars, sources, speech);
+  const first = phaseSync('solve pass 1', () => solveOnce(sheet, avatars, sources, speech, options));
   const record = clearing.record;
   clearing.record = undefined;
   if (![...record.values()].some((moves) => moves.some((m) => turned(m) > 1e-5))) return first;
@@ -301,7 +302,7 @@ export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, 
     // to the plan smoothed, and solves again, until no frame needs it or after CLEAR_ROUNDS.
     for (let round = 1; ; round += 1) {
       clearing.rest = new Map();
-      const take = solveOnce(sheet, avatars, sources, speech);
+      const take = phaseSync(`solve pass ${round + 1}`, () => solveOnce(sheet, avatars, sources, speech, options));
       const rest = clearing.rest;
       clearing.rest = undefined;
       if (round >= CLEAR_ROUNDS || ![...rest.values()].some((moves) => moves.some((m) => m && turned(m) > 1e-5))) return take;
@@ -313,7 +314,17 @@ export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, 
   }
 }
 
-function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources: ReadonlyMap<string, LoadedSource>, speech: ReadonlyMap<string, readonly Speech[]>): SolvedTake {
+/** How much of the take to solve. */
+export interface SolveOptions {
+  /**
+   * Solve frames 0 to `frames - 1` only, for a look at one moment. The sheet
+   * keeps its duration, so the life schedule, the beat checks and every goal
+   * are the same as in the full take; the solve stops early.
+   */
+  readonly frames?: number;
+}
+
+function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources: ReadonlyMap<string, LoadedSource>, speech: ReadonlyMap<string, readonly Speech[]>, options: SolveOptions = {}): SolvedTake {
   const problems = validateSheet(sheet);
   // Before the first frame (the rest pose and the set), no clearing move is recorded or applied.
   solving.f = -1;
@@ -335,7 +346,7 @@ function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources
   const fps = sheet.fps ?? 30;
   const flat = sheet.style === 'flat';
   const life = sheet.life !== false && !flat;
-  const frames = Math.round(sheet.duration * fps) + 1;
+  const frames = Math.min(Math.round(sheet.duration * fps) + 1, Math.max(1, options.frames ?? Infinity));
   const times = new Float32Array(frames).map((_, i) => i / fps);
 
   const cast: Cast[] = sheet.performers.map((spec, index) => {
