@@ -21,6 +21,8 @@
  *   scene from a camera placed by `view`, returns a JPEG data URL (and,
  *   with `view.faceBox`, the face's box: brow line to chin when `init` had
  *   regions, else every vertex a face shape moves).
+ * - `points(i)`: performer `i`'s named bones (head, hips, neck, hands,
+ *   feet) in world space.
  * - `bodies()`: world head and hips per performer and each recorded
  *   object's world box, for planning `view`.
  * - `regions(i)`: when `init` was given the audition's face regions
@@ -299,6 +301,13 @@ export const REVIEW_PAGE = String.raw`
       const pts = [...world.brow, ...state.regions.chin.flatMap((s) => { const m = meshOf(state.performers[i], s); const v = V(); return s.idx.map((k) => { const q = vertex(m, k, v); return [q.x, q.y, q.z]; }); })];
       const faceCentre = pts.length ? [0, 1, 2].map((a) => (Math.min(...pts.map((q) => q[a])) + Math.max(...pts.map((q) => q[a]))) / 2) : null;
       return { ...out, faceCentre, pixelRatio: state.probe.renderer.getPixelRatio() };
+    },
+    /** Performer i's named bones (head, hips, neck, hands, feet) in world space, for placing a close camera. */
+    points(i) {
+      state.probe.model.updateWorldMatrix(true, true);
+      const out = {};
+      for (const [k, b] of Object.entries(state.performers[i].bones)) { const w = b.getWorldPosition(V()); out[k] = [w.x, w.y, w.z]; }
+      return out;
     },
     bodies() {
       state.probe.model.updateWorldMatrix(true, true);
