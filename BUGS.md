@@ -7,6 +7,17 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
+### B-113 — Pipeline e2e: an unknown hologram id shows "You're offline" on a heavily loaded Mac (once)
+
+- **Area:** apps/viewer-web (`e2e/profiles.pipeline.spec.ts:124`, the `/h/<id>` page of an unknown id)
+- **Severity:** P3 (test flake; no person has seen it)
+- **Observed:** 2026-11-26, once, in `verify:pr --no-cache` on `infra/hosted-branch-gate` (no viewer-web change);
+  lint and typecheck took 28 minutes in the same run. The status said "You're offline. The feed loads again when
+  you're back online." for the 20 s of the check, not "not here any more". The 12 other pipeline spec files passed,
+  and the hosted gate run 45852488789 passed this spec on the same tree.
+- **Expected:** a 404 for an unknown id shows "not here any more", also when the API answers slowly.
+- **Reproduction:** not reproduced. A suspect: a slow or failed request that the page takes as offline, not as a 404.
+
 ### B-112 — viewer-api unit test "waits past the deadline" times out on a heavily loaded Mac (once)
 
 - **Area:** apps/viewer-api (`test/object-routes.test.ts`, "object search with a stalled Poly Pizza download")
