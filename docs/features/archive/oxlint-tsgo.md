@@ -1,7 +1,7 @@
 # Feature brief: lint with Oxlint, typecheck with the native compiler
 
 **Lead:** Claude (session `infra/oxlint-tsgo`)
-**Status:** Delivered 2026-11-24
+**Status:** Delivered 2026-11-26. `verify:pr` passed all 12 steps on the branch with `origin/main` merged in.
 **Layer:** None. Developer tooling; no product behavior changes.
 
 ## User outcome
@@ -173,20 +173,20 @@ and takes 0 s.
 
 ## Acceptance criteria
 
-- [ ] On one clean tree, ESLint and Oxlint both report zero errors and zero
+- [x] On one clean tree, ESLint and Oxlint both report zero errors and zero
   warnings, and lint the same file set in every package.
-- [ ] For every row of the rule map, a planted violation in a scratch copy
+- [x] For every row of the rule map, a planted violation in a scratch copy
   fails the new lint (exit 1) with the expected rule; the `warn` rule warns.
-- [ ] No less than 10 planted type errors (wrong argument type, missing
+- [x] No less than 10 planted type errors (wrong argument type, missing
   property, null access under `strict`, wrong generic, bad type import, an
   error across a package boundary, a `.tsx` error, an e2e spec error, a
   `scripts/` error, an unused `@ts-expect-error`) are each reported by the
   new typecheck, and the old commands report the same set.
-- [ ] `apps/knowledge` gives the same result with the preview `tsgo` and
+- [x] `apps/knowledge` gives the same result with the preview `tsgo` and
   with `tsc` 7.0.2, on the clean tree and on its planted errors.
-- [ ] `pnpm run check:all`, `pnpm run doctor` and `pnpm run verify:pr` pass.
-- [ ] Times after are recorded beside the times before.
-- [ ] A proof video shows the old and new times and the planted defects found.
+- [x] `pnpm run check:all`, `pnpm run doctor` and `pnpm run verify:pr` pass.
+- [x] Times after are recorded beside the times before.
+- [x] A proof video shows the old and new times and the planted defects found.
 
 ## Failure cases considered
 
@@ -230,7 +230,7 @@ runs the same module, so it is not needed); a text scan for token colours
 | Same clean result and file set | A probe JS plugin reports each file it sees; ESLint at `main` (a detached worktree) and Oxlint on the branch, in all 18 lint scopes | Pass. Identical file lists in all 18 scopes (root 11, capture 351, knowledge 21, viewer-api 55, viewer-web 159, avatar-face 9, avatar-look 7, contracts 3, design-tokens 10, meaning 6, objects 3, place 4, ui-dom 27, xr-runtime 2, xr-ui-core 30, xr-ui-iwsdk 15, xr-ui-r3f 17, xr-ui-three 21). 0 errors and 0 warnings with both tools, after the 3 optional-chain fixes. |
 | Planted lint defects | 61 plants, one or more per rule row and its option edges (`^_` names, `while (true)`, `(a = b)`, capture's type-import off, hooks outside `src/`, the token rule in `.mjs` and in design-tokens, the root-config `.mjs` with no globals, an unused directive), each in a scratch copy, run with ESLint at `main` and Oxlint on the branch | Pass. 60 of 61 give the same rule and exit code. The one difference is the stricter late `@ts-nocheck` (see "Differences that the proof found"). The ports fire on `.mjs` with the original messages. |
 | Planted type errors | 12 edits (wrong argument, missing property, null access under `strict`, wrong generic, bad type import, a package boundary, a `.tsx` prop, an e2e spec, root `scripts/`, an unused `@ts-expect-error`, knowledge `.ts`, knowledge `.tsx`), each run through `tsc` 7.0.2, preview `tsgo` 7.0.0-dev.20260707.2 and TypeScript 6 `tsc` | Pass. All 12 have the same line, column and code on `tsc` and `tsgo`; TypeScript 6 also reports each. On the clean tree `tsc` and `tsgo` give 0 errors in every package. No disagreement to report. |
-| Gates | `check:all`, `doctor`, `check:ci-areas` (4750 assertions), `scripts/verify-changed.test.ts` (9), the config-eslint test (4), capture `verify:changed` (a planted `debugger` fails it; a changed file that only the ignores match passes), `verify:pr` | `check:all`, `doctor` and the others pass; `verify:pr`: see Status |
+| Gates | `check:all`, `doctor`, `check:ci-areas` (4750 assertions), `scripts/verify-changed.test.ts` (9), the config-eslint test (4), capture `verify:changed` (a planted `debugger` fails it; a changed file that only the ignores match passes), `verify:pr` | `check:all`, `doctor` and the others pass; `verify:pr` passed all 12 steps (unit 38 s, build 45 s, pipeline 787 s, xr-viewer 608 s); an earlier run failed only on timeouts while the machine was overloaded |
 | Times after | same commands as "Times before", each old run beside a new run | "Times after" table |
 
 ## Independent verification
