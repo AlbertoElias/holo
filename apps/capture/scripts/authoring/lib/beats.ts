@@ -121,7 +121,9 @@ export type Direction = Timing & (
   | { readonly kind: 'state'; readonly name: StateName; readonly strength?: number; /** What the state is about: the head turns to it. */ readonly at?: Point }
   /**
    * A palm onto a surface (trial, `docs/features/contact-and-pose-look.md`): no distance and no angle. `on` is
-   * `<performer>.<surface>` (one of `CONTACT_SURFACES`); `fit` `rest` lays the palm flat on it.
+   * `<performer>.<surface>` (one of `CONTACT_SURFACES`) or an object's id. `fit` `rest` lays the palm flat on it
+   * (on an object it follows the object's world change: a door that swings); `grip` (on an object only) gives the
+   * object's take its grip, found on the surface.
    */
   | { readonly kind: 'contact'; readonly part: ContactPart; readonly on: string; readonly fit: 'rest' | 'grip' }
 );
@@ -166,11 +168,13 @@ function contactProblems(sheet: BeatSheet, b: Beat, d: Extract<Direction, { kind
     }
     return out;
   }
+  // A rest on an object: `on` is the object's id (a door, a table), with no surface name.
+  if (typeof d.on === 'string' && !d.on.includes('.') && sheet.objects?.[d.on]) return out;
   const dot = typeof d.on === 'string' ? d.on.indexOf('.') : -1;
   const who = dot > 0 ? d.on.slice(0, dot) : '';
   const surface = dot > 0 ? d.on.slice(dot + 1) : '';
   const others = sheet.performers.map((p) => p.id).filter((id) => id !== b.performer);
-  if (dot <= 0) out.push(`on ${String(d.on)} is <performer>.<surface> (performers: ${others.join(', ') || 'none'}; surfaces: ${CONTACT_SURFACES.join(', ')})`);
+  if (dot <= 0) out.push(`on ${String(d.on)} is <performer>.<surface> or an object (performers: ${others.join(', ') || 'none'}; surfaces: ${CONTACT_SURFACES.join(', ')}; objects: ${Object.keys(sheet.objects ?? {}).join(', ') || 'none'})`);
   else if (who === b.performer) out.push(`on ${d.on}: a contact on the performer's own body is not in the trial`);
   else if (!others.includes(who)) out.push(`on ${d.on}: no performer ${who} (${others.join(', ') || 'none'})`);
   else if (!(CONTACT_SURFACES as readonly string[]).includes(surface)) out.push(`on ${d.on}: no surface ${surface} (${CONTACT_SURFACES.join(', ')})`);
@@ -884,7 +888,7 @@ export function validateSheet(sheet: BeatSheet): string[] {
           if (!covered) problems.push(`${where}: an aim needs a reach of the ${d.side} hand around it (from before ${r.at.toFixed(2)} s to after ${(r.at + r.attack + r.hold).toFixed(2)} s)`);
         }
       }
-      if (d.kind === 'contact' && d.fit === 'rest') {
+      if (d.kind === 'contact' && d.fit === 'rest' && d.on.includes('.')) {
         // A mutual contact (a handshake, a hug) is not in the trial: the target is solved before the one who touches.
         const on = d.on.slice(0, d.on.indexOf('.'));
         const back = sheet.beats.filter((x) => x.performer === on).flatMap((x) => x.directions.flatMap((y) => (y.kind === 'contact' && y.on.startsWith(`${b.performer}.`) ? [resolveTiming(x, y)] : [])));

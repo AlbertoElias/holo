@@ -250,6 +250,64 @@ function insidePart(p: Part, local: THREE.Vector3): boolean {
   return p.shape === 'cylinder' ? r2 <= 0.25 : Math.sqrt(r2) <= (0.5 - u.y) / 2;
 }
 
+/** How deep a point of the object frame is in a part (metres; below 0 outside, about as far as the part). */
+function partDepth(p: Part, local: THREE.Vector3): number {
+  const u = local.clone().sub(p.at).applyQuaternion(p.rotation.clone().invert());
+  u.y -= p.size.y / 2;
+  const h = p.size.clone().multiplyScalar(0.5);
+  if (p.shape === 'box') {
+    const d = new THREE.Vector3(h.x - Math.abs(u.x), h.y - Math.abs(u.y), h.z - Math.abs(u.z));
+    if (d.x > 0 && d.y > 0 && d.z > 0) return Math.min(d.x, d.y, d.z);
+    return -new THREE.Vector3(Math.max(0, -d.x), Math.max(0, -d.y), Math.max(0, -d.z)).length();
+  }
+  // A round shape: how far in, as a fraction of its half sizes, times the least half size.
+  const radial = Math.hypot(u.x / h.x, u.z / h.z);
+  const m = p.shape === 'sphere' ? Math.hypot(radial, u.y / h.y)
+    : Math.max(p.shape === 'cone' ? radial / Math.max(1e-6, 0.5 - u.y / p.size.y) : radial, Math.abs(u.y) / h.y);
+  return (1 - m) * Math.min(h.x, h.y, h.z);
+}
+
+/** How deep a point of the object frame is in the object as a world change has moved it now (metres; below 0 outside). */
+export function propDepth(prop: Prop, local: THREE.Vector3): number {
+  let most = -Infinity;
+  for (const part of prop.changed ?? prop.parts) most = Math.max(most, partDepth(part, local));
+  return most;
+}
+
+/** Points on the skin of an object's parts (not inside another part) with their outward normals, in the object frame, unmoved by a change. */
+export function surfaceSamples(prop: Prop): { p: THREE.Vector3; n: THREE.Vector3; margin: number }[] {
+  const out: { p: THREE.Vector3; n: THREE.Vector3; margin: number }[] = [];
+  const probe = new THREE.Vector3();
+  const add = (p: THREE.Vector3, n: THREE.Vector3, margin = Infinity): void => {
+    probe.copy(p).addScaledVector(n, 0.001);
+    if (!prop.parts.some((q) => insidePart(q, probe))) out.push({ p, n, margin });
+  };
+  const STEPS = 12;
+  for (const part of prop.parts) {
+    if (part.shape !== 'box') {
+      const g = partGeometry(part);
+      const pos = g.getAttribute('position');
+      const nor = g.getAttribute('normal');
+      for (let i = 0; i < pos.count; i += 1) add(new THREE.Vector3().fromBufferAttribute(pos, i), new THREE.Vector3().fromBufferAttribute(nor, i).normalize());
+      g.dispose();
+      continue;
+    }
+    // A box: a grid on each face (its eight corners alone say nothing of a face).
+    for (let axis = 0; axis < 3; axis += 1) for (const sign of [-1, 1]) {
+      const n = new THREE.Vector3().setComponent(axis, sign).applyQuaternion(part.rotation);
+      const [a1, a2] = [0, 1, 2].filter((x) => x !== axis) as [number, number];
+      for (let i = 0; i <= STEPS; i += 1) for (let j = 0; j <= STEPS; j += 1) {
+        const u = new THREE.Vector3().setComponent(axis, sign * 0.5).setComponent(a1, i / STEPS - 0.5).setComponent(a2, j / STEPS - 0.5);
+        u.y += 0.5;
+        // How far the point is from the nearest edge of its face (a palm centred on an edge hangs half off).
+        const margin = Math.min((0.5 - Math.abs(i / STEPS - 0.5)) * part.size.getComponent(a1), (0.5 - Math.abs(j / STEPS - 0.5)) * part.size.getComponent(a2));
+        add(u.multiply(part.size).applyQuaternion(part.rotation).add(part.at), n.clone(), margin);
+      }
+    }
+  }
+  return out;
+}
+
 /** The step (metres) and the most depth the grip's thickness is read to, through the object. */
 const GRIP_DEPTH_STEP = 0.002;
 const GRIP_DEPTH_MAX = 0.4;

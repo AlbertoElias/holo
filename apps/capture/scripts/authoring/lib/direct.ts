@@ -22,7 +22,7 @@ import { elbowPole } from '../../../src/ik/armPoseModel.ts';
 import { armRestOffset, bodyUp, hangArm, keepingTwist, rollHand, moveBoneWorld, orientHand, plantFeet, restElbowHint, rotateBoneWorld, solveArm, WRIST_LIMITS, steadyTwist, shareTwist, easeTwist, toWorld, turnBody, TURN_SHARE } from './pose.ts';
 import { speakingAt, visemesAt, type LineLips } from './lips.ts';
 import { busy, faceAt, fidgetAt, finishedBy, GLANCE_BLINK_DEG, glanceAt, glanceChest, LIFE_FIDGET, LIFE_SIGH, LIFE_WEIGHT, lifeSchedule, MASK_PAD, MASKED_BY, postureAt, sighAt, weightAt, attendArmsAt, attendGate, attendNodAt, attendSchedule, ATTEND_ARMS, type AttendSchedule, type LifeSchedule } from './life.ts';
-import { buildProp, changedPoint, propWorld, setChange, surfaceGrip, type LoadedSource, type Prop } from './props.ts';
+import { buildProp, changedPoint, propDepth, propWorld, setChange, surfaceGrip, surfaceSamples, type LoadedSource, type Prop } from './props.ts';
 import { changePoseAt } from './world.ts';
 import { phaseSync } from './phases.ts';
 import { isPlace, measureBody, resolvePlace, type Body, type PlaceFrame } from './stage.ts';
@@ -431,7 +431,7 @@ function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources
   // A contact holds the touched arm's life still too, and its target is solved first in each frame.
   for (const c of cast) for (const r of c.dirs) {
     const d = r.direction;
-    if (d.kind !== 'contact') continue;
+    if (d.kind !== 'contact' || !d.on.includes('.')) continue;
     const other = contactTarget(cast, d);
     const m = /^(left|right)(UpperArm|LowerArm|Hand)$/.exec(d.on.slice(d.on.indexOf('.') + 1));
     if (m && other !== c) other.touched[m[1] as Side].push(r);
@@ -625,7 +625,7 @@ const stage = {
   goals: new Map<Direction, { point: THREE.Vector3; axis?: THREE.Vector3; upright?: THREE.Quaternion }>(),
   report: { grips: [], puts: [], aims: [], contacts: [] } as ObjectReport,
   /** Each contact's skin point, chosen once in the target bone's frame, and its measure so far. */
-  contacts: new Map<Direction, { bone: THREE.Object3D; child?: THREE.Object3D; local: THREE.Vector3; localN: THREE.Vector3; chosenAt: number; frames: number; gap: number; skinGap: number; near: number; sink: number; short: number; need?: string; layout?: 'across' | 'along'; byFrame: { t: number; gap: number; skinGap: number; near: number; sink: number; short: number }[] }>(),
+  contacts: new Map<Direction, { bone?: THREE.Object3D; prop?: Prop; child?: THREE.Object3D; local: THREE.Vector3; localN: THREE.Vector3; chosenAt: number; frames: number; gap: number; skinGap: number; near: number; sink: number; short: number; need?: string; layout?: 'across' | 'along'; byFrame: { t: number; gap: number; skinGap: number; near: number; sink: number; short: number }[] }>(),
   /** Each target's skin, posed once a frame (the take time it was posed at). */
   contactSkins: new Map<object, { t: number; skin: BodySkin }>(),
   swivels: new Map<Direction, number>(),
@@ -828,6 +828,8 @@ const CONTACT_SHORT = 10;
 const CONTACT_FACING = 0.25;
 /** The share of the toucher's arm length (shoulder to palm centre) that a contact point may be from the shoulder. */
 const CONTACT_REACH = 0.92;
+/** A flat palm on an object is centred at least this far (metres) from the edge of the face it lies on (half a palm's width). */
+const CONTACT_PALM_MARGIN = 0.04;
 /** On a limb, the cosine between the point's direction out from the axis and the direction to her shoulder (1: straight at her). */
 const CONTACT_SIDE = 0.6;
 /** The most the joints past a finger's knuckle wrap round a curve (a share of each joint's full bend). */
@@ -851,6 +853,18 @@ const CONTACT_SINK = 0.0025;
 const CONTACT_LIFTS = [-10, -8, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 8, 10, 13, 16, 20, 25, 30, 40];
 type ContactDirection = Extract<Direction, { kind: 'contact' }>;
 
+/** The object a contact is on (`on` names an object, with no surface after a dot), or undefined for a performer. */
+function contactObject(d: ContactDirection): Prop | undefined {
+  return d.on.includes('.') ? undefined : stage.props.get(d.on)?.prop;
+}
+
+/** How deep a world point is in an object as it is now (metres; below 0 outside), as `BodySkin.depth` reads a body. */
+function objectDepth(prop: Prop): { depth(q: THREE.Vector3): { depth: number } } {
+  const inv = new THREE.Quaternion();
+  const local = new THREE.Vector3();
+  return { depth: (q) => { inv.copy(prop.quaternion).invert(); return { depth: propDepth(prop, local.copy(q).sub(prop.position).applyQuaternion(inv)) }; } };
+}
+
 function contactTarget(cast: Cast[], d: ContactDirection): Cast {
   const who = d.on.slice(0, d.on.indexOf('.'));
   const c = cast.find((x) => x.spec.id === who);
@@ -862,7 +876,7 @@ function contactTarget(cast: Cast[], d: ContactDirection): Cast {
 function contactOrder(cast: Cast[]): number[] {
   const after = cast.map(() => new Set<number>());
   cast.forEach((c, ci) => c.dirs.forEach((r) => {
-    if (r.direction.kind === 'contact') after[ci]!.add(cast.indexOf(contactTarget(cast, r.direction)));
+    if (r.direction.kind === 'contact' && r.direction.on.includes('.')) after[ci]!.add(cast.indexOf(contactTarget(cast, r.direction)));
   }));
   const order: number[] = [];
   const left = new Set(cast.map((_, i) => i));
@@ -901,6 +915,8 @@ const LIMB_CHILD: Partial<Record<(typeof CONTACT_SURFACES)[number], VrmHumanoidB
  */
 function contactSurface(cast: Cast[], c: Cast, r: Resolved): { p: THREE.Vector3; n: THREE.Vector3; axis?: THREE.Vector3 } {
   const d = r.direction as ContactDirection;
+  const prop = contactObject(d);
+  if (prop) return objectSurface(c, d, prop);
   const target = contactTarget(cast, d);
   let k = stage.contacts.get(d);
   if (!k) {
@@ -953,11 +969,49 @@ function contactSurface(cast: Cast[], c: Cast, r: Resolved): { p: THREE.Vector3;
     k = { bone, ...(child ? { child } : {}), local: bone.worldToLocal(best!.p.clone()), localN: best!.n.clone().applyQuaternion(q), chosenAt: solving.t, frames: 0, gap: 0, skinGap: 0, near: 1, sink: 0, short: 0, byFrame: [] };
     stage.contacts.set(d, k);
   }
-  const p = k.bone.localToWorld(k.local.clone());
-  const n = k.localN.clone().applyQuaternion(k.bone.getWorldQuaternion(new THREE.Quaternion())).normalize();
+  const bone = k.bone!;
+  const p = bone.localToWorld(k.local.clone());
+  const n = k.localN.clone().applyQuaternion(bone.getWorldQuaternion(new THREE.Quaternion())).normalize();
   const child = k.child;
   if (!child) return { p, n };
-  return { p, n, axis: child.getWorldPosition(new THREE.Vector3()).sub(k.bone.getWorldPosition(new THREE.Vector3())).normalize() };
+  return { p, n, axis: child.getWorldPosition(new THREE.Vector3()).sub(bone.getWorldPosition(new THREE.Vector3())).normalize() };
+}
+
+/**
+ * A contact's point on an object and its outward normal in the world now. The point is chosen once, as on a body
+ * (the surface that her forearm runs along, a little toward her, near), from the object's own parts, and kept in the
+ * object frame, so it moves with the object and with a world change of it (a door that swings).
+ */
+function objectSurface(c: Cast, d: ContactDirection, prop: Prop): { p: THREE.Vector3; n: THREE.Vector3 } {
+  let k = stage.contacts.get(d);
+  const toWorld = (local: THREE.Vector3, normal: THREE.Vector3): { p: THREE.Vector3; n: THREE.Vector3 } => {
+    const turn = prop.changePose?.quaternion ?? new THREE.Quaternion();
+    return { p: propWorld(prop, changedPoint(prop, local)), n: normal.clone().applyQuaternion(turn).applyQuaternion(prop.quaternion).normalize() };
+  };
+  if (!k) {
+    const side = contactSide(d);
+    const ch = c.a.arms[side];
+    c.a.frame.updateMatrixWorld(true);
+    const shoulder = ch.upperArm.getWorldPosition(new THREE.Vector3());
+    const elbow = ch.foreArm.getWorldPosition(new THREE.Vector3());
+    const wrist = ch.hand.getWorldPosition(new THREE.Vector3());
+    const palm = c.a.hands[side]?.palmCenter(new THREE.Vector3()) ?? wrist.clone();
+    const reach = CONTACT_REACH * (shoulder.distanceTo(elbow) + elbow.distanceTo(wrist) + wrist.distanceTo(palm));
+    let best: { local: THREE.Vector3; localN: THREE.Vector3; score: number } | undefined;
+    const all = surfaceSamples(prop);
+    const wide = all.filter((x) => x.margin >= CONTACT_PALM_MARGIN);
+    for (const x of wide.length ? wide : all) {
+      const { p, n } = toWorld(x.p, x.n);
+      const to = shoulder.clone().sub(p);
+      const dist = to.length();
+      const score = dist > reach ? -10 - dist : -Math.abs(n.dot(to.divideScalar(dist)) - CONTACT_FACING) - 2 * dist;
+      if (!best || score > best.score) best = { local: x.p, localN: x.n, score };
+    }
+    if (!best) throw new Error(`contact on ${d.on}: the object has no surface to touch`);
+    k = { prop, local: best.local, localN: best.localN, chosenAt: solving.t, frames: 0, gap: 0, skinGap: 0, near: 1, sink: 0, short: 0, byFrame: [] };
+    stage.contacts.set(d, k);
+  }
+  return toWorld(k.local, k.localN);
 }
 
 /**
@@ -1059,7 +1113,8 @@ function fitContacts(cast: Cast[], c: Cast, t: number): void {
     // The hand skin, laid with its palm on the point, must stay out of the target (his torso beside the arm, the
     // arm's own curve): a millimetre inside weighs as much as a degree past a wrist limit. The hand's own shape
     // (fingers that curl toward the palm side) is read from its present pose in the palm frame.
-    const skin = contactSkin(contactTarget(cast, d), t);
+    const onObject = contactObject(d);
+    const skin = onObject ? objectDepth(onObject) : contactSkin(contactTarget(cast, d), t);
     const samples = c.armBody.hand[s];
     const probe = new THREE.Vector3();
     // Each finger follows the surface: it wraps as far as the skin lets it, from straight (a flat palm on a flat
