@@ -227,14 +227,13 @@ test("A: a git-ignored input that is a link counts as what it points to", () => 
 
 // --- B. What a suite does not read ---
 
-test("B: docs, Markdown and the authoring tools change the tree key and not a suite's key", () => {
+test("B: docs and Markdown change the tree key and not a suite's key", () => {
   const root = makeRepo();
   const code = key(root, CODE);
   let tree = key(root, TREE);
   for (const [file, text] of [
     ["docs/guide.md", "Changed.\n"],
     ["README.md", "# Changed\n"],
-    ["apps/capture/scripts/authoring/make.ts", "export const make = 2;\n"],
     ["apps/capture/NOTES.md", "new\n"]
   ] as const) {
     write(root, file, text);

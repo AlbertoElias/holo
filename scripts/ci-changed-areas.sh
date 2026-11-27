@@ -79,10 +79,10 @@ else
         api=true; web=true; capture_app=true ;;
       *.md|docs/*)
         saw_docs=true ;;
-      # Offline authoring tools: lint and typecheck cover them, and no suite or
-      # build loads them (scripts/check-ci-areas.ts fails when one starts to).
+      # Authoring solver: viewer-api invokes scripts/authoring/direct.ts for
+      # AI prompt-to-hologram builds, so changes here must test and deploy API.
       apps/capture/scripts/authoring/*)
-        saw_code=true; quality=true ;;
+        saw_code=true; quality=true; api=true; capture_xr=true; pipeline=true; portal=true; capture_app=true ;;
       apps/capture/*)
         saw_code=true; quality=true; capture_xr=true; pipeline=true; portal=true; capture_app=true ;;
       apps/viewer-web/*)
