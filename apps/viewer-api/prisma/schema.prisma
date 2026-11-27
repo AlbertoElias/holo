@@ -19,6 +19,7 @@ model User {
   sessions      Session[]
   apiTokens     ApiToken[]
   postGrants    PostGrant[]
+  promptJobs    PromptJob[]
 }
 
 model MagicLinkToken {
@@ -129,4 +130,33 @@ model UploadIntent {
   ownerId             String?
   owner               User?     @relation(fields: [ownerId], references: [id], onDelete: SetNull)
   createdAt           DateTime  @default(now())
+}
+
+/// Private AI prompt-to-hologram generation job (docs/features/prompt-to-hologram.md).
+/// BYOK keys are NEVER stored here — they stay in-memory for the active LLM call only.
+model PromptJob {
+  id                  String   @id @default(cuid())
+  ownerId             String
+  owner               User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  parentJobId         String?
+  prompt              String
+  revisionNote        String?
+  finish              String   @default("clay")
+  includeVoice        Boolean  @default(true)
+  status              String   @default("queued")
+  title               String?
+  intent              String?
+  sheetJson           String?
+  durationSec         Float?
+  beatCount           Int?
+  hasVoice            Boolean  @default(false)
+  previewKey          String?
+  sizeBytes           Int?
+  error               String?
+  publishedHologramId String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([ownerId, createdAt(sort: Desc)])
+  @@index([status])
 }
