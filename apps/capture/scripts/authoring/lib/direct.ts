@@ -235,7 +235,7 @@ export interface ContactRow {
   readonly gap: number;
   /** Largest gap from the palm's own skin (within 3 cm of the palm's center) to the target's skin: a second number beside `gap`. */
   readonly skinGap: number;
-  /** The least share, over the hold frames, of the hand's skin samples (palm and fingers) within 5 mm of the target's skin or in it. */
+  /** The least share, over the hold frames, of the hand's palm-side skin samples (palm and fingers) within 5 mm of the target's skin or in it. */
   readonly near: number;
   /** Deepest point of the hand's skin inside the target's skin. */
   readonly sink: number;
@@ -820,16 +820,22 @@ const CONTACT_SHORT = 10;
 const CONTACT_FACING = 0.25;
 /** The share of the toucher's arm length (shoulder to palm centre) that a contact point may be from the shoulder. */
 const CONTACT_REACH = 0.92;
+/** On a limb, the cosine between the point's direction out from the axis and the direction to her shoulder (1: straight at her). */
+const CONTACT_SIDE = 0.6;
+/** The most the joints past a finger's knuckle wrap round a curve (a share of each joint's full bend). */
+const CONTACT_WRAP = 1;
 /** On a limb, the most the fingers may point away from its axis (degrees). */
 const CONTACT_ALONG = 30;
+/** A hand skin sample faces the target when its normal is within about 70° of the target's inward normal (cosine). */
+const CONTACT_FACING_SKIN = 0.35;
 /** A hand skin sample this near the target's skin (or in it) counts as lying on it (metres). */
 const CONTACT_NEAR = 0.005;
 /** How far from the palm's center the palm skin gap reads the hand's skin (metres). */
 const CONTACT_PALM_SKIN = 0.03;
 /** The hand skin a contact's fit lets into the target's skin (the bar is 3 mm). */
 const CONTACT_SINK = 0.0025;
-/** The palm lifts a contact tries, millimetres off the skin point, lowest first. */
-const CONTACT_LIFTS = [1, 2, 3, 4, 5, 6, 8, 10, 13, 16, 20, 25, 30, 40];
+/** The palm lifts a contact tries, millimetres of the palm's center off the skin point, lowest first. The center sits in front of the palm skin, so it may go in. */
+const CONTACT_LIFTS = [-10, -8, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 8, 10, 13, 16, 20, 25, 30, 40];
 type ContactDirection = Extract<Direction, { kind: 'contact' }>;
 
 function contactTarget(cast: Cast[], d: ContactDirection): Cast {
@@ -877,7 +883,7 @@ const LIMB_CHILD: Partial<Record<(typeof CONTACT_SURFACES)[number], VrmHumanoidB
  * A contact's skin point and its outward normal in the world now, and for a limb its axis. The point is
  * chosen once, the first time the contact moves the hand, from the target bone's own skin (the bind skin),
  * and kept in that bone's frame, so it moves with the target. On a limb it is the skin on the limb's middle
- * half that faces her palm across the limb's axis (the centre line of the side toward her, not an edge);
+ * half that faces her shoulder across the limb's axis (the centre line of the side toward her, not an edge);
  * elsewhere it is the skin that faces the hand's shoulder and is nearest it.
  */
 function contactSurface(cast: Cast[], c: Cast, r: Resolved): { p: THREE.Vector3; n: THREE.Vector3; axis?: THREE.Vector3 } {
@@ -904,8 +910,9 @@ function contactSurface(cast: Cast[], c: Cast, r: Resolved): { p: THREE.Vector3;
     const a0 = bone.getWorldPosition(new THREE.Vector3());
     const along = child ? child.getWorldPosition(new THREE.Vector3()).sub(a0) : undefined;
     const length = along?.length() ?? 0;
-    // Across the limb's axis, toward her palm.
-    const toward = along ? palm.clone().sub(a0).addScaledVector(along, -palm.clone().sub(a0).dot(along) / (length * length)).normalize() : undefined;
+    // Across the limb's axis, toward her shoulder: the side her palm comes from (when the point is chosen, the hand
+    // still hangs at her side and can be past his limb).
+    const toward = along ? shoulder.clone().sub(a0).addScaledVector(along, -shoulder.clone().sub(a0).dot(along) / (length * length)).normalize() : undefined;
     let best: { p: THREE.Vector3; n: THREE.Vector3; score: number } | undefined;
     for (const x of samples) {
       const p = new THREE.Vector3(); const n = new THREE.Vector3();
@@ -919,7 +926,7 @@ function contactSurface(cast: Cast[], c: Cast, r: Resolved): { p: THREE.Vector3;
         const s0 = p.clone().sub(a0).dot(along) / (length * length);
         if (s0 < 0.25 || s0 > 0.75) continue;
         const out = p.clone().sub(a0).addScaledVector(along, -s0).normalize();
-        const score = out.dot(toward) - 0.2 * dist;
+        const score = -Math.abs(out.dot(toward) - CONTACT_SIDE) - 0.2 * dist;
         if (!best || score > best.score) best = { p, n, score };
         continue;
       }
@@ -1063,7 +1070,18 @@ function fitContacts(cast: Cast[], c: Cast, t: number): void {
           if (fingerIn(own) > CONTACT_SINK) break;
           best = k;
         }
-        hand.applyFinger(f, Array.from({ length: joints }, (_, i) => (i === 0 ? best : Math.pow(Math.max(best, 0), 1 + 0.25 * i))), REST_PALM.spread);
+        // Then the joints past the knuckle wrap on round a curve (a limb), the knuckle as it is: bending the knuckle
+        // first presses the finger's base in before its tip comes near.
+        const curl = (kd: number): number[] => Array.from({ length: joints }, (_, i) => (i === 0 ? best : Math.max(Math.pow(Math.max(best, 0), 1 + 0.25 * i), kd)));
+        let wrap = 0;
+        if (f !== 'thumb') {
+          for (let kd = 0.1; kd <= CONTACT_WRAP + 1e-9; kd += 0.1) {
+            hand.applyFinger(f, curl(kd), REST_PALM.spread);
+            if (fingerIn(own) > CONTACT_SINK) break;
+            wrap = kd;
+          }
+        }
+        hand.applyFinger(f, curl(wrap), REST_PALM.spread);
       }
       a.frame.updateMatrixWorld(true);
     };
@@ -1162,10 +1180,17 @@ function fitContacts(cast: Cast[], c: Cast, t: number): void {
         if (Number.isFinite(dq)) skinGap = Math.min(skinGap, Math.max(0, -dq));
       }
       if (!Number.isFinite(skinGap)) skinGap = gap;
-      // The share of the hand's skin (palm and fingers) that lies on him: within CONTACT_NEAR of his skin, or in it.
-      let onIt = 0;
-      for (const sample of samples) if (skin.depth(skinned(sample, at)).depth >= -CONTACT_NEAR) onIt += 1;
-      const near = samples.length ? onIt / samples.length : 0;
+      // The share of the hand's skin on the palm side (palm and fingers, the skin that faces his skin: the back of the
+      // hand is never on him) that lies on him: within CONTACT_NEAR of his skin, or in it.
+      let onIt = 0, facing = 0;
+      const sn = new THREE.Vector3();
+      for (const sample of samples) {
+        skinned(sample, at, sn);
+        if (sn.dot(n) > -CONTACT_FACING_SKIN) continue;
+        facing += 1;
+        if (skin.depth(at).depth >= -CONTACT_NEAR) onIt += 1;
+      }
+      const near = facing ? onIt / facing : 0;
       k.frames += 1;
       const deep = deepest();
       k.gap = Math.max(k.gap, gap);

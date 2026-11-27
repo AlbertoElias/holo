@@ -272,7 +272,7 @@ function print(look: PoseLook): void {
   console.log(`pose look at ${look.at.toFixed(2)} s (frame ${look.frame}, ${look.framesSolved} frames solved, ${look.solve}) in ${look.seconds.toFixed(1)} s`);
   console.log(`  phases: ${phaseLine(look.phases)}`);
   if (look.note) console.log(`  ${look.note}`);
-  for (const k of look.contacts ?? []) console.log(`  contact ${k.beat}: gap ${(k.gap * 1000).toFixed(1)} mm, sink ${(k.sink * 1000).toFixed(1)} mm, short ${k.short.toFixed(0)}° over ${k.frames} hold frames${k.notPossible ? `; ${k.notPossible}` : ''}`);
+  for (const k of look.contacts ?? []) console.log(`  contact ${k.beat}: palm skin gap ${(k.skinGap * 1000).toFixed(1)} mm (palm centre ${(k.gap * 1000).toFixed(1)} mm), palm side on him ${Math.round(k.near * 100)}%, sink ${(k.sink * 1000).toFixed(1)} mm, short ${k.short.toFixed(0)}° over ${k.frames} hold frames${k.notPossible ? `; ${k.notPossible}` : ''}`);
   for (const h of look.hands) console.log(`  ${h.performer} ${h.side} (${h.why}; seen card ${h.seen.card}, best ${h.seen.best} at turn ${h.bestTurn}°): ${h.pictures.join(', ')}`);
   if (look.compare) {
     const c = look.compare;
