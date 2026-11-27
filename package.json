@@ -48,6 +48,7 @@
     "verify:xr": "pnpm run test:xr:smoke",
     "verify:agent": "tsx scripts/verify-changed.ts",
     "verify:pr": "tsx scripts/verify-pr.ts",
+    "verify:hosted": "tsx scripts/verify-hosted.ts",
     "verify:full": "tsx scripts/verify-pr.ts --full",
     "verify:changed": "pnpm run verify:agent",
     "timed": "tsx scripts/run-timed.ts"
