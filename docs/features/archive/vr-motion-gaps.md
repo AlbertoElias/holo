@@ -1,7 +1,7 @@
 # Feature brief: VR motion gaps (pelvis at landings, far reaches)
 
 **Lead:** Claude (Opus), side session of the avatar-motion lead
-**Status:** Complete (2026-11-27); two values pending owner confirmation; the Quest check is open
+**Status:** Complete (2026-11-27); both values confirmed by the owner on 2026-11-27; the Quest check is open
 **Layer:** event (how the recorded body moves; see `docs/product/concepts/what-a-hologram-is.md`)
 
 ## User outcome
@@ -60,7 +60,7 @@ sample gets one more optional debug field (`solver.pelvisReachDrop`).
 
 ## Design decision
 
-Both values are the agent's choice, pending owner confirmation:
+Both values were the agent's choice; the owner confirmed them on 2026-11-27:
 
 1. The recorded hips bob, smoothed with a circular Gaussian of σ = 6 samples
    (about 6% of the cycle).

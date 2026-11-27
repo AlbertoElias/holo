@@ -3,6 +3,23 @@
 Closed entries moved from `BUGS.md` so the live tracker stays scannable.
 `BUGS.md` remains the authority for open, verified defects.
 
+### B-114 — CI: packages.microsoft.com answers 403 and the Playwright browser install fails
+
+- **Area:** CI (`scripts/ci-apt.sh`, called by `.github/actions/setup`)
+- **Severity:** P2 (two red `main` runs; no product effect)
+- **Observed:** 2026-11-27, hosted run 46036780190 (8b258730, job "Portal view end-to-end") and run
+  46037776491 (b15acf58, "Viewer VR gallery … shard 2/2"): `playwright install --with-deps chromium` failed
+  with "Failed to fetch https://packages.microsoft.com/…/InRelease 403 Forbidden" and "The repository … is
+  no longer signed", exit 100. The other 24 jobs of the first run got past the same step.
+- **Cause:** the runner image lists Microsoft's apt repository, and its index is already cached. When that
+  host answers 403, `apt-get update` fails, so the install fails. The retry in `ci-apt.sh` changes only the
+  Ubuntu mirror (B-024), so it failed the same way.
+- **Fix:** before its first apt call, `ci-apt.sh` renames each apt source file that names packages.microsoft.com
+  to `*.ci-disabled`, which apt ignores. The install needs only Ubuntu's packages.
+- **Proof:** in an Ubuntu 24.04 container with the Microsoft source cached and a local server answering
+  403 for that host, the old script exits 100 with the two errors above; the new one turns the source off
+  and exits 0 on the first attempt. From a Mac the same URL returns 200: the 403 hits only runner IPs.
+
 ### B-087 — VR head walk: the pelvis drops in one frame at each foot landing
 
 - **Area:** apps/capture (`VrBodySolver` pelvis height in the gait)
@@ -1818,7 +1835,7 @@ bug above.)
   the torso leaned back to reach the head. Sideways, the feet also trailed (as in B-078).
 - **Fix:** `MovementSystem` records the rig's move in `BodyTracking.carried`, and `planRoot` takes it out of the root
   plan. Side cadence and the travel-side first step as in B-078. The stick strafe moves at 65% of the forward speed
-  (`STICK_STRAFE_SHARE`), so a sideways stride can keep pace (pending owner confirmation).
+  (`STICK_STRAFE_SHARE`), so a sideways stride can keep pace (confirmed by the owner on 2026-11-27).
 - **Closed:** 2026-11-20.
 
 ### B-077 — VR head walk start: the body jumps from rest to full speed in one frame (arms pop)

@@ -105,6 +105,8 @@ export interface UiViewModel {
   /** The prepared tray (PRD-045): item names in slot order. */
   tray: TrayUiState;
   faceCamera: 'off' | 'starting' | 'tracking' | 'no-face' | 'denied' | 'unavailable';
+  /** Upper-body and hand tracking from the camera (docs/features/selfie-gestures.md). */
+  bodycam: { enabled: boolean; status: 'off' | 'starting' | 'ready' | 'unavailable'; handsVisible: boolean };
   /** The dominant hand, stored per device (docs/features/ui-redesign.md, Q8). */
   handedness: Handedness;
   /** Running time of the take, whole seconds as ms, on the simulation clock. */

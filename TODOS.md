@@ -81,7 +81,7 @@ it from the item below instead of duplicating its status here.
   desktop body at rest; letting the Idle move the hand and eyes needs the
   desktop reach, carry, set-down and prop placement retuned). Slice 1 replaced
   only Idle and Walk. Shipped 2026-11-23; its owner decisions are listed in the
-  brief, pending owner confirmation.
+  brief and confirmed by the owner on 2026-11-27.
 
 - [x] "The way down", version 2 (agent-authored, 2026-11-12): the same <!-- T-305363 -->
   introspection, made to go inside and hit harder. Version 1 (scene

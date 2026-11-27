@@ -68,8 +68,13 @@ export class FaceDriver {
   private turn = 0;
   private stepped: HTMLVideoElement | null = null;
 
-  /** `bodycam` is the camera source of a page opened with `?input=camera`; without it the camera drives the face only. */
-  constructor(rig: THREE.Object3D, onCameraState: (state: FaceCameraState) => void, private readonly bodycam?: BodycamSource) {
+  /** `bodycam` is the camera source when upper-body/hand tracking is enabled; without it the camera drives the face only. */
+  constructor(
+    rig: THREE.Object3D,
+    onCameraState: (state: FaceCameraState) => void,
+    private readonly bodycam?: BodycamSource,
+    private readonly onBodycamState: (status: 'off' | 'starting' | 'ready' | 'unavailable') => void = () => undefined
+  ) {
     this.webcam = new WebcamFace(onCameraState);
     this.xrGaze = new XrGaze(rig);
   }
@@ -110,12 +115,33 @@ export class FaceDriver {
     this.tap = tap;
   }
 
-  private async startCamera(): Promise<void> {
+  /** Switches upper-body and hand tracking on or off on the live camera stream without reloading. */
+  setBodycamEnabled(enabled: boolean): void {
+    const source = this.bodycam;
+    if (!source) return;
+    source.setEnabled(enabled);
+    if (!enabled) {
+      this.stopBodycam();
+      return;
+    }
+    const video = this.webcam.videoElement;
+    if (video && this.webcam.active && !this.tracker) void this.startBodycam(video);
+  }
+
+  /** Starts the face camera and, when enabled, the pose and hand tracker on the same stream. */
+  async startCamera(): Promise<void> {
     await this.webcam.start();
     const source = this.bodycam;
     const video = this.webcam.videoElement;
     if (!source?.enabled || !video || !this.webcam.active) return;
+    await this.startBodycam(video);
+  }
+
+  private async startBodycam(video: HTMLVideoElement): Promise<void> {
+    const source = this.bodycam;
+    if (!source?.enabled) return;
     const generation = ++this.trackerGeneration;
+    this.onBodycamState('starting');
     try {
       // Loaded only now: a session that never starts the camera fetches neither pose nor hand model.
       const { BodycamTracker: Tracker } = await import('../bodycam/BodycamTracker');
@@ -125,12 +151,19 @@ export class FaceDriver {
           source.feed(frame);
           this.tap?.(frame, info);
         },
-        () => generation !== this.trackerGeneration || !this.webcam.active
+        () => generation !== this.trackerGeneration || !this.webcam.active || !source.enabled
       );
-      if (!tracker) return;
+      if (!tracker) {
+        if (generation === this.trackerGeneration) this.onBodycamState('off');
+        return;
+      }
       this.tracker = tracker;
+      this.onBodycamState('ready');
     } catch (error) {
-      if (generation === this.trackerGeneration) console.warn('Body tracking unavailable', error);
+      if (generation === this.trackerGeneration) {
+        this.onBodycamState('unavailable');
+        console.warn('Body tracking unavailable', error);
+      }
     }
   }
 
@@ -188,6 +221,7 @@ export class FaceDriver {
     this.tracker?.stop();
     this.tracker = null;
     this.bodycam?.release();
+    this.onBodycamState('off');
   }
 
   update(input: FaceStepInput): void {
