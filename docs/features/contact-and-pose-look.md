@@ -1,7 +1,7 @@
 # Feature brief: one contact idea and a pose look (trial)
 
 **Lead:** Claude (lead session)  
-**Status:** Reviewed (design review 2026-11-26: approve with changes; the changes are in this text)
+**Status:** Trial complete (2026-11-27); waits for the owner's decision. Design review 2026-11-26: approve with changes; the changes are in this text
 **Layer:** event (the authoring tool builds the recorded event; no change to the view)
 
 ## Why
@@ -178,6 +178,24 @@ after clearing.
 | Surface names and "not possible" report | A sheet with a wrong name; a sheet with an angle past a wrist limit | pending |
 | No present piece moves | `solver-regression.ts` with no `--write-pins` | pending |
 | Proof video | The three cases, before and after, close views | pending |
+
+## Trial result (2026-11-27)
+
+Branch `feature/pose-look` (head `7bd057b89d1c`, not merged). No pin, bar, wrist limit
+or solver time limit changed. `solver-regression.ts` passes: 7 of 7 present cases at or
+under their pins.
+
+| Part | Result | Cost |
+|---|---|---|
+| Pose look | Works. 83.7 s for one moment against about 142 s for a build; the same pose to 0.000 mm. The 30-second gate failed. | - |
+| Goodbye, `rest` on his upper arm | Numbers pass (skin gap 0.0 mm, sink 2.4 mm). Three fresh readers: partly, partly, no. Four other rows are worse than in the reach build (smooth, turn, arms.body, bodies). Not accepted. | 2 builds, 11 looks, about 35 probes, 3 readers (before: 18 builds, no pass) |
+| Stone, `grip` from the surface | Passes: 0.2 mm, 4.8° (authored grip: 0.4 mm, 4.7°). The found grip is tighter and more to the side than the authored one, so jump.me and arms.body are worse (both fail in both sheets). | 2 builds, 2 looks, 4 probes |
+| Baker door, `rest` on the door | Not possible: needs extend 69° (limit 55°). The tool gave the "not possible at this angle" report. | 3 probes |
+| Baker door, `grip` on the handle | Fails: 60.9 mm, 30°. The fist falls behind the swinging door after 1.67 s; jump and turn are worse. | 2 probes, 2 looks, 2 builds |
+
+Reading: contact works on a target that is still during the hold (stone). It fails
+when the target moves during the hold (his arm as he turns away, the swinging door).
+The owner decides if the pose look lands alone, and if contact gets one more round.
 
 ## Physical-device limits
 
