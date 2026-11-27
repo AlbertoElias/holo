@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "pnpm --filter @holoim/contracts build && pnpm --filter @holoim/objects build && pnpm run prisma:setup && tsx watch src/server.ts",
     "build": "pnpm run prisma:generate && tsc -p tsconfig.json",
-    "lint": "eslint .",
+    "lint": "oxlint",
     "typecheck": "pnpm run prisma:generate && tsc -p tsconfig.typecheck.json --noEmit",
     "pretest": "pnpm run prisma:generate",
     "test": "vitest run",
@@ -40,7 +40,7 @@
     "@holoim/config-eslint": "workspace:*",
     "@holoim/config-ts": "workspace:*",
     "@types/node": "^24.0.0",
-    "eslint": "catalog:",
+    "oxlint": "catalog:",
     "prisma": "^6.3.1",
     "tsx": "^4.19.2",
     "typescript": "catalog:",

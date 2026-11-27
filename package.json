@@ -15,7 +15,7 @@
     "dev": "pnpm exec concurrently -n viewer,capture -c blue,green \"pnpm run dev:viewer\" \"pnpm run dev:capture\"",
     "dev:capture:mock-vr": "pnpm --filter @holoim/capture dev:mock-vr",
     "install:all": "pnpm install",
-    "lint:tooling": "eslint \"scripts/**/*.ts\"",
+    "lint:tooling": "oxlint --ignore-pattern='**/*.mjs' scripts",
     "lint:all": "pnpm run lint:tooling && pnpm -r --if-present lint",
     "typecheck:tooling": "tsc -p tsconfig.scripts.json --noEmit",
     "typecheck:all": "pnpm run typecheck:tooling && pnpm -r --if-present typecheck",
@@ -72,7 +72,7 @@
     "@holoim/tooling-testing": "workspace:*",
     "@types/node": "^24.0.0",
     "concurrently": "^9.2.1",
-    "eslint": "catalog:",
+    "oxlint": "catalog:",
     "tsx": "^4.19.2",
     "typescript": "catalog:"
   },

@@ -11,12 +11,6 @@
   },
   "typescript.tsdk": "node_modules/typescript/lib",
   "typescript.enablePromptUseWorkspaceTsdk": true,
-  "eslint.workingDirectories": [
-    "./apps/capture",
-    "./apps/viewer-api",
-    "./apps/viewer-web",
-    "./packages/contracts"
-  ],
   "files.associations": {
     "CLAUDE.md": "markdown"
   }

@@ -105,6 +105,22 @@ function checkInstructionFilters() {
   }
 }
 
+// Each package whose `lint` script runs Oxlint has its own `.oxlintrc.json`.
+// Without one, Oxlint uses the nearest config in a parent folder, or its
+// defaults outside the repository, and the lint silently changes.
+function checkOxlintConfigs() {
+  for (const group of ["apps", "packages"]) {
+    for (const entry of readdirSync(path.join(rootDir, group))) {
+      const manifest = path.join(rootDir, group, entry, "package.json");
+      if (!existsSync(manifest)) continue;
+      const lint = JSON.parse(readFileSync(manifest, "utf8")).scripts?.lint ?? "";
+      if (/\boxlint\b/.test(lint) && !existsSync(path.join(rootDir, group, entry, ".oxlintrc.json"))) {
+        reporter.fail(`${group}/${entry} lints with Oxlint but has no .oxlintrc.json; add one that extends @holoim/config-eslint/oxlint/base.json or react-src.json.`);
+      }
+    }
+  }
+}
+
 // Each TODOS.md item ends its first line with an id marker, `<!-- T-xxxxxx -->`
 // (docs/FEATURE_WORKFLOW.md). Tools that read the queue key an item on it, so an
 // item keeps its id when its text changes. An item is a top-level checkbox line.
@@ -231,6 +247,7 @@ async function main() {
   checkPackageManagerAlignment();
   checkAgentConfigParity();
   checkInstructionFilters();
+  checkOxlintConfigs();
   checkTodoIds();
   checkPrePushHook();
   checkWallClockWaits();

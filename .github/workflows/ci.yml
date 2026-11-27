@@ -4,7 +4,7 @@ name: CI
 # `pnpm run verify:pr` locally or `pnpm run verify:hosted`, which pushes the
 # branch merged with origin/main to refs/heads/gate/<tree> and waits
 # for this workflow there (see AGENT_CONTRACT.md and
-# docs/features/hosted-branch-gate.md). So this workflow runs on pushes to
+# docs/features/archive/hosted-branch-gate.md). So this workflow runs on pushes to
 # main, on pushes to gate/** refs and on manual dispatch, never on other
 # branches or pull requests. A changes job selects only the suites relevant to
 # the files the push touched (docs-only pushes run no suites); a gate ref

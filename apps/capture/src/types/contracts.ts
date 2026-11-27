@@ -121,6 +121,18 @@ export interface UiViewModel {
    * is `dressing` until the avatar wears it.
    */
   houseLook: HouseLookUi | null;
+  /** The look step's photo choice (docs/features/directed-performance.md, slice 5b): kept apart from `houseLook`, so a change's status does not replace it. */
+  lookPhoto: LookPhotoUi;
+}
+
+export interface LookPhotoUi {
+  status: 'idle' | 'loading' | 'reading' | 'read' | 'refused' | 'error';
+  /** The status line: the step in progress, the traits the photo set, or why it stopped. */
+  message: string | null;
+  /** One muted line: the traits the photo kept as they were, and why; null when none. */
+  kept: string | null;
+  /** True while "Previous look" can put back the look from before the photo. */
+  previous: boolean;
 }
 
 export interface HouseLookUi {
@@ -189,7 +201,7 @@ export type BodySample = {
   // True ground surface height and normal under each ankle and toe.
   ground: Partial<Record<'root' | 'leftAnkle' | 'rightAnkle' | 'leftToe' | 'rightToe', { y: number; normal: Vec3Tuple }>>;
   // Solver state, for diagnosis only; checks measure the bones instead.
-  solver: { aligned: boolean; translating: boolean; turning: boolean; bodyYaw: number; steps: number; recordedSteps?: number; swinging: { left: boolean; right: boolean } };
+  solver: { aligned: boolean; translating: boolean; turning: boolean; bodyYaw: number; steps: number; recordedSteps?: number; pelvisReachDrop?: number; swinging: { left: boolean; right: boolean } };
   dims: { legLength: number; ankleHeight: number; toeHeight: number; toeForward: number; eyeHeight: number; hipHeight: number; stanceWidth: number } | null;
 };
 

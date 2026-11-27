@@ -144,7 +144,7 @@ export class BodyTracking {
       bones,
       eyes: leftEye && rightEye ? { left: tuple(leftEye.getWorldPosition(scratch)), right: tuple(rightEye.getWorldPosition(scratch)) } : null,
       ground,
-      solver: { aligned: debug.aligned, translating: debug.translating, turning: debug.turning, bodyYaw: debug.bodyYaw, steps: debug.steps, recordedSteps: debug.recordedSteps, swinging: { left: debug.feet.left.swinging, right: debug.feet.right.swinging } },
+      solver: { aligned: debug.aligned, translating: debug.translating, turning: debug.turning, bodyYaw: debug.bodyYaw, steps: debug.steps, recordedSteps: debug.recordedSteps, pelvisReachDrop: debug.pelvisReachDrop, swinging: { left: debug.feet.left.swinging, right: debug.feet.right.swinging } },
       dims: this.solver.dimensions ?? null
     };
   }

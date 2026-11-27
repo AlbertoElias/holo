@@ -27,7 +27,9 @@ import type { BodySample } from '../src/types/contracts';
 //   of facing only: docs/features/archive/vr-recorded-walk.md, decision 4);
 // - the pelvis to stay over the feet (hips against the ankles' midpoint);
 // - the torso to keep its standing posture (a stick walk once moved the root twice and leaned the spine back);
-// - for the head walk, the hips' horizontal acceleration over the walk start to stay near the head's own.
+// - for the head walk, the hips' horizontal acceleration over the walk start to stay near the head's own;
+// - the pelvis to rise and fall smoothly with the stride: no frame of the hips' vertical acceleration far above the
+//   walk's own (B-087, a one-frame drop at each foot landing).
 // The head moves on every XR frame, and each sample carries the time of the frame it was solved at.
 // WALK_DIRECTION_VIDEO=1 also films each walk from the side and the front (H.264 MP4 in the artifact directory).
 
@@ -48,6 +50,9 @@ const MAX_POSTURE_CHANGE_M = 0.02;
 // itself reaches 4).
 const MAX_START_ACCEL_MS2 = 10;
 const START_WINDOW_SAMPLES = 30;
+// The hips' vertical acceleration in a walk phase (m/s²). A smooth bob reads 2–10; a one-frame pelvis drop at a
+// landing read 13–27 (B-087).
+const MAX_HIPS_VERTICAL_ACCEL_MS2 = 12;
 
 // Directions in the user's frame: x right, z back (the head faces -Z). `recorded`: the recorded walk plays.
 const DIRECTIONS = [
@@ -306,6 +311,16 @@ function measure(samples: Sample[]) {
       const accel = [0, 2].map((i) => ((c.body.bones.hips![i]! - b.body.bones.hips![i]!) / t2 - (b.body.bones.hips![i]! - a.body.bones.hips![i]!) / t1) / ((t1 + t2) / 2));
       startAccel = Math.max(startAccel, Math.hypot(accel[0]!, accel[1]!));
     }
+    // The hips' vertical acceleration through the whole phase, from the frame times.
+    let verticalAccel = 0;
+    for (let k = 2; k < phase.length; k++) {
+      const [a, b, c] = [phase[k - 2]!, phase[k - 1]!, phase[k]!];
+      const t1 = (b.t - a.t) / 1000;
+      const t2 = (c.t - b.t) / 1000;
+      if (t1 <= 0 || t2 <= 0) continue;
+      const y = (s: Sample) => s.body.bones.hips![1]!;
+      verticalAccel = Math.max(verticalAccel, Math.abs(((y(c) - y(b)) / t2 - (y(b) - y(a)) / t1) / ((t1 + t2) / 2)));
+    }
     const recorded = (phase.at(-1)!.body.solver.recordedSteps ?? 0) - (phase[0]!.body.solver.recordedSteps ?? 0);
     rows[dir.label] = {
       speedMS: travelLength / (((n - 1) * FRAME_MS) / 1000),
@@ -318,7 +333,8 @@ function measure(samples: Sample[]) {
       pelvisAheadM: ahead / n,
       pelvisAsideM: aside / n,
       postureChangeM: postureChange / n,
-      startAccelMS2: startAccel
+      startAccelMS2: startAccel,
+      hipsVerticalAccelMS2: verticalAccel
     };
   }
   return rows;
@@ -338,6 +354,7 @@ function judge(name: string, rows: ReturnType<typeof measure>): string[] {
     if (r.postureChangeM! > MAX_POSTURE_CHANGE_M) failures.push(`${at}: torso ${(r.postureChangeM! * 100).toFixed(1)} cm from its standing posture (at most ${MAX_POSTURE_CHANGE_M * 100} cm)`);
     // The stick moves the view at full speed at once (no VR stick acceleration: a comfort choice), so only the head walk eases in.
     if (name === 'head' && r.startAccelMS2! > MAX_START_ACCEL_MS2) failures.push(`${at}: hips ${r.startAccelMS2!.toFixed(1)} m/s² at the walk start (at most ${MAX_START_ACCEL_MS2})`);
+    if (!(r.hipsVerticalAccelMS2! <= MAX_HIPS_VERTICAL_ACCEL_MS2)) failures.push(`${at}: hips ${r.hipsVerticalAccelMS2!.toFixed(1)} m/s² up or down in one frame (at most ${MAX_HIPS_VERTICAL_ACCEL_MS2}; the pelvis drops at a landing)`);
     if (dir.recorded !== r.recordedSteps! > 0) failures.push(`${at}: ${r.recordedSteps} recorded steps (${dir.recorded ? 'the recorded walk should play' : 'procedural steps only'})`);
   }
   return failures;
@@ -353,7 +370,7 @@ for (const { spec, samples, errors } of results) {
   report[spec.name] = rows;
   await writeFile(path.join(artifactDir, `${spec.name}-samples.json`), JSON.stringify(samples));
   for (const [label, r] of Object.entries(rows)) {
-    console.log(`[walk-direction] ${spec.name} ${label.padEnd(8)} ${r.speedMS!.toFixed(2)} m/s, ${r.steps} steps (${r.recordedSteps} recorded), step angle mean ${r.stepAngleMeanDeg!.toFixed(1)}° max ${r.stepAngleMaxDeg!.toFixed(1)}°, pelvis ahead ${(r.pelvisAheadM! * 100).toFixed(1)} cm aside ${(r.pelvisAsideM! * 100).toFixed(1)} cm, posture ${(r.postureChangeM! * 100).toFixed(1)} cm, start ${r.startAccelMS2!.toFixed(1)} m/s²`);
+    console.log(`[walk-direction] ${spec.name} ${label.padEnd(8)} ${r.speedMS!.toFixed(2)} m/s, ${r.steps} steps (${r.recordedSteps} recorded), step angle mean ${r.stepAngleMeanDeg!.toFixed(1)}° max ${r.stepAngleMaxDeg!.toFixed(1)}°, pelvis ahead ${(r.pelvisAheadM! * 100).toFixed(1)} cm aside ${(r.pelvisAsideM! * 100).toFixed(1)} cm, posture ${(r.postureChangeM! * 100).toFixed(1)} cm, start ${r.startAccelMS2!.toFixed(1)} m/s², hips vertical ${r.hipsVerticalAccelMS2!.toFixed(1)} m/s²`);
   }
   failures.push(...judge(spec.name, rows), ...errors.map((error) => `${spec.name}: console error ${error}`));
 }
