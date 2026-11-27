@@ -1835,7 +1835,7 @@ bug above.)
   the torso leaned back to reach the head. Sideways, the feet also trailed (as in B-078).
 - **Fix:** `MovementSystem` records the rig's move in `BodyTracking.carried`, and `planRoot` takes it out of the root
   plan. Side cadence and the travel-side first step as in B-078. The stick strafe moves at 65% of the forward speed
-  (`STICK_STRAFE_SHARE`), so a sideways stride can keep pace (pending owner confirmation).
+  (`STICK_STRAFE_SHARE`), so a sideways stride can keep pace (confirmed by the owner on 2026-11-27).
 - **Closed:** 2026-11-20.
 
 ### B-077 — VR head walk start: the body jumps from rest to full speed in one frame (arms pop)
