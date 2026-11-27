@@ -50,10 +50,10 @@ set.
      process and a labelled first-pass-only look are added, and the tool turns the
      second picture to the view where the hand is not hidden.
 2. **Contact, as a trial.** One new direction:
-   `{ "contact": { "part": "rightPalm", "on": "him.leftUpperArm", "kind": "rest" } }`
+   `{ "kind": "contact", "part": "rightPalm", "on": "him.leftUpperArm", "fit": "rest" }`
    with the usual beat times.
    - `part` is a palm only in the trial.
-   - `kind` is `rest` or `grip`. They are two solves on one shared surface goal.
+   - `fit` is `rest` or `grip`. They are two solves on one shared surface goal.
      `rest`: the palm normal goes against the surface normal and the fingers follow
      the surface. `grip`: the hand aligns with an axis and the fingers wrap.
    - The tool finds the contact point in the target bone's local frame, from the bind
@@ -96,8 +96,11 @@ capture app, so it adds no authoring action to the capture history.
 - [ ] The pose is the same as in the full build: each bone within 0.5° and each palm
       within 1 mm of that frame in `take.glb`.
 - [ ] With `contact`, the palm lies on his upper arm in goodbye. During the hold
-      frames, the gap at the palm centre is 3 mm or less and the deepest point of the
-      hand skin inside him is 3 mm or less. Both numbers are in a JSON row.
+      frames, the gap from the palm skin to his skin (`skinGap`) is 3 mm or less and
+      the deepest point of the hand skin inside him is 3 mm or less. Both numbers are
+      in a JSON row. (Changed 2026-11-27: the palm-centre point is about 1 cm in front
+      of the palm skin, so it read 1.2 mm while the skin was 3.8 to 8.0 mm away and a
+      fresh reader said "partly".)
 - [ ] A fresh hands reader accepts the goodbye touch. Its input is the close stills
       from two angles and one question: "Does her palm lie on his arm?"
 - [ ] The author's sheet for that touch has no `stopShort`, no palm direction and no
