@@ -148,7 +148,24 @@ function contactProblems(sheet: BeatSheet, b: Beat, d: Extract<Direction, { kind
   const out: string[] = [];
   if (!(CONTACT_PARTS as readonly string[]).includes(d.part)) out.push(`no part ${d.part} (${CONTACT_PARTS.join(', ')})`);
   if (d.fit !== 'rest' && d.fit !== 'grip') out.push(`fit ${String(d.fit)} is rest or grip`);
-  else if (d.fit === 'grip') out.push('fit grip is not built yet (the trial has rest only)');
+  else if (d.fit === 'grip') {
+    // A grip is on an object only in the trial, and it gives that object's take its grip: the take holds it.
+    const objects = sheet.objects ?? {};
+    const o = typeof d.on === 'string' ? objects[d.on] : undefined;
+    if (!o) out.push(`on ${String(d.on)}: fit grip is on an object (${Object.keys(objects).join(', ') || 'none'})`);
+    else if (o.grip !== undefined) out.push(`on ${d.on}: the object has its own grip; remove it, the contact finds the grip on its surface`);
+    else {
+      const side = contactSide(d);
+      const r = resolveTiming(b, d);
+      const take = sheet.beats.some((x) => x.performer === b.performer && x.directions.some((y) => {
+        if (y.kind !== 'take' || y.side !== side || y.object !== d.on) return false;
+        const q = resolveTiming(x, y);
+        return q.start < r.end && r.start < q.end;
+      }));
+      if (!take) out.push(`on ${d.on}: a grip needs a take of ${d.on} by the ${side} hand at the same time (the take holds it)`);
+    }
+    return out;
+  }
   const dot = typeof d.on === 'string' ? d.on.indexOf('.') : -1;
   const who = dot > 0 ? d.on.slice(0, dot) : '';
   const surface = dot > 0 ? d.on.slice(dot + 1) : '';
@@ -829,7 +846,8 @@ export function validateSheet(sheet: BeatSheet): string[] {
       if (d.kind === 'contact') problems.push(...contactProblems(sheet, b, d).map((x) => `${where}: ${x}`));
       if (d.kind === 'turn' && d.degrees === undefined && d.toward === undefined) problems.push(`${where}: needs degrees or toward`);
       if ((d.kind === 'take' || d.kind === 'put' || d.kind === 'drop') && !objects.has(d.object)) problems.push(`${where}: no object ${d.object}`);
-      if (d.kind === 'take' && sheet.objects?.[d.object] && !sheet.objects[d.object]!.grip) problems.push(`${where}: ${d.object} has no grip`);
+      // A take of an object with no grip needs a grip contact of the same hand on it (the grip is found on the surface).
+      if (d.kind === 'take' && sheet.objects?.[d.object] && !sheet.objects[d.object]!.grip && !b.directions.some((y) => y.kind === 'contact' && y.fit === 'grip' && y.on === d.object && contactSide(y) === d.side)) problems.push(`${where}: ${d.object} has no grip (give it one, or add a contact with fit grip on it)`);
       if (d.kind === 'put' && (d.at === undefined) === (d.on === undefined)) problems.push(`${where}: give at or on`);
       if (d.kind === 'put' && d.on !== undefined && (!objects.has(d.on) || d.on === d.object)) problems.push(`${where}: on ${d.on}: no other object`);
       if (d.kind === 'put' && pointObjects(d.at, objects, sheet.marks).includes(d.object)) problems.push(`${where}: an object cannot be put down at a point on itself`);
@@ -866,7 +884,7 @@ export function validateSheet(sheet: BeatSheet): string[] {
           if (!covered) problems.push(`${where}: an aim needs a reach of the ${d.side} hand around it (from before ${r.at.toFixed(2)} s to after ${(r.at + r.attack + r.hold).toFixed(2)} s)`);
         }
       }
-      if (d.kind === 'contact') {
+      if (d.kind === 'contact' && d.fit === 'rest') {
         // A mutual contact (a handshake, a hug) is not in the trial: the target is solved before the one who touches.
         const on = d.on.slice(0, d.on.indexOf('.'));
         const back = sheet.beats.filter((x) => x.performer === on).flatMap((x) => x.directions.flatMap((y) => (y.kind === 'contact' && y.on.startsWith(`${b.performer}.`) ? [resolveTiming(x, y)] : [])));

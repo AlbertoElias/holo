@@ -22,7 +22,7 @@ import { elbowPole } from '../../../src/ik/armPoseModel.ts';
 import { armRestOffset, bodyUp, hangArm, keepingTwist, rollHand, moveBoneWorld, orientHand, plantFeet, restElbowHint, rotateBoneWorld, solveArm, WRIST_LIMITS, steadyTwist, shareTwist, easeTwist, toWorld, turnBody, TURN_SHARE } from './pose.ts';
 import { speakingAt, visemesAt, type LineLips } from './lips.ts';
 import { busy, faceAt, fidgetAt, finishedBy, GLANCE_BLINK_DEG, glanceAt, glanceChest, LIFE_FIDGET, LIFE_SIGH, LIFE_WEIGHT, lifeSchedule, MASK_PAD, MASKED_BY, postureAt, sighAt, weightAt, attendArmsAt, attendGate, attendNodAt, attendSchedule, ATTEND_ARMS, type AttendSchedule, type LifeSchedule } from './life.ts';
-import { buildProp, changedPoint, propWorld, setChange, type LoadedSource, type Prop } from './props.ts';
+import { buildProp, changedPoint, propWorld, setChange, surfaceGrip, type LoadedSource, type Prop } from './props.ts';
 import { changePoseAt } from './world.ts';
 import { phaseSync } from './phases.ts';
 import { isPlace, measureBody, resolvePlace, type Body, type PlaceFrame } from './stage.ts';
@@ -370,6 +370,7 @@ function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources
   stage.restBones.clear();
   stage.goals.clear();
   stage.swivels.clear();
+  stage.gripFrom.clear();
   stage.restsOn.clear();
   stage.report = { grips: [], puts: [], aims: [], contacts: [] };
   stage.contacts.clear();
@@ -388,7 +389,9 @@ function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources
     a.frame.position.set(spec.at[0], 0, spec.at[1]);
     a.frame.quaternion.copy(yawQuat(spec.facing));
     a.frame.updateMatrixWorld(true);
-    const dirs = sheet.beats.filter((b) => b.performer === spec.id).flatMap((b) => b.directions.map((d0) => {
+    // A grip contact on an object gives only its take's grip (found on the surface when the take first needs it): the take moves the hand.
+    for (const b of sheet.beats) if (b.performer === spec.id) for (const d of b.directions) if (d.kind === 'contact' && d.fit === 'grip') stage.gripFrom.set(d.on, a.arms[contactSide(d)].upperArm);
+    const dirs = sheet.beats.filter((b) => b.performer === spec.id).flatMap((b) => b.directions.filter((d0) => !(d0.kind === 'contact' && d0.fit === 'grip')).map((d0) => {
       // A hand gesture is the right hand's unless it names one (so it masks only that hand's life).
       const d: Direction = d0.kind === 'gesture' && GESTURES[d0.name].hand && !d0.side ? { ...d0, side: 'right' } : d0;
       const r = resolveTiming(b, d);
@@ -627,7 +630,9 @@ const stage = {
   contactSkins: new Map<object, { t: number; skin: BodySkin }>(),
   swivels: new Map<Direction, number>(),
   /** What each object is set down on in the sheet (its `on`). */
-  restsOn: new Map<string, string>()
+  restsOn: new Map<string, string>(),
+  /** The upper arm of the hand whose `contact` with `fit: grip` is on an object with no grip of its own: the grip is found on its surface, facing that shoulder. */
+  gripFrom: new Map<string, THREE.Object3D>()
 };
 const solving = { t: 0, f: 0 };
 
@@ -1572,13 +1577,29 @@ function gripOf(performer: string, side: Side, t: number): { weight: number; pro
   return best;
 }
 
+/**
+ * An object's grip: its own, or (for a grip contact) the one found on its surface the first time it is needed (when
+ * its take begins), facing the shoulder of that hand then, and kept for the rest of the take.
+ */
+function propGrip(prop: Prop): NonNullable<Prop['grip']> {
+  if (!prop.grip) {
+    const arm = stage.gripFrom.get(prop.id);
+    if (!arm) throw new Error(`object ${prop.id} has no grip`);
+    const inv = prop.quaternion.clone().invert();
+    const center = prop.bounds.getCenter(new THREE.Vector3());
+    const toward = arm.getWorldPosition(new THREE.Vector3()).sub(propWorld(prop, center)).applyQuaternion(inv).normalize();
+    prop.grip = surfaceGrip(prop, toward, new THREE.Vector3(0, 1, 0).applyQuaternion(inv));
+  }
+  return prop.grip;
+}
+
 /** Where a take's hand goes (the grip, where the object rests when the take begins) and the grip's axis there. */
 function takeGoal(r: Resolved): { point: THREE.Vector3; axis?: THREE.Vector3 } {
   let g = stage.goals.get(r.direction);
   if (!g) {
     const d = r.direction as Extract<Direction, { kind: 'take' }>;
     const prop = stage.props.get(d.object)!.prop;
-    g = { point: propWorld(prop, prop.grip!.center), axis: prop.grip!.axis.clone().applyQuaternion(prop.quaternion) };
+    g = { point: propWorld(prop, propGrip(prop).center), axis: propGrip(prop).axis.clone().applyQuaternion(prop.quaternion) };
     stage.goals.set(r.direction, g);
   }
   return g;
@@ -1623,7 +1644,7 @@ function poseInHand(prop: Prop, handPosition: THREE.Vector3, handQuaternion: THR
   const rigidP = new THREE.Vector3();
   const rigidQ = new THREE.Quaternion();
   m.decompose(rigidP, rigidQ, new THREE.Vector3());
-  const grip = prop.grip!;
+  const grip = propGrip(prop);
   const pivot = grip.center.clone().applyQuaternion(rigidQ).add(rigidP);
   const quaternion = hangAbout(rigidQ, grip.axis);
   return { position: pivot.sub(grip.center.clone().applyQuaternion(quaternion)), quaternion };
@@ -1650,7 +1671,7 @@ function moveHeld(cast: Cast[], c: Cast, t: number): void {
       if (run.released) continue;
       const hand = c.a.arms[h.side].hand;
       const rig = c.a.hands[h.side];
-      const grip = st.prop.grip!;
+      const grip = propGrip(st.prop);
       if (!run.offset) {
         if (!h.take) seat(c, h.side, st.prop);
         else if (rig) {
@@ -1687,7 +1708,7 @@ function moveHeld(cast: Cast[], c: Cast, t: number): void {
 /** Seats an object held from the first frame: its grip axis across the palm, turned about it to stand as upright as it can (front forward), the grip in the fist. */
 function seat(c: Cast, side: Side, prop: Prop): void {
   const rig = c.a.hands[side];
-  const grip = prop.grip!;
+  const grip = propGrip(prop);
   const palm = rig ? rig.palmFrame(new THREE.Quaternion()) : c.a.arms[side].hand.getWorldQuaternion(new THREE.Quaternion());
   const across = new THREE.Vector3(1, 0, 0).applyQuaternion(palm);
   const up = new THREE.Vector3(0, 1, 0);
@@ -2445,7 +2466,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
       } else if (d.kind === 'take') {
         target = takeGoal(r).point;
         g = target.clone();
-        const radius = stage.props.get(d.object)!.prop.grip!.radius;
+        const radius = propGrip(stage.props.get(d.object)!.prop).radius;
         effector = (out) => (a.hands[s] ? a.hands[s]!.fistPoint(radius, out) : a.arms[s].hand.getWorldPosition(out));
         turns.push({ r, e: e * (1 - (held === 0 ? over?.q ?? 0 : 0)) });
       } else {
@@ -2615,7 +2636,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
     // Closed round what it holds: tighter round a thin handle, looser round a thick one.
     const held = gripOf(c.spec.id, s, t);
     if (held) {
-      const k = Math.min(1.3, Math.max(0.6, 1 + (0.015 - held.prop.grip!.radius) * 12));
+      const k = Math.min(1.3, Math.max(0.6, 1 + (0.015 - propGrip(held.prop).radius) * 12));
       const grip = { curl: Object.fromEntries(FINGERS.map((f) => [f, Math.min(1, HAND_SHAPES.grip.curl[f] * k)])) as Record<FingerName, number>, spread: HAND_SHAPES.grip.spread };
       pose = blendPose(pose, grip, held.weight);
     }
@@ -2811,7 +2832,7 @@ function leanFor(cast: Cast[], c: Cast, t: number, hipsLocal: THREE.Vector3): { 
       const target = pointOf(cast, c.spec, d.at);
       goal = target.clone().addScaledVector(target.clone().sub(shoulder).normalize(), -d.stopShort);
     } else if (d.kind === 'take') goal = takeGoal(r).point.clone();
-    else goal = putGoal(cast, c, r).point.clone().add(new THREE.Vector3(0, stage.props.get(d.object)!.prop.grip!.center.y, 0));
+    else goal = putGoal(cast, c, r).point.clone().add(new THREE.Vector3(0, propGrip(stage.props.get(d.object)!.prop).center.y, 0));
     const arm = a.arms[side];
     const over = goal.distanceTo(shoulder) - (COMFORT_REACH * (arm.upperLength + arm.lowerLength) + PALM_OFFSET);
     if (over <= 0) { if (e > 0.9 && !c.shortfall.has(r)) c.shortfall.set(r, 0); continue; }

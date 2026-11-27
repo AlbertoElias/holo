@@ -58,7 +58,8 @@ export interface Prop {
   /** In the object frame. */
   readonly bounds: THREE.Box3;
   readonly anchors: ReadonlyMap<string, THREE.Vector3>;
-  readonly grip?: { readonly center: THREE.Vector3; readonly axis: THREE.Vector3; readonly radius: number };
+  /** Set once from the object's surface when a `contact` with `fit: grip` names an object with no grip of its own. */
+  grip?: { readonly center: THREE.Vector3; readonly axis: THREE.Vector3; readonly radius: number };
   readonly tool?: { readonly tip: THREE.Vector3; readonly axis: THREE.Vector3 };
   /** Half the smaller of its width and depth: how far a holding hand hangs out from the thigh. */
   readonly halfWidth: number;
@@ -236,6 +237,63 @@ export function partGeometry(p: Part): THREE.BufferGeometry {
   g.translate(0, 0.5, 0);
   g.applyMatrix4(new THREE.Matrix4().compose(p.at, p.rotation, p.size));
   return g;
+}
+
+/** True when a point in the object frame is inside the part. */
+function insidePart(p: Part, local: THREE.Vector3): boolean {
+  const u = local.clone().sub(p.at).applyQuaternion(p.rotation.clone().invert()).divide(p.size);
+  u.y -= 0.5;
+  const r2 = u.x * u.x + u.z * u.z;
+  if (p.shape === 'box') return Math.abs(u.x) <= 0.5 && Math.abs(u.y) <= 0.5 && Math.abs(u.z) <= 0.5;
+  if (p.shape === 'sphere') return r2 + u.y * u.y <= 0.25;
+  if (Math.abs(u.y) > 0.5) return false;
+  return p.shape === 'cylinder' ? r2 <= 0.25 : Math.sqrt(r2) <= (0.5 - u.y) / 2;
+}
+
+/** The step (metres) and the most depth the grip's thickness is read to, through the object. */
+const GRIP_DEPTH_STEP = 0.002;
+const GRIP_DEPTH_MAX = 0.4;
+
+/**
+ * A grip found on an object's surface (a `contact` with `fit: grip`), in the object frame. `toward` is a unit
+ * direction to the hand's shoulder and `up` is the world's up, both in the object frame. The point is the surface
+ * point that faces the shoulder most (the near side, on the line of reach). The axis (across the palm) is up made
+ * square to the line of reach: the hand comes with the thumb up and the wrist straight, as
+ * the authored grips of the regression pieces do (stone-sE: 0.4 mm, 4.7°).
+ * The center is inside the object at half its thickness under the point, and that half thickness is the radius.
+ */
+export function surfaceGrip(prop: Prop, toward: THREE.Vector3, up: THREE.Vector3): { center: THREE.Vector3; axis: THREE.Vector3; radius: number } {
+  let best: { p: THREE.Vector3; n: THREE.Vector3; score: number } | undefined;
+  const over = up.clone().addScaledVector(toward, -up.dot(toward));
+  if (over.length() < 1e-3) throw new Error(`object ${prop.id}: the hand is straight over it, so the grip has no direction`);
+  over.normalize();
+  const probe = new THREE.Vector3();
+  for (const part of prop.parts) {
+    const g = partGeometry(part);
+    const pos = g.getAttribute('position');
+    const nor = g.getAttribute('normal');
+    for (let i = 0; i < pos.count; i += 1) {
+      const p = new THREE.Vector3().fromBufferAttribute(pos, i);
+      const n = new THREE.Vector3().fromBufferAttribute(nor, i).normalize();
+      // Skin of the union only: a point a little out along its normal must be outside every part.
+      probe.copy(p).addScaledVector(n, 0.001);
+      if (prop.parts.some((q) => insidePart(q, probe))) continue;
+      const score = n.dot(toward);
+      if (!best || score > best.score) best = { p, n, score };
+    }
+    g.dispose();
+  }
+  if (!best) throw new Error(`object ${prop.id}: no surface to grip`);
+  const { p, n } = best;
+  let depth = 0;
+  for (let s = GRIP_DEPTH_STEP; s <= GRIP_DEPTH_MAX; s += GRIP_DEPTH_STEP) {
+    probe.copy(p).addScaledVector(n, -s);
+    if (!prop.parts.some((q) => insidePart(q, probe))) break;
+    depth = s;
+  }
+  const radius = Math.max(DEFAULT_GRIP_RADIUS, depth / 2);
+  const axis = over.clone();
+  return { center: p.clone().addScaledVector(n, -radius), axis: axis.normalize(), radius };
 }
 
 /** A point given in an object's frame, in the world, at its current pose. */
