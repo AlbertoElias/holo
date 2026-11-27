@@ -367,7 +367,7 @@ holograms to the agent account (dry run without `--apply`). Background:
   There is no separate heavy tier and no weekly schedule; dispatch CI
   manually to check runner-image or dependency drift on unchanged code.
 - Hosted gate: `pnpm run verify:hosted` (`scripts/verify-hosted.ts`,
-  design in `docs/features/hosted-branch-gate.md`). It needs a committed,
+  design in `docs/features/archive/hosted-branch-gate.md`). It needs a committed,
   clean tree on a branch. It runs doctor, `check:ci-areas`, lint and
   typecheck, unit tests and (when `verify:pr` would) the solver regression
   for the changed areas, with the `verify:pr` result cache and no lock. Then
