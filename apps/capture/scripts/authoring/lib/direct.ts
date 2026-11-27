@@ -261,6 +261,8 @@ interface Cast {
   readonly speech: readonly Speech[];
   /** The body's skin and the arms' bind frames (`arm-quality.ts`), so the arms keep out of the body. */
   readonly armBody: ArmBody;
+  /** The shown avatar's samples, for the meters (route (c) trial). */
+  readonly meterBody: ArmBody;
   /** Each eye's opening and how far it turns with the pupil in view (`eye-view.ts`). */
   readonly eyeView: EyeView;
   readonly skin: BodySkin;
@@ -349,7 +351,26 @@ function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources
       return flat ? { ...r, start: r.at, anticipation: 0 } : r;
     })).sort((x, y) => x.start - y.start);
     const ankles0 = { left: toWorld(a, a.legs.left.foot.rootPosition), right: toWorld(a, a.legs.right.foot.rootPosition) };
-    const armBody = measureArmBody(a);
+    const collide = (a as LoadedAvatar & { collide?: LoadedAvatar }).collide;
+    const meterBody = measureArmBody(a);
+    let armBody = meterBody;
+    if (collide) {
+      const shown = new Map<string, THREE.SkinnedMesh>();
+      a.scene.traverse((o) => { const m = o as THREE.SkinnedMesh; if (m.isSkinnedMesh) shown.set(m.name, m); });
+      const meshes: THREE.SkinnedMesh[] = [];
+      collide.scene.traverse((o) => {
+        const m = o as THREE.SkinnedMesh;
+        const s = shown.get(m.name);
+        if (!m.isSkinnedMesh || !s) return;
+        const names = s.skeleton.bones.map((b) => b.name);
+        if (m.skeleton.bones.some((b, k) => b.name !== names[k])) throw new Error(`collision avatar: ${m.name} has other bones`);
+        m.bind(new THREE.Skeleton(s.skeleton.bones, m.skeleton.boneInverses), m.bindMatrix);
+        Object.defineProperty(m, 'matrixWorld', { get: () => s.matrixWorld });
+        m.visible = s.visible;
+        meshes.push(m);
+      });
+      armBody = measureArmBody(a, meshes);
+    }
     const eyes = eyeView(a);
     const morphing: Cast['morphing'] = [];
     const seenNodes = new Set<THREE.Object3D>();
@@ -368,7 +389,7 @@ function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources
       turnDeg: new Map(), stepWorld: new Map(), fixed: { next: 0, yaw: spec.facing }, ankles0,
       feetMid0: ankles0.left.clone().add(ankles0.right).multiplyScalar(0.5),
       seen: new Map(), seenBefore: new Map(), seenAt: { t: -Infinity, before: -Infinity }, shortfall: new Map(), morphing, speech: speech.get(spec.id) ?? [],
-      armBody, skin: new BodySkin(armBody.body), eyeView: eyes
+      armBody, meterBody, skin: new BodySkin(armBody.body), eyeView: eyes
     };
   });
   // A hand someone reaches to keeps still while they do (its fidget would move what they touch).
@@ -421,9 +442,9 @@ function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources
     aimChecks.set(f, [...(aimChecks.get(f) ?? []), { c: ci, r }]);
   }));
 
-  const meters = cast.map((c) => new ArmMeter(c.a, c.armBody));
+  const meters = cast.map((c) => new ArmMeter(c.a, c.meterBody));
   const eyeMeters = cast.map((c) => new EyeMeter(c.a, c.eyeView));
-  const pairMeter = new PairMeter(cast.map((c) => c.spec.id), cast.map((c) => c.armBody));
+  const pairMeter = new PairMeter(cast.map((c) => c.spec.id), cast.map((c) => c.meterBody));
   for (let f = 0; f < frames; f += 1) {
     const t = times[f]!;
     solving.t = t;

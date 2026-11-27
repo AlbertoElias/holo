@@ -17,7 +17,7 @@ const DRESSED = fileURLToPath(new URL('../../../output/authoring/avatars/', impo
 /** The house base dressed in its default look (`defaultLook` in house-base/base.json). */
 export const HOUSE_BASE = fileURLToPath(new URL('../../../public/gltf/models/house-base.glb', import.meta.url));
 
-export const wardrobeFile = (build: Build): string => join(ASSETS, `wardrobe-${build}.glb`);
+export const wardrobeFile = (build: Build): string => join(process.env.HOLOIM_WARDROBE_DIR ?? ASSETS, `wardrobe-${build}.glb`);
 
 /** The look `public/gltf/models/house-base.glb` wears (`defaultLook` in house-base/base.json). */
 export async function defaultLook(): Promise<LookCard> {
@@ -28,7 +28,7 @@ export async function defaultLook(): Promise<LookCard> {
 
 /** The house base dressed as the card says, in a finish (default clay), written to its own GLB. */
 export async function dressedFile(card: LookCard, finish: Finish = 'clay'): Promise<string> {
-  const file = join(DRESSED, `house-${finish === 'clay' ? '' : `${finish}-`}${lookKey(card)}.glb`);
+  const file = join(DRESSED, `${process.env.HOLOIM_WARDROBE_DIR ? 'collide-' : ''}house-${finish === 'clay' ? '' : `${finish}-`}${lookKey(card)}.glb`);
   const io = new NodeIO();
   const doc = await io.read(wardrobeFile(card.build));
   dressAvatar(doc, card);

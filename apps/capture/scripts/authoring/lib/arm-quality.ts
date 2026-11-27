@@ -90,10 +90,11 @@ const percentile = (values: number[], p: number): number => {
 };
 
 /** Every skinned vertex at bind in the world, with the bone that moves it most. */
-function bindVertices(a: LoadedAvatar): { p: THREE.Vector3; bone: THREE.Object3D; w: number; mesh: THREE.SkinnedMesh; i: number }[] {
+function bindVertices(a: LoadedAvatar, only?: readonly THREE.SkinnedMesh[]): { p: THREE.Vector3; bone: THREE.Object3D; w: number; mesh: THREE.SkinnedMesh; i: number }[] {
   const out: { p: THREE.Vector3; bone: THREE.Object3D; w: number; mesh: THREE.SkinnedMesh; i: number }[] = [];
   a.scene.updateMatrixWorld(true);
-  a.scene.traverse((o) => {
+  const each = (fn: (o: THREE.Object3D) => void): void => { if (only) only.forEach(fn); else a.scene.traverse(fn); };
+  each((o) => {
     const m = o as THREE.SkinnedMesh;
     if (!m.isSkinnedMesh || !m.visible) return;
     const pos = m.geometry.getAttribute('position');
@@ -128,9 +129,9 @@ function thin<T extends { p: THREE.Vector3 }>(verts: readonly T[], cell = CELL):
 }
 
 /** The body's skin samples and the arms' bind frames, from the avatar at bind. Leaves the avatar at bind. */
-export function measureArmBody(a: LoadedAvatar): ArmBody {
+export function measureArmBody(a: LoadedAvatar, only?: readonly THREE.SkinnedMesh[]): ArmBody {
   resetPose(a);
-  const verts = bindVertices(a);
+  const verts = bindVertices(a, only);
   const bodyQ = a.body.getWorldQuaternion(new THREE.Quaternion());
   const part = new Map<THREE.Object3D, string>();
   const name = (n: VrmHumanoidBone, label: string): void => { const b = a.humanoid.bone(n); if (b) part.set(b, label); };
