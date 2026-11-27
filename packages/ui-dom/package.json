@@ -9,7 +9,7 @@
     ".": "./src/index.tsx"
   },
   "scripts": {
-    "lint": "eslint .",
+    "lint": "oxlint",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "verify:fast": "pnpm run lint && pnpm run typecheck",
@@ -27,8 +27,8 @@
     "@testing-library/react": "^16.2.0",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
-    "eslint": "catalog:",
     "jsdom": "^26.0.0",
+    "oxlint": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }
