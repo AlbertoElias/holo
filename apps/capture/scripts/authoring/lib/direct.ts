@@ -355,21 +355,28 @@ function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources
     const meterBody = measureArmBody(a);
     let armBody = meterBody;
     if (collide) {
-      const shown = new Map<string, THREE.SkinnedMesh>();
-      a.scene.traverse((o) => { const m = o as THREE.SkinnedMesh; if (m.isSkinnedMesh) shown.set(m.name, m); });
-      const meshes: THREE.SkinnedMesh[] = [];
-      collide.scene.traverse((o) => {
-        const m = o as THREE.SkinnedMesh;
-        const s = shown.get(m.name);
-        if (!m.isSkinnedMesh || !s) return;
-        const names = s.skeleton.bones.map((b) => b.name);
-        if (m.skeleton.bones.some((b, k) => b.name !== names[k])) throw new Error(`collision avatar: ${m.name} has other bones`);
-        m.bind(new THREE.Skeleton(s.skeleton.bones, m.skeleton.boneInverses), m.bindMatrix);
-        Object.defineProperty(m, 'matrixWorld', { get: () => s.matrixWorld });
-        m.visible = s.visible;
-        meshes.push(m);
-      });
-      armBody = measureArmBody(a, meshes);
+      const cached = (collide as LoadedAvatar & { meshes?: THREE.SkinnedMesh[] });
+      if (!cached.meshes) {
+        const shown = new Map<string, THREE.SkinnedMesh>();
+        a.scene.traverse((o) => { const m = o as THREE.SkinnedMesh; if (m.isSkinnedMesh) shown.set(m.name, m); });
+        const meshes: THREE.SkinnedMesh[] = [];
+        collide.scene.traverse((o) => {
+          const m = o as THREE.SkinnedMesh;
+          const s = shown.get(m.name);
+          if (!m.isSkinnedMesh || !s) return;
+          const names = s.skeleton.bones.map((b) => b.name);
+          if (m.skeleton.bones.some((b, k) => b.name !== names[k])) throw new Error(`collision avatar: ${m.name} has other bones`);
+          // The shown mesh's skeleton, bind matrices and world matrix: in attached bind mode three.js recomputes
+          // bindMatrixInverse from matrixWorld on each update of the shown mesh, which the collision mesh never gets.
+          m.bind(s.skeleton, s.bindMatrix);
+          m.bindMatrixInverse = s.bindMatrixInverse;
+          Object.defineProperty(m, 'matrixWorld', { get: () => s.matrixWorld });
+          m.visible = s.visible;
+          meshes.push(m);
+        });
+        cached.meshes = meshes;
+      }
+      armBody = measureArmBody(a, cached.meshes);
     }
     const eyes = eyeView(a);
     const morphing: Cast['morphing'] = [];

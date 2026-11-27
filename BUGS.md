@@ -266,6 +266,18 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   - the ring at the jumper's own sleeve end (no `sleeveEnd` plane): only stone-sD moves, smooth.me 11 % (pin 19),
     and arms.prop.me 20 mm (pin 15) with the skin kept under the cuff. Without the kept skin, and without the hem,
     smooth.me stays at 11 %.
+- **Tried (2026-11-27, `bug/sleeve-end`, route (c), not merged):** the take shows the cuff avatar, and the solver
+  collides with a cuff-free copy (`HOLOIM_COLLIDE_DIR`, a folder with the `main` wardrobes and `house-base.glb`). The
+  arm meters still read the shown avatar. The collision meshes take the shown skeleton, `bindMatrix`,
+  `bindMatrixInverse` and `matrixWorld` (`solveOnce` in `lib/direct.ts`). A first wiring kept the collision mesh's own
+  `bindMatrixInverse`. In attached bind mode three.js recomputes it only on the shown mesh, so each sample moved
+  about 1.3 m when the solver placed the performer (baker reach.open 731 mm, turn.b 6476 °/s), also with two equal
+  avatars. With the shared matrices the samples agree to 0.0 mm on each frame. Results (`solver-regression.ts`, all
+  7 cases, no pin changed): the control (both avatars from `main`) and the route (cuff shown) both have every case at
+  or under its pins. Without the collision avatar the cuff fails baker arms.prop.b 28 mm (pin 25).
+- **To land route (c):** ship the cuff build as `assets/house-base/wardrobe-*.glb` and `public/gltf/models/house-base.glb`
+  (the shipped look changes), track a cuff-free collision set (4 GLBs, about 7 MB) with a build mode that skips the
+  `cuff` block, and make the solver read that set by default in place of the variable.
 - **Next fix:** decide which surface the arm samples take. If the solver and the arm checks should see the body and
   not the clothes, `bindVertices` takes the `Body` mesh only; the cuff then moves no number, but the pins move once
   for every case (a re-pin that waits for the owner). Otherwise accept stone-sD smooth.me 11 % in the stone re-pin
