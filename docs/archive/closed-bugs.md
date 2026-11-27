@@ -3,6 +3,98 @@
 Closed entries moved from `BUGS.md` so the live tracker stays scannable.
 `BUGS.md` remains the authority for open, verified defects.
 
+### B-100 — Authored crouch: the right arm steps about 8 mm in one frame as the take starts (1.73 s)
+
+- **Area:** `apps/capture/scripts/authoring` (`lib/direct.ts` reach solve, `src/ik/ArmIkSolver.ts` reach stop)
+- **Severity:** P3 (a small draft fault; no bar sees it, the opus review saw a probable stammer at the shin)
+- **Observed:** 2026-11-23, crouch v27 to v43 (`output/authoring/gesture-proof/crouch.json`)
+- **Evidence:** from the shoulder, the right elbow and wrist move 13 mm in the frame at 1.73 s against 2 to 5 mm in the
+  frames around it (v36). The cause has two parts. (1) The wrist goal loop in the reach solve does not converge near
+  full stretch: with a whole step per round the goal swings between two arm lengths 3 mm apart, so the pose depends
+  on the round that ends the loop. Fixed in B-099: the goal moves by half the error, 16 rounds (`EFFECTOR_GAIN`);
+  the step is now 8 mm. (2) At 1.77 s the hand gets to the solver's hard stop 1 cm short of the arm's length and stops
+  there (424 mm from the shoulder). Easing the goal into that stop (tanh over 8 or 20 mm, v41 and v42) did not make
+  the step smaller and put a finger 7 mm into the ball (`arms.held.me` FAIL), so it was taken out.
+- **Expected:** the arm moves on with no one-frame step as the take starts.
+- **Reproduction:** `node --conditions=development --import tsx scripts/authoring/make.ts output/authoring/gesture-proof/crouch.json --quick`
+  in `apps/capture`, then the per-frame step of `rightElbow` and `rightWrist` less `rightShoulder` in `motion.me.json`.
+- **Cause found (2026-11-24, crouch v43 sheet, trace of the reach solve):** the elbow does not jump because of the
+  clavicle or the hint. The reach goal runs ahead of the arm. At 1.77 s the arm is at its stop (424 mm upper arm to
+  hand), and the goal continues: the effector is 5 mm short at 1.80 s, 24 mm at 1.97 s and 37 mm at 2.00 s, and then
+  it comes back to 5 mm at 2.10 s. While the arm comes straight, the bend changes fast, and the bend stops when the
+  arm is at its stop. That stop is the step. A soft stop in the solver (an exponential knee from 1 cm to 1 mm short,
+  authoring only) made it worse: the elbow steps went to 14 to 16 mm, and `arms.held.me` and `turn.me` failed. So
+  that change was taken out.
+- **Next fix:** keep the reach goal within the arm's reach while the body goes down. The hand must not leave for the
+  ball before the shoulder is low enough. Do one of these: delay the reach weight `w` against the crouch, or let the
+  trunk lean toward the goal when the goal is more than the arm's length from the shoulder. Measure the effector
+  error per frame. It must stay under about 5 mm through the take.
+- **Tried (2026-11-24, crouch-v43, `solver-regression.ts crouch-v43`, trace of the reach solve per frame):** the
+  palm point is 505 mm from the shoulder at 1.70 s and 531 mm at 1.90 s. The palm stops at about 514 mm (the
+  wrist stop at 425 mm plus the palm's offset). The error is 5.6 mm at 1.80 s, 24 mm at 1.97 s and 0.5 mm at
+  2.13 s. Baseline elbow step (per frame, from the shoulder): 8 mm at 1.77 s, then 2 mm. Largest change of the step
+  between frames: 6.3 mm.
+  - A soft limit on the point at the reach sphere (tanh knee of 3 or 6 cm below an estimated reach): the error and
+    the step did not change (the estimate was too large); turn.me 244°/s (pin 231), or smooth.me 51 % (pin 58 %)
+    with the 6 cm knee. Taken out.
+  - A lean for the point on its way (the line from the hanging hand to the goal), as well as for `e` of the goal's
+    shortfall: the error from 1.80 to 2.10 s was the same to 0.1 mm. smooth.me 18 % and turn.me 271°/s failed.
+    Taken out.
+  - Why the lean did nothing: `leanFor` measures the shoulder as the bind shoulder plus `hipsLocal`. That includes
+    the crouch's drop and its hips back, but not the crouch's forward spine lean. So `leanFor` puts the goal 82 to
+    89 cm from the shoulder through the take, while the solve's real shoulder is 77 cm from it at 1.60 s and 48 cm
+    at 2.20 s. The lean need is wrong in size and does not track the real gap.
+  - The shoulder with the crouch's and the bend's spine lean (the hips-to-shoulder vector turned forward by
+    `BEND.deg * bend + CROUCH.deg * crouch` in `leanFor`), with and without the lean for the point on its way:
+    `leanFor` now puts the goal 71 cm from the shoulder at 1.70 s and 56 cm at 2.20 s. The lean gets smaller, so
+    the hand stops short of the ball: the effector error grows to 64 mm from 2.0 s on and does not close.
+    grip.pick 66 mm, arms.held.me 17 mm and arms.support.me 3 % fail where they passed at the pin; jump.props
+    1.26 m/s (pin 1.17). The elbow step falls to 7.5 mm and its largest change to 4.1 mm. Taken out.
+  - What this shows: the take reaches the ball only because the old shoulder is too far back and the lean is too
+    large. The real lean gap is in the spine that the lean itself bends: the lean, the crouch and the bend all
+    turn the same spine bones, and `leanFor` sizes its lean before the crouch's own turn is known to the solve.
+- **Next fix:** measure the shoulder from the posed bones (pose the spine with the crouch and the bend first, read
+  the upper-arm world position, then size the lean), so the lean need is the real gap. Then re-tune
+  `COMFORT_REACH` only if the pinned cases ask for it. Measure the effector error per frame (under about 5 mm),
+  the elbow step, and guard all six pinned cases.
+- **Tried (2026-11-24, crouch-v43):** the lean sized from the posed shoulder. `leanFor` now runs after the hips,
+  the twist, the breath, the state, the bend and the crouch have posed the spine; it reads the upper arm's world
+  position, then moves the hips by its shift and turns the spine. A first estimate from the bind shoulder sets only
+  how much a sigh gives way, and does not record a shortfall.
+  - `COMFORT_REACH` 0.94 (as now): the elbow step falls from 8 mm to 7.1 mm and its largest change from 6.3 to
+    4.7 mm. grip.pick 8 mm (pin 0.3 mm) and arms.held.me 7.3 mm at 2.13 s (a finger in the ball) fail.
+  - `COMFORT_REACH` 0.90 (more lean): step 7.2 mm, change 4.9 mm; grip.pick 2.6 mm and arms.held.me 4.7 mm fail.
+  - Taken out. The step does not go below its bar, and a pinned number gets worse either way. The real shoulder
+    makes the lean smaller, and then the hand comes to the ball late and off its grip. A fix must also change how
+    the reach weight `w` comes in against the crouch (the hand does not leave until the shoulder is low enough),
+    and that changes the approved crouch v43, so it needs the owner's choice.
+- **Closed (2026-11-24):** crouch v43 stays as it is; the owner accepted it ("crouch accepter"). The 8 mm elbow step
+  at 1.77 s stays. No fix tried above kept the pinned crouch numbers, and the owner judged the take as good.
+### B-107 — Quick Look check: the cloche refit is 9 cm off the baked cloche on walk takes
+
+- **Area:** apps/viewer-api/tools (`glb_to_usdz.py` `fit_points`, `inspect_usdz.py` cloche refit, `cloche.py`)
+- **Severity:** P3 (a false failure of the usdz-tools gate; no person has seen a wrong cloche)
+- **Observed:** 2026-11-23 once, then from 2026-11-24 on every local `test:usdz-tools` run on the owner's Mac,
+  on new takes and on a clean `origin/main`. Hosted Linux CI passed.
+- **Evidence:** all five challenged cases: "Cloche foot exceeds tolerance 0.005" (0.0887) and "Cloche radii exceeds
+  tolerance 0.0387" (0.104); the refit foot's z moved from −0.328 to −0.417.
+- **Cause:** the diorama clip scales each cut point of the environment onto the bubble's sphere and stores it as
+  float32, so those points are on the edge to within micrometres. Both fits keep a point only if it is not further
+  from the bubble's centre than its radius, and the two sides compose that centre from different matrices (about
+  4e-9 m apart). On the kept take one boundary point at z 5.789 m was 3e-10 m inside for the converter and
+  2.7e-9 m outside for the inspector. The fit is a bounding box, so that one point moved the dome's far side and
+  foot by 9 cm. Which side of the edge a point lands on depends on the last bits of the arithmetic, so it changed
+  with the take and the machine.
+- **Fix:** `cloche.inside_bubble` is the one bubble test for both sides; it counts points up to
+  `BUBBLE_EDGE_METERS` (0.1 mm) past the radius as inside. The check tolerances did not change. The web's
+  `drawnPoints` still uses the strict test; 0.1 mm does not change a visible dome.
+- **Also seen:** the challenged face's points differ by up to 1.3 cm between the two sides. They are inside the
+  box on this take, so the fit does not change, but the same kind of failure can come back if the face sets an
+  extreme.
+- **Proof:** on the kept failing take (the main checkout's ignored `apps/viewer-api/output/b107-2026-11-24/walk.glb`),
+  three `test:usdz-tools` runs in a row pass; the refit foot matches the baked foot to 8e-7 m and the radii to
+  1.4e-6 m (before: 0.089 m and 0.104 m). No proof video: the change is in a Python gate with no visible behavior.
+
 ### B-110 — verify:pr lock: waiters do not get the lock in arrival order
 
 - **Area:** `scripts/verify-lock.ts` (the machine-wide lock of `verify:pr` and `scripts/ci-emulate.sh`)

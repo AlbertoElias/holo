@@ -15,11 +15,13 @@ The CI workflow (`.github/workflows/ci.yml`) deploys each changed surface
 on a push to `main` as soon as the suites that exercise it pass: Fly API
 (an image built while the tests run, released by tag), Pages viewer and
 Pages capture (the bundles CI built). Each job health-checks its URL
-afterwards. Required repository secrets: `FLY_API_TOKEN` (a Fly deploy
-token scoped to `holoim-api`), `CLOUDFLARE_API_TOKEN` (scoped token with
-Cloudflare Pages edit permission), and `CLOUDFLARE_ACCOUNT_ID`. Manual
-redeploys and rollbacks: Actions → Deploy → Run workflow
-(`.github/workflows/deploy.yml`). The manual steps below remain
+afterwards. Required secrets, in the GitHub environment `production`
+(deployment-branch policy "main only"; every job that reads one names that
+environment): `FLY_API_TOKEN` (a Fly deploy token scoped to `holoim-api`),
+`CLOUDFLARE_API_TOKEN` (scoped token with Cloudflare Pages edit
+permission), and `CLOUDFLARE_ACCOUNT_ID`. Manual redeploys: Actions →
+Deploy → Run workflow on `main` (`.github/workflows/deploy.yml`; on another
+ref, a dispatch starts a run, but every job in it skips); a rollback is a revert on `main`. The manual steps below remain
 the fallback and the way the accounts/projects were first created.
 
 ## 0. Accounts and CLIs (one-time, operator)

@@ -1286,7 +1286,7 @@ class Converter:
         root = UsdSkel.Root(self.stage.GetDefaultPrim())
         cache = UsdSkel.Cache()
         cache.Populate(root, Usd.PrimDefaultPredicate)
-        inside = (lambda point: np.linalg.norm(point - self.bubble_center) <= self.bubble_radius) if self.bubble_center is not None else (lambda point: True)
+        inside = lambda point: cloche_rules.inside_bubble(point, self.bubble_center, self.bubble_radius)
         xforms = UsdGeom.XformCache(0)
         drawn, moving = [], []
         for prim in self.stage.Traverse():

@@ -27,7 +27,7 @@
       ]
     },
     "changes": [
-      "She stands further from the oven (20 cm back, facing it at 75\u00b0) and opens the door with her right hand, so her left arm stays out of the oven; she takes the loaf by its near end, and she shows it on the side away from the oven.",
+      "She stands further from the oven (20 cm back, facing it at 75°) and opens the door with her right hand, so her left arm stays out of the oven; she takes the loaf by its near end, and she shows it on the side away from the oven.",
       "The flour sack was removed so the set stays narrow and the face stays over 40 px.",
       "No cloth uniform exists, so a stiff hat and a short apron worn on bones show the role.",
       "A real oven door cannot be pulled, so a change turns the door open as her hand reaches it.",
@@ -38,7 +38,8 @@
       "s8 round 3, b1: a step back (20 cm) after the take, so the turn and the carry have room and her forearm stays out of the oven; the turn and the carry start 0.3 s later.",
       "b3: b1 with the step after the take (3.1 s), the turn and the carry at 3.5 s, and the show after the turn (4.9 s).",
       "s8 round 4, b1: the left hand comes under the loaf as the turn starts (3.5 s), so both palms carry it through the turn; an offer beat holds it out at chest height (5.6 s) while she looks at you for 2.7 s.",
-      "b2: the handle mark is 4 cm out from the door face (a palm-down hand stops with its fingers at the door, so its centre cannot reach the face); the loaf sits 6 cm nearer the oven mouth."
+      "b2: the handle mark is 4 cm out from the door face (a palm-down hand stops with its fingers at the door, so its centre cannot reach the face); the loaf sits 6 cm nearer the oven mouth.",
+      "B-104: the counter, the oven and its door turn -40° about the oven's centre, so the oven mouth faces her (she stood at its side wall and every take reached round it, through the wall); the loaf rests on the oven floor (it sat 5 cm into it), and its grip is round its near end at mid height with the loaf's own radius (5.5 cm), so the fist closes on the crust and not on a 1.5 cm handle inside the loaf. The open reach goes to the door's handle anchor, which swings with the door, so the hand pulls the door down and does not stay in the air while the door swings through it; the door starts to swing when the hand is on the handle (1.45 s), and the hand lets go a third of the way down (a hold of 0.3 s), as a door that the hand followed to the counter would bend her to counter height. She stands at (-0.18, 0.34) facing 85, in front of the oven's open side and clear of the open door, so the loaf is in reach (it was 53 cm away); the show and offer marks move with her."
     ]
   },
   "duration": 8.5,
@@ -48,9 +49,9 @@
       "avatar": "house:clay",
       "at": [
         -0.18,
-        0.25
+        0.34
       ],
-      "facing": 75,
+      "facing": 85.0,
       "seed": 21,
       "look": {
         "build": "medium",
@@ -71,30 +72,25 @@
       1.55,
       2.5
     ],
-    "handle": [
-      0.24,
-      1.0,
-      0.54
-    ],
     "showR": [
       -0.18,
       1.2,
-      0.61
+      0.7
     ],
     "showL": [
       -0.28,
       1.13,
-      0.63
+      0.72
     ],
     "offerR": [
       -0.18,
       1.27,
-      0.71
+      0.8
     ],
     "offerL": [
       -0.28,
       1.22,
-      0.73
+      0.82
     ]
   },
   "objects": {
@@ -112,12 +108,12 @@
         0,
         0.3
       ],
-      "facing": 0
+      "facing": -40
     },
     "oven": {
       "name": "Oven",
       "on": "counter",
-      "facing": 0,
+      "facing": -40,
       "parts": [
         {
           "shape": "box",
@@ -194,11 +190,11 @@
     "door": {
       "name": "Oven door",
       "at": [
-        0.4,
+        0.284,
         0.74,
-        0.48
+        0.438
       ],
-      "facing": 0,
+      "facing": -40,
       "parts": [
         {
           "shape": "box",
@@ -228,28 +224,36 @@
           ],
           "color": "#ff7a1a"
         }
-      ]
+      ],
+      "anchors": {
+        "handle": [
+          -0.16,
+          0.26,
+          0.06
+        ]
+      }
     },
     "loaf": {
       "name": "Loaf",
       "at": {
         "of": "oven",
-        "up": -0.01,
-        "right": 0.13,
-        "forward": 0.06
+        "up": 0.04,
+        "right": -0.08,
+        "forward": 0.12
       },
-      "facing": 0,
+      "facing": -40.0,
       "grip": {
         "at": [
-          -0.1,
-          0.02,
+          -0.06,
+          0.065,
           0
         ],
         "axis": [
-          1.35,
-          0.44999999999999996,
-          0.7
-        ]
+          0.788,
+          0.518,
+          0.331
+        ],
+        "radius": 0.055
       },
       "parts": [
         {
@@ -323,13 +327,13 @@
       "id": "open",
       "performer": "b",
       "at": 0.9,
-      "hold": 0.9,
+      "hold": 0.3,
       "intent": "She reaches out and opens the oven door.",
       "directions": [
         {
           "kind": "reach",
           "side": "right",
-          "at": "handle",
+          "at": "door.handle",
           "stopShort": 0,
           "palm": "down",
           "attack": 0.6,
@@ -501,7 +505,7 @@
     {
       "kind": "change",
       "object": "door",
-      "when": 1.3,
+      "when": 1.45,
       "over": 0.9,
       "from": {
         "turn": [

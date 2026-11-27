@@ -80,6 +80,13 @@ const RENDER = 512;
 const VIEW = { top: 0.42, bottom: -0.42, ahead: 0.04, fov: 20 } as const;
 const SPACING = 3;
 const BACKGROUND = Number.parseInt(tokens.color.ground.mid.slice(1), 16);
+/**
+ * The clay finish is lit and has no emissive, so the viewer's lights (ACES, exposure 0.82) leave a cheek at about a third of its
+ * swatch. The finish renders of the card lift it by this multiplier on the exposure: the porcelain, caramel and umber cheeks land
+ * within OKLab dE 4 of their swatches (docs/features/directed-performance.md, "Clay skin light"). Ink and light carry an
+ * emissive term and stay as they are; the hair-outline renders stay too.
+ */
+const CLAY_EXPOSURE = 4;
 const KEY_GREEN = [0, 1, 0, 1] as const;
 
 const HELP = `photo-look.ts <photo> [--out card.json] [--finish clay|ink|light] [--name n] [--read-only]
@@ -256,7 +263,7 @@ async function keyedFile(card: LookCard, dir: string): Promise<string> {
 }
 
 /** Renders each avatar head-on, one performer each, in one still take; returns JPEG bytes in order. */
-async function renderHeads(servers: ViewerServers, dir: string, label: string, avatars: string[]): Promise<Buffer[]> {
+async function renderHeads(servers: ViewerServers, dir: string, label: string, avatars: string[], exposures: readonly number[] = []): Promise<Buffer[]> {
   await mkdir(dir, { recursive: true });
   const sheetFile = join(dir, 'still.json');
   const performers = avatars.map((avatar, i) => ({ id: `p${i}`, avatar, at: [i * SPACING, 0], facing: 0 }));
@@ -274,7 +281,7 @@ async function renderHeads(servers: ViewerServers, dir: string, label: string, a
       const head = bodies.performers[i]!.head;
       const distance = ((VIEW.top - VIEW.bottom) / 2) / Math.tan((VIEW.fov / 2) * Math.PI / 180);
       const target: [number, number, number] = [head[0], head[1] + (VIEW.top + VIEW.bottom) / 2, head[2] + VIEW.ahead];
-      const shot = await call(page, 'close', i, { position: [target[0], target[1], target[2] + distance], target, fov: VIEW.fov, width: RENDER, height: RENDER, background: BACKGROUND, far: distance + 0.6 }) as { image: string };
+      const shot = await call(page, 'close', i, { position: [target[0], target[1], target[2] + distance], target, fov: VIEW.fov, width: RENDER, height: RENDER, background: BACKGROUND, far: distance + 0.6, ...(exposures[i] ? { exposure: exposures[i] } : {}) }) as { image: string };
       out.push(Buffer.from(shot.image.slice(shot.image.indexOf(',') + 1), 'base64'));
     }
     return out;
@@ -376,7 +383,7 @@ async function main(): Promise<void> {
     let renderFrame: FaceFrame | null = outlines?.frame ?? null;
 
     const card = parseLook({ ...base, hair: { ...base.hair, style: hairStyle.value } }, 'photo-look card');
-    const finishShots = readOnly ? [] : await renderHeads(servers!, join(work, 'finishes'), 'Photo look: the card', await Promise.all(finishes.map((f) => dressedFile(card, f))));
+    const finishShots = readOnly ? [] : await renderHeads(servers!, join(work, 'finishes'), 'Photo look: the card', await Promise.all(finishes.map((f) => dressedFile(card, f))), finishes.map((f) => f === 'clay' ? CLAY_EXPOSURE : 1));
     if (!readOnly) renderFrame ??= await reader.look<FaceFrame | null>('frame', reader.addRender('clay', finishShots[0]!));
     if (readOnly) {
       // no renders

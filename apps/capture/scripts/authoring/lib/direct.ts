@@ -22,7 +22,8 @@ import { elbowPole } from '../../../src/ik/armPoseModel.ts';
 import { armRestOffset, bodyUp, hangArm, keepingTwist, rollHand, moveBoneWorld, orientHand, plantFeet, restElbowHint, rotateBoneWorld, solveArm, steadyTwist, shareTwist, easeTwist, toWorld, turnBody, TURN_SHARE } from './pose.ts';
 import { speakingAt, visemesAt, type LineLips } from './lips.ts';
 import { busy, faceAt, fidgetAt, finishedBy, GLANCE_BLINK_DEG, glanceAt, glanceChest, LIFE_FIDGET, LIFE_SIGH, LIFE_WEIGHT, lifeSchedule, MASK_PAD, MASKED_BY, postureAt, sighAt, weightAt, attendArmsAt, attendGate, attendNodAt, attendSchedule, ATTEND_ARMS, type AttendSchedule, type LifeSchedule } from './life.ts';
-import { buildProp, propWorld, type LoadedSource, type Prop } from './props.ts';
+import { buildProp, changedPoint, propWorld, setChange, type LoadedSource, type Prop } from './props.ts';
+import { changePoseAt } from './world.ts';
 import { isPlace, measureBody, resolvePlace, type Body, type PlaceFrame } from './stage.ts';
 
 const SIDES = ['left', 'right'] as const;
@@ -325,6 +326,7 @@ function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources
   stage.restBones.clear();
   stage.goals.clear();
   stage.swivels.clear();
+  stage.restsOn.clear();
   stage.report = { grips: [], puts: [], aims: [] };
   stage.first = sheet.performers[0]!.id;
   for (const [k, v] of Object.entries(sheet.marks ?? {})) stage.marks.set(k, v);
@@ -426,6 +428,8 @@ function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources
     const t = times[f]!;
     solving.t = t;
     solving.f = f;
+    // The shapes as the viewer sees them now: a door that has swung open is not in the way of a reach (B-104).
+    for (const st of stage.props.values()) setChange(st.prop, changePoseAt(sheet, st.prop.id, t));
     cast.forEach((c, ci) => {
       fixPersistent(cast, c, t);
       solveFrame(cast, c, t, 1 / fps, life, flat);
@@ -547,7 +551,9 @@ const stage = {
   restBones: new Map<string, Map<string, THREE.Matrix4>>(),
   goals: new Map<Direction, { point: THREE.Vector3; axis?: THREE.Vector3; upright?: THREE.Quaternion }>(),
   report: { grips: [], puts: [], aims: [] } as ObjectReport,
-  swivels: new Map<Direction, number>()
+  swivels: new Map<Direction, number>(),
+  /** What each object is set down on in the sheet (its `on`). */
+  restsOn: new Map<string, string>()
 };
 const solving = { t: 0, f: 0 };
 
@@ -563,7 +569,7 @@ function pointOf(cast: Cast[], self: PerformerSpec, p: Point): THREE.Vector3 {
   const who = p.slice(0, dot);
   const bone = p.slice(dot + 1);
   const object = stage.props.get(who);
-  if (object) return propWorld(object.prop, object.prop.anchors.get(bone)!);
+  if (object) return propWorld(object.prop, changedPoint(object.prop, object.prop.anchors.get(bone)!));
   const other = cast.find((c) => c.spec.id === who);
   const at = other?.seen.get(bone as VrmHumanoidBone);
   if (!other || !at) throw new Error(`${self.id}: cannot find ${p}`);
@@ -618,6 +624,7 @@ function placeObjects(cast: Cast[], sheet: BeatSheet, sources: ReadonlyMap<strin
     const performer = measuredFrom(sheet, spec.at) ?? stage.first;
     const prop = buildProp(id, spec, stage.bodies, performer, sources);
     stage.props.set(id, { prop, holdings: holdings.filter((h) => h.object === id) });
+    if (spec.on !== undefined) stage.restsOn.set(id, spec.on);
     if (spec.at === undefined && spec.on === undefined) continue;
     let defaultYaw = 0;
     if (spec.on !== undefined) {
@@ -647,7 +654,11 @@ function placeObjects(cast: Cast[], sheet: BeatSheet, sources: ReadonlyMap<strin
   }
 }
 
-/** A hand may touch an object while it holds it or while a direction of that hand points at it. */
+/**
+ * A hand may touch an object while it holds it or while a direction of that hand points at it. A take may also touch
+ * what its object is set down on (a stone in a box): the hand goes in to the object, and a hand kept out of the box
+ * holds the stone 13 cm from its grip, so the stone jumps to the hand when the grip starts.
+ */
 function mayTouch(c: Cast, s: Side, prop: Prop, t: number): boolean {
   if (gripOf(c.spec.id, s, t)?.prop === prop) return true;
   const ids = new Set(stage.props.keys());
@@ -655,7 +666,8 @@ function mayTouch(c: Cast, s: Side, prop: Prop, t: number): boolean {
     if (t < r.start || t > r.end + 0.3) return false;
     const d = r.direction;
     if (!('side' in d) || d.side !== s) return false;
-    const named = d.kind === 'take' ? [d.object] : d.kind === 'put' ? [d.object, ...(d.on ? [d.on] : []), ...pointObjects(d.at, ids, Object.fromEntries(stage.marks))] : 'at' in d ? pointObjects(d.at as Point, ids, Object.fromEntries(stage.marks)) : [];
+    const support = d.kind === 'take' ? stage.restsOn.get(d.object) : undefined;
+    const named = d.kind === 'take' ? [d.object, ...(support ? [support] : [])] : d.kind === 'put' ? [d.object, ...(d.on ? [d.on] : []), ...pointObjects(d.at, ids, Object.fromEntries(stage.marks))] : 'at' in d ? pointObjects(d.at as Point, ids, Object.fromEntries(stage.marks)) : [];
     return named.includes(prop.id);
   });
 }
@@ -1909,7 +1921,14 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
             g.addScaledVector(drift, k);
           }
         }
-        effector = (out) => (a.hands[s] ? a.hands[s]!.palmCenter(out) : a.arms[s].hand.getWorldPosition(out));
+        const palmAt = (out: THREE.Vector3): THREE.Vector3 => (a.hands[s] ? a.hands[s]!.palmCenter(out) : a.arms[s].hand.getWorldPosition(out));
+        // A reach that takes over a held hand (a fist round an object, 9 cm from the palm's center) moves the point
+        // that meets the goal over by its own curve: a switch in one frame moves the hand, and what it holds, at once.
+        const over0 = takeover.get(r);
+        const by = over0?.q ?? clamp01(e);
+        effector = held > 0
+          ? (out) => { const from = earlierEffector(out); return from.lerp(palmAt(new THREE.Vector3()), by); }
+          : palmAt;
       } else if (d.kind === 'take') {
         target = takeGoal(r).point;
         g = target.clone();
@@ -1935,7 +1954,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
       if (leading) {
         // Before the later starts: only its palm, by the takeover's progress. The hand still meets the earlier's goal
         // with the earlier's own point (a fist round a held object, not the palm's center 9 cm from it).
-        effector = earlierEffector;
+        if (d.kind !== 'reach') effector = earlierEffector;
         if (palm) palm = palm.lerp(p, lead!).normalize();
         continue;
       }

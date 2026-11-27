@@ -359,7 +359,14 @@
         "right": 0.28
       },
       "on": "giftbox",
-      "facing": "me.hips"
+      "facing": "me.hips",
+      "anchors": {
+        "edge": [
+          -0.42,
+          0.155,
+          0.12
+        ]
+      }
     }
   },
   "beats": [
@@ -407,22 +414,17 @@
     {
       "id": "lid",
       "performer": "me",
-      "at": 1.7,
+      "at": 1.5,
       "intent": "She lifts the lid of the box open.",
       "directions": [
         {
           "kind": "reach",
           "side": "left",
-          "at": {
-            "of": "me",
-            "forward": 0.36,
-            "right": -0.12,
-            "height": 0.95
-          },
+          "at": "lid.edge",
           "stopShort": 0.03,
           "palm": "down",
-          "attack": 0.4,
-          "hold": 0.2
+          "attack": 0.5,
+          "hold": 0.5
         },
         {
           "kind": "look",
@@ -598,7 +600,7 @@
       "turn": [
         0,
         0,
-        -100
+        -80
       ]
     }
   ]

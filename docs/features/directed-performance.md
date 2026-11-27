@@ -4912,16 +4912,72 @@ take plays. It is not linked from here.
 **Approval (2026-11-24).** After the contact sheet and the proof video,
 the owner said: "Approve, merge". Slice 5a merged into `main` that day.
 
-**Follow-ups (open, not fixed in this merge).**
+**Follow-ups (from the 5a merge).**
 
-- The clay still renders light the skin at about 30% of its colour, so
-  porcelain shows as mid-brown (see "Why the clay face looks darker than
-  the swatch" above). The owner has not chosen a fix: more light in the
-  renders, or a lighter swatch.
+- The clay still renders lit the skin at about 30% of its colour, so
+  porcelain showed as mid-brown. Fixed on `bug/clay-skin-light`, see
+  "Clay skin light" below. Waits for the owner's verdict on the sheet.
 - The light finish makes all skin tones look pale. On the contact sheet,
-  D000096 (umber) looks pale.
+  D000096 (umber) looks pale. Measured below, not fixed.
 - The default skin (caramel) is darker than a pale person whose read
-  fails, for example Schumer.
+  fails, for example Schumer. Measured below, not fixed.
+
+### Clay skin light
+
+**Decision (owner, 2026-11-24):** "More light on clay". Raise the light or
+exposure in the clay still renders so skin shows near its swatch. The
+swatches, the `FINISHES` materials and every file format stay as they are.
+
+**Change.** The still renders (`close` in `lib/review-page.ts`) take an
+optional `view.exposure`, a multiplier on the viewer's tone-mapping exposure
+(0.82, ACES) for that one render. `photo-look.ts` sets it to 4 for the clay
+finish in the card's finish renders (`CLAY_EXPOSURE`). Ink, light, the hair
+outline renders and the viewer itself keep their lights. Other callers of
+`close` pass no multiplier and are unchanged (the audition renders and
+`house-look-pictures.ts` still show clay at the viewer's exposure; they were
+not asked for).
+
+**Numbers.** Cheek = mean of two 12 px patches at the same face position,
+OKLab distance (dE, x100) to the swatch, house base, 512 px head render:
+
+| Skin | Swatch | Cheek before | dE before | Cheek after | dE after |
+|---|---|---|---|---|---|
+| porcelain | 243, 171, 136 | 131, 82, 59 | 31.4 | 224, 181, 152 | 3.6 |
+| linen | 225, 152, 111 | 114, 66, 41 | 31.3 | 213, 160, 122 | 2.5 |
+| goldenSand | 232, 152, 100 | 119, 65, 36 | 31.6 | 217, 161, 111 | 3.0 |
+| honey | 228, 143, 93 | 116, 59, 32 | 31.0 | 215, 152, 100 | 2.8 |
+| caramel | 229, 139, 94 | 116, 56, 32 | 31.0 | 216, 148, 101 | 2.8 |
+| copper | 205, 122, 75 | 98, 44, 20 | 29.9 | 202, 127, 75 | 1.3 |
+| umber | 176, 98, 64 | 75, 29, 14 | 28.5 | 178, 95, 58 | 0.8 |
+
+The multiplier was chosen on porcelain, caramel and umber over 1 to 5: dE
+15.3 / 15.3 / 15.8 at 2, 6.5 / 6.3 / 6.8 at 3, 3.9 / 2.8 / 0.8 at 4 and
+5.5 / 6.0 / 5.0 at 5, so 4 is the low point (porcelain 4.7 / 3.5 / 3.4 at
+3.5). The oatmealSlate top (swatch 231, 195, 168) went from RGB 141, 114, 95 (dE 27 to 28) to RGB 222, 206, 191 (dE 3.4; on the porcelain run 228, 211, 195, dE 4.4): paler and less saturated, not
+clipped (no channel above 228). The cost: hair lightens as well (black hair
+reads dark grey, silver reads near white), because the light is one for the
+whole picture. Skins that start light lose some saturation (porcelain cheek
+224, 181, 152 against 243, 171, 136).
+
+**The two other follow-ups, measured only.**
+
+- Light finish, umber (D000096): cheek 172, 130, 105 against swatch 176, 98,
+  64: OKLab dE 8.0, lightness 0.64 against 0.58. Ink on the same skin: dE
+  9.4 (147, 69, 39, darker). In light, every skin lands at dE 5.0 to 8.0 and
+  the cheeks grey toward one tone: umber and caramel differ by 0.07 in
+  lightness in light against 0.14 by swatch.
+- Default skin: caramel has OKLab lightness 0.72 against porcelain 0.80,
+  linen 0.74 and goldenSand 0.75. A pale person whose read fails (Schumer)
+  gets a face 0.08 darker than porcelain by swatch.
+
+**Evidence (ignored `apps/capture/output/clay-light/`).**
+`contact-sheet-clay-light.jpg`: seven people, light to dark skin
+(porcelain, linen, goldenSand, honey, copper, umber, caramel), four
+columns: clay before, clay after, ink, light. It uses the seven cards of
+the 5a sheet, without the photos. `clay-light-proof.mp4`: `photo-look.ts`
+on public-domain portrait B001243 in real time, ending on its new
+`compare.jpg` (linen; clay cheek now near the ink and light ones). Neither
+is linked from here.
 
 ## Physical-device limits
 
