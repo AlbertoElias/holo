@@ -1,7 +1,7 @@
 # Feature brief: realistic avatar motion (mocap clips + IK)
 
 **Lead:** Claude (Opus), session local_86351c34 family, worktree `.worktrees/desktop-gait`
-**Status:** Slice 1 and fix 1b shipped (2026-11-18); slice 2 shipped (2026-11-23; its owner decisions pending owner confirmation); physical Quest check pending with the owner
+**Status:** Slice 1 and fix 1b shipped (2026-11-18); slice 2 shipped (2026-11-23; its owner decisions confirmed by the owner on 2026-11-27); physical Quest check pending with the owner
 **Layer:** event (the recorded body)
 
 ## User outcome
@@ -296,11 +296,11 @@ and a real crouch walk, and stands its feet on the slope under them.
     57–76, 1.1–1.3 m/s, about 190 steps/min, the feet at least 7 cm apart.
     A side-step leads with one leg, so its half cannot be mirrored onto the
     other. (143_40 has a larger knee swing, 43–58°, but its feet cross by up
-    to 35 cm in the source itself, which reads as scissoring; pending owner
-    confirmation.) The side-step's own pops are larger than the walk's: the
+    to 35 cm in the source itself, which reads as scissoring; owner-confirmed on
+    2026-11-27.) The side-step's own pops are larger than the walk's: the
     source measures p99 65–66 m/s² at 1.8 m, so the first-person side-step
     phases are judged against 70 (`strafePopP99MS2`), and the rest of the run
-    against the desktop pop target (pending owner confirmation).
+    against the desktop pop target (owner-confirmed on 2026-11-27).
   - `CrouchWalk`: 136_10 frames 126–164 mirrored, 0.78 m/s, 92 steps/min,
     knee swing 100°, mid-stance 83°.
   - `CrouchWalkBackward`: 136_11 frames 121–167 mirrored, 0.64 m/s.
@@ -311,8 +311,8 @@ and a real crouch walk, and stands its feet on the slope under them.
   `usesOwnClips`): it plays its own directional clips where it has them by
   these names (the house avatar does, as its clips are the library's), and
   slice 1's turned forward walk where it has none. Its own idle sways at full weight, as its author made it
-  (the house avatar's own idle is the library's scaled take; pending owner
-  confirmation).
+  (the house avatar's own idle is the library's scaled take; owner-confirmed on
+  2026-11-27).
 - Desktop directional blend (`desktop-full` profile only; VR keeps the
   forward walk and the stride turn):
   - Third person keeps the travel turn (cause 11): a sideways or forward
@@ -343,7 +343,7 @@ and a real crouch walk, and stands its feet on the slope under them.
     pooled, the gap between the feet outweighs the short backward stride
     and the axis turned sideways (the back walk then measured 0.21 m/s and
     played at three times its cadence).
-  - Speed by direction on the desktop keys (pending owner confirmation):
+  - Speed by direction on the desktop keys (owner-confirmed on 2026-11-27):
     forward 1.0 of the walk speed, backing up 0.6 (1.08 m/s at 1.8 m),
     side-stepping 0.65 (like the VR stick, B-079), blended by the keys.
     Crouched speeds multiply in (0.45 at full crouch). The speed so changes
@@ -371,7 +371,7 @@ and a real crouch walk, and stands its feet on the slope under them.
     (`new`, array and object literals, closures, spreads, copying array
     methods) and wants none. A V8 heap profile cannot measure this: it counts
     the number boxing in three.js math (about 165 kB per frame) and, with the
-    debugger on, slows the pose 15 times (pending owner confirmation).
+    debugger on, slows the pose 15 times (owner-confirmed on 2026-11-27).
   - The toe lift: down a slope the toe stands on its own ground. Only over a
     drop steeper than 40° along the foot (a ledge) is it held at the ankle's
     ground. Before, every downhill toe was held at the ankle's height and
@@ -396,7 +396,7 @@ and a real crouch walk, and stands its feet on the slope under them.
   view rides the eye. In third person the view looks at the hips plus the
   eye's offset from them through a 3 s filter, blended in by the sway's
   weight (`CameraController.steadyLookTarget`), so the view does not rock
-  (pending owner confirmation). The phone object checks scan the open
+  (owner-confirmed on 2026-11-27). The phone object checks scan the open
   bracket prop in 5 px steps: its thin arms shift on screen as the view
   turns. The capture state reports the weight as `swayWeight`.
 - Knee swing: the slice 1 note (walk p99 77° against the source's 57–66°)
@@ -419,7 +419,7 @@ solver lays its own steps); a crouched strafe clip (no clean CMU take); the
 cause 23 residue (VR stick stop knee twitch, VR landing, mock-VR float),
 which stays in `TODOS.md`.
 
-**Owner decisions taken (pending owner confirmation):** the per-direction
+**Owner decisions taken (owner-confirmed on 2026-11-27):** the per-direction
 speed shares (back 0.6, side 0.65), which so differ by view mode (third
 person walks side keys forward at the full speed); third person keeps the
 travel turn for side keys instead of a strafe; the desktop idle sways its
@@ -448,7 +448,7 @@ All on the shipped avatar and the 7 fixture skeletons, desktop keyboard:
 - [ ] Slopes: on the default terrain, on faces of 10° or more, a planted
       foot's pitch and roll are within 8° of the ground under its heel and
       toe at p95 of the planted frames (the max reads 15.9° on the short
-      frames where a foot crosses a face edge; pending owner confirmation);
+      frames where a foot crosses a face edge; owner-confirmed on 2026-11-27);
       standing across a slope, the lower foot floats less than 1.5 cm above
       its ground at p95.
 - [ ] Knee swing ≤ 76° on every upright walk row: the forward walk's lowest
@@ -458,8 +458,8 @@ All on the shipped avatar and the 7 fixture skeletons, desktop keyboard:
       samples hold world positions only, so the check reads the change of an
       upper arm's or forearm's angular velocity against the torso (clavicle
       line, chest to neck) from one frame to the next, not against its parent
-      joint; the body's own turn toward its travel does not count (pending
-      owner confirmation).
+      joint; the body's own turn toward its travel does not count (owner-confirmed
+      on 2026-11-27).
 - [ ] The leg solver allocates nothing per frame (a source scan of its
       `update` path, see above).
 - [ ] Desktop idle: head sway 0.5–3 cm standing, from 2 s into the last stop
