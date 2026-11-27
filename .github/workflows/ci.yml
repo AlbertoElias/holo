@@ -1,11 +1,16 @@
 name: CI
 
-# Local-first verification: agents run `pnpm run verify:agent` in the loop
-# and `pnpm run verify:pr` before merging (see AGENT_CONTRACT.md). Hosted CI
-# therefore runs only on pushes to main and on manual dispatch — never on
-# branches or pull requests. On main, a changes job selects only the suites
-# relevant to the files the push touched (docs-only pushes run no suites);
-# manual dispatch always runs the full suite.
+# Agents run `pnpm run verify:agent` in the loop. The pre-merge gate is either
+# `pnpm run verify:pr` locally or `pnpm run verify:hosted`, which pushes the
+# branch merged with origin/main to refs/heads/gate/<tree> and waits
+# for this workflow there (see AGENT_CONTRACT.md and
+# docs/features/hosted-branch-gate.md). So this workflow runs on pushes to
+# main, on pushes to gate/** refs and on manual dispatch, never on other
+# branches or pull requests. A changes job selects only the suites relevant to
+# the files the push touched (docs-only pushes run no suites); a gate ref
+# selects what main would. On main, the suites that a green gate run passed on
+# the same tree do not run again (scripts/ci-gate-reuse.sh). Manual dispatch
+# always runs the full suite.
 #
 # Deploy runs in this workflow: each app deploys as soon as every suite that
 # exercises it has passed, from a production build (viewer, capture) or API
@@ -13,7 +18,7 @@ name: CI
 # redeploys and rollbacks stay in deploy.yml.
 on:
   push:
-    branches: [main]
+    branches: [main, "gate/**"]
   workflow_dispatch:
 
 permissions:
@@ -46,6 +51,9 @@ jobs:
       capture_app: ${{ steps.areas.outputs.capture_app }}
       docs_only: ${{ steps.areas.outputs.docs_only }}
       no_suite: ${{ steps.areas.outputs.no_suite }}
+      quality_checks: ${{ steps.areas.outputs.quality_checks }}
+      reused_run: ${{ steps.areas.outputs.reused_run }}
+      reused_suites: ${{ steps.areas.outputs.reused_suites }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -58,17 +66,36 @@ jobs:
         # Diff from the last successful CI run on main, so pushes whose run
         # was cancelled by this one or failed are re-checked and redeployed
         # (a run succeeds only when its deploys did); the push's `before` is
-        # the fallback.
+        # the fallback. A gate ref (pnpm run verify:hosted) is the branch
+        # merged with origin/main, so the same base gives the selection that
+        # main would make. Its name must be gate/<the tree it holds>, on a
+        # dispatch too, because main reuses its results by that name.
         run: |
+          areas="${RUNNER_TEMP}/areas"
+          if [[ "${GITHUB_REF}" == refs/heads/gate/* ]]; then
+            tree="$(git rev-parse "HEAD^{tree}")"
+            if [ "${GITHUB_REF}" != "refs/heads/gate/${tree}" ]; then
+              echo "::error::A gate ref must be refs/heads/gate/<the tree it holds> (gate/${tree}); push it with pnpm run verify:hosted"
+              exit 1
+            fi
+          fi
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            scripts/ci-changed-areas.sh >> "${GITHUB_OUTPUT}"
+            scripts/ci-changed-areas.sh > "${areas}"
+          elif [[ "${GITHUB_REF}" == refs/heads/gate/* ]]; then
+            base="$(scripts/ci-push-base.sh ci.yml "${GITHUB_SHA}" "")"
+            scripts/ci-changed-areas.sh "${base}" "${GITHUB_SHA}" > "${areas}"
           else
             base="$(scripts/ci-push-base.sh ci.yml "${GITHUB_SHA}" "${BEFORE}")"
-            scripts/ci-changed-areas.sh "${base}" "${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
+            scripts/ci-changed-areas.sh "${base}" "${GITHUB_SHA}" > "${areas}"
+            if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
+              scripts/ci-gate-reuse.sh "${areas}" "${GITHUB_SHA}" > "${areas}.reused"
+              mv "${areas}.reused" "${areas}"
+            fi
           fi
+          cat "${areas}" >> "${GITHUB_OUTPUT}"
           {
             echo "## Changed areas"
-            cat "${GITHUB_OUTPUT}"
+            cat "${areas}"
           } >> "${GITHUB_STEP_SUMMARY}"
 
 
@@ -89,10 +116,14 @@ jobs:
         with:
           pnpm-version: ${{ env.PNPM_VERSION }}
           ktx: "true"
+      # quality_checks is false on main when a gate run passed this tree
+      # (scripts/ci-gate-reuse.sh): the build below still makes the bundles
+      # the deploys take.
       - name: Lint and typecheck
+        if: needs.changes.outputs.quality_checks != 'false'
         run: pnpm timed quality-checks -- pnpm run check:all
       - name: Unit tests
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && needs.changes.outputs.quality_checks != 'false' }}
         run: pnpm timed unit-tests -- pnpm run test:unit:all
       - name: Build
         if: ${{ !cancelled() }}
@@ -114,10 +145,10 @@ jobs:
       # Listing the specs loads the built workspace packages, so it follows
       # the build.
       - name: Check the browser suites' shards cover each test once
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && needs.changes.outputs.quality_checks != 'false' }}
         run: pnpm timed e2e-shards -- pnpm run check:e2e-shards
       - name: Keep the viewer bundle for deploy
-        if: needs.changes.outputs.web == 'true'
+        if: github.ref == 'refs/heads/main' && needs.changes.outputs.web == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: viewer-dist-${{ github.run_id }}
@@ -125,7 +156,7 @@ jobs:
           if-no-files-found: error
           retention-days: 3
       - name: Keep the capture bundle for deploy
-        if: needs.changes.outputs.capture_app == 'true'
+        if: github.ref == 'refs/heads/main' && needs.changes.outputs.capture_app == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: capture-dist-${{ github.run_id }}
@@ -541,7 +572,9 @@ jobs:
 
   # ---- Deploy -------------------------------------------------------------
   # Each deploy needs every suite that exercises its app (a skipped suite
-  # means this push did not touch it) and runs only on main. When one push
+  # means this push did not touch it, or a green gate run passed it on this
+  # tree) and runs only on main: a gate ref never deploys and never builds the
+  # API image, so no job of a gate run reads a secret. When one push
   # changes the API and the viewer, the viewer waits for the API so it never
   # calls an endpoint that is not live yet.
 
@@ -552,6 +585,8 @@ jobs:
     needs: [changes]
     if: needs.changes.outputs.api == 'true' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
+    # The secrets live in this environment, whose branch policy is main only.
+    environment: production
     timeout-minutes: 15
     concurrency:
       group: ci-api-image-${{ github.ref }}
@@ -572,9 +607,11 @@ jobs:
       needs.changes.outputs.api == 'true' &&
       !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     runs-on: ubuntu-24.04
+    # The secrets live in this environment, whose branch policy is main only.
+    environment: production
     timeout-minutes: 10
     concurrency:
-      group: deploy-production-api
+      group: ${{ github.ref == 'refs/heads/main' && 'deploy-production-api' || format('gate-deploy-api-{0}', github.run_id) }}
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
@@ -606,9 +643,11 @@ jobs:
       (needs.changes.outputs.api != 'true' || needs.deploy-api.result == 'success') &&
       !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     runs-on: ubuntu-24.04
+    # The secrets live in this environment, whose branch policy is main only.
+    environment: production
     timeout-minutes: 10
     concurrency:
-      group: deploy-production-web
+      group: ${{ github.ref == 'refs/heads/main' && 'deploy-production-web' || format('gate-deploy-web-{0}', github.run_id) }}
       cancel-in-progress: false
     steps:
       # Pages deploy bundles functions/ and reads wrangler.toml from the
@@ -643,9 +682,11 @@ jobs:
       needs.changes.outputs.capture_app == 'true' &&
       !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     runs-on: ubuntu-24.04
+    # The secrets live in this environment, whose branch policy is main only.
+    environment: production
     timeout-minutes: 10
     concurrency:
-      group: deploy-production-capture
+      group: ${{ github.ref == 'refs/heads/main' && 'deploy-production-capture' || format('gate-deploy-capture-{0}', github.run_id) }}
       cancel-in-progress: false
     steps:
       # Wrangler runs from apps/capture: pages deploy bundles the functions/
@@ -702,6 +743,8 @@ jobs:
       DEPLOY_API_RESULT: ${{ needs.deploy-api.result }}
       DEPLOY_WEB_RESULT: ${{ needs.deploy-web.result }}
       DEPLOY_CAPTURE_RESULT: ${{ needs.deploy-capture.result }}
+      REUSED_RUN: ${{ needs.changes.outputs.reused_run }}
+      REUSED_SUITES: ${{ needs.changes.outputs.reused_suites }}
     steps:
       - name: Summarize jobs
         run: |
@@ -720,10 +763,15 @@ jobs:
             echo "| Deploy API (Fly) | ${DEPLOY_API_RESULT} |"
             echo "| Deploy viewer (Pages) | ${DEPLOY_WEB_RESULT} |"
             echo "| Deploy capture (Pages) | ${DEPLOY_CAPTURE_RESULT} |"
+            if [ -n "${REUSED_RUN}" ]; then
+              echo
+              echo "Not run again: ${REUSED_SUITES}. Gate run ${REUSED_RUN} passed them on this tree: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${REUSED_RUN}"
+            fi
           } >> "${GITHUB_STEP_SUMMARY}"
       # Skipped jobs report green, so a change the selector cannot see would
-      # pass untested: fail unless some area ran, the change is docs-only, or
-      # it is declared no-suite plumbing (scripts/ci-changed-areas.sh).
+      # pass untested: fail unless some area ran, a gate run passed the
+      # selected suites on this tree, the change is docs-only, or it is
+      # declared no-suite plumbing (scripts/ci-changed-areas.sh).
       - name: Enforce that changed source selected a suite
         env:
           AREAS: ${{ needs.changes.outputs.quality }}${{ needs.changes.outputs.capture_xr }}${{ needs.changes.outputs.e2e }}${{ needs.changes.outputs.pipeline }}${{ needs.changes.outputs.portal }}${{ needs.changes.outputs.usdz_tools }}${{ needs.changes.outputs.api }}${{ needs.changes.outputs.web }}${{ needs.changes.outputs.capture_app }}
@@ -731,7 +779,7 @@ jobs:
           NO_SUITE: ${{ needs.changes.outputs.no_suite }}
         run: |
           if [ "${DOCS_ONLY}" != "true" ] && [ "${NO_SUITE}" != "true" ] \
-            && ! grep -q true <<<"${AREAS}"; then
+            && [ -z "${REUSED_SUITES}" ] && ! grep -q true <<<"${AREAS}"; then
             echo "::error::Changed files selected no CI area, so every suite skipped; fix scripts/ci-changed-areas.sh"
             exit 1
           fi

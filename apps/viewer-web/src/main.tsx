@@ -9,7 +9,7 @@ import { router } from "./app/router";
 import "./styles/global.css";
 import { installTestModules, testHooks } from "./testHooks";
 
-// Debug logging for development
+// Startup facts for a support report: these lines print in every build, production too.
 console.log("HoloIM Viewer starting...");
 console.log("API Origin:", import.meta.env.VITE_API_ORIGIN);
 console.log("WebXR available:", "xr" in navigator);

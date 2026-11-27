@@ -7,6 +7,38 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
+### B-113 — Pipeline e2e: an unknown hologram id shows "You're offline" on a heavily loaded Mac (once)
+
+- **Area:** apps/viewer-web (`e2e/profiles.pipeline.spec.ts:124`, the `/h/<id>` page of an unknown id)
+- **Severity:** P3 (test flake; no person has seen it)
+- **Observed:** 2026-11-26, once, in `verify:pr --no-cache` on `infra/hosted-branch-gate` (no viewer-web change);
+  lint and typecheck took 28 minutes in the same run. The status said "You're offline. The feed loads again when
+  you're back online." for the 20 s of the check, not "not here any more". The 12 other pipeline spec files passed,
+  and the hosted gate run 45852488789 passed this spec on the same tree.
+- **Expected:** a 404 for an unknown id shows "not here any more", also when the API answers slowly.
+- **Reproduction:** not reproduced. A suspect: a slow or failed request that the page takes as offline, not as a 404.
+
+### B-112 — viewer-api unit test "waits past the deadline" times out on a heavily loaded Mac (once)
+
+- **Area:** apps/viewer-api (`test/object-routes.test.ts`, "object search with a stalled Poly Pizza download")
+- **Severity:** P3 (test flake; no product effect)
+- **Observed:** 2026-11-26, once, in `verify:pr --no-cache` on `infra/hosted-branch-gate` (no viewer-api change)
+  at load average 22: "Test timed out in 5000ms" after 54.9 s. In the same run, lint and typecheck took 29 minutes.
+- **Expected:** the test finishes inside its limit on a loaded machine, or its limit fits a loaded machine.
+- **Reproduction:** not reproduced. Alone, the file passes in 4.5 s (this test takes 1.5 s).
+
+### B-111 — Viewer browser shard hits its 10-minute limit when the Playwright cache misses and apt is slow (once)
+
+- **Area:** CI (`.github/actions/setup`, job "Viewer and Knowledge browser checks")
+- **Severity:** P3 (CI flake; no product effect)
+- **Observed:** 2026-11-24, hosted run 45330508669 (af3e48fa), attempt 1, shard 2/4: the job was cancelled at
+  `timeout-minutes: 10`. The Playwright Chromium cache missed, and `playwright install --with-deps chromium`
+  took about 7 minutes on a slow apt mirror, so the tests did not finish. Attempt 2 passed.
+- **Expected:** a cache miss costs at most a few minutes and never takes a shard past its limit.
+- **Reproduction:** not reproduced; it needs a cold Playwright cache and a slow Ubuntu mirror at the same time.
+  `scripts/ci-apt.sh 240` bounds only the apt part with a fallback mirror (B-024).
+- **Found by:** the first-attempt failure count in `docs/features/hosted-branch-gate.md`.
+
 ### B-104 — Authored takes: held grips drift since B-092 (stone sD snap, goodbye grip turn, held and support)
 
 - **Area:** apps/capture (`scripts/authoring/lib/direct.ts`: the arm solve and the clearing plan), the sheets
@@ -171,8 +203,8 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   (44826449489, 12b0a45) passed the same job. caf7cad holds the performer floor (85ee704b62ba, B-083), which
   changes the card's camera fit, so a slow fit is a suspect.
 - **Expected:** the wheel gesture that stops at the inside end leaves the camera in free mode on every run.
-- **Observed again:** 2026-11-23, hosted runs 45195106971 (22199d76) and the run on 79475539, same job and line.
-  Later runs on `main` passed it.
+- **Observed again:** 2026-11-23, hosted run 45195106971 (22199d76), same job and line. Later runs on `main` passed it.
+  (An earlier line also named run 45269930460 on 79475539; its log shows `portal.spec.ts:214`, which is B-090.)
 - **Reproduction:** `scripts/ci-emulate.sh bash -c "cd apps/viewer-web && VITE_IWER_SEM_SCENE=office_small XR_TEST_MODE=iwer pnpm exec playwright test e2e/deep-zoom.spec.ts --workers=1 --repeat-each=5"`
   with no extra load fails at line 241 in 5 of 5 runs on 9cc877c5 and 4 of 5 on 22199d76. On a Mac it passes.
   So the failure is in the code before 22199d76; the render-order change there (avatar see-through parts) is not the cause.
@@ -181,6 +213,9 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   stayed 7.14 (expected the inside distance, 1.6) for the 10 s of the poll. `deep-zoom.spec.ts` passed in that
   attempt. Attempt 2 of the same commit passed the job, and four local runs of the file passed that day. It is
   possibly the same cause (a wheel on the hologram that the slow runner does not take as a zoom); not examined.
+- **`portal.pipeline.spec.ts:120` observed again (2026-11-26):** gate run 45847778751 (`verify:hosted`, tree a7cd7367,
+  `infra/hosted-branch-gate`, no viewer-web change), attempt 1: the same numbers (7.14 against 1.6 for the 10 s poll).
+  The gate's one rerun of the job passed.
 
 ### B-101 — House avatar: the jumper's sleeve end has a jagged edge at the wrist
 
