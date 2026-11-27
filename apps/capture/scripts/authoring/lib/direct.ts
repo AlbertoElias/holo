@@ -22,7 +22,7 @@ import { elbowPole } from '../../../src/ik/armPoseModel.ts';
 import { armRestOffset, bodyUp, hangArm, keepingTwist, rollHand, moveBoneWorld, orientHand, plantFeet, restElbowHint, rotateBoneWorld, solveArm, WRIST_LIMITS, steadyTwist, shareTwist, easeTwist, toWorld, turnBody, TURN_SHARE } from './pose.ts';
 import { speakingAt, visemesAt, type LineLips } from './lips.ts';
 import { busy, faceAt, fidgetAt, finishedBy, GLANCE_BLINK_DEG, glanceAt, glanceChest, LIFE_FIDGET, LIFE_SIGH, LIFE_WEIGHT, lifeSchedule, MASK_PAD, MASKED_BY, postureAt, sighAt, weightAt, attendArmsAt, attendGate, attendNodAt, attendSchedule, ATTEND_ARMS, type AttendSchedule, type LifeSchedule } from './life.ts';
-import { buildProp, changedPoint, propDepth, propWorld, setChange, surfaceGrip, surfaceSamples, type LoadedSource, type Prop } from './props.ts';
+import { buildProp, changedPoint, nearestPart, propDepth, propWorld, setChange, surfaceGrip, surfaceSamples, type LoadedSource, type Prop } from './props.ts';
 import { changePoseAt } from './world.ts';
 import { phaseSync } from './phases.ts';
 import { isPlace, measureBody, resolvePlace, type Body, type PlaceFrame } from './stage.ts';
@@ -371,6 +371,7 @@ function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources
   stage.goals.clear();
   stage.swivels.clear();
   stage.gripFrom.clear();
+  stage.handleGrips.clear();
   stage.restsOn.clear();
   stage.report = { grips: [], puts: [], aims: [], contacts: [] };
   stage.contacts.clear();
@@ -390,8 +391,8 @@ function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources
     a.frame.quaternion.copy(yawQuat(spec.facing));
     a.frame.updateMatrixWorld(true);
     // A grip contact on an object gives only its take's grip (found on the surface when the take first needs it): the take moves the hand.
-    for (const b of sheet.beats) if (b.performer === spec.id) for (const d of b.directions) if (d.kind === 'contact' && d.fit === 'grip') stage.gripFrom.set(d.on, a.arms[contactSide(d)].upperArm);
-    const dirs = sheet.beats.filter((b) => b.performer === spec.id).flatMap((b) => b.directions.filter((d0) => !(d0.kind === 'contact' && d0.fit === 'grip')).map((d0) => {
+    for (const b of sheet.beats) if (b.performer === spec.id) for (const d of b.directions) if (d.kind === 'contact' && d.fit === 'grip' && !d.on.includes('.')) stage.gripFrom.set(d.on, a.arms[contactSide(d)].upperArm);
+    const dirs = sheet.beats.filter((b) => b.performer === spec.id).flatMap((b) => b.directions.filter((d0) => !(d0.kind === 'contact' && d0.fit === 'grip' && !d0.on.includes('.'))).map((d0) => {
       // A hand gesture is the right hand's unless it names one (so it masks only that hand's life).
       const d: Direction = d0.kind === 'gesture' && GESTURES[d0.name].hand && !d0.side ? { ...d0, side: 'right' } : d0;
       const r = resolveTiming(b, d);
@@ -431,7 +432,7 @@ function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources
   // A contact holds the touched arm's life still too, and its target is solved first in each frame.
   for (const c of cast) for (const r of c.dirs) {
     const d = r.direction;
-    if (d.kind !== 'contact' || !d.on.includes('.')) continue;
+    if (d.kind !== 'contact' || d.fit === 'grip' || !d.on.includes('.')) continue;
     const other = contactTarget(cast, d);
     const m = /^(left|right)(UpperArm|LowerArm|Hand)$/.exec(d.on.slice(d.on.indexOf('.') + 1));
     if (m && other !== c) other.touched[m[1] as Side].push(r);
@@ -539,6 +540,11 @@ function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources
   cast.forEach((c) => c.dirs.forEach((r) => {
     const d = r.direction;
     if (d.kind !== 'contact') return;
+    if (d.fit === 'grip') {
+      const g = stage.handleGrips.get(r);
+      if (g) stage.report.grips.push({ beat: r.beat.id, object: d.on, side: contactSide(d), distance: round(g.distance, 10000), angle: round(g.angle, 10) });
+      return;
+    }
     const k = stage.contacts.get(d);
     const mm = (v: number): number => round(v, 1e5);
     stage.report.contacts.push({
@@ -632,7 +638,9 @@ const stage = {
   /** What each object is set down on in the sheet (its `on`). */
   restsOn: new Map<string, string>(),
   /** The upper arm of the hand whose `contact` with `fit: grip` is on an object with no grip of its own: the grip is found on its surface, facing that shoulder. */
-  gripFrom: new Map<string, THREE.Object3D>()
+  gripFrom: new Map<string, THREE.Object3D>(),
+  /** The worst fist-to-handle distance (metres) and angle (degrees) of each grip on an anchor while it holds. */
+  handleGrips: new Map<Resolved, { distance: number; angle: number }>()
 };
 const solving = { t: 0, f: 0 };
 
@@ -854,6 +862,43 @@ const CONTACT_LIFTS = [-10, -8, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 8, 
 type ContactDirection = Extract<Direction, { kind: 'contact' }>;
 
 /** The object a contact is on (`on` names an object, with no surface after a dot), or undefined for a performer. */
+/** A handle's radius (metres): an oven or cupboard bar about 2.4 cm thick. */
+const HANDLE_RADIUS = 0.012;
+
+/**
+ * A grip on an object's anchor (`on: "door.handle"`), in the world now: the anchor as the object's change moves it,
+ * and the handle's long direction, the longest side of the object's part nearest the anchor, turned with it.
+ */
+function handleGrip(d: ContactDirection): { point: THREE.Vector3; axis: THREE.Vector3; radius: number } {
+  const dot = d.on.indexOf('.');
+  const prop = stage.props.get(d.on.slice(0, dot))?.prop;
+  const local = prop?.anchors.get(d.on.slice(dot + 1));
+  if (!prop || !local) throw new Error(`contact on ${d.on}: no such object anchor`);
+  const part = nearestPart(prop, local);
+  const long = [0, 1, 2].reduce((m, i) => (part.size.getComponent(i) > part.size.getComponent(m) ? i : m), 0);
+  const turn = prop.changePose?.quaternion ?? new THREE.Quaternion();
+  const axis = new THREE.Vector3().setComponent(long, 1).applyQuaternion(part.rotation).applyQuaternion(turn).applyQuaternion(prop.quaternion).normalize();
+  return { point: propWorld(prop, changedPoint(prop, local)), axis, radius: HANDLE_RADIUS };
+}
+
+/** Records, for each grip on an anchor that holds now, how far the fist is from the handle and how far its axis turns from it. */
+function meterHandleGrips(c: Cast, t: number): void {
+  for (const r of c.dirs) {
+    const d = r.direction;
+    if (d.kind !== 'contact' || d.fit !== 'grip') continue;
+    const rig = c.a.hands[contactSide(d)];
+    if (!rig || t < r.at + r.attack - 1e-6 || t > r.at + r.attack + r.hold + 1e-6) continue;
+    c.a.frame.updateMatrixWorld(true);
+    const hg = handleGrip(d);
+    const fist = rig.fistPoint(hg.radius, new THREE.Vector3());
+    const across = new THREE.Vector3(1, 0, 0).applyQuaternion(rig.palmFrame(new THREE.Quaternion()));
+    const distance = fist.distanceTo(hg.point);
+    const angle = Math.acos(Math.min(1, Math.abs(across.dot(hg.axis)))) / DEG;
+    const worst = stage.handleGrips.get(r);
+    stage.handleGrips.set(r, { distance: Math.max(worst?.distance ?? 0, distance), angle: Math.max(worst?.angle ?? 0, angle) });
+  }
+}
+
 function contactObject(d: ContactDirection): Prop | undefined {
   return d.on.includes('.') ? undefined : stage.props.get(d.on)?.prop;
 }
@@ -876,7 +921,7 @@ function contactTarget(cast: Cast[], d: ContactDirection): Cast {
 function contactOrder(cast: Cast[]): number[] {
   const after = cast.map(() => new Set<number>());
   cast.forEach((c, ci) => c.dirs.forEach((r) => {
-    if (r.direction.kind === 'contact' && r.direction.on.includes('.')) after[ci]!.add(cast.indexOf(contactTarget(cast, r.direction)));
+    if (r.direction.kind === 'contact' && r.direction.fit !== 'grip' && r.direction.on.includes('.')) after[ci]!.add(cast.indexOf(contactTarget(cast, r.direction)));
   }));
   const order: number[] = [];
   const left = new Set(cast.map((_, i) => i));
@@ -1081,7 +1126,7 @@ function fitContacts(cast: Cast[], c: Cast, t: number): void {
   const a = c.a;
   for (const r of c.dirs) {
     const d = r.direction;
-    if (d.kind !== 'contact') continue;
+    if (d.kind !== 'contact' || d.fit === 'grip') continue;
     const e = clamp01(handEnv(r, t, false));
     const s = contactSide(d);
     const hand = a.hands[s];
@@ -2018,9 +2063,9 @@ function turnHand(cast: Cast[], c: Cast, s: Side, turns: readonly { r: Resolved;
     a.frame.updateMatrixWorld(true);
     const Hc = hand.getWorldQuaternion(new THREE.Quaternion());
     let wanted: THREE.Quaternion | undefined;
-    if (d.kind === 'take' && rig) {
+    if ((d.kind === 'take' || (d.kind === 'contact' && d.fit === 'grip')) && rig) {
       const across = new THREE.Vector3(1, 0, 0).applyQuaternion(rig.palmFrame(new THREE.Quaternion()));
-      const g = takeGoal(r).axis!.clone();
+      const g = d.kind === 'take' ? takeGoal(r).axis!.clone() : handleGrip(d).axis;
       // Until the take arrives, the grip axis takes whichever way round is nearer: the hand may come from an earlier
       // direction that turned it far from the grip (a palm-down reach to an oven door). From its arrival it keeps the
       // sign it had there (per arm): a hand that turns on past 90° while the take settles (palm in, then up) would
@@ -2486,7 +2531,14 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
       let target: THREE.Vector3;
       let palmKind = d.kind === 'put' || d.kind === 'contact' ? 'in' : d.palm ?? (d.kind === 'take' ? 'in' : 'toward');
       let onto: THREE.Vector3 | undefined;
-      if (d.kind === 'reach' || d.kind === 'contact') {
+      if (d.kind === 'contact' && d.fit === 'grip') {
+        // A fist round a handle anchor, which moves with its object's change (a hand on an oven door's handle).
+        const hg = handleGrip(d);
+        target = hg.point;
+        g = target.clone();
+        effector = (out) => (a.hands[s] ? a.hands[s]!.fistPoint(hg.radius, out) : a.arms[s].hand.getWorldPosition(out));
+        turns.push({ r, e });
+      } else if (d.kind === 'reach' || d.kind === 'contact') {
         if (d.kind === 'contact') {
           // Onto the skin point, the palm against the skin's normal; `fitContacts` lays it flat after clearing.
           const k = contactSurface(cast, c, r);
@@ -2709,7 +2761,13 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
     // A palm at rest on a surface is flat.
     for (const r of c.dirs) {
       const d = r.direction;
-      if (d.kind === 'contact' && contactSide(d) === s) pose = blendPose(pose, REST_PALM, clamp01(handEnv(r, t, false)));
+      if (d.kind !== 'contact' || contactSide(d) !== s) continue;
+      if (d.fit === 'grip') {
+        // Closed round the handle, as a fist round a held object of that radius.
+        const k = Math.min(1.3, Math.max(0.6, 1 + (0.015 - handleGrip(d).radius) * 12));
+        const grip = { curl: Object.fromEntries(FINGERS.map((f) => [f, Math.min(1, HAND_SHAPES.grip.curl[f] * k)])) as Record<FingerName, number>, spread: HAND_SHAPES.grip.spread };
+        pose = blendPose(pose, grip, clamp01(handEnv(r, t, false)));
+      } else pose = blendPose(pose, REST_PALM, clamp01(handEnv(r, t, false)));
     }
     // Gestures shape the hand: open for a shrug or a wave, flat on the chest, fingertips rubbing (the wrist rolling a little with them).
     let rubRoll = 0;
@@ -2756,6 +2814,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
   clearArms(cast, c, t);
   fitContacts(cast, c, t);
   fitGrip(c, t, posed);
+  meterHandleGrips(c, t);
   moveWorn(c);
 
   // 9. Face: expressions summed, life's face under them, then blinks (always, and on a big look shift), then gaze.
@@ -2882,7 +2941,8 @@ function leanFor(cast: Cast[], c: Cast, t: number, hipsLocal: THREE.Vector3): { 
     if (e === 0) continue;
     const shoulder = toWorld(a, a.bind.get(`${side}UpperArm`)!.rootPosition.clone().add(hipsLocal));
     let goal: THREE.Vector3;
-    if (d.kind === 'contact') { const k = contactSurface(cast, c, r); goal = k.p.addScaledVector(k.n, CONTACT_REST); }
+    if (d.kind === 'contact' && d.fit === 'grip') goal = handleGrip(d).point;
+    else if (d.kind === 'contact') { const k = contactSurface(cast, c, r); goal = k.p.addScaledVector(k.n, CONTACT_REST); }
     else if (d.kind === 'reach') {
       const target = pointOf(cast, c.spec, d.at);
       goal = target.clone().addScaledVector(target.clone().sub(shoulder).normalize(), -d.stopShort);

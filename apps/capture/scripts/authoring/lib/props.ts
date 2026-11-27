@@ -274,6 +274,13 @@ export function propDepth(prop: Prop, local: THREE.Vector3): number {
   return most;
 }
 
+/** The part of an object (unmoved by a change) whose surface is nearest a point of the object frame. */
+export function nearestPart(prop: Prop, local: THREE.Vector3): Part {
+  let best = prop.parts[0]!;
+  for (const q of prop.parts) if (Math.abs(partDepth(q, local)) < Math.abs(partDepth(best, local))) best = q;
+  return best;
+}
+
 /** Points on the skin of an object's parts (not inside another part) with their outward normals, in the object frame, unmoved by a change. */
 export function surfaceSamples(prop: Prop): { p: THREE.Vector3; n: THREE.Vector3; margin: number }[] {
   const out: { p: THREE.Vector3; n: THREE.Vector3; margin: number }[] = [];

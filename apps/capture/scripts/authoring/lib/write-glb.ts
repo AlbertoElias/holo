@@ -174,8 +174,9 @@ export async function writeTake(take: SolvedTake, provenance: Provenance, world?
       origin: 'prepared',
       source: { name: sourceName(track.prop.spec.source) ?? `sheet:${track.prop.id}`, ...(track.prop.source ? { sha256: track.prop.source.loaded.sha256 } : {}) },
       presence: change?.presence ?? [{ start: 0, end: round3(duration) }],
-      // HOLOIM_objects holds are the recorded avatar's: the first performer's.
-      holds: track.holdings.filter((h) => h.performer === first).map((h) => ({ hand: h.side, start: round3(h.from), end: round3(Math.min(h.to, duration)) }))
+      // HOLOIM_objects holds are the recorded avatar's: the first performer's. A short window (a pose look) leaves out
+      // the holds that start after its last frame.
+      holds: track.holdings.filter((h) => h.performer === first && h.from <= duration).map((h) => ({ hand: h.side, start: round3(h.from), end: round3(Math.min(h.to, duration)) }))
     })), ...effectNodes.map(({ effect, node }) => ({
       node: nodes.indexOf(node),
       name: effect.name,

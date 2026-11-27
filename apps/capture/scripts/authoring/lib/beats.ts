@@ -151,8 +151,18 @@ function contactProblems(sheet: BeatSheet, b: Beat, d: Extract<Direction, { kind
   if (!(CONTACT_PARTS as readonly string[]).includes(d.part)) out.push(`no part ${d.part} (${CONTACT_PARTS.join(', ')})`);
   if (d.fit !== 'rest' && d.fit !== 'grip') out.push(`fit ${String(d.fit)} is rest or grip`);
   else if (d.fit === 'grip') {
-    // A grip is on an object only in the trial, and it gives that object's take its grip: the take holds it.
+    // A grip is on an object only in the trial. On an object's anchor (`door.handle`) the fist holds the anchor and
+    // follows the object's change; on an object id it gives that object's take its grip, and the take holds it.
     const objects = sheet.objects ?? {};
+    const dot = typeof d.on === 'string' ? d.on.indexOf('.') : -1;
+    if (dot > 0) {
+      const owner = objects[d.on.slice(0, dot)];
+      const anchor = d.on.slice(dot + 1);
+      const names = owner ? [...Object.keys(owner.anchors ?? {}), ...(owner.parts ?? []).flatMap((p) => (p.name ? [p.name] : []))] : [];
+      if (!owner) out.push(`on ${d.on}: no object ${d.on.slice(0, dot)} (${Object.keys(objects).join(', ') || 'none'})`);
+      else if (!names.includes(anchor)) out.push(`on ${d.on}: no anchor ${anchor} (${names.join(', ') || 'none'})`);
+      return out;
+    }
     const o = typeof d.on === 'string' ? objects[d.on] : undefined;
     if (!o) out.push(`on ${String(d.on)}: fit grip is on an object (${Object.keys(objects).join(', ') || 'none'})`);
     else if (o.grip !== undefined) out.push(`on ${d.on}: the object has its own grip; remove it, the contact finds the grip on its surface`);

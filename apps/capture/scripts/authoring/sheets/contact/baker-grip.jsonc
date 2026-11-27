@@ -1,0 +1,526 @@
+{
+  "title": "Fresh bread",
+  "intent": "A baker opens her oven, takes out a fresh loaf and proudly shows it to you.",
+  "story": {
+    "setup": {
+      "says": "A baker at work in front of her oven.",
+      "see": [
+        "a white hat and apron on her",
+        "a counter with an oven that glows orange",
+        "she looks at the oven"
+      ]
+    },
+    "event": {
+      "says": "She opens the oven and takes out a fresh loaf.",
+      "see": [
+        "the oven door swings down",
+        "a golden loaf sits inside, steam rises",
+        "her hand takes the loaf out"
+      ]
+    },
+    "reaction": {
+      "says": "She is proud of the loaf and shows it to you.",
+      "see": [
+        "she looks at the loaf, then at you",
+        "she holds it in both hands in front of her chest",
+        "a wide smile"
+      ]
+    },
+    "changes": [
+      "She stands further from the oven (20 cm back, facing it at 75°) and opens the door with her right hand, so her left arm stays out of the oven; she takes the loaf by its near end, and she shows it on the side away from the oven.",
+      "The flour sack was removed so the set stays narrow and the face stays over 40 px.",
+      "No cloth uniform exists, so a stiff hat and a short apron worn on bones show the role.",
+      "A real oven door cannot be pulled, so a change turns the door open as her hand reaches it.",
+      "v45: she stands 2 cm nearer the handle; she shows the loaf only after her turn ends (4.6 s), so her left arm stays out of the oven; the proud face is the named delighted shape.",
+      "v47: back to the v44 stance (the grip fits there); the open reach holds 0.6 s so it ends before the take; a carry beat brings the right hand and the loaf to the show point during the turn, so the hand does not drop into the thigh or the oven; the left hand joins at 4.6 s.",
+      "v50: from v47 with the open hold at 0.9 s again, so the take starts from the v44 pose where the grip fits.",
+      "v51: the loaf sits 5 cm lower (the build's grip fit); the carry takes 1.6 s, as long as the turn, so the hand turns with her body and not through the oven.",
+      "s8 round 3, b1: a step back (20 cm) after the take, so the turn and the carry have room and her forearm stays out of the oven; the turn and the carry start 0.3 s later.",
+      "b3: b1 with the step after the take (3.1 s), the turn and the carry at 3.5 s, and the show after the turn (4.9 s).",
+      "s8 round 4, b1: the left hand comes under the loaf as the turn starts (3.5 s), so both palms carry it through the turn; an offer beat holds it out at chest height (5.6 s) while she looks at you for 2.7 s.",
+      "b2: the handle mark is 4 cm out from the door face (a palm-down hand stops with its fingers at the door, so its centre cannot reach the face); the loaf sits 6 cm nearer the oven mouth.",
+      "B-104: the counter, the oven and its door turn -40° about the oven's centre, so the oven mouth faces her (she stood at its side wall and every take reached round it, through the wall); the loaf rests on the oven floor (it sat 5 cm into it), and its grip is round its near end at mid height with the loaf's own radius (5.5 cm), so the fist closes on the crust and not on a 1.5 cm handle inside the loaf. The open reach goes to the door's handle anchor, which swings with the door, so the hand pulls the door down and does not stay in the air while the door swings through it; the door starts to swing when the hand is on the handle (1.45 s), and the hand lets go a third of the way down (a hold of 0.3 s), as a door that the hand followed to the counter would bend her to counter height. She stands at (-0.18, 0.34) facing 85, in front of the oven's open side and clear of the open door, so the loaf is in reach (it was 53 cm away); the show and offer marks move with her."
+    ]
+  },
+  "duration": 8.5,
+  "performers": [
+    {
+      "id": "b",
+      "avatar": "house:clay",
+      "at": [
+        -0.18,
+        0.34
+      ],
+      "facing": 85.0,
+      "seed": 21,
+      "look": {
+        "build": "medium",
+        "skin": "honey",
+        "eyes": "darkBrown",
+        "hair": {
+          "style": "highBun",
+          "colour": "chestnut"
+        },
+        "glasses": "none",
+        "clothing": "stormGraphite"
+      }
+    }
+  ],
+  "marks": {
+    "viewer": [
+      0,
+      1.55,
+      2.5
+    ],
+    "showR": [
+      -0.18,
+      1.2,
+      0.7
+    ],
+    "showL": [
+      -0.28,
+      1.13,
+      0.72
+    ],
+    "offerR": [
+      -0.18,
+      1.27,
+      0.8
+    ],
+    "offerL": [
+      -0.28,
+      1.22,
+      0.82
+    ]
+  },
+  "objects": {
+    "counter": {
+      "name": "Counter",
+      "shape": "box",
+      "size": [
+        0.7,
+        0.7,
+        0.4
+      ],
+      "color": "#8b7d6b",
+      "at": [
+        0.4,
+        0,
+        0.3
+      ],
+      "facing": -40
+    },
+    "oven": {
+      "name": "Oven",
+      "on": "counter",
+      "facing": -40,
+      "parts": [
+        {
+          "shape": "box",
+          "size": [
+            0.56,
+            0.04,
+            0.35
+          ],
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "color": "#4a4a52"
+        },
+        {
+          "shape": "box",
+          "size": [
+            0.56,
+            0.04,
+            0.35
+          ],
+          "at": [
+            0,
+            0.36,
+            0
+          ],
+          "color": "#4a4a52"
+        },
+        {
+          "shape": "box",
+          "size": [
+            0.04,
+            0.32,
+            0.35
+          ],
+          "at": [
+            -0.26,
+            0.04,
+            0
+          ],
+          "color": "#4a4a52"
+        },
+        {
+          "shape": "box",
+          "size": [
+            0.04,
+            0.32,
+            0.35
+          ],
+          "at": [
+            0.26,
+            0.04,
+            0
+          ],
+          "color": "#4a4a52"
+        },
+        {
+          "shape": "box",
+          "size": [
+            0.48,
+            0.32,
+            0.04
+          ],
+          "at": [
+            0,
+            0.04,
+            -0.155
+          ],
+          "color": "#7a2f12"
+        }
+      ]
+    },
+    "door": {
+      "name": "Oven door",
+      "at": [
+        0.284,
+        0.74,
+        0.438
+      ],
+      "facing": -40,
+      "parts": [
+        {
+          "shape": "box",
+          "size": [
+            0.52,
+            0.34,
+            0.03
+          ],
+          "at": [
+            0,
+            0.04,
+            0
+          ],
+          "color": "#33333a"
+        },
+        {
+          "shape": "box",
+          "size": [
+            0.38,
+            0.2,
+            0.035
+          ],
+          "at": [
+            0,
+            0.1,
+            0
+          ],
+          "color": "#ff7a1a"
+        }
+      ],
+      "anchors": {
+        "handle": [
+          -0.16,
+          0.26,
+          0.06
+        ]
+      }
+    },
+    "loaf": {
+      "name": "Loaf",
+      "at": {
+        "of": "oven",
+        "up": 0.04,
+        "right": -0.08,
+        "forward": 0.12
+      },
+      "facing": -40.0,
+      "grip": {
+        "at": [
+          -0.06,
+          0.065,
+          0
+        ],
+        "axis": [
+          0.788,
+          0.518,
+          0.331
+        ],
+        "radius": 0.055
+      },
+      "parts": [
+        {
+          "name": "body",
+          "shape": "sphere",
+          "size": [
+            0.22,
+            0.13,
+            0.16
+          ],
+          "at": [
+            0,
+            0,
+            0
+          ],
+          "color": "#e8941f"
+        }
+      ]
+    },
+    "hat": {
+      "shape": "cylinder",
+      "size": [
+        0.2,
+        0.16,
+        0.2
+      ],
+      "color": "#ffffff",
+      "wear": {
+        "on": "head",
+        "at": [
+          0,
+          0.17,
+          -0.01
+        ]
+      }
+    },
+    "apron": {
+      "shape": "box",
+      "size": [
+        0.3,
+        0.3,
+        0.02
+      ],
+      "color": "#ffffff",
+      "wear": {
+        "on": "hips",
+        "at": [
+          0,
+          -0.35,
+          0.13
+        ]
+      }
+    }
+  },
+  "beats": [
+    {
+      "id": "look-oven",
+      "performer": "b",
+      "at": 0.2,
+      "hold": 1,
+      "intent": "She looks at her oven, ready to work.",
+      "directions": [
+        {
+          "kind": "look",
+          "at": "oven.center",
+          "head": 0.25
+        }
+      ]
+    },
+    {
+      "id": "open",
+      "performer": "b",
+      "at": 0.9,
+      "hold": 0.3,
+      "intent": "She reaches out and opens the oven door.",
+      "directions": [
+        {
+          "kind": "contact", "part": "rightPalm", "on": "door.handle", "fit": "grip",
+          "attack": 0.6,
+          "settle": 0.4
+        }
+      ]
+    },
+    {
+      "id": "see-loaf",
+      "performer": "b",
+      "at": 2,
+      "hold": 0.6,
+      "intent": "She sees the golden loaf inside.",
+      "directions": [
+        {
+          "kind": "look",
+          "at": "loaf.center",
+          "head": 0.25
+        }
+      ]
+    },
+    {
+      "id": "take",
+      "performer": "b",
+      "at": 2.4,
+      "hold": 0.5,
+      "intent": "She takes the loaf out.",
+      "directions": [
+        {
+          "kind": "take",
+          "side": "right",
+          "object": "loaf",
+          "palm": "in"
+        }
+      ]
+    },
+    {
+      "id": "step-back",
+      "performer": "b",
+      "at": 3.1,
+      "intent": "She steps back from the oven with the loaf.",
+      "directions": [
+        {
+          "kind": "step",
+          "foot": "right",
+          "by": [
+            0,
+            -0.2
+          ],
+          "follow": true,
+          "attack": 0.6,
+          "settle": 0.4
+        }
+      ]
+    },
+    {
+      "id": "turn-back",
+      "performer": "b",
+      "at": 3.5,
+      "hold": 0.8,
+      "intent": "She turns to face you with the loaf.",
+      "directions": [
+        {
+          "kind": "turn",
+          "toward": "viewer",
+          "body": "whole",
+          "attack": 1.4
+        }
+      ]
+    },
+    {
+      "id": "carry",
+      "performer": "b",
+      "at": 3.5,
+      "hold": 1.2,
+      "intent": "She carries the loaf round with her as she turns.",
+      "directions": [
+        {
+          "kind": "reach",
+          "side": "right",
+          "at": "showR",
+          "stopShort": 0,
+          "palm": "up",
+          "attack": 1.4,
+          "settle": 0.4
+        }
+      ]
+    },
+    {
+      "id": "show",
+      "performer": "b",
+      "at": 3.5,
+      "hold": 1.2,
+      "intent": "Her other hand comes under the loaf, so she carries it in both hands as she turns.",
+      "directions": [
+        {
+          "kind": "reach",
+          "side": "left",
+          "at": "showL",
+          "stopShort": 0,
+          "palm": "up",
+          "attack": 1.4,
+          "settle": 0.4
+        }
+      ]
+    },
+    {
+      "id": "look-loaf",
+      "performer": "b",
+      "at": 4.9,
+      "hold": 0.8,
+      "intent": "She looks at the loaf.",
+      "directions": [
+        {
+          "kind": "look",
+          "at": "loaf.center",
+          "head": 0.25
+        }
+      ]
+    },
+    {
+      "id": "offer",
+      "performer": "b",
+      "at": 5.6,
+      "hold": 2.2,
+      "intent": "She holds the loaf out to you at chest height, in both hands.",
+      "directions": [
+        {
+          "kind": "reach",
+          "side": "right",
+          "at": "offerR",
+          "stopShort": 0,
+          "palm": "up",
+          "attack": 0.5,
+          "settle": 0.4
+        },
+        {
+          "kind": "reach",
+          "side": "left",
+          "at": "offerL",
+          "stopShort": 0,
+          "palm": "up",
+          "attack": 0.5,
+          "settle": 0.4
+        }
+      ]
+    },
+    {
+      "id": "proud",
+      "performer": "b",
+      "at": 5.5,
+      "hold": 2.7,
+      "intent": "She looks at you, proud and smiling.",
+      "directions": [
+        {
+          "kind": "look",
+          "at": "viewer",
+          "head": 0.8
+        },
+        {
+          "kind": "expression",
+          "shape": "delighted",
+          "strength": 0.9
+        }
+      ]
+    }
+  ],
+  "world": [
+    {
+      "kind": "change",
+      "object": "door",
+      "when": 1.45,
+      "over": 0.9,
+      "from": {
+        "turn": [
+          0,
+          0,
+          0
+        ]
+      },
+      "turn": [
+        90,
+        0,
+        0
+      ]
+    },
+    {
+      "kind": "drift",
+      "at": "oven.top",
+      "when": 2.2,
+      "until": 7.5
+    }
+  ]
+}
