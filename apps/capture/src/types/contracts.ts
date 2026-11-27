@@ -121,6 +121,18 @@ export interface UiViewModel {
    * is `dressing` until the avatar wears it.
    */
   houseLook: HouseLookUi | null;
+  /** The look step's photo choice (docs/features/directed-performance.md, slice 5b): kept apart from `houseLook`, so a change's status does not replace it. */
+  lookPhoto: LookPhotoUi;
+}
+
+export interface LookPhotoUi {
+  status: 'idle' | 'loading' | 'reading' | 'read' | 'refused' | 'error';
+  /** The status line: the step in progress, the traits the photo set, or why it stopped. */
+  message: string | null;
+  /** One muted line: the traits the photo kept as they were, and why; null when none. */
+  kept: string | null;
+  /** True while "Previous look" can put back the look from before the photo. */
+  previous: boolean;
 }
 
 export interface HouseLookUi {

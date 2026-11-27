@@ -9,11 +9,11 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { BUILDS, CLOTHING, EYES, FINISHES, GLASSES, HAIR_COLOUR, HAIR_STYLES, SKIN, type LookCard } from '@holoim/avatar-look';
 import { tokens } from '@holoim/design-tokens';
-import { Chip, Type } from '@holoim/ui-dom';
-import { PHONE_EDGES, glyphMetrics, type HitInput, type ViewTarget } from '@holoim/xr-ui-core';
+import { Chip, Type, typeRoleStyle } from '@holoim/ui-dom';
+import { PHONE_EDGES, glyphAppearance, glyphMetrics, hitAreaApx, type HitInput, type ViewTarget } from '@holoim/xr-ui-core';
 
 import type { HouseLook } from '../avatar/houseLook';
-import type { HouseLookUi } from '../types/contracts';
+import type { HouseLookUi, LookPhotoUi } from '../types/contracts';
 import { clothingWords, lookPicture, traitWords, type LookRow } from './lookPictures';
 
 const options = <T extends string>(values: readonly T[], words: (value: string) => string = traitWords) =>
@@ -26,17 +26,26 @@ const PICTURE = 72;
 
 export function LookPanel({
   look,
+  photo,
   input,
   target,
   bottom,
   onChange,
+  onPhoto,
+  onPrevious,
   onHeight
 }: {
   look: HouseLookUi;
+  /** The photo choice's state (docs/features/directed-performance.md, slice 5b). */
+  photo: LookPhotoUi;
   input: HitInput;
   target: ViewTarget;
   bottom: string;
   onChange: (next: HouseLook) => void;
+  /** "From a photo": opens the device's picker in this tap. */
+  onPhoto: () => void;
+  /** "Previous look": the look from before the photo. */
+  onPrevious: () => void;
   /** The panel's top, in CSS pixels from the screen's bottom; 0 once it closes. */
   onHeight: (px: number) => void;
 }) {
@@ -58,7 +67,9 @@ export function LookPanel({
   const gap = glyphMetrics({ headset: false }).gapApx;
   const card = look.look;
   const set = (patch: Partial<LookCard>): void => onChange({ look: { ...card, ...patch }, finish: look.finish });
-  const status = look.status === 'dressing' ? 'Changing the look' : look.status === 'error' ? look.message : null;
+  const status = look.status === 'dressing' ? 'Changing the look' : look.status === 'error' ? look.message : photo.status !== 'idle' ? photo.message : null;
+  const kept = look.status !== 'error' && photo.status === 'read' ? photo.kept : null;
+  const busy = photo.status === 'loading' || photo.status === 'reading';
   return (
     <div style={{ position: 'absolute', left: 0, right: 0, bottom, display: 'flex', justifyContent: 'center', paddingInline: `max(env(safe-area-inset-left), ${PHONE_EDGES.side}px)`, pointerEvents: 'none' }}>
       <div ref={sheet} style={{ pointerEvents: 'auto', width: 'min(100%, 28rem)', maxHeight: '46vh', overflowY: 'auto', borderRadius: tokens.chip.radius }}>
@@ -66,6 +77,20 @@ export function LookPanel({
           <Type variant="captionUnderCard" as="p" aria-live="polite" data-testid="look-status" style={{ margin: 0, minHeight: '1.2em' }}>
             {status ?? 'Your look shows on the avatar before you record.'}
           </Type>
+          {kept ? (
+            <Type variant="captionUnderCard" as="p" data-testid="look-kept" style={{ margin: 0 }}>
+              {kept}
+            </Type>
+          ) : null}
+          <div style={{ display: 'grid', gap: gap * 0.5 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', columnGap: gap * 2 }}>
+              <WordAction word="From a photo" testId="look-photo" disabled={busy} input={input} onPress={onPhoto} />
+              {photo.previous ? <WordAction word="Previous look" testId="look-previous" disabled={busy} input={input} onPress={onPrevious} /> : null}
+            </div>
+            <Type variant="captionUnderCard" as="p" style={{ margin: 0 }}>
+              Use a photo of your own face. It stays on this device.
+            </Type>
+          </div>
           <Row title="Finish">
             <Pictures label="Finish" row="finish" value={look.finish} options={options(FINISHES)} input={input} onChange={(finish) => onChange({ look: card, finish })} />
           </Row>
@@ -193,5 +218,44 @@ function Pictures<T extends string>({ label, row, value, options: choices, input
         );
       })}
     </div>
+  );
+}
+
+/** A gold word the sheet acts on (styleguide section 6 states), with the touch hit area around it. */
+function WordAction({ word, testId, disabled, input, onPress }: { word: string; testId: string; disabled: boolean; input: HitInput; onPress: () => void }) {
+  const [hovered, setHovered] = useState(false);
+  const [pressed, setPressed] = useState(false);
+  const [focusVisible, setFocusVisible] = useState(false);
+  const appearance = glyphAppearance(disabled ? { dimmed: true } : { hovered, focusVisible, pressed, dimmed: false }, { headset: false });
+  const ring = appearance.focusRing;
+  return (
+    <button
+      type="button"
+      data-testid={testId}
+      disabled={disabled}
+      onClick={onPress}
+      onPointerEnter={(event) => { if (event.pointerType !== 'touch') setHovered(true); }}
+      onPointerLeave={() => { setHovered(false); setPressed(false); }}
+      onPointerDown={() => setPressed(true)}
+      onPointerUp={() => setPressed(false)}
+      onPointerCancel={() => setPressed(false)}
+      onFocus={(event) => setFocusVisible(event.currentTarget.matches(':focus-visible'))}
+      onBlur={() => { setFocusVisible(false); setPressed(false); }}
+      style={{
+        ...typeRoleStyle('controlLabel'),
+        minHeight: hitAreaApx(input, 0),
+        padding: 0,
+        background: 'transparent',
+        border: 0,
+        color: appearance.color,
+        opacity: appearance.opacity,
+        cursor: disabled ? 'default' : 'pointer',
+        outline: ring ? `${ring.width}px solid ${ring.color}` : 'none',
+        outlineOffset: ring ? `${ring.offset}px` : undefined,
+        WebkitTapHighlightColor: 'transparent'
+      }}
+    >
+      {word}
+    </button>
   );
 }
