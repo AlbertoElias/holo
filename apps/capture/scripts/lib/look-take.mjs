@@ -17,6 +17,13 @@ import { enterIwer, stepper } from './summon-take.mjs';
 //     pass shows the head while the eye's does not; Record closes Look; the
 //     take exports the look (its hair, its glasses, its card) and no mirror or
 //     panel; after Close the mirror draws no more.
+//   - headset-photo-look: "From a photo" on the look panel's head row (a ray's
+//     hit, no text within 1 m) opens the device's picker; a portrait fills
+//     the card and the mirror wears it, the status line names the rows set,
+//     "Previous look" shows and puts back the look from before the photo.
+//     IWER's select is not a user activation, so the picker may not open in
+//     emulation; then the photo goes to the same file input, and the report
+//     says `pickerOpened: false`. The Quest check is that the picker opens.
 // IWER has no multiview, so the mirror's stereo under multiview is not shown here.
 
 const HOUSE_BASE = '/gltf/models/house-base.glb';
@@ -179,6 +186,93 @@ export async function runIwerLookTake({ browser, baseUrl, artifactDir, consoleEr
     if (JSON.stringify(exported.card) !== JSON.stringify(afterGlasses.look.look)) fail(`the export's card is ${JSON.stringify(exported.card)}`);
     if (exported.chromeNodes.length) fail(`the export holds look chrome: ${exported.chromeNodes.join(', ')}`);
     return { label, status: failures.length ? 'fail' : 'pass', failures, glb, shots, opened, start, afterHair: afterHair.look, afterGlasses: afterGlasses.look, head, closed, duringTake, export: exported };
+  } finally {
+    await context.close();
+  }
+}
+
+const PORTRAIT = path.resolve(import.meta.dirname, '../../../viewer-web/e2e/fixtures/photo-look/portrait.jpg');
+const samplePhoto = (page) => page.evaluate(() => window.__samplePhotoLook());
+const traits = (card) => ({ skin: card.skin, eyes: card.eyes, hairColour: card.hair.colour, hairStyle: card.hair.style });
+
+/** IWER controllers: Look on the wrist, "From a photo" by the ray, a portrait fills the card in the mirror, "Previous look" puts it back. */
+export async function runIwerPhotoLookTake({ browser, baseUrl, artifactDir, consoleErrors }) {
+  const label = 'headset-photo-look';
+  const failures = [];
+  const fail = (message) => failures.push(message);
+  await mkdir(artifactDir, { recursive: true });
+  const [width, height] = (process.env.LOOK_VIEWPORT ?? '1280x720').split('x').map(Number);
+  const { context, page } = await setupPage(browser, { iwer: true, consoleErrors, label, viewport: { width, height } });
+  try {
+    await openCapture(page, baseUrl, { avatar: HOUSE_BASE });
+    await enterIwer(page, 'controller');
+    await page.evaluate(() => window.__setSpectatorView(false));
+    const { step } = stepper(page);
+    const shot = headsetShooter(page, step, artifactDir, label);
+    await page.evaluate(({ l, r }) => {
+      for (const [side, p] of [['left', l], ['right', r]]) {
+        const c = window.IWER_DEVICE.controllers[side];
+        c.position.set(...p);
+        c.quaternion.set(0, 0, 0, 1);
+      }
+    }, { l: REST.left, r: REST.right });
+    await step(20);
+    await until(page, step, (vr) => vr.look?.dockGlyph === true, 'the Look glyph on the wrist', fail, 300);
+    await selectTarget(page, step, 'look');
+    await until(page, step, (vr) => vr.look?.panel?.visible && vr.look?.mirror?.visible, 'the mirror and the look panel', fail, 120);
+    let vr = await chrome(page);
+    const rayMinM = tokens.hit.ray * tokens.size.radiansPerApx * tokens.placement.worldPanelDefaultM;
+    const target = (id) => vr.look.panel.targets.find((t) => t.id === id);
+    const photoTarget = target('photo');
+    const opened = {
+      photo: photoTarget ? { visible: photoTarget.visible, hitM: Math.min(photoTarget.hitWidthM, photoTarget.hitHeightM) } : null,
+      previousVisible: target('previous')?.visible ?? null,
+      nearestLabelM: Math.min(...vr.labels.map((l) => l.distanceFromHeadM))
+    };
+    if (!opened.photo?.visible) fail('no "From a photo" on the look panel');
+    else if (opened.photo.hitM < rayMinM - 1e-4) fail(`"From a photo" hits ${opened.photo.hitM} m, under the ray minimum ${rayMinM} m`);
+    if (opened.previousVisible) fail('"Previous look" shows before a photo');
+    if (opened.nearestLabelM < tokens.type.headsetLabelMinDistanceM) fail(`text shows ${opened.nearestLabelM} m from the head`);
+    const start = (await sampleLook(page)).look;
+    const shots = { opened: await shot('1-opened') };
+
+    // "From a photo" by the ray: the device's picker, or (IWER) the same file input.
+    const chooser = page.waitForEvent('filechooser', { timeout: 3_000 }).catch(() => null);
+    const picked = await selectTarget(page, step, 'look:photo');
+    if (picked.hit !== 'look:photo') fail(`the right ray rested on ${picked.hit}, not "From a photo"`);
+    const opener = await chooser;
+    const pickerOpened = opener !== null;
+    if (opener) await opener.setFiles(PORTRAIT);
+    else await page.locator('[data-testid="look-photo-input"]').setInputFiles(PORTRAIT);
+    for (let i = 0; i < 600 && (await samplePhoto(page)).picks < 1; i += 1) await step(2);
+    await until(page, step, (v) => /^From your photo: /.test(v.look?.panel?.status ?? ''), 'the photo read', fail, 600);
+    await until(page, step, (v) => v.look?.panel?.targets?.find((t) => t.id === 'previous')?.visible, '"Previous look" shows', fail, 120);
+    const read = await samplePhoto(page);
+    const afterPhoto = (await sampleLook(page)).look;
+    vr = await chrome(page);
+    const changed = Object.entries(traits(afterPhoto.look)).filter(([k, v]) => traits(start.look)[k] !== v).map(([k]) => k);
+    if (changed.length < 2) fail(`the portrait changed ${changed.length} rows (${changed.join(', ')})`);
+    if (JSON.stringify(afterPhoto.look) !== JSON.stringify(read.card)) fail(`the live look ${JSON.stringify(afterPhoto.look)} is not the read card ${JSON.stringify(read.card)}`);
+    // close() ran, not only the reference dropped (the counts are the controller's).
+    for (let i = 0; i < 60 && (await samplePhoto(page)).closed < (await samplePhoto(page)).opened; i += 1) await step(2);
+    const after = await samplePhoto(page);
+    if (after.readerOpen || after.opened !== 1 || after.closed !== 1) fail(`the reader did not close after the read (opened ${after.opened}, closed ${after.closed})`);
+    const photoStatus = vr.look.panel.status;
+    const kept = vr.look.panel.kept;
+    // A second in the mirror, so a proof video shows the change.
+    await step(60);
+    shots.photo = await shot('2-photo');
+
+    // "Previous look": the look from before the photo.
+    await selectTarget(page, step, 'look:previous');
+    await until(page, step, (v) => v.look?.panel?.status === 'Your look shows in the mirror.', 'the previous look worn', fail, 600);
+    const back = (await sampleLook(page)).look;
+    if (JSON.stringify(back) !== JSON.stringify(start)) fail(`"Previous look" gave ${JSON.stringify(back)}, not ${JSON.stringify(start)}`);
+    vr = await chrome(page);
+    if (vr.look.panel.targets.find((t) => t.id === 'previous')?.visible) fail('"Previous look" still shows after it was used');
+    await step(60);
+    shots.previous = await shot('3-previous');
+    return { label, status: failures.length ? 'fail' : 'pass', failures, shots, opened, pickerOpened, start, afterPhoto, changed, photoStatus, kept, readMs: read.lastReadMs, back };
   } finally {
     await context.close();
   }

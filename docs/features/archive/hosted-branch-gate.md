@@ -1,7 +1,7 @@
 # Feature brief: hosted branch gate
 
 **Lead:** Claude Code session `hosted-branch-gate` (Opus 5.5)  
-**Status:** Reviewed  
+**Status:** Complete (landed on `main` as 67afd7e08b4c, 2026-11-26)  
 **Layer:** None (developer tooling; no product behavior changes)
 
 ## User outcome
@@ -283,11 +283,11 @@ conclusion is success. Findings and what changed:
 | Planted failing test | throwaway branch with a failing Playwright test, `pnpm run verify:hosted` | Run 45404331213 (tree 047d8b55), 11m28s: FAILED, exit 1. The command printed `failed job: Viewer and Knowledge browser checks (shard 4/4)` and `✘ 12 e2e/atlas.spec.ts:593:1 › planted gate failure: the atlas title is wrong on purpose`. |
 | Rerun rule: a second failure is red | the new command on the failed planted run | Run 45404331213: the command reran the failed shard once (attempt 2, 4m35s); the planted test failed again; FAILED, exit 1; `output/verify-hosted.json` holds `firstAttemptFailures` and `failures`. Green-rerun path: gate run 45847778751 (tree a7cd7367, 2026-11-26), 10m50s. Attempt 1 failed `portal.pipeline.spec.ts:120` (B-085); the command reran that job once, attempt 2 passed, and it printed PASSED, FLAKY with that test, and no land command; exit 0. The BUGS.md record came next, on the branch. |
 | Merge conflict stops the command | a branch that conflicts with `origin/main`, `--dry-run` | A throwaway branch that edits a line of `docs/features/your-look.md` that `main` also changed: "FAILED: the branch conflicts with origin/main (docs/features/your-look.md)", exit 2, nothing pushed. |
-| Same selection as `main` | the gate run's "Changed areas" summary against `ci-changed-areas.sh` run locally | pending |
-| `main` skips the gated suites | the run on `main` after the merge: skipped jobs and its summary | pending |
+| Same selection as `main` | the gate run's jobs against `ci-changed-areas.sh` run locally on the merge diff | `ci-changed-areas.sh` on 3f0442f9c05b..67afd7e08b4c selects quality, e2e, pipeline, portal and web. Gate run 45900753447 ran exactly those suites (quality, 4 viewer and Knowledge shards, 2 viewer VR shards, 11 pipeline shards, portal) and skipped Capture XR and the Quick Look check. |
+| `main` skips the gated suites | the run on `main` after the merge: skipped jobs and its summary | Run 45901990305 on 67afd7e08b4c (tree 1e0f3687, the gate's tree), 2m12s, green: "gate run 45900753447 passed tree 1e0f3687…; reused: e2e,pipeline,portal,quality". Every browser suite skipped; the quality job ran only its build for the viewer bundle; Deploy viewer passed in the `production` environment with its health check. The API and capture deploys skipped (no change selected them). `FLY_API_TOKEN` in `production` waits for the manual deploy run 46033922796 (`deploy.yml`, targets=api), which the owner started. |
 | A branch run cannot deploy | the conditions in `ci.yml` and `deploy.yml`; deploy jobs skipped in a gate run | Run 45404255068: "Build API image", "Deploy API (Fly)", "Deploy viewer (Pages)" and "Deploy capture (Pages)" skipped. `api-image` and the deploy jobs name the environment `production` (branch policy `main`). |
 | Two gate runs do not cancel each other | two gate runs on two refs at the same time | Runs 45404255068 (13:31:09–13:37:08 UTC) and 45404331213 (from 13:31:36) overlapped; neither job was cancelled. Their test jobs started 2–3 s after the changes job (no runner queue at that time). |
-| doctor and verify:pr | `pnpm run doctor`, `pnpm run verify:pr` | pending |
+| doctor and verify:pr | `pnpm run doctor`, `pnpm run verify:pr` | `doctor` passed in every run. The owner approved the landing on the gate alone (2026-11-26). Three local `verify:pr` runs did not give a pass: two failed on load flakes after hours behind the machine-wide lock (B-112, B-113; the gate passed both suites on the same trees), and the follow-up run after the merge was still waiting for the lock when the laptop restarted on 2026-11-27. |
 | Proof video | screen recording of the command | `output/hosted-gate-proof/verify-hosted-green.mp4` (H.264, 9m12s, real time, the green run 45404255068); not committed |
 
 ## Physical-device limits

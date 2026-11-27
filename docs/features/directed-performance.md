@@ -1100,7 +1100,7 @@ bars in the brief to the artist.
 | **2d: traits** | The shared dressing function, used by `direct.ts` only; three builds; hair and glasses parts; the poem's two characters from cards. Built 2026-11-18 (see "Slice 2d evidence"); the turn row still fails, worse with garments | The audition on every trait value at its extreme; a contact sheet of the trait values; the poem's two characters made from cards alone, in a take whose GLB carries the look | **Yes.** A workspace package, authoring scripts and avatar files; nothing in `apps/capture/src/` |
 | **2c2: the base looks like the sheets** | Added 2026-11-18 on the owner's verdict: "the images its based on are great, we need to reach the point where the avatars look just like those images". The owner picked the route "Generate, then fit"; on 2026-11-19 the owner's licence decision replaced the generated shape with a visual hull carved from the sheet's own silhouettes (`house-base/carve.py`), and the house base's own mesh is wrapped onto it (`house-base/fit.py`), keeping the rig, the face shapes, the three builds and the trait parts | The likeness check (`house-likeness.ts`): silhouette overlap per turnaround view, "which is the drawing?" pairs for fresh readers, a contact sheet against each sheet. The audition and the blind reading unchanged, `house-traits.ts` over every trait value, the base at 1.8 MB or under, a proof video | **Yes.** Authoring scripts and avatar files; nothing in `apps/capture/src/`; `DEFAULT_AVATAR_URL` unchanged |
 | **2c3: the face matches the sheet** | Added 2026-11-19 on the owner's verdict on the default avatar: "issues with the eyes and mouth, it looks weird and uncanny as hell. it need to be much closer to the reference image". `build.py` rebuilds the eyes, lids, brows, nose and mouth to the clay expression sheet; the shared mixes, the body and the rig are unchanged. Built 2026-11-19 and merged 2026-11-20 on the owner's word "Merge as is", with the ink and light blind readings below the gate in the AI round and the turn row one vertex worse (see "Slice 2c3 evidence") | The face likeness check (`house-face-likeness.ts`) before and after; every 2c2 and 2f gate re-run unchanged; a new reader pack for people; a proof video | **Yes.** Authoring scripts, avatar files and `@holoim/avatar-look` colours; nothing in `apps/capture/src/` |
-| **2e: chosen per take** | `house:<finish>` and `look` in beat sheets; the dressing function in capture's avatar loading; height from the head-top bone; the "your look" step in the phone journey and the headset mirror; `?look=` | A phone e2e: set a look, record, upload, and the feed card shows it; an XR harness check of the mirror; a beat sheet re-dressed with another card; a proof video | **No.** Touches the phone journey (`CaptureOverlay.tsx` and its flow), owned by the phone mandate, and `src/avatar/` (loading, `AvatarRig`'s height fit), owned by the motion owner: built with both, after the phone's device checks |
+| **2e: chosen per take** | `house:<finish>` and `look` in beat sheets; the dressing function in capture's avatar loading; height from the head-top bone; the "your look" step in the phone journey and the headset mirror; `?look=` | A phone e2e: set a look, record, upload, and the feed card shows it; an XR harness check of the mirror; a beat sheet re-dressed with another card; a proof video | **No.** Touches the phone journey (`CaptureOverlay.tsx` and its flow), owned by the phone mandate, and `src/avatar/` (loading, `AvatarRig`'s height fit), owned by the motion owner. Built and on `main` (see [your-look.md](your-look.md)): the phone and the headset look step; a Quest check of the mirror under multiview is open |
 | **2f: finishes** | The other one or two finishes as material sets | Brow contrast and the blind reading per finish; one authored piece re-dressed in each | **Yes.** Avatar files. Built 2026-11-19: ink and light (see "Slice 2f evidence") |
 | **2g: the default and outside avatars** | `DEFAULT_AVATAR_URL` to the house base; the credit rule and verdict for outside avatars. The owner lifted the hold on the default on 2026-11-20; the swap first failed five capture checks (see "Slice 2g attempt" and "Slice 2g fixes"); with the walk rule of 2026-11-13 unchanged and no bar changed, all 16 pass on the house base and on the stock avatar, and the house base is the default (see "Slice 2g result") | Motion owner's agreement recorded; the phone journey's load measured against the 2.3 MB; an outside VRM passed and one refused, by name; a proof video | **No.** One constant in capture, on the motion owner's say |
 
@@ -1378,15 +1378,19 @@ the phone capture mandate):
 4b changes the recording format, so it waits for both owners to agree;
 4a's loss report is the case for it.
 
-### Slice 5: likeness from a photo (5a built, at the owner's gate; 5b after 2e)
+### Slice 5: likeness from a photo (5a merged 2026-11-24; 5b merged 2026-11-26)
 
 The second finish moved into slice 2 (2f) on 2026-11-17. What is left is
 the deferred half of likeness: a selfie read once into the slice 2 trait
 card (skin, hair, eyes, glasses, build), as a one-time setup outside the
 phone journey's two minutes, kept on the device and made only from the
 creator's own photo. It changes no trait and no file format: it only
-fills the card a creator can already set by hand. It starts after the
-trait card has been used in both capture flows (2e).
+fills the card a creator can already set by hand. 2e (built, on `main`)
+put the trait card in both capture flows.
+
+**5b approved on 2026-11-26.** The owner saw the 5b proof video and the
+report and answered "Approve, merge". The Quest picker check on a physical
+headset stays open.
 
 **Split on 2026-11-23 (5a approved, decision 16).** The owner asked for "a
 feature where the avatar configuration is based on a photo of the user".
@@ -1396,8 +1400,10 @@ already take a trait card. So slice 5 is now two parts:
 - **5a: a photo read into a card, for authoring.** No change to
   `apps/capture/src/`, so it does not wait for 2e or decision 8.
 - **5b: the same read in the capture flows.** A "from a photo" choice in
-  the "your look" step (phone) and the mirror panel (headset). It waits for
-  2e, as before, and is built with the phone mandate's owner.
+  the "your look" step (phone) and the mirror panel (headset). It needed
+  2e, which is built and on `main`; the owner lifted decision 8's hold on
+  the phone journey and 2e on 2026-11-20, so 5b does not wait (corrected
+  2026-11-24).
 
 #### Slice 5a: a photo read into a card
 
@@ -1497,6 +1503,205 @@ trait with its own audition rows, in its own slice.
 the read in `packages/avatar-look`. 5a edits nothing in
 `apps/capture/src/`. It only imports MediaPipe and the model file that
 capture already ships.
+
+#### Slice 5b: a photo in the look step (plan, 2026-11-24)
+
+The design review (2026-11-24) approved it with changes, which are in
+the text below: a separate photo result in the UI state, "Previous look"
+for "Undo", the current hair style as its fallback, the Quest activation
+check, and more cases in the checks.
+
+The owner said "Start 5b" on 2026-11-24. 2e put the look step in both
+capture flows, and 5a gave a read that runs in a browser. 5b joins them: a
+"From a photo" action in the phone's look sheet and on the headset's look
+panel fills the card from the creator's own photo, on the device.
+
+**What the creator does.** In the look sheet they select "From a photo".
+The device's own picker opens (camera or photo library on a phone, files on
+a headset). They pick a photo of their own face. After about a second the
+avatar wears the card that the photo gives, and the sheet says which traits
+came from the photo and which stayed as they were, and why. Every row still
+shows its value as a picture, so they check each one against the photo and
+change any of them, as they do by hand. "Previous look" puts back the look from
+before the photo. Then they record as before.
+
+**Trait outputs.** The read is 5a's, unchanged (`createLookReader`,
+`proposeHairStyle`, `cardFromRead` in `packages/avatar-look`). What 5b
+changes is the card that a trait keeps when the photo cannot say.
+
+| Trait | From the photo | When the photo cannot say |
+|---|---|---|
+| Skin | The read's swatch | The creator's current skin, with the read's reason (dark eye whites, uneven light, too little skin) |
+| Hair colour | The nearest `HAIR_COLOUR` | The current hair colour (hair under the area minimum: a hat or a hood) |
+| Eyes | The read's swatch at a confidence of 0.5 or more | The current eyes |
+| Hair style | The proposal at a confidence of 0.5 or more, from the six styles' outlines shipped as data | The current style |
+| Finish, build, glasses, clothing | Not read | The current values |
+
+In the CLI the fallback is the house default look. In capture it is the
+creator's current look, so a photo never undoes a choice that the photo
+cannot see.
+
+**UI on a phone (and desktop).** At the top of the look sheet, below the
+status line: the sheet action "From a photo" (gold word, Figtree 500 14 px,
+no button or pill; styleguide 6, a sheet action shows its word) with its
+44 px touch target, and one muted caption line, "Use a photo of your own
+face. It stays on this device." While it runs, the status line says
+"Getting the photo reader ready" (first use, the models load) and then
+"Reading your photo". After a read one line names the traits the photo set ("From your
+photo: skin Linen, hair colour Wheat, eyes Cool grey, hair Wavy bob. Check
+each row.") and one muted line gives the reasons for the traits kept, so
+the rows do not move far down a sheet that is at most 46% of the screen.
+This photo result is a separate field of the UI state (`lookPhoto`), not
+the look's status, so the change's "dressing" and "ready" do not replace
+it. "Previous look" is a second sheet action beside "From a photo" until
+the next change or the next take. (Not "Undo": styleguide 6 gives that word
+to the Halo's authoring undo, which does not cover the look.) A refusal (no face, two faces, a face too
+small, a file that is not an image) says why in the status line, and the
+look does not change. The values come from `tokens.json` through
+`@holoim/design-tokens`, as the rest of the sheet.
+
+**UI on a headset.** The look panel's top row gets "From a photo" between
+the tabs and Close: a gold word, at least a ray's 56 apx high (6.1), as
+Close is. Selecting it opens the same hidden file input. The panel's
+UIKit click runs in the frame after the WebXR select event, so the picker
+opens only if Chromium on Quest still counts that select as the user's
+activation (transient activation lasts some seconds); this is a Quest check,
+with what the session does while the system picker is open. If it fails, the
+headset action is removed and the creator uses the flat sheet in Quest
+Browser before they enter VR. The panel's status line shows the same words
+as the phone, and the mirror shows the change. "Previous look" sits beside
+"From a photo" in that row until the next change, so a second photo is one
+select.
+
+**Where the models load from, and their size.** All from capture's own
+origin. Nothing is fetched from a CDN, and nothing is fetched before the
+first "From a photo".
+
+| File | Size | Where | Already loaded? |
+|---|---|---|---|
+| MediaPipe WebAssembly (`vision_wasm_internal.{js,wasm}`) | about 9 MB | A Vite asset URL, as `WebcamFace.ts` loads it | Yes, when the selfie face ran |
+| `face_landmarker.task` | 3.76 MB | `public/mediapipe/`, as now | Yes, when the selfie face ran |
+| `selfie_multiclass_256x256.tflite` (float32; the only version MediaPipe publishes) | 16.4 MB | New in `public/mediapipe/`, at the SHA-256 that 5a pins (`c6748b12…`) | No: the first "From a photo" fetches it, then the browser cache keeps it |
+| The six hair outlines | about 10 KB | A JSON file in the photo read's lazy chunk | No |
+
+The reader code (`@holoim/avatar-look/read` and the outlines) is a lazy
+chunk, so the capture bundle does not grow for a person who does not use
+it. Cloudflare Pages takes files up to 25 MiB, so the segmenter fits. The
+reader loads its two models when the person selects "From a photo", at the
+same time as the picker opens; the picker's `cancel` event stops that load.
+The reader closes after each read, so the memory goes back (each MediaPipe
+task has its own WebAssembly heap, so a read has three beside the selfie
+face's for about a second). The browser keeps the segmenter in its HTTP
+cache only after a load completes.
+
+**The photo stays on the device.** The file goes into an image bitmap (with
+its EXIF orientation), then into a canvas with its longest side capped at
+2048 px, then into the read. After the read the canvas is cleared and the
+bitmap closed. The photo is not stored, not uploaded and not in the take:
+only the card is saved, as a hand-made look is today. The page sends no
+request with the photo.
+
+**Outlines as data.** The six styles' outlines do not depend on the photo
+(5a evidence). `scripts/authoring/photo-look-data.ts outlines` writes the
+outlines that a full `photo-look.ts` run keeps in `.styles/` (the file
+for the current code, by the CLI's own key) into
+`apps/capture/src/avatar/photoLookOutlines.ts` (a module, so the lazy
+chunk holds it), with `OUTLINES_KEY`: the hash of the shipped house base,
+the wardrobes and the dressing and read code
+(`apps/capture/scripts/lib/photo-look-key.ts`, outside the authoring
+folder, so CI's browser suites run when one of them changes). The phone
+e2e fails when the key no longer matches. Run `outlines` again after a
+change to the house base, the dressing or the read, then
+`photo-look-data.ts cards` for the e2e's pinned portrait card. The e2e
+does not run the authoring CLI: `scripts/check-ci-areas.ts` fails a suite
+that reads the authoring folder.
+
+**Failure cases.**
+
+| Failure case | Prevention or evidence |
+|---|---|
+| The photo leaves the device | No code path sends it; the e2e records every request from the pick to the read and checks that each is to capture's own origin and is a GET |
+| A model loads from a CDN | The asset paths are capture's own; the same e2e check |
+| The capture bundle grows for everyone | The reader is a lazy chunk; the build's entry chunk is compared before and after |
+| A photo of someone else | Not detectable; the caption says "your own face", as the CLI's help does |
+| No face, two faces, a face too small, not an image | Refused by name in the status line; the look does not change; the e2e picks a photo with no face |
+| A large phone photo (12 to 48 MP) uses too much memory | Capped at 2048 px on its longest side before the read; a face must still be 200 px wide, which a selfie at that size is |
+| EXIF rotation (phone photos are often stored sideways) | `createImageBitmap` with `imageOrientation: 'from-image'` |
+| A HEIC file on a browser that cannot decode it | The decode fails and the status line says to use a JPEG or PNG; iOS Safari gives a JPEG to a file input |
+| The read stalls the face or the UI on a phone | It runs once per photo, about 0.7 s on a desktop CPU (5a), after one painted frame of "Reading your photo"; the e2e measures it in emulation; the time and peak memory on a physical phone are a device check; a Worker is a later option |
+| The hair style has no fallback in the read | The capture path passes the whole current card; a proposal under 0.5 keeps the current style |
+| The outlines or the segmenter are out of date | The e2e checks the outlines' key against the house base's wardrobe and the dressing code, and the segmenter's SHA-256 |
+| The photo's measures reach the take | The e2e checks that the GLB extras hold only the card, and no file name shows in a status line or the log |
+| The model download fails (offline) | The status line says the reader did not load; the look does not change |
+| A take starts while the photo is read | `setLook` refuses a change when the take is not idle, and the result is dropped with a status line |
+| A second pick while the first reads | Each read has a number; only the latest one is applied |
+| The photo overrides a choice it cannot see | Traits that are not read keep the current value (table above) |
+| The headset's picker does not open during an immersive session | Not testable in IWER; a Quest check. The select event is a user activation by the WebXR spec |
+| The read's numbers differ in the page from the CLI | The parity check below on 5a's photo set |
+
+**Previous look.** As in 2e, the look is set before a take and is not in a
+take's undo history. A photo changes up to four rows at once, so "Previous
+look" puts back the look from before the photo in one step. Any later
+change or a take ends it.
+
+**Checks.**
+
+1. **Phone e2e** (`apps/viewer-web/e2e/phone-photo-look.pipeline.spec.ts`,
+   Pixel 7 viewport, IWER and SwiftShader as the look e2e): open the look
+   sheet, "From a photo", the fixture photo through the file chooser. The
+   status line names the traits; the card equals `photo-look.ts
+   --read-only` on the same fixture and changes at least two rows; each
+   row's chosen picture is the card's;
+   the live avatar wears the card (`__sampleHouseLook`); every request in
+   the read is a GET to capture's origin. "Previous look" puts back the look. Pick
+   again, record, post: the posted GLB's extras carry the card, and the feed
+   card shows the look (screenshot). A photo with no face and a file that
+   is not an image are refused by name and leave the look as it was.
+2. **IWER headset check** (`headset-photo-look` in
+   `apps/capture/scripts/lib/look-take.mjs`): a controller ray on "From a
+   photo" asks for a photo; the harness gives the fixture to the file
+   chooser (or to the file input when none opens); the live look changes
+   and the mirror renders it; "Previous look" puts back the start. Whether
+   a Quest opens its picker from the select is a device check.
+3. **Read parity on 5a's photo set.** The capture path (decode, the 2048 px
+   cap, the shipped outlines) gives the same card as `photo-look.ts` on the
+   public-domain portraits of check 2, plus one of them upscaled past
+   2048 px (so the cap runs) and one stored sideways with EXIF orientation
+   6. The numbers go in "Slice 5b evidence".
+4. **Proof video**, real time, phone viewport, zoomed so the sheet is
+   legible: pick a public-domain portrait from 5a's set, see the card and
+   the avatar change, record, post, and the feed card shows the look.
+
+**The e2e photo.** The plan was a committed render of the house base in a
+known card (`photo-look-data.ts fixture`). The read finds the render as a
+face but sets no trait, so it cannot show that a photo changes the card.
+Decision (owner, 2026-11-26): commit one public-domain portrait as the e2e
+photo, `apps/viewer-web/e2e/fixtures/photo-look/portrait.jpg` (B001243,
+from `unitedstates.github.io/images/congress/original/`, a work of the US
+government). Its source, status and SHA-256 are in the README beside it.
+The render stays as the kept-traits case. No other photo of a real person
+goes into the repository: the parity check and the proof video use 5a's
+other portraits from outside it.
+
+**Ownership.** The lead of this brief builds 5b: `src/avatar/photoLook.ts`
+(new), `photoLookRead.ts` (new, the lazy chunk), `photoLookOutlines.ts` (new), the segmenter in
+`public/mediapipe/`, and small edits to `LookPanel.tsx`, `VrLookPanel.ts`,
+`VrChrome.ts`, `createCaptureRuntime.ts`, `captureUiBridge.ts`,
+`UIStateStore.ts` and the contracts; `photo-look-data.ts` (new); the e2e
+and the IWER scenario. It does not edit `photo-look.ts` or
+`lib/review-page.ts`, which another session changes for the clay light.
+
+#### Slice 5b evidence (2026-11-24, this Mac, IWER and SwiftShader)
+
+| Check | Result |
+|---|---|
+| Phone e2e (`apps/viewer-web/e2e/phone-photo-look.pipeline.spec.ts`, Pixel 7) | Pass, 2.9 min (after the review fixes). A file that is not an image and an image with no face are refused by name and leave the look. The portrait sets four rows (skin Linen, hair colour Wheat, eyes Cool grey, hair Wavy bob; the start was Caramel, Espresso, Dark brown, Swept crop) and equals `photo-look.ts` on the same photo (its card is pinned in the spec, made by `photo-look-data.ts cards`); the read took 404 ms. One reader opens for each pick, and `close()` runs for each (counted, not only the reference dropped). A take ends "Previous look" (checked while the take records), and no reader is open into the take. "Previous look" puts back the start. The house render is found as a face but sets no trait, and the kept line gives each reason. From the first pick to the post, every request is a GET to capture's origin; the segmenter served there has the pinned SHA-256. The posted GLB's avatar record carries the read card, and its JSON holds no read numbers or image. The feed card shows the look. `OUTLINES_KEY` equals `outlinesKey()` in `scripts/lib/photo-look-key.ts`. Screenshots: `output/test-results/photo-look/` (not committed) |
+| IWER headset (`headset-photo-look`, `SUMMON_ONLY=headset-photo-look pnpm --filter @holoim/capture run test:xr:summon`) | Pass, 19 s. "From a photo" sits on the panel's head row with a ray-size hit and no text within 1 m. The controller select opened Playwright's file chooser (`pickerOpened: true`); Playwright does not hold the picker to user activation, so the Quest check below stays open. The mirror wears the portrait's four rows, and "Previous look" puts back the start |
+| Read parity (the parity test in the same spec, `PHOTO_LOOK_PARITY_DIR` = 5a's nine portraits, one upscaled to 2700 × 3300 px and one stored sideways with EXIF orientation 6) | 11 of 11 equal `photo-look.ts`; the upscaled and the EXIF-6 photo read as their originals. Reads 370 to 1090 ms |
+| Lazy load | `photoLookRead` and the outlines are a 29 KB chunk of their own; the entry holds only the controller. The reader and the models load at the first "From a photo" and close after each read |
+| Review fixes (independent verifier and code review, 2026-11-24) | A read that goes stale while the reader loads now closes the reader (one `finally` for every exit). A cancelled picker or an older read does not close a reader that a newer read holds (a count of reads in flight). On the headset, "From a photo" takes no hits while a photo loads or reads, as on the phone. A take that starts during the load or decode stops the read before it runs, and a refusal during a take ends "Previous look" and stays shown. A house look gone during a read sets the status back to idle. `outlines` takes the `.styles/` file named by the CLI's own key, not the newest file. The e2e no longer runs the authoring CLI, which `check:ci-areas` refused (CI's browser suites do not run for that folder) |
+| Not covered | The cancel path and a row tap during "Getting the photo reader ready" are in the code only: the e2e cannot close a file chooser or time a tap inside the model load |
+| Open | On a Quest: does the system picker open from the ray's select (activation)? If it does not, remove the headset action (the plan's fallback) |
 
 ### Slice 6: publish a take in one command (2026-11-18)
 
@@ -1840,8 +2045,8 @@ each joins both owning sessions when it starts.
 
 **Included:** slices 0 to 3, with slice 2 as the avatar flow (2a to 2g);
 slice 4 once camera driving is on `main`; slice 5a (a photo read into a
-card for authoring), approved 2026-11-23 (decision 16); slice 5b
-after 2e.  
+card for authoring), approved 2026-11-23 and merged 2026-11-24 (decision
+16); slice 5b (2e is built).  
 **Excluded:** an avatar editor in the app beyond the trait card; more than
 one family and three finishes; facial hair and headwear; uploading an
 outside avatar inside the app; a creator profile on the server; synthesized speech; a prompt box in the app; an MCP tool (the CLI
@@ -2236,7 +2441,9 @@ lift the hold"); slice 2 is now the avatar flow, approved the same day
      bar is unchanged: each reader at least 5 of 7.
    - **"Decision 8: hold"**: the phone journey, 2e and 2g, stays on hold.
      For 2g's default avatar the owner lifted it on 2026-11-20 (decision
-     13); the phone journey and 2e are as they were.
+     13). On 2026-11-20 the owner also lifted it for the phone journey
+     and 2e ("we should also start looking into the embodied flow on phone
+     and nailing that", your-look.md), and 2e is built.
    - **Open, not acted on:** the owner was not told of the Hunyuan3D-2mv
      territory restriction (decision 10) before it was built on, and asked
      whether an unrestricted model or another route can replace it. The lead
@@ -3470,9 +3677,9 @@ the owner's absence on 2026-11-18, for review.
 - **`packages/avatar-look`**: the trait card (`traits.ts`, `card.ts`) and
   the one dressing function (`dress.ts`, gltf-transform). It reads a
   build's wardrobe file, keeps only the card's hair and glasses parts, and
-  sets the skin, eye, hair, brow and clothing colours. `direct.ts` is its
-  only caller (`avatar: "house:clay"` plus a `look` on the performer); the
-  capture side waits for 2e.
+  sets the skin, eye, hair, brow and clothing colours. `direct.ts` was its
+  first caller (`avatar: "house:clay"` plus a `look` on the performer); the
+  capture side came with 2e (`src/avatar/houseLook.ts`).
 - **Three builds** (`house-base.ts --build slight|medium|broad`), each
   written as `apps/capture/assets/house-base/wardrobe-<build>.glb` (about
   1.55 MB) with every hair style and both glasses frames as parts. A dressed

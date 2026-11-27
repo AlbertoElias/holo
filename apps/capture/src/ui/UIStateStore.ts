@@ -26,7 +26,8 @@ export class UIStateStore {
     tracingElapsedMs: null,
     xrEntry: { vr: 'unknown', ar: 'unknown' },
     notice: null,
-    houseLook: null
+    houseLook: null,
+    lookPhoto: { status: 'idle', message: null, kept: null, previous: false }
   };
   private noticeTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -36,6 +37,11 @@ export class UIStateStore {
     this.listeners.add(listener);
     listener(this.value);
     return () => this.listeners.delete(listener);
+  }
+
+  setLookPhoto(lookPhoto: UiViewModel['lookPhoto']): void {
+    this.value = { ...this.value, lookPhoto };
+    this.emit();
   }
 
   setHouseLook(houseLook: UiViewModel['houseLook']): void {

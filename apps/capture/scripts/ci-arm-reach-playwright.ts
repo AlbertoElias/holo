@@ -295,7 +295,8 @@ function judge(report: Awaited<ReturnType<typeof run>>): string[] {
     if ((gate.min !== undefined && value < gate.min) || (gate.max !== undefined && value > gate.max)) misses.push(`${where} ${gate.metric}: ${value.toFixed(1)} (bar ${gate.min ?? '-∞'}..${gate.max ?? '∞'})`);
   };
   for (const gate of [...SHARED_GATES, ...GATES[report.label as 'hand' | 'controller']]) {
-    if (gate.segment && only && !gate.segment.startsWith(only)) continue;
+    // A partial run (ARM_REACH_ONLY) judges only its own segments: the overall gates are for the whole script.
+    if (only && !gate.segment?.startsWith(only)) continue;
     check(gate.segment ?? 'overall', gate.segment ? report.segments[gate.segment] : report.overall, gate);
   }
   for (const [name, m] of Object.entries(report.segments)) {

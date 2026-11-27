@@ -55,6 +55,10 @@ interface VrChromeDeps {
   getOpenTrace: () => { startSec: number; onSide?: VrHandSide } | null;
   /** A pick on the headset look panel: the house avatar wears it (docs/features/your-look.md, slice 2). */
   setLook: (next: HouseLook) => void;
+  /** "From a photo" on the headset look panel (docs/features/directed-performance.md, slice 5b). */
+  pickLookPhoto: () => void;
+  /** "Previous look" on the headset look panel. */
+  previousLook: () => void;
   /** Runs the mirror's draw with the first-person head shown; returns how many head meshes showed. */
   withHeadShown: (draw: () => void, layer: number) => number;
   /** True when a first-person head mesh is visible to the eye now. */
@@ -290,6 +294,8 @@ export class VrChrome {
       chipOpacity: this.chipOpacity(),
       onChange: (next) => this.deps.setLook(next),
       onClose: () => this.closeLook(),
+      onPhoto: () => this.deps.pickLookPhoto(),
+      onPrevious: () => this.deps.previousLook(),
       canCommit: (pointerId) => !this.ownedElsewhere(pointerId),
       onCommit: (pointerId) => this.committed(pointerId, 'ray'),
       onHover: (pointerId, hovered) => hovered && this.pulsePointer(pointerId, PULSE_HOVER)
@@ -681,7 +687,7 @@ export class VrChrome {
       this.mirror.refreshLayers(this.deps.scene);
       this.mirrorLayersFor = layersKey ?? this.mirrorLayersFor ?? true;
     }
-    this.look.update(camera, state.houseLook);
+    this.look.update(camera, state.houseLook, state.lookPhoto);
   }
 
   // --- Poke feedback: the fingertip shade before contact ---

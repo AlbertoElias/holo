@@ -8,8 +8,11 @@
  * - `irisLimits`: the largest turn up, down, left and right that keeps the
  *   pupil centre (and 1 mm around it) inside that opening, as an ellipse the
  *   solve clamps the gaze to (`clampGaze`); the head takes the rest of a look.
+ * - `blinkCap`: the opening again with the upper lids part closed; a held
+ *   closure opens as the eyes look up until the pupil shows (B-111).
  * - `EyeMeter`: per frame, where each eye bone actually points, and whether
- *   its pupil centre is in view; the `eyes.<performer>` bar counts the frames.
+ *   its pupil centre is in view under the held lids; the `eyes.<performer>`
+ *   bar counts the frames.
  *
  * The frame is the avatar's body frame (+Y up, +Z the way it faces); gaze yaw
  * is + toward the avatar's own left, pitch + up, as `FaceRig` takes them.
@@ -20,6 +23,7 @@ import type { LoadedAvatar, Side } from './avatar.ts';
 import { resetPose } from './avatar.ts';
 import { hitUv, triangles } from './face-geometry.ts';
 import { meshesOf, skin } from './skin.ts';
+import type { FaceWeights } from '../../../src/face/faceTypes.ts';
 
 const NEUTRAL = { left: { yaw: 0, pitch: 0 }, right: { yaw: 0, pitch: 0 } };
 /** Grid step (m). */
@@ -44,10 +48,15 @@ export interface Gaze { readonly yaw: number; readonly pitch: number }
 /** Radians: the largest turn each way that keeps the pupil in view. `left` is + yaw (toward the avatar's left). */
 export interface IrisLimit { readonly up: number; readonly down: number; readonly left: number; readonly right: number }
 
-/** What each eye shows from in front at bind pose, neutral face. Eyes without an eye bone or eye triangles are left out. */
-export function eyeApertures(a: LoadedAvatar): Partial<Record<Side, EyeAperture>> {
+/** Upper-lid closures (eyeBlink) at which `eyeView` measures the opening again, for `blinkCap`. */
+const BLINK_LEVELS = [0.15, 0.3, 0.45, 0.6, 0.75] as const;
+/** A blink this closed or more is meant to hide the eye (eyes shut), so no cap applies. */
+export const BLINK_SHUT = 0.85;
+
+/** What each eye shows from in front at bind pose, with the face at `weights` (neutral by default). Eyes without an eye bone or eye triangles are left out. */
+export function eyeApertures(a: LoadedAvatar, weights: FaceWeights = {}): Partial<Record<Side, EyeAperture>> {
   resetPose(a);
-  a.face.apply({}, NEUTRAL);
+  a.face.apply(weights, NEUTRAL);
   a.frame.updateMatrixWorld(true);
   const meshes = meshesOf(a.scene);
   const frameOf = a.body.name === 'HumanoidFacing' && a.body.parent ? a.body.parent : a.body;
@@ -177,6 +186,18 @@ export function bothEyes(l: IrisLimit | undefined, r: IrisLimit | undefined): Ir
 export interface EyeView {
   readonly apertures: Partial<Record<Side, EyeAperture>>;
   readonly limits: Partial<Record<Side, IrisLimit>>;
+  /** The opening again with the upper lids lowered to each of `BLINK_LEVELS`, and how far up each eye then turns with the pupil in view (radians). */
+  readonly lids: readonly { readonly blink: number; readonly apertures: Partial<Record<Side, EyeAperture>>; readonly up: Partial<Record<Side, number>> }[];
+}
+
+/** The largest straight-up turn that keeps the pupil in view (radians). */
+function upLimit(ap: EyeAperture): number {
+  let last = -45;
+  for (let d = -45; d <= 45; d += 0.5) {
+    if (pupilShows(ap, gazeDir({ yaw: 0, pitch: d * Math.PI / 180 }))) last = d;
+    else if (last > -45) break;
+  }
+  return last * Math.PI / 180;
 }
 
 /** The apertures and limits of an avatar; call at bind pose, before the solve. */
@@ -184,10 +205,37 @@ export function eyeView(a: LoadedAvatar): EyeView {
   const apertures = eyeApertures(a);
   const limits: Partial<Record<Side, IrisLimit>> = {};
   for (const side of ['left', 'right'] as const) { const ap = apertures[side]; if (ap) limits[side] = irisLimits(ap); }
+  const lids = BLINK_LEVELS.map((blink) => {
+    const aps = eyeApertures(a, { eyeBlinkLeft: blink, eyeBlinkRight: blink });
+    const up: Partial<Record<Side, number>> = {};
+    for (const side of ['left', 'right'] as const) { const ap = aps[side]; if (ap) up[side] = upLimit(ap); }
+    return { blink, apertures: aps, up };
+  });
   resetPose(a);
   a.face.apply({}, NEUTRAL);
   a.frame.updateMatrixWorld(true);
-  return { apertures, limits };
+  return { apertures, limits, lids };
+}
+
+/**
+ * The most the upper lids may close while the eyes look `pitch` up (radians)
+ * with the pupil in view: a lid follows the eye up, as a real one does. 1 when
+ * any closure up to the last measured level keeps the pupil in view.
+ */
+export function blinkCap(view: EyeView, pitch: number): number {
+  let prev = { blink: 0, up: Infinity };
+  for (const l of view.lids) {
+    const ups = Object.values(l.up);
+    if (!ups.length) return 1;
+    const up = Math.min(...ups);
+    if (up < pitch) {
+      // Between the last level that shows the pupil and this one, as the limit falls.
+      const f = prev.up === Infinity ? 0 : (prev.up - pitch) / Math.max(1e-6, prev.up - up);
+      return prev.blink + (l.blink - prev.blink) * Math.max(0, Math.min(1, f));
+    }
+    prev = { blink: l.blink, up };
+  }
+  return 1;
 }
 
 export interface EyeReport {
@@ -239,10 +287,13 @@ export class EyeMeter {
     return this.d.set(0, 0, 1).applyQuaternion(this.q);
   }
 
-  sample(t: number): void {
+  /** `blink`: the upper lids' held closure this frame (an expression's, not a passing blink); below `BLINK_SHUT` the pupil must show under it. */
+  sample(t: number, blink = 0): void {
     this.frames += 1;
     let bad: Side | undefined;
-    for (const e of this.eyes) if (!pupilShows(e.ap, this.direction(e))) { bad = e.side; break; }
+    // The opening at the most closed measured level at or below `blink` (a little kinder than the lid itself).
+    const level = blink < BLINK_SHUT ? [...this.view.lids].reverse().find((l) => l.blink <= blink + 1e-6) : undefined;
+    for (const e of this.eyes) if (!pupilShows(level?.apertures[e.side] ?? e.ap, this.direction(e))) { bad = e.side; break; }
     if (!bad) return;
     this.out += 1;
     if (!this.first) {

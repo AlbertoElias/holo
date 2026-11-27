@@ -10,6 +10,7 @@ import { JumpArms } from '../animation/JumpArms';
 import { TerrainLegSolver } from '../animation/TerrainLegSolver';
 import { AvatarRig } from '../avatar/AvatarRig';
 import { HouseLookController } from '../avatar/HouseLookController';
+import { PhotoLookController } from '../avatar/photoLook';
 import { currentHouseLook, dressHouseBase, resolveHouseLook, sameHouseLook, wantedHouseLook } from '../avatar/houseLook';
 import { BodyTracking } from '../body/BodyTracking';
 import { CrouchState } from '../body/crouch';
@@ -213,7 +214,12 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     getAvatarRoot: () => avatar.avatarRoot,
     getOpenTrace: () => recording.recorder.pointSamples.openTrace(),
     // `houseLook` is built below; these run only once Look opens.
-    setLook: (next) => void houseLook.setLook(next),
+    setLook: (next) => {
+      photoLook.forget();
+      houseLook.setLook(next);
+    },
+    pickLookPhoto: () => photoLook.pick(),
+    previousLook: () => photoLook.previous(),
     withHeadShown: (draw, layer) => avatar.withFirstPersonHeadShown(draw, layer),
     headVisibleToEye: () => avatar.firstPersonHeadVisibleToEye()
   });
@@ -359,6 +365,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
   const houseLook = new HouseLookController({
     loader: stage.loader, avatar, face: capture.face, armClearance: capture.armClearance, recording, ui
   });
+  const photoLook = new PhotoLookController({ houseLook, recording, ui });
 
   const chromeProbe = new ChromeProbe();
   const onResize = (): void => camera.onResize();
@@ -457,7 +464,12 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
         if (entering && mode === 'ar') recording.holdMicForArTake();
       },
       recenterAr,
-      setLook: (next) => houseLook.setLook(next),
+      setLook: (next) => {
+        photoLook.forget();
+        return houseLook.setLook(next);
+      },
+      pickLookPhoto: () => photoLook.pick(),
+      previousLook: () => photoLook.previous(),
       setLookPanelHeight: (px) => {
         camera.lookPanelPx = px;
       }
@@ -498,7 +510,9 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
         __resetHandCalibrationPose: () => hands.resetCalibrationPose(),
         __loadObjectUrl: (url) => objects.loadUrl(url),
         __sampleHouseLook: () => ({ ...houseLook.sample(), memory: { ...renderer.info.memory } }),
+        __samplePhotoLook: () => photoLook.sample(),
         __setHouseLook: async (next) => {
+          photoLook.forget();
           if (!houseLook.setLook(next)) return false;
           await houseLook.settled();
           return true;
