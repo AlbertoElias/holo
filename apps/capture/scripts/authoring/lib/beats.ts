@@ -119,8 +119,46 @@ export type Direction = Timing & (
       /** A wave's palm faces this point (default straight ahead). */ readonly at?: Point;
     }
   | { readonly kind: 'state'; readonly name: StateName; readonly strength?: number; /** What the state is about: the head turns to it. */ readonly at?: Point }
+  /**
+   * A palm onto a surface (trial, `docs/features/contact-and-pose-look.md`): no distance and no angle. `on` is
+   * `<performer>.<surface>` (one of `CONTACT_SURFACES`); `fit` `rest` lays the palm flat on it.
+   */
+  | { readonly kind: 'contact'; readonly part: ContactPart; readonly on: string; readonly fit: 'rest' | 'grip' }
 );
+
+/** The body parts that can make a contact (a palm only in the trial). */
+export const CONTACT_PARTS = ['leftPalm', 'rightPalm'] as const;
+export type ContactPart = (typeof CONTACT_PARTS)[number];
+/** The surfaces of a performer a contact can be on: humanoid bones with skin of their own (`leftShoulder` is the root near the neck, so it is not one). */
+export const CONTACT_SURFACES = [
+  'head', 'neck', 'upperChest', 'chest', 'spine', 'hips',
+  'leftUpperArm', 'rightUpperArm', 'leftLowerArm', 'rightLowerArm', 'leftHand', 'rightHand',
+  'leftUpperLeg', 'rightUpperLeg', 'leftLowerLeg', 'rightLowerLeg'
+] as const;
+export const contactSide = (d: { readonly part: ContactPart }): Side => (d.part === 'leftPalm' ? 'left' : 'right');
+/** The hand a hand direction moves (reach, take, put, aim, contact). */
+export function handSideOf(d: Direction): Side | undefined {
+  if (d.kind === 'contact') return contactSide(d);
+  return d.kind === 'reach' || d.kind === 'take' || d.kind === 'put' || d.kind === 'aim' ? d.side : undefined;
+}
 export type DirectionKind = Direction['kind'];
+
+/** What is wrong with a contact's names, each with the names it can use. */
+function contactProblems(sheet: BeatSheet, b: Beat, d: Extract<Direction, { kind: 'contact' }>): string[] {
+  const out: string[] = [];
+  if (!(CONTACT_PARTS as readonly string[]).includes(d.part)) out.push(`no part ${d.part} (${CONTACT_PARTS.join(', ')})`);
+  if (d.fit !== 'rest' && d.fit !== 'grip') out.push(`fit ${String(d.fit)} is rest or grip`);
+  else if (d.fit === 'grip') out.push('fit grip is not built yet (the trial has rest only)');
+  const dot = typeof d.on === 'string' ? d.on.indexOf('.') : -1;
+  const who = dot > 0 ? d.on.slice(0, dot) : '';
+  const surface = dot > 0 ? d.on.slice(dot + 1) : '';
+  const others = sheet.performers.map((p) => p.id).filter((id) => id !== b.performer);
+  if (dot <= 0) out.push(`on ${String(d.on)} is <performer>.<surface> (performers: ${others.join(', ') || 'none'}; surfaces: ${CONTACT_SURFACES.join(', ')})`);
+  else if (who === b.performer) out.push(`on ${d.on}: a contact on the performer's own body is not in the trial`);
+  else if (!others.includes(who)) out.push(`on ${d.on}: no performer ${who} (${others.join(', ') || 'none'})`);
+  else if (!(CONTACT_SURFACES as readonly string[]).includes(surface)) out.push(`on ${d.on}: no surface ${surface} (${CONTACT_SURFACES.join(', ')})`);
+  return out;
+}
 
 /** Fields each direction kind takes (the type above, at run time), so a sheet with a wrong field name fails with the name. */
 const TIMING_FIELDS: readonly string[] = ['anticipation', 'attack', 'hold', 'settle', 'delay'];
@@ -140,6 +178,7 @@ const DIRECTION_FIELDS = {
   drop: { required: ['side', 'object'], optional: [] },
   gesture: { required: ['name'], optional: ['side', 'count', 'strength', 'at'] },
   state: { required: ['name'], optional: ['strength', 'at'] },
+  contact: { required: ['part', 'on', 'fit'], optional: [] },
 } as const satisfies Record<Direction['kind'], { required: readonly string[]; optional: readonly string[] }>;
 
 export interface Beat {
@@ -387,6 +426,7 @@ export const DEFAULT_TIMING: Readonly<Record<DirectionKind, Required<Omit<Timing
   look: { anticipation: 0.08, attack: 0.35, settle: 0.5 },
   expression: { anticipation: 0, attack: 0.35, settle: 0.6 },
   reach: { anticipation: 0.25, attack: 0.75, settle: 0.8 },
+  contact: { anticipation: 0.25, attack: 0.75, settle: 0.8 },
   hand: { anticipation: 0, attack: 0.3, settle: 0.5 },
   weight: { anticipation: 0.2, attack: 0.6, settle: 0.7 },
   bend: { anticipation: 0.2, attack: 0.8, settle: 0.8 },
@@ -786,6 +826,7 @@ export function validateSheet(sheet: BeatSheet): string[] {
       if (d.kind === 'crouch' && d.amount !== undefined && !(d.amount >= 0 && d.amount <= 1)) problems.push(`${where}: amount is 0 to 1 (1 is the deepest crouch)`);
       if (d.kind === 'bend' && d.amount !== undefined && !(d.amount >= 0 && d.amount <= 1)) problems.push(`${where}: amount is 0 to 1 (1 is the deepest bend)`);
       if (d.kind === 'reach' && !(d.stopShort >= 0)) problems.push(`${where}: stopShort must be ≥ 0`);
+      if (d.kind === 'contact') problems.push(...contactProblems(sheet, b, d).map((x) => `${where}: ${x}`));
       if (d.kind === 'turn' && d.degrees === undefined && d.toward === undefined) problems.push(`${where}: needs degrees or toward`);
       if ((d.kind === 'take' || d.kind === 'put' || d.kind === 'drop') && !objects.has(d.object)) problems.push(`${where}: no object ${d.object}`);
       if (d.kind === 'take' && sheet.objects?.[d.object] && !sheet.objects[d.object]!.grip) problems.push(`${where}: ${d.object} has no grip`);
@@ -824,6 +865,12 @@ export function validateSheet(sheet: BeatSheet): string[] {
           }));
           if (!covered) problems.push(`${where}: an aim needs a reach of the ${d.side} hand around it (from before ${r.at.toFixed(2)} s to after ${(r.at + r.attack + r.hold).toFixed(2)} s)`);
         }
+      }
+      if (d.kind === 'contact') {
+        // A mutual contact (a handshake, a hug) is not in the trial: the target is solved before the one who touches.
+        const on = d.on.slice(0, d.on.indexOf('.'));
+        const back = sheet.beats.filter((x) => x.performer === on).flatMap((x) => x.directions.flatMap((y) => (y.kind === 'contact' && y.on.startsWith(`${b.performer}.`) ? [resolveTiming(x, y)] : [])));
+        if (back.some((q) => q.start < r.end && r.start < q.end)) problems.push(`${where}: ${on} touches ${b.performer} at the same time: a mutual contact (a handshake, a hug) is not possible yet`);
       }
       if (d.kind === 'reach') {
         const h = holdingAt(b.performer, d.side, r.at);

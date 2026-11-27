@@ -16,10 +16,10 @@ import type { FaceGaze, FaceWeights } from '../../../src/face/faceTypes.ts';
 import { resetPose, type LoadedAvatar } from './avatar.ts';
 import { bothEyes, clampGaze, EyeMeter, eyeView, type EyeReport, type EyeView } from './eye-view.ts';
 import { armAngles, ArmMeter, PairMeter, armPoints, armSkin, BodySkin, measureArmBody, partDepth, skinned, propNormal, propParts, propSurface, type ArmBody, type ArmReport, type PairReport } from './arm-quality.ts';
-import { FACE_MIXES, GESTURES, cueTime, STATE_FACES, envelope, gestureCycle, holdingsOf, pointObjects, resolveTiming, validateSheet, type BeatSheet, type Direction, type Holding, type ObjectSpec, type PerformerSpec, type Place, type Point, type Resolved, type Side } from './beats.ts';
+import { FACE_MIXES, GESTURES, cueTime, STATE_FACES, envelope, gestureCycle, holdingsOf, pointObjects, resolveTiming, contactSide, handSideOf, CONTACT_SURFACES, validateSheet, type BeatSheet, type Direction, type Holding, type ObjectSpec, type PerformerSpec, type Place, type Point, type Resolved, type Side } from './beats.ts';
 import { FINGERS, HAND_SHAPES, blendPose, shapePose, type FingerName, type HandPose } from './hands.ts';
 import { elbowPole } from '../../../src/ik/armPoseModel.ts';
-import { armRestOffset, bodyUp, hangArm, keepingTwist, rollHand, moveBoneWorld, orientHand, plantFeet, restElbowHint, rotateBoneWorld, solveArm, steadyTwist, shareTwist, easeTwist, toWorld, turnBody, TURN_SHARE } from './pose.ts';
+import { armRestOffset, bodyUp, hangArm, keepingTwist, rollHand, moveBoneWorld, orientHand, plantFeet, restElbowHint, rotateBoneWorld, solveArm, WRIST_LIMITS, steadyTwist, shareTwist, easeTwist, toWorld, turnBody, TURN_SHARE } from './pose.ts';
 import { speakingAt, visemesAt, type LineLips } from './lips.ts';
 import { busy, faceAt, fidgetAt, finishedBy, GLANCE_BLINK_DEG, glanceAt, glanceChest, LIFE_FIDGET, LIFE_SIGH, LIFE_WEIGHT, lifeSchedule, MASK_PAD, MASKED_BY, postureAt, sighAt, weightAt, attendArmsAt, attendGate, attendNodAt, attendSchedule, ATTEND_ARMS, type AttendSchedule, type LifeSchedule } from './life.ts';
 import { buildProp, changedPoint, propWorld, setChange, type LoadedSource, type Prop } from './props.ts';
@@ -219,6 +219,23 @@ export interface ObjectReport {
   readonly grips: { beat: string; object: string; side: Side; distance: number; angle: number }[];
   readonly puts: { beat: string; object: string; side: Side; distance: number; tilt: number }[];
   readonly aims: { beat: string; object: string; side: Side; residual: number }[];
+  /** Each contact over its hold: the gap at the palm's center and the deepest hand skin in the target, metres (trial). */
+  readonly contacts: ContactRow[];
+}
+
+/** A contact as measured over its hold frames. */
+export interface ContactRow {
+  readonly beat: string; readonly performer: string; readonly part: string; readonly on: string; readonly fit: string;
+  /** The skin point chosen, in the target bone's frame (metres), and when it was chosen. */
+  readonly point: readonly [number, number, number]; readonly chosenAt: number;
+  readonly frames: number;
+  /** Largest gap from the palm's center out to the target's skin (0 when it is on or in it). */
+  readonly gap: number;
+  /** Deepest point of the hand's skin inside the target's skin. */
+  readonly sink: number;
+  /** The most the hand ended short of lying flat on the surface (degrees), and the wrist limits that stopped it. */
+  readonly short: number;
+  readonly notPossible?: string;
 }
 
 export interface SolvedTake {
@@ -292,7 +309,7 @@ export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, 
   const first = phaseSync('solve pass 1', () => solveOnce(sheet, avatars, sources, speech, options));
   const record = clearing.record;
   clearing.record = undefined;
-  if (![...record.values()].some((moves) => moves.some((m) => turned(m) > 1e-5))) return first;
+  if (options.firstPassOnly || ![...record.values()].some((moves) => moves.some((m) => turned(m) > 1e-5))) return first;
   clearing.plan = smoothClearing(record, first.times.length);
   try {
     // Where the smoothed plan leaves an arm more than CLEAR.deep in, the solve clears that rest frame by frame, and
@@ -320,6 +337,12 @@ export interface SolveOptions {
    * are the same as in the full take; the solve stops early.
    */
   readonly frames?: number;
+  /**
+   * Stop after the first pass, with no clearing round. Only for a quick look
+   * that says "first pass only": the arms are not cleared from the bodies as
+   * in the full take. The full take never sets it.
+   */
+  readonly firstPassOnly?: boolean;
 }
 
 function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources: ReadonlyMap<string, LoadedSource>, speech: ReadonlyMap<string, readonly Speech[]>, options: SolveOptions = {}): SolvedTake {
@@ -338,7 +361,9 @@ function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources
   stage.goals.clear();
   stage.swivels.clear();
   stage.restsOn.clear();
-  stage.report = { grips: [], puts: [], aims: [] };
+  stage.report = { grips: [], puts: [], aims: [], contacts: [] };
+  stage.contacts.clear();
+  stage.contactSkins.clear();
   stage.first = sheet.performers[0]!.id;
   for (const [k, v] of Object.entries(sheet.marks ?? {})) stage.marks.set(k, v);
   const fps = sheet.fps ?? 30;
@@ -390,6 +415,15 @@ function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources
     const other = m && cast.find((o) => o.spec.id === m[1]);
     if (other && other !== c) other.touched[m[2] as Side].push(r);
   }
+  // A contact holds the touched arm's life still too, and its target is solved first in each frame.
+  for (const c of cast) for (const r of c.dirs) {
+    const d = r.direction;
+    if (d.kind !== 'contact') continue;
+    const other = contactTarget(cast, d);
+    const m = /^(left|right)(UpperArm|LowerArm|Hand)$/.exec(d.on.slice(d.on.indexOf('.') + 1));
+    if (m && other !== c) other.touched[m[1] as Side].push(r);
+  }
+  const order = contactOrder(cast);
   // Measures and landmarks from each performer's rest pose, then the set, placed on the first frame.
   for (const c of cast) {
     solveFrame(cast, { ...c, dirs: [] }, 0, 1 / fps, false, false);
@@ -441,7 +475,8 @@ function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources
     solving.f = f;
     // The shapes as the viewer sees them now: a door that has swung open is not in the way of a reach (B-104).
     for (const st of stage.props.values()) setChange(st.prop, changePoseAt(sheet, st.prop.id, t));
-    cast.forEach((c, ci) => {
+    order.forEach((ci) => {
+      const c = cast[ci]!;
       fixPersistent(cast, c, t);
       solveFrame(cast, c, t, 1 / fps, life, flat);
       const tr = tracks[ci]!;
@@ -488,6 +523,18 @@ function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources
     props.forEach((pt) => { pt.prop.position.toArray(pt.position, f * 3); pt.prop.quaternion.toArray(pt.rotation, f * 4); });
   }
   tracks.forEach((tr, ci) => { tr.arms = meters[ci]!.report(); tr.eyes = eyeMeters[ci]!.report(); });
+  cast.forEach((c) => c.dirs.forEach((r) => {
+    const d = r.direction;
+    if (d.kind !== 'contact') return;
+    const k = stage.contacts.get(d);
+    const mm = (v: number): number => round(v, 1e5);
+    stage.report.contacts.push({
+      beat: r.beat.id, performer: c.spec.id, part: d.part, on: d.on, fit: d.fit,
+      point: k ? [mm(k.local.x), mm(k.local.y), mm(k.local.z)] : [0, 0, 0], chosenAt: k ? round(k.chosenAt, 1000) : NaN,
+      frames: k?.frames ?? 0, gap: mm(k?.gap ?? NaN), sink: mm(k?.sink ?? NaN), short: round(k?.short ?? 0, 10),
+      ...(k?.need ? { notPossible: k.need } : {})
+    });
+  }));
   return { sheet, fps, times, tracks, props, objects: stage.report, pairs: pairMeter.report() };
 }
 
@@ -561,7 +608,11 @@ const stage = {
   /** Each performer's bone world matrices in the rest pose, for worn objects. */
   restBones: new Map<string, Map<string, THREE.Matrix4>>(),
   goals: new Map<Direction, { point: THREE.Vector3; axis?: THREE.Vector3; upright?: THREE.Quaternion }>(),
-  report: { grips: [], puts: [], aims: [] } as ObjectReport,
+  report: { grips: [], puts: [], aims: [], contacts: [] } as ObjectReport,
+  /** Each contact's skin point, chosen once in the target bone's frame, and its measure so far. */
+  contacts: new Map<Direction, { bone: THREE.Object3D; local: THREE.Vector3; localN: THREE.Vector3; chosenAt: number; frames: number; gap: number; sink: number; short: number; need?: string }>(),
+  /** Each target's skin, posed once a frame (the take time it was posed at). */
+  contactSkins: new Map<object, { t: number; skin: BodySkin }>(),
   swivels: new Map<Direction, number>(),
   /** What each object is set down on in the sheet (its `on`). */
   restsOn: new Map<string, string>()
@@ -748,6 +799,216 @@ const LEG_CLEAR_OUT = 0.5;
  * surface's normal; a forearm or upper arm moves the elbow out instead, so
  * the hand stays where it was sent. The hand keeps its turn and its fingers.
  */
+/** How far the palm's center sits out from the skin point it rests on, metres (the palm's own skin). */
+const CONTACT_REST = 0.001;
+/** A contact that ends more than this short of lying flat (degrees) is reported as not possible at this angle. */
+const CONTACT_SHORT = 10;
+type ContactDirection = Extract<Direction, { kind: 'contact' }>;
+
+function contactTarget(cast: Cast[], d: ContactDirection): Cast {
+  const who = d.on.slice(0, d.on.indexOf('.'));
+  const c = cast.find((x) => x.spec.id === who);
+  if (!c) throw new Error(`contact on ${d.on}: no performer ${who}`);
+  return c;
+}
+
+/** The cast's solve order in a frame: each contact's target before the one who touches it (sheet order otherwise). */
+function contactOrder(cast: Cast[]): number[] {
+  const after = cast.map(() => new Set<number>());
+  cast.forEach((c, ci) => c.dirs.forEach((r) => {
+    if (r.direction.kind === 'contact') after[ci]!.add(cast.indexOf(contactTarget(cast, r.direction)));
+  }));
+  const order: number[] = [];
+  const left = new Set(cast.map((_, i) => i));
+  while (left.size) {
+    const next = [...left].find((i) => [...after[i]!].every((j) => !left.has(j) || j === i));
+    if (next === undefined) throw new Error(`contacts between ${[...left].map((i) => cast[i]!.spec.id).join(' and ')} go both ways: a mutual contact (a handshake, a hug) is not possible yet`);
+    order.push(next);
+    left.delete(next);
+  }
+  return order;
+}
+
+/** The target's skin (body and both arms, as the pair bar reads it), posed as it stands now. */
+function contactSkin(target: Cast, t: number): BodySkin {
+  const hit = stage.contactSkins.get(target);
+  if (hit && hit.t === t) return hit.skin;
+  const skin = hit?.skin ?? new BodySkin([...target.armBody.body, ...target.armBody.arm.left, ...target.armBody.arm.right]);
+  target.a.scene.updateMatrixWorld(true);
+  skin.pose();
+  stage.contactSkins.set(target, { t, skin });
+  return skin;
+}
+
+/**
+ * A contact's skin point and its outward normal in the world now. The point is
+ * chosen once, the first time the contact moves the hand: the target bone's
+ * own skin vertex (from the bind skin) that faces the hand's shoulder and is
+ * nearest it. It is kept in that bone's frame, so it moves with the target.
+ */
+function contactSurface(cast: Cast[], c: Cast, r: Resolved): { p: THREE.Vector3; n: THREE.Vector3 } {
+  const d = r.direction as ContactDirection;
+  const target = contactTarget(cast, d);
+  let k = stage.contacts.get(d);
+  if (!k) {
+    const name = d.on.slice(d.on.indexOf('.') + 1);
+    const bone = target.a.humanoid.bone(name as VrmHumanoidBone);
+    if (!bone) throw new Error(`contact on ${d.on}: ${target.spec.id} has no ${name} (${CONTACT_SURFACES.join(', ')})`);
+    target.a.scene.updateMatrixWorld(true);
+    const samples = [...target.armBody.body, ...target.armBody.arm.left, ...target.armBody.arm.right].filter((x) => x.bone === bone);
+    if (!samples.length) throw new Error(`contact on ${d.on}: no skin of its own to touch (${CONTACT_SURFACES.join(', ')})`);
+    const shoulder = c.a.arms[contactSide(d)].upperArm.getWorldPosition(new THREE.Vector3());
+    let best: { p: THREE.Vector3; n: THREE.Vector3; score: number } | undefined;
+    for (const x of samples) {
+      const p = new THREE.Vector3(); const n = new THREE.Vector3();
+      skinned(x, p, n);
+      const to = shoulder.clone().sub(p);
+      const dist = to.length();
+      // Facing the shoulder first (a cosine), then near it: 10 cm nearer weighs as much as 0.2 of facing.
+      const score = n.dot(to.divideScalar(dist)) - 2 * dist;
+      if (!best || score > best.score) best = { p, n, score };
+    }
+    const q = bone.getWorldQuaternion(new THREE.Quaternion()).invert();
+    k = { bone, local: bone.worldToLocal(best!.p.clone()), localN: best!.n.clone().applyQuaternion(q), chosenAt: solving.t, frames: 0, gap: 0, sink: 0, short: 0 };
+    stage.contacts.set(d, k);
+  }
+  const p = k.bone.localToWorld(k.local.clone());
+  const n = k.localN.clone().applyQuaternion(k.bone.getWorldQuaternion(new THREE.Quaternion())).normalize();
+  return { p, n };
+}
+
+/**
+ * The wrist turn a wanted hand orientation needs from the neutral wrist, in
+ * degrees, as `orientHand` splits it (roll about the forearm, then flex and
+ * deviation), and the limits it goes past.
+ */
+function wristNeed(a: LoadedAvatar, s: Side, wanted: THREE.Quaternion): string[] {
+  const chain = a.arms[s];
+  const rig = a.hands[s];
+  if (!rig) return [];
+  const parent = chain.hand.parent!.getWorldQuaternion(new THREE.Quaternion());
+  const neutral = parent.clone().multiply(chain.handBindQuaternion);
+  const delta = wanted.clone().multiply(neutral.clone().invert());
+  if (delta.w < 0) delta.set(-delta.x, -delta.y, -delta.z, -delta.w);
+  const fore = chain.hand.getWorldPosition(new THREE.Vector3()).sub(chain.foreArm.getWorldPosition(new THREE.Vector3())).normalize();
+  const roll = 2 * Math.atan2(delta.x * fore.x + delta.y * fore.y + delta.z * fore.z, delta.w) / DEG;
+  const twist = new THREE.Quaternion().setFromAxisAngle(fore, roll * DEG);
+  const swing = delta.clone().multiply(twist.clone().invert());
+  if (swing.w < 0) swing.set(-swing.x, -swing.y, -swing.z, -swing.w);
+  const rolled = twist.clone().multiply(neutral);
+  const toLocal = chain.hand.getWorldQuaternion(new THREE.Quaternion()).invert();
+  const palm = rig.palmFrame(new THREE.Quaternion());
+  const local = (v: THREE.Vector3): THREE.Vector3 => v.applyQuaternion(palm).applyQuaternion(toLocal).applyQuaternion(rolled);
+  const fingers = local(new THREE.Vector3(0, 1, 0));
+  const thumbSide = local(new THREE.Vector3(1, 0, 0));
+  const normal = local(new THREE.Vector3(0, 0, s === 'right' ? 1 : -1));
+  const angle = 2 * Math.acos(THREE.MathUtils.clamp(swing.w, -1, 1));
+  const sn = Math.sqrt(Math.max(0, 1 - swing.w * swing.w));
+  const vec = sn > 1e-8 ? new THREE.Vector3(swing.x / sn, swing.y / sn, swing.z / sn).multiplyScalar(angle) : new THREE.Vector3();
+  const flex = vec.dot(new THREE.Vector3().crossVectors(fingers, normal).normalize()) / DEG;
+  const radial = vec.dot(new THREE.Vector3().crossVectors(fingers, thumbSide).normalize()) / DEG;
+  const L = WRIST_LIMITS;
+  const out: string[] = [];
+  if (Math.abs(roll) > L.roll) out.push(`roll ${Math.abs(roll).toFixed(0)}° (limit ${L.roll}°)`);
+  if (flex > L.flex) out.push(`flex ${flex.toFixed(0)}° (limit ${L.flex}°)`);
+  if (-flex > L.extend) out.push(`extend ${(-flex).toFixed(0)}° (limit ${L.extend}°)`);
+  if (radial > L.radial) out.push(`radial ${radial.toFixed(0)}° (limit ${L.radial}°)`);
+  if (-radial > L.ulnar) out.push(`ulnar ${(-radial).toFixed(0)}° (limit ${L.ulnar}°)`);
+  return out;
+}
+
+/**
+ * Lays each contact's palm on its surface, after arm clearing: the palm's
+ * center onto the skin point, the palm against the skin's normal, the fingers
+ * along the surface (the target bone's line, the way the fingers point now).
+ * The elbow keeps the swing that clearing gave it. The fit is solved at full
+ * contact and eased in by the contact's own curve, so the hand arrives onto
+ * the surface. The wrist stays inside its limits; a flat palm it cannot make
+ * is reported as not possible at this angle.
+ */
+function fitContacts(cast: Cast[], c: Cast, t: number): void {
+  const a = c.a;
+  for (const r of c.dirs) {
+    const d = r.direction;
+    if (d.kind !== 'contact') continue;
+    const e = clamp01(handEnv(r, t, false));
+    const s = contactSide(d);
+    const hand = a.hands[s];
+    if (e === 0 || !hand) continue;
+    const ch = a.arms[s];
+    a.frame.updateMatrixWorld(true);
+    const { p, n } = contactSurface(cast, c, r);
+    const k = stage.contacts.get(d)!;
+    const bones = [ch.shoulder, ch.upperArm, ch.foreArm, ch.hand];
+    const before = bones.map((b) => b.quaternion.clone());
+    // The wanted palm frame: +Z the palm normal (into the skin for the right hand; the left hand's normal is -Z).
+    const palmQ = hand.palmFrame(new THREE.Quaternion());
+    const handQ = ch.hand.getWorldQuaternion(new THREE.Quaternion());
+    const into = n.clone().negate();
+    const z = s === 'right' ? into.clone() : n.clone();
+    const fingersNow = new THREE.Vector3(0, 1, 0).applyQuaternion(palmQ);
+    const child = k.bone.children.find((o) => (o as THREE.Bone).isBone);
+    const along = child ? child.getWorldPosition(new THREE.Vector3()).sub(k.bone.getWorldPosition(new THREE.Vector3())) : fingersNow.clone();
+    along.addScaledVector(n, -along.dot(n));
+    if (along.lengthSq() < 1e-8) along.copy(fingersNow).addScaledVector(n, -fingersNow.dot(n));
+    along.normalize();
+    if (along.dot(fingersNow) < 0) along.negate();
+    const x = new THREE.Vector3().crossVectors(along, z).normalize();
+    const y = new THREE.Vector3().crossVectors(z, x).normalize();
+    const wantedPalm = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+    const wanted = wantedPalm.multiply(palmQ.clone().invert()).multiply(handQ);
+    // The elbow's swing as clearing left it, about the shoulder-to-wrist line, in the avatar's frame.
+    const sh = ch.upperArm.getWorldPosition(new THREE.Vector3());
+    const el = ch.foreArm.getWorldPosition(new THREE.Vector3());
+    const wr = ch.hand.getWorldPosition(new THREE.Vector3());
+    const line = wr.clone().sub(sh).normalize();
+    const hint = el.clone().sub(sh);
+    hint.addScaledVector(line, -hint.dot(line)).normalize().applyQuaternion(a.frame.getWorldQuaternion(new THREE.Quaternion()).invert());
+    const skin = contactSkin(contactTarget(cast, d), t);
+    const samples = c.armBody.hand[s];
+    const at = new THREE.Vector3();
+    const deepest = (): number => {
+      let most = 0;
+      for (const sample of samples) most = Math.max(most, skin.depth(skinned(sample, at)).depth);
+      return most;
+    };
+    const goal = p.clone().addScaledVector(n, CONTACT_REST);
+    let short = 0;
+    let sink = 0;
+    for (let round = 0; round < 3; round += 1) {
+      for (let i = 0; i < EFFECTOR_STEPS; i += 1) {
+        solveArm(a, s, wr, { elbowHint: hint });
+        a.frame.updateMatrixWorld(true);
+        short = orientHand(a, s, wanted);
+        a.frame.updateMatrixWorld(true);
+        const err = goal.clone().sub(hand.palmCenter(at));
+        if (err.length() < 2e-4) break;
+        wr.add(err);
+      }
+      // A hand skin point under his skin (a finger round the curve of the arm): the palm goes out by that much.
+      sink = deepest();
+      if (sink <= 5e-4) break;
+      goal.addScaledVector(n, sink);
+    }
+    // Eased in by the contact's curve, from the lift's pose.
+    const after = bones.map((b) => b.quaternion.clone());
+    bones.forEach((b, i) => b.quaternion.copy(before[i]!).slerp(after[i]!, e));
+    a.frame.updateMatrixWorld(true);
+    const arrive = r.at + r.attack;
+    if (t >= arrive - 1e-6 && t <= arrive + r.hold + 1e-6) {
+      const gap = Math.max(0, -skin.depth(hand.palmCenter(at)).depth);
+      k.frames += 1;
+      k.gap = Math.max(k.gap, gap);
+      k.sink = Math.max(k.sink, deepest());
+      k.short = Math.max(k.short, short);
+      if (short > CONTACT_SHORT && !k.need) {
+        const over = wristNeed(a, s, wanted);
+        k.need = `not possible at this angle: a flat palm on ${d.on} needs ${over.length ? over.join(', ') : 'more turn than the wrist and forearm give together'} (limits: roll ${WRIST_LIMITS.roll}°, flex ${WRIST_LIMITS.flex}°, extend ${WRIST_LIMITS.extend}°, radial ${WRIST_LIMITS.radial}°, ulnar ${WRIST_LIMITS.ulnar}°); nearest pose: the palm ${short.toFixed(0)}° from flat at ${t.toFixed(2)} s`;
+      }
+    }
+  }
+}
+
 function clearArms(cast: Cast[], c: Cast, t: number): void {
   const a = c.a;
   a.frame.updateMatrixWorld(true);
@@ -1885,7 +2146,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
     const takeover = new Map<Resolved, { q: number; to: number }>();
     for (const r of c.dirs) {
       const d = r.direction;
-      if ((d.kind !== 'reach' && d.kind !== 'take' && d.kind !== 'put') || d.side !== s) continue;
+      if ((d.kind !== 'reach' && d.kind !== 'take' && d.kind !== 'put' && d.kind !== 'contact') || handSideOf(d) !== s) continue;
       let earlier: Resolved | undefined;
       let most = 0;
       for (const p of before) { const h = handEnv(p, r.at, flat); if (h > most) { most = h; earlier = p; } }
@@ -1901,7 +2162,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
     before.length = 0;
     for (const r of c.dirs) {
       const d = r.direction;
-      if ((d.kind !== 'reach' && d.kind !== 'take' && d.kind !== 'put' && d.kind !== 'aim') || d.side !== s) continue;
+      if ((d.kind !== 'reach' && d.kind !== 'take' && d.kind !== 'put' && d.kind !== 'aim' && d.kind !== 'contact') || handSideOf(d) !== s) continue;
       const held = d.kind === 'aim' ? 0 : before.reduce((most, p) => Math.max(most, handEnv(p, r.at, flat)), 0);
       if (d.kind !== 'aim') before.push(r);
       const e = handEnv(r, t, flat);
@@ -1915,12 +2176,21 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
       const shoulder = a.arms[s].upperArm.getWorldPosition(new THREE.Vector3());
       let g: THREE.Vector3;
       let target: THREE.Vector3;
-      let palmKind = d.kind === 'put' ? 'in' : d.palm ?? (d.kind === 'take' ? 'in' : 'toward');
-      if (d.kind === 'reach') {
-        target = pointOf(cast, c.spec, d.at);
-        g = target.clone().addScaledVector(target.clone().sub(shoulder).normalize(), -d.stopShort);
+      let palmKind = d.kind === 'put' || d.kind === 'contact' ? 'in' : d.palm ?? (d.kind === 'take' ? 'in' : 'toward');
+      let onto: THREE.Vector3 | undefined;
+      if (d.kind === 'reach' || d.kind === 'contact') {
+        if (d.kind === 'contact') {
+          // Onto the skin point, the palm against the skin's normal; `fitContacts` lays it flat after clearing.
+          const k = contactSurface(cast, c, r);
+          target = k.p;
+          g = k.p.clone().addScaledVector(k.n, CONTACT_REST);
+          onto = k.n.clone().negate();
+        } else {
+          target = pointOf(cast, c.spec, d.at);
+          g = target.clone().addScaledVector(target.clone().sub(shoulder).normalize(), -d.stopShort);
+        }
         // A hand held out does not stand still: once it arrives it drifts a little, slowly, as a held arm does.
-        if (life && !flat) {
+        if (life && !flat && d.kind === 'reach') {
           const k = smootherStep(clamp01((t - r.at - r.attack) / HOLD_DRIFT.ease));
           if (k > 0) {
             const ph = c.seed * 1.7 + (s === 'left' ? 2.1 : 0);
@@ -1960,7 +2230,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
       }
       const up = bodyUp(a);
       const towards = target.clone().sub(shoulder).normalize();
-      const p = d.kind === 'reach' && d.palmAt ? pointOf(cast, c.spec, d.palmAt).sub(target).normalize() : palmKind === 'up' ? up : palmKind === 'down' ? up.clone().negate() : palmKind === 'in' ? new THREE.Vector3(s === 'left' ? -1 : 1, 0, 0).applyQuaternion(bodyQ) : towards;
+      const p = onto ? onto : d.kind === 'reach' && d.palmAt ? pointOf(cast, c.spec, d.palmAt).sub(target).normalize() : palmKind === 'up' ? up : palmKind === 'down' ? up.clone().negate() : palmKind === 'in' ? new THREE.Vector3(s === 'left' ? -1 : 1, 0, 0).applyQuaternion(bodyQ) : towards;
       const lead = held > 0 && over ? over.q : undefined;
       if (leading) {
         // Before the later starts: only its palm, by the takeover's progress. The hand still meets the earlier's goal
@@ -2108,7 +2378,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
   for (const s of SIDES) {
     const hand = a.hands[s];
     if (!hand) continue;
-    const reachW = Math.max(0, ...c.dirs.filter((r) => (r.direction.kind === 'reach' || r.direction.kind === 'take' || r.direction.kind === 'put') && r.direction.side === s).map((r) => handEnv(r, t, false)));
+    const reachW = Math.max(0, ...c.dirs.filter((r) => (r.direction.kind === 'reach' || r.direction.kind === 'take' || r.direction.kind === 'put' || r.direction.kind === 'contact') && handSideOf(r.direction) === s).map((r) => handEnv(r, t, false)));
     let pose: HandPose = blendPose(HAND_SHAPES.relaxed, HAND_SHAPES.reach, clamp01(reachW) * 0.8);
     // Closed round what it holds: tighter round a thin handle, looser round a thick one.
     const held = gripOf(c.spec.id, s, t);
@@ -2127,6 +2397,11 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
         curl[finger] = lerp(curl[finger], target.curl[finger], e);
       }
       pose = { curl, spread: lerp(pose.spread, target.spread, env(r, t, false)) };
+    }
+    // A palm at rest on a surface is flat, as on a chest.
+    for (const r of c.dirs) {
+      const d = r.direction;
+      if (d.kind === 'contact' && contactSide(d) === s) pose = blendPose(pose, CHEST_PALM, clamp01(handEnv(r, t, false)));
     }
     // Gestures shape the hand: open for a shrug or a wave, flat on the chest, fingertips rubbing (the wrist rolling a little with them).
     let rubRoll = 0;
@@ -2171,6 +2446,7 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
   a.frame.updateMatrixWorld(true);
   moveHeld(cast, c, t);
   clearArms(cast, c, t);
+  fitContacts(cast, c, t);
   fitGrip(c, t, posed);
   moveWorn(c);
 
@@ -2289,20 +2565,22 @@ function leanFor(cast: Cast[], c: Cast, t: number, hipsLocal: THREE.Vector3): { 
   let best: { dir: THREE.Vector3; need: number; r: Resolved; e: number } | undefined;
   for (const r of c.dirs) {
     const d = r.direction;
-    if (d.kind !== 'reach' && d.kind !== 'take' && d.kind !== 'put') continue;
+    if (d.kind !== 'reach' && d.kind !== 'take' && d.kind !== 'put' && d.kind !== 'contact') continue;
+    const side = handSideOf(d)!;
     // A take or put leans only to get the hand there: once it arrives, the object moves with the hand (or stays put), so the lean eases out.
     const arrive = r.at + r.attack;
-    const after = d.kind === 'reach' || t <= arrive ? 1 : 1 - smootherStep(Math.min(1, (t - arrive) / LEAN_LET_GO));
+    const after = d.kind === 'reach' || d.kind === 'contact' || t <= arrive ? 1 : 1 - smootherStep(Math.min(1, (t - arrive) / LEAN_LET_GO));
     const e = clamp01(handEnv(r, t, false)) * after;
     if (e === 0) continue;
-    const shoulder = toWorld(a, a.bind.get(`${d.side}UpperArm`)!.rootPosition.clone().add(hipsLocal));
+    const shoulder = toWorld(a, a.bind.get(`${side}UpperArm`)!.rootPosition.clone().add(hipsLocal));
     let goal: THREE.Vector3;
-    if (d.kind === 'reach') {
+    if (d.kind === 'contact') { const k = contactSurface(cast, c, r); goal = k.p.addScaledVector(k.n, CONTACT_REST); }
+    else if (d.kind === 'reach') {
       const target = pointOf(cast, c.spec, d.at);
       goal = target.clone().addScaledVector(target.clone().sub(shoulder).normalize(), -d.stopShort);
     } else if (d.kind === 'take') goal = takeGoal(r).point.clone();
     else goal = putGoal(cast, c, r).point.clone().add(new THREE.Vector3(0, stage.props.get(d.object)!.prop.grip!.center.y, 0));
-    const arm = a.arms[d.side];
+    const arm = a.arms[side];
     const over = goal.distanceTo(shoulder) - (COMFORT_REACH * (arm.upperLength + arm.lowerLength) + PALM_OFFSET);
     if (over <= 0) { if (e > 0.9 && !c.shortfall.has(r)) c.shortfall.set(r, 0); continue; }
     const dir = goal.clone().sub(shoulder).setY(0);

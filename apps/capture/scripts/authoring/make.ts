@@ -43,7 +43,7 @@ import { measureJumps, measurePropJumps, measureSmoothness, measureTurnJumps, SM
 import { BAR } from './lib/audition-bar.ts';
 import { faceBarPasses, faceBarPx, FACE_AWAY_MAX_SHARE, PAIR_FACE_BAR_PX } from './lib/face-bar.ts';
 import { FACE_CHANNELS } from '@holoim/avatar-face';
-import { DEFAULT_TIMING, FACE_MIXES, GESTURES, houseFinish, parseSheetText, resolveTiming, STATES, STORY_PARTS, storyEventProblem, validateSheet, type BeatSheet, type ObjectSpec, type Place, type Point } from './lib/beats.ts';
+import { CONTACT_PARTS, CONTACT_SURFACES, DEFAULT_TIMING, FACE_MIXES, GESTURES, houseFinish, parseSheetText, resolveTiming, STATES, STORY_PARTS, storyEventProblem, validateSheet, type BeatSheet, type ObjectSpec, type Place, type Point } from './lib/beats.ts';
 import { solveTake } from './lib/direct.ts';
 import { phaseLine, type Phase } from './lib/phases.ts';
 import { IRIS_OUT_MAX_FRAMES } from './lib/eye-view.ts';
@@ -75,6 +75,9 @@ export interface Row {
 const rel = (p: string): string => relative(process.cwd(), p) || '.';
 const mb = (bytes: number): string => `${(bytes / 1e6).toFixed(2)} MB`;
 
+/** A palm on a surface, over the contact's hold (trial brief `docs/features/contact-and-pose-look.md`), metres. */
+const CONTACT_LIMITS = { gap: 0.003, sink: 0.003 } as const;
+
 /** `make.ts words`: every name a sheet can use, from the code. */
 function words(): string {
   const list = (xs: readonly string[]) => xs.join(' | ');
@@ -96,6 +99,8 @@ function words(): string {
     `gesture     ${list(Object.keys(GESTURES))}   (wave takes side, count, at)`,
     `state       ${list(Object.keys(STATES))}`,
     `hand shape  ${list(Object.keys(HAND_SHAPES))}`,
+    `contact     { "kind": "contact", "part": ${list(CONTACT_PARTS)}, "on": "<performer>.<surface>", "fit": "rest" }   (trial; no distance or angle)`,
+    `  surfaces  ${list(CONTACT_SURFACES)}`,
     `bend        amount 0..1 (forward from the waist; reach and look are solved on the bent body)`,
     `measures    ${list(MEASURES)}; landmark heights ${list(LANDMARKS)}   (e.g. "0.5 step", "hanging-hand")`,
     'timing      anticipation, attack, hold, settle (seconds) on any direction; delay shifts it in the beat',
@@ -513,6 +518,13 @@ async function make(sheetFile: string, quick: boolean): Promise<boolean> {
   for (const a of built.take.objects.aims) {
     const pass = a.residual <= L.aimResidual;
     rows.push({ id: `aim.${a.beat}`, bar: `${a.object}'s tool within ${L.aimResidual}° of its target`, value: `${a.residual.toFixed(1)}°`, pass, ...(pass ? {} : { fix: await fitMiss(sheetFile, { kind: 'aim', beat: a.beat, side: a.side }) }) });
+  }
+  // A palm on a surface (trial): the gap at the palm's center and the deepest hand skin in the target, over the hold.
+  if (built.take.objects.contacts.length) await writeFile(join(dir, 'contacts.json'), `${JSON.stringify(built.take.objects.contacts, null, 2)}\n`);
+  for (const k of built.take.objects.contacts) {
+    const pass = k.frames > 0 && k.gap <= CONTACT_LIMITS.gap && k.sink <= CONTACT_LIMITS.sink && !k.notPossible;
+    const fix = k.notPossible ?? (k.frames === 0 ? 'the contact has no hold frames: give it a hold' : k.gap > CONTACT_LIMITS.gap ? 'the palm does not get to the surface: move the performer nearer, or add a step' : 'the hand goes into the surface: report it (the fit should lift it out)');
+    rows.push({ id: `contact.${k.beat}`, bar: `palm on ${k.on}: gap at the palm's center ≤ ${CONTACT_LIMITS.gap * 1000} mm and hand skin ≤ ${CONTACT_LIMITS.sink * 1000} mm inside, over the hold`, value: `gap ${(k.gap * 1000).toFixed(1)} mm, sink ${(k.sink * 1000).toFixed(1)} mm, ${k.short.toFixed(0)}° from flat, ${k.frames} frames`, pass, ...(pass ? {} : { fix }) });
   }
   for (const t of built.take.tracks) for (const r of t.reaches) {
     const miss = r.targetDistance - r.stopShort > 0.02;
