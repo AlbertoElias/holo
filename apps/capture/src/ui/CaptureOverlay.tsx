@@ -62,6 +62,13 @@ function resolveNotice(state: UiViewModel): string | null {
   // Selfie mode falls back to the avatar's own face; say why, once, up top.
   const camera = isSelfieJourney() ? faceCameraProblem(state.faceCamera) : null;
   if (camera) return `${camera} The avatar keeps its own face.`;
+  if (isSelfieJourney() && state.recordingState === 'idle') {
+    if (state.bodycam.enabled && state.bodycam.status === 'starting') return 'Starting face & hand tracking…';
+    if (state.faceCamera === 'no-face') return state.bodycam.enabled ? 'Step into view so your face and hands show.' : 'Face the camera so your expressions show.';
+    if (state.faceCamera === 'tracking' && state.bodycam.enabled && state.bodycam.status === 'ready' && !state.bodycam.handsVisible) {
+      return 'Step back a little so your hands are in frame.';
+    }
+  }
   return null;
 }
 
@@ -118,8 +125,8 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
   const trayOpenedByUi = useRef(false);
   const aboveDock = useAboveDock(input);
   const selfie = touch && isSelfieJourney();
-  // In selfie mode the count waits for the camera, so the face drives the avatar from the first frame.
-  const cameraStarting = state.faceCamera === 'starting';
+  // In selfie mode the count waits for the camera (and body/hand models when enabled) so the avatar is live from frame one.
+  const cameraStarting = state.faceCamera === 'starting' || (state.bodycam.enabled && state.bodycam.status === 'starting');
   const countdown = useCountdown(3, cameraStarting, () => bridge.toggleRecording());
   const trayGlyph = useTrayGlyph(bridge, state.tray.open, touch, trayOpenedByUi);
   const trayOpen = state.tray.open;
@@ -409,22 +416,39 @@ function SettingsBody({ bridge, state, touch, input }: { bridge: CaptureUiBridge
       </SettingsSection>
 
       {desktop ? (
-        <SettingsSection title="Face camera">
-          <ChoiceGroup
-            label="Face camera"
-            value={faceCameraOn(state.faceCamera) ? 'on' : 'off'}
-            options={FACE_CAMERA_OPTIONS}
-            input={input}
-            onChange={(next) => {
-              if ((next === 'on') !== faceCameraOn(state.faceCamera)) bridge.toggleFaceCamera();
-            }}
-          />
-          {faceCameraProblem(state.faceCamera) ? (
-            <Type variant="captionUnderCard" as="p" data-testid="face-camera-status" style={{ margin: 0 }}>
-              {faceCameraProblem(state.faceCamera)}
-            </Type>
-          ) : null}
-        </SettingsSection>
+        <>
+          <SettingsSection title="Face camera">
+            <ChoiceGroup
+              label="Face camera"
+              value={faceCameraOn(state.faceCamera) ? 'on' : 'off'}
+              options={FACE_CAMERA_OPTIONS}
+              input={input}
+              onChange={(next) => {
+                if ((next === 'on') !== faceCameraOn(state.faceCamera)) bridge.toggleFaceCamera();
+              }}
+            />
+            {faceCameraProblem(state.faceCamera) ? (
+              <Type variant="captionUnderCard" as="p" data-testid="face-camera-status" style={{ margin: 0 }}>
+                {faceCameraProblem(state.faceCamera)}
+              </Type>
+            ) : null}
+          </SettingsSection>
+
+          <SettingsSection title="Camera tracking">
+            <ChoiceGroup
+              label="Camera tracking"
+              value={state.bodycam.enabled ? 'body' : 'face'}
+              options={CAMERA_TRACKING_OPTIONS}
+              input={input}
+              onChange={(next) => bridge.setBodycamEnabled(next === 'body')}
+            />
+            {state.bodycam.enabled && state.bodycam.status === 'unavailable' ? (
+              <Type variant="captionUnderCard" as="p" data-testid="bodycam-status" style={{ margin: 0 }}>
+                Hand tracking could not start; using face only.
+              </Type>
+            ) : null}
+          </SettingsSection>
+        </>
       ) : null}
 
       {state.place.enabled ? (
@@ -504,6 +528,11 @@ function PlacePicker({ bridge, place, disabled, input }: { bridge: CaptureUiBrid
 const FACE_CAMERA_OPTIONS = [
   { value: 'on', label: 'On' },
   { value: 'off', label: 'Off' }
+] as const;
+
+const CAMERA_TRACKING_OPTIONS = [
+  { value: 'body', label: 'Face + hands' },
+  { value: 'face', label: 'Face' }
 ] as const;
 
 // A file input under a glyph: the input is the control (one tab stop, named for assistive tech), the glyph its drawing, a hint its name.

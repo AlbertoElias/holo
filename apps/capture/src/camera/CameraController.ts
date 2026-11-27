@@ -25,6 +25,8 @@ export class CameraController {
    * right of the screen. Only the canvas is flipped; the scene, the take and DOM chrome are not.
    */
   mirrorView = false;
+  /** Selfie view pulls back slightly when body/hand tracking is enabled so raised hands stay in frame. */
+  selfieBodyFraming = false;
   private canvasFlipped = false;
   /**
    * The look panel's height from the screen's bottom, in CSS pixels; 0 when it is closed (docs/features/your-look.md).
@@ -108,7 +110,8 @@ export class CameraController {
   // rigWorldLocked: the VR body solver owns the rig (it moves only with
   // artificial locomotion), so the camera must not dolly it to the avatar.
   update(isVrActive: boolean, isXrPresenting: boolean, deltaSec: number, isAr = false, rigWorldLocked = false): void {
-    this.applyCanvasFlip(this.mirrorView && !isVrActive && !isAr && !isXrPresenting && this.desktopViewMode === 'third');
+    const mirrored = !isVrActive && !isAr && !isXrPresenting && (this.desktopViewMode === 'selfie' || (this.mirrorView && this.desktopViewMode === 'third'));
+    this.applyCanvasFlip(mirrored);
     // Phone AR camera author: the WebXR device controls the camera directly.
     // Keep cameraRig at origin so the XR pose maps 1:1 to world space.
     if (isAr) {
@@ -129,7 +132,7 @@ export class CameraController {
 
     if (!isVrActive) {
       if (this.desktopViewMode === 'selfie' || lookFraming) {
-        this.updateSelfieCamera(deltaSec);
+        this.updateSelfieCamera(deltaSec, lookFraming);
       } else if (this.desktopViewMode === 'third') {
         const shouldSnap = this.snapDesktopCameraAfterVrExit || this.postVrExitSnapFrames > 0;
         this.updateThirdPersonCamera(deltaSec, shouldSnap);
@@ -199,14 +202,15 @@ export class CameraController {
    * face the avatar, close enough for waist up in a portrait screen, so the
    * person sees their own face move. View only; nothing recorded changes.
    */
-  private updateSelfieCamera(delta: number): void {
+  private updateSelfieCamera(delta: number, lookFraming: boolean): void {
     if (!this.deps.avatarRig.avatar) return;
     const avatarHeight = this.deps.avatarRig.avatarHeight;
     const aspect = this.deps.desktopCamera.aspect;
-    // Portrait needs more distance to keep the shoulders in frame.
-    const distance = avatarHeight * (aspect < 1 ? 1.15 : 0.85);
+    // Portrait needs more distance to keep shoulders and raised hands in frame; keep Look closer on the face.
+    const wideGestures = this.selfieBodyFraming && !lookFraming;
+    const distance = avatarHeight * (aspect < 1 ? (wideGestures ? 1.45 : 1.15) : (wideGestures ? 1.05 : 0.85));
     this.deps.avatarRig.getEyeAnchorWorldPosition(this.tmpTargetCam, this.deps.embodyOffset);
-    this.tmpTargetCam.y -= avatarHeight * 0.12;
+    this.tmpTargetCam.y -= avatarHeight * (wideGestures ? 0.18 : 0.12);
     this.tmpDesiredCam.set(-Math.sin(this.lookYaw) * distance, avatarHeight * 0.02, -Math.cos(this.lookYaw) * distance).add(this.tmpTargetCam);
     const smoothing = 1 - Math.exp(-8 * delta);
     this.deps.desktopCamera.position.lerp(this.tmpDesiredCam, smoothing);
