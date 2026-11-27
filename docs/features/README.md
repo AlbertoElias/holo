@@ -8,7 +8,8 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 
 | Feature | Status | Brief |
 | --- | --- | --- |
-| A hosted pre-merge gate: `pnpm run verify:hosted` runs the hosted test jobs on the branch merged with `origin/main`, and `main` skips the suites it passed | In progress (reviewed 2026-11-24) | [hosted-branch-gate.md](hosted-branch-gate.md) |
+| Lint with Oxlint and typecheck with the stable native `tsc` in every package (same rules on the same files; lint 6 to 8 times faster) | Delivered 2026-11-26 | [oxlint-tsgo.md](archive/oxlint-tsgo.md) |
+| A hosted pre-merge gate: `pnpm run verify:hosted` runs the hosted test jobs on the branch merged with `origin/main`, and `main` skips the suites it passed | Complete | [hosted-branch-gate.md](archive/hosted-branch-gate.md) |
 | VR motion gaps: a smooth pelvis at landings (B-087); a chest lean on far reaches tried and left out | Delivered 2026-11-27; two values pending owner confirmation; Quest check open | [vr-motion-gaps.md](archive/vr-motion-gaps.md) |
 | verify:pr skips checks whose inputs already passed (result cache, one pass per spec file) | Delivered 2026-11-24 | [verify-result-cache.md](archive/verify-result-cache.md) |
 | The mouth from the microphone in a headset (jaw and lips follow the voice when no face tracking is there) | Delivered 2026-11-24; Quest check open | [mic-mouth.md](archive/mic-mouth.md) |

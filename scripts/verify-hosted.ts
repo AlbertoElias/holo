@@ -1,5 +1,5 @@
 // Hosted pre-merge gate: the hosted test jobs on this branch merged with
-// origin/main (docs/features/hosted-branch-gate.md). It is the other way to
+// origin/main (docs/features/archive/hosted-branch-gate.md). It is the other way to
 // pass the gate besides a full local `pnpm run verify:pr`.
 //
 // 1. Runs the fast local checks of verify:pr for the changed areas, with its

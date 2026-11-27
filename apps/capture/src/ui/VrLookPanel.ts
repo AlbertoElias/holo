@@ -4,7 +4,7 @@ import { RayInteractable, UIKit, UIKitDocument, type Entity, type World } from '
 import * as THREE from 'three';
 
 import type { HouseLook } from '../avatar/houseLook';
-import type { HouseLookUi } from '../types/contracts';
+import type { HouseLookUi, LookPhotoUi } from '../types/contracts';
 import { LOOK_CHOICES, LOOK_ROW_TITLES, lookPicture, lookValue, withLookValue, type LookRow } from './lookPictures';
 
 // The headset look panel (docs/features/your-look.md, slice 2): the phone
@@ -33,11 +33,15 @@ export const LOOK_TABS = { body: ['finish', 'build', 'clothing'], face: ['skin',
 export type LookTab = keyof typeof LOOK_TABS;
 const TAB_WORDS: Record<LookTab, string> = { body: 'Body', face: 'Face', hair: 'Hair' };
 
-export type LookTargetId = 'close' | `tab:${LookTab}` | `pick:${LookRow}:${string}`;
+export type LookTargetId = 'close' | 'photo' | 'previous' | `tab:${LookTab}` | `pick:${LookRow}:${string}`;
 
 export interface VrLookPanelOptions {
   onChange(next: HouseLook): void;
   onClose(): void;
+  /** "From a photo" (docs/features/directed-performance.md, slice 5b): the device's picker opens. */
+  onPhoto(): void;
+  /** "Previous look": the look from before the last photo. */
+  onPrevious(): void;
   canCommit(pointerId: number): boolean;
   onCommit(pointerId: number): void;
   onHover(pointerId: number, hovered: boolean): void;
@@ -52,6 +56,8 @@ export interface VrLookPanelProbe {
   sizeM: [number, number];
   tab: LookTab;
   status: string;
+  /** The photo's muted line: the traits kept and why; '' when none. */
+  kept: string;
   /** Each shown row's chosen value. */
   chosen: Partial<Record<LookRow, string>>;
   targets: Array<{ id: LookTargetId; text: string; visible: boolean; hitHeightM: number; hitWidthM: number }>;
@@ -91,9 +97,11 @@ export class VrLookPanel {
   private readonly rows = new Map<LookRow, InstanceType<typeof UIKit.Container>>();
   private readonly tabRules = new Map<LookTab, InstanceType<typeof UIKit.Container>>();
   private readonly statusText: InstanceType<typeof UIKit.Text>;
+  private readonly keptText: InstanceType<typeof UIKit.Text>;
   private tab: LookTab = 'body';
   private look: HouseLookUi | null = null;
   private status = '';
+  private kept = '';
 
   constructor(world: World, private readonly options: VrLookPanelOptions) {
     const root = (this.root = new UIKit.Container({
@@ -113,7 +121,7 @@ export class VrLookPanel {
       backgroundColor: withAlpha(COLOR.deepSea, options.chipOpacity)
     }));
 
-    // The tabs, each with its gold rule when chosen, then Close at the far end.
+    // The tabs, each with its gold rule when chosen, then the photo's actions and Close at the far end.
     const head = row();
     for (const tab of Object.keys(LOOK_TABS) as LookTab[]) {
       const hit = this.labelled(`tab:${tab}`, TAB_WORDS[tab], () => {
@@ -125,11 +133,16 @@ export class VrLookPanel {
       head.add(hit);
     }
     head.add(new UIKit.Container({ flexGrow: 1, pointerEvents: 'none' }));
+    head.add(this.labelled('photo', 'From a photo', () => this.options.onPhoto()));
+    head.add(this.labelled('previous', 'Previous look', () => this.options.onPrevious()));
     head.add(this.labelled('close', 'Close', () => this.options.onClose()));
     root.add(head);
 
     this.statusText = text('', WORD_APX * 1.12, 400, COLOR.textMuted);
     root.add(this.statusText);
+    this.keptText = text('', WORD_APX, 400, COLOR.textMuted);
+    this.keptText.setProperties({ display: 'none' });
+    root.add(this.keptText);
 
     for (const rowId of Object.values(LOOK_TABS).flat() as LookRow[]) {
       const section = new UIKit.Container({ flexDirection: 'column', alignItems: 'flex-start', gap: GAP_APX / 2 });
@@ -234,13 +247,30 @@ export class VrLookPanel {
     }
   }
 
-  /** Paints the look: the chosen tab and pictures, the status line; hides any text within 1 m of the head (7.3). */
-  update(headObject: THREE.Object3D, look: HouseLookUi | null): void {
+  /** Paints the look: the chosen tab and pictures, the status lines; hides any text within 1 m of the head (7.3). */
+  update(headObject: THREE.Object3D, look: HouseLookUi | null, photo: LookPhotoUi): void {
     this.look = look;
     headObject.getWorldPosition(headPosition);
-    this.status = !look ? '' : look.status === 'dressing' ? 'Changing the look' : look.status === 'error' ? (look.message ?? 'That look did not load.') : 'Your look shows in the mirror.';
+    this.status = !look
+      ? ''
+      : look.status === 'dressing'
+        ? 'Changing the look'
+        : look.status === 'error'
+          ? (look.message ?? 'That look did not load.')
+          : photo.status !== 'idle' && photo.message
+            ? photo.message
+            : 'Your look shows in the mirror.';
     say(this.statusText, this.status);
     this.statusText.setProperties({ opacity: this.readableAt(this.statusText) ? 1 : 0 });
+    this.kept = look && look.status !== 'error' && photo.status === 'read' ? (photo.kept ?? '') : '';
+    say(this.keptText, this.kept);
+    this.keptText.setProperties({ display: this.kept ? 'flex' : 'none', opacity: this.readableAt(this.keptText) ? 1 : 0 });
+    // While a photo loads or reads, "From a photo" takes no hits (as on the phone): a second pick must not close the reader in use.
+    const photoBusy = photo.status === 'loading' || photo.status === 'reading';
+    this.targets.get('photo')!.shown = !photoBusy;
+    const previous = this.targets.get('previous')!;
+    previous.shown = photo.previous;
+    previous.hit.setProperties({ display: photo.previous ? 'flex' : 'none' });
 
     const shownRows = new Set<LookRow>(LOOK_TABS[this.tab]);
     for (const [rowId, section] of this.rows) section.setProperties({ display: shownRows.has(rowId) ? 'flex' : 'none' });
@@ -261,7 +291,7 @@ export class VrLookPanel {
       const chosen = pick && look ? lookValue(look, pick.row) === pick.value : target.id === `tab:${this.tab}`;
       for (const label of target.labels) {
         // A picture's word is full text colour when chosen, muted otherwise; a control's word is gold.
-        const rest = pick ? (chosen ? COLOR.text : COLOR.textMuted) : target.id.startsWith('tab:') && !chosen ? COLOR.textMuted : COLOR.gold;
+        const rest = pick ? (chosen ? COLOR.text : COLOR.textMuted) : (target.id.startsWith('tab:') && !chosen) || (target.id === 'photo' && photoBusy) ? COLOR.textMuted : COLOR.gold;
         label.setProperties({ color: hovered || pressed ? COLOR.highlight : rest, opacity: !readable ? 0 : pressed ? GLYPH.pressedOpacity : 1 });
       }
       target.hit.setProperties({ pointerEvents: readable && target.shown ? 'auto' : 'none' });
@@ -297,6 +327,7 @@ export class VrLookPanel {
       .filter((target) => target.shown && target.readable)
       .map((target) => ({ id: target.id, text: labelText(target), object: target.hit }));
     if (this.readableAt(this.statusText)) labels.push({ id: 'status', text: this.status, object: this.statusText });
+    if (this.kept && this.readableAt(this.keptText)) labels.push({ id: 'kept', text: this.kept, object: this.keptText });
     return labels.filter((label) => label.text.trim() !== '');
   }
 
@@ -310,6 +341,7 @@ export class VrLookPanel {
       sizeM: [size[0] * this.pixelSize, size[1] * this.pixelSize],
       tab: this.tab,
       status: this.status,
+      kept: this.kept,
       chosen,
       targets: [...this.targets.values()].map((target) => {
         const hit = target.hit.size.value ?? [0, 0];

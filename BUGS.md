@@ -37,7 +37,7 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Expected:** a cache miss costs at most a few minutes and never takes a shard past its limit.
 - **Reproduction:** not reproduced; it needs a cold Playwright cache and a slow Ubuntu mirror at the same time.
   `scripts/ci-apt.sh 240` bounds only the apt part with a fallback mirror (B-024).
-- **Found by:** the first-attempt failure count in `docs/features/hosted-branch-gate.md`.
+- **Found by:** the first-attempt failure count in `docs/features/archive/hosted-branch-gate.md`.
 
 ### B-104 — Authored takes: held grips drift since B-092 (stone sD snap, goodbye grip turn, held and support)
 

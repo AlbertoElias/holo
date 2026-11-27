@@ -1,0 +1,13 @@
+{
+  "$schema": "../../node_modules/oxlint/configuration_schema.json",
+  "extends": [
+    "../../packages/config-eslint/oxlint/base.json"
+  ],
+  "ignorePatterns": [
+    "**/*.d.ts",
+    "**/dist/**",
+    "**/coverage/**",
+    "**/node_modules/**",
+    "**/.turbo/**"
+  ]
+}
