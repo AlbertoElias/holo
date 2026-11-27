@@ -263,9 +263,13 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   avatars. With the shared matrices the samples agree to 0.0 mm on each frame. Results (`solver-regression.ts`, all
   7 cases, no pin changed): the control (both avatars from `main`) and the route (cuff shown) both have every case at
   or under its pins. Without the collision avatar the cuff fails baker arms.prop.b 28 mm (pin 25).
-- **To land route (c):** ship the cuff build as `assets/house-base/wardrobe-*.glb` and `public/gltf/models/house-base.glb`
-  (the shipped look changes), track a cuff-free collision set (4 GLBs, about 7 MB) with a build mode that skips the
-  `cuff` block, and make the solver read that set by default in place of the variable.
+- **Landing (2026-11-27, `bug/sleeve-end`, not merged):** the cuff build is the shipped
+  `assets/house-base/wardrobe-*.glb` and `public/gltf/models/house-base.glb`. `house-base.ts --collide` makes the
+  collision set, `assets/house-base/collide/wardrobe-*.glb` (the same params without `garments.top.cuff`; the
+  builds are byte-identical to `main`'s wardrobes). A house performer loads its collision avatar by default
+  (`loadSheet` in `direct.ts`, `dressedFile(..., 'collide')`); no variable is left. The solver regression has every
+  case at or under its pins. Against `main`'s avatars, baker, crouch-v43, goodbye-v35, pinch-v14 and slip-sO give
+  the same rows.
 - **Next fix:** decide which surface the arm samples take. If the solver and the arm checks should see the body and
   not the clothes, `bindVertices` takes the `Body` mesh only; the cuff then moves no number, but the pins move once
   for every case (a re-pin that waits for the owner). Otherwise accept stone-sD smooth.me 11 % in the stone re-pin

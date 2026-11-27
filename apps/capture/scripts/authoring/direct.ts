@@ -43,7 +43,7 @@ const OUTPUT = fileURLToPath(new URL('../../output/authoring/', import.meta.url)
 export async function resolveAvatar(spec: string, sheetFile: string, look?: LookCard): Promise<string> {
   if (spec === 'stock') return SHIPPED_AVATAR;
   const finish = houseFinish(spec);
-  if (finish === 'clay' && !look) return process.env.HOLOIM_WARDROBE_DIR ? join(process.env.HOLOIM_WARDROBE_DIR, 'house-base.glb') : HOUSE_BASE;
+  if (finish === 'clay' && !look) return HOUSE_BASE;
   if (finish) return dressedFile(look ? parseLook(look) : await defaultLook(), finish);
   if (spec.startsWith('fixture:')) {
     const name = spec.slice('fixture:'.length);
@@ -62,13 +62,11 @@ export async function loadSheet(sheetFile: string, avatarOverride?: string): Pro
   if (problems.length) throw new Error(`${basename(sheetFile)}:\n  ${problems.join('\n  ')}`);
   const avatars = new Map<string, LoadedAvatar>();
   for (const p of sheet.performers) avatars.set(p.id, await loadAvatar(await resolveAvatar(p.avatar, avatarOverride ? join(process.cwd(), 'x') : sheetFile, p.look)));
-  const collideDir = process.env.HOLOIM_COLLIDE_DIR;
-  if (collideDir) {
-    // Route (c) trial (B-101): the solver reads a collision avatar without the cuff; the take shows the cuff.
-    process.env.HOLOIM_WARDROBE_DIR = collideDir;
-    try {
-      for (const p of sheet.performers) (avatars.get(p.id) as LoadedAvatar & { collide?: LoadedAvatar }).collide = await loadAvatar(await resolveAvatar(p.avatar, avatarOverride ? join(process.cwd(), 'x') : sheetFile, p.look));
-    } finally { delete process.env.HOLOIM_WARDROBE_DIR; }
+  // A house performer also loads its collision avatar: the same look without the jumper's cuff, which the solver
+  // keeps the arms out of while the take shows the cuff (B-101).
+  for (const p of sheet.performers) {
+    const finish = houseFinish(p.avatar);
+    if (finish) (avatars.get(p.id) as LoadedAvatar & { collide?: LoadedAvatar }).collide = await loadAvatar(await dressedFile(p.look ? parseLook(p.look) : await defaultLook(), finish, 'collide'));
   }
   const sources = await loadSources(sheet.objects ?? {}, sheetFile, join(OUTPUT, 'objects'));
   return { sheet, avatars, sources };

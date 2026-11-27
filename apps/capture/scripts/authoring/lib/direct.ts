@@ -261,7 +261,7 @@ interface Cast {
   readonly speech: readonly Speech[];
   /** The body's skin and the arms' bind frames (`arm-quality.ts`), so the arms keep out of the body. */
   readonly armBody: ArmBody;
-  /** The shown avatar's samples, for the meters (route (c) trial). */
+  /** The shown avatar's samples, for the meters: they judge what the take shows, the cuff too (B-101). */
   readonly meterBody: ArmBody;
   /** Each eye's opening and how far it turns with the pupil in view (`eye-view.ts`). */
   readonly eyeView: EyeView;

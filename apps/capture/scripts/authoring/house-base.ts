@@ -3,7 +3,7 @@
  * from CC0 parts, every value from `house-base/base.json`, so the base is
  * re-made by this command and never edited by hand.
  *
- *   node --conditions=development --import tsx scripts/authoring/house-base.ts [--params file] [--build name] [--out file.glb] [--blender path] [--install-mpfb]
+ *   node --conditions=development --import tsx scripts/authoring/house-base.ts [--params file] [--build name] [--out file.glb] [--collide] [--blender path] [--install-mpfb]
  *
  * It fetches the pinned parts into the ignored `output/authoring/house-base/cache/`
  * and checks their sha256: MPFB 2.0.18 (the Blender add-on that makes the
@@ -18,7 +18,11 @@
  * `assets/house-base/wardrobe-<build>.glb`, and `<name>.report.json` in the
  * cache folder. `public/gltf/models/house-base.glb` is the medium wardrobe
  * dressed in base.json's `defaultLook`. `--build` makes only that wardrobe
- * (to `--out` if given) and leaves the public file alone.
+ * (to `--out` if given) and leaves the public file alone. `--collide` makes the
+ * collision set, `assets/house-base/collide/wardrobe-<build>.glb`: the same
+ * params without the jumper's `cuff` block, for the solver to keep the arms out
+ * of while takes show the cuff (B-101). It leaves the public file alone. Re-make
+ * both sets after a change to base.json.
  */
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -73,13 +77,21 @@ async function part(p: { url: string; sha256: string; file: string }): Promise<s
 }
 
 const blender = arg('--blender') ?? process.env.BLENDER ?? '/Applications/Blender.app/Contents/MacOS/Blender';
-const params = resolve(arg('--params') ?? join(HERE, 'house-base/base.json'));
-const base = JSON.parse(await readFile(params, 'utf8')) as { builds: Record<string, unknown>; defaultLook: unknown };
+const collide = process.argv.includes('--collide');
+let params = resolve(arg('--params') ?? join(HERE, 'house-base/base.json'));
+const base = JSON.parse(await readFile(params, 'utf8')) as { builds: Record<string, unknown>; defaultLook: unknown; garments: { top: { cuff?: unknown } } };
+if (collide) {
+  if (!base.garments.top.cuff) throw new Error(`--collide: ${params} has no garments.top.cuff to leave out`);
+  delete base.garments.top.cuff;
+  await mkdir(CACHE, { recursive: true });
+  params = join(CACHE, 'base-collide.json');
+  await writeFile(params, JSON.stringify(base, null, 2));
+}
 const builds = Object.keys(base.builds).filter((k) => !k.startsWith('$'));
 const only = arg('--build');
 if (only && !builds.includes(only)) throw new Error(`no build "${only}" in ${params}; builds: ${builds.join(', ')}`);
 if (arg('--out') && !only) throw new Error('--out needs --build');
-const fileFor = (build: string) => wardrobeFile(build as Build);
+const fileFor = (build: string) => wardrobeFile(build as Build, collide ? 'collide' : 'shown');
 
 const mpfbZip = await part(PARTS.mpfb);
 const fuZip = await part(PARTS.faceunits);
@@ -154,7 +166,7 @@ async function make(build: string, out: string): Promise<void> {
 
 for (const build of only ? [only] : builds) await make(build, only ? resolve(arg('--out') ?? fileFor(build)) : fileFor(build));
 
-if (!only) {
+if (!only && !collide) {
   const look = parseLook(Object.fromEntries(Object.entries(base.defaultLook as object).filter(([k]) => !k.startsWith('$'))), 'defaultLook');
   const io = new NodeIO();
   const doc = await io.read(wardrobeFile(look.build));
