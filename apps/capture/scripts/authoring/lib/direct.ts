@@ -233,13 +233,15 @@ export interface ContactRow {
   readonly frames: number;
   /** Largest gap from the palm's center out to the target's skin (0 when it is on or in it). */
   readonly gap: number;
+  /** Largest gap from the palm's own skin (within 3 cm of the palm's center) to the target's skin: a second number beside `gap`. */
+  readonly skinGap: number;
   /** Deepest point of the hand's skin inside the target's skin. */
   readonly sink: number;
   /** The most the hand ended short of lying flat on the surface (degrees), and the wrist limits that stopped it. */
   readonly short: number;
   readonly notPossible?: string;
   /** Each hold frame: time (s), gap and sink (mm), short (degrees). */
-  readonly byFrame: readonly { readonly t: number; readonly gap: number; readonly sink: number; readonly short: number }[];
+  readonly byFrame: readonly { readonly t: number; readonly gap: number; readonly skinGap: number; readonly sink: number; readonly short: number }[];
 }
 
 export interface SolvedTake {
@@ -535,9 +537,9 @@ function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources
     stage.report.contacts.push({
       beat: r.beat.id, performer: c.spec.id, part: d.part, on: d.on, fit: d.fit,
       point: k ? [mm(k.local.x), mm(k.local.y), mm(k.local.z)] : [0, 0, 0], chosenAt: k ? round(k.chosenAt, 1000) : NaN,
-      frames: k?.frames ?? 0, gap: mm(k?.gap ?? NaN), sink: mm(k?.sink ?? NaN), short: round(k?.short ?? 0, 10),
+      frames: k?.frames ?? 0, gap: mm(k?.gap ?? NaN), skinGap: mm(k?.skinGap ?? NaN), sink: mm(k?.sink ?? NaN), short: round(k?.short ?? 0, 10),
       ...(k?.need ? { notPossible: k.need } : {}),
-      byFrame: (k?.byFrame ?? []).map((x) => ({ t: round(x.t, 1000), gap: round(x.gap * 1000, 10), sink: round(x.sink * 1000, 10), short: round(x.short, 10) }))
+      byFrame: (k?.byFrame ?? []).map((x) => ({ t: round(x.t, 1000), gap: round(x.gap * 1000, 10), skinGap: round(x.skinGap * 1000, 10), sink: round(x.sink * 1000, 10), short: round(x.short, 10) }))
     });
   }));
   return { sheet, fps, times, tracks, props, objects: stage.report, pairs: pairMeter.report() };
@@ -615,7 +617,7 @@ const stage = {
   goals: new Map<Direction, { point: THREE.Vector3; axis?: THREE.Vector3; upright?: THREE.Quaternion }>(),
   report: { grips: [], puts: [], aims: [], contacts: [] } as ObjectReport,
   /** Each contact's skin point, chosen once in the target bone's frame, and its measure so far. */
-  contacts: new Map<Direction, { bone: THREE.Object3D; local: THREE.Vector3; localN: THREE.Vector3; chosenAt: number; frames: number; gap: number; sink: number; short: number; need?: string; byFrame: { t: number; gap: number; sink: number; short: number }[] }>(),
+  contacts: new Map<Direction, { bone: THREE.Object3D; local: THREE.Vector3; localN: THREE.Vector3; chosenAt: number; frames: number; gap: number; skinGap: number; sink: number; short: number; need?: string; byFrame: { t: number; gap: number; skinGap: number; sink: number; short: number }[] }>(),
   /** Each target's skin, posed once a frame (the take time it was posed at). */
   contactSkins: new Map<object, { t: number; skin: BodySkin }>(),
   swivels: new Map<Direction, number>(),
@@ -816,6 +818,8 @@ const CONTACT_SHORT = 10;
 const CONTACT_FACING = 0.25;
 /** The share of the toucher's arm length (shoulder to palm centre) that a contact point may be from the shoulder. */
 const CONTACT_REACH = 0.92;
+/** How far from the palm's center the palm skin gap reads the hand's skin (metres). */
+const CONTACT_PALM_SKIN = 0.03;
 /** The hand skin a contact's fit lets into the target's skin (the bar is 3 mm). */
 const CONTACT_SINK = 0.0025;
 /** The palm lifts a contact tries, millimetres off the skin point, lowest first. */
@@ -897,7 +901,7 @@ function contactSurface(cast: Cast[], c: Cast, r: Resolved): { p: THREE.Vector3;
       if (!best || score > best.score) best = { p, n, score };
     }
     const q = bone.getWorldQuaternion(new THREE.Quaternion()).invert();
-    k = { bone, local: bone.worldToLocal(best!.p.clone()), localN: best!.n.clone().applyQuaternion(q), chosenAt: solving.t, frames: 0, gap: 0, sink: 0, short: 0, byFrame: [] };
+    k = { bone, local: bone.worldToLocal(best!.p.clone()), localN: best!.n.clone().applyQuaternion(q), chosenAt: solving.t, frames: 0, gap: 0, skinGap: 0, sink: 0, short: 0, byFrame: [] };
     stage.contacts.set(d, k);
   }
   const p = k.bone.localToWorld(k.local.clone());
@@ -1113,11 +1117,23 @@ function fitContacts(cast: Cast[], c: Cast, t: number): void {
       const palm = hand.palmCenter(new THREE.Vector3());
       const inside = skin.depth(palm).depth;
       const gap = Number.isFinite(inside) ? Math.max(0, -inside) : palm.distanceTo(p);
+      // A second number beside the gap: the palm's own skin (the hand bone's samples) within 3 cm of the palm centre,
+      // to the nearest point of the target's skin. The brief's measure stays the palm-centre gap above.
+      let skinGap = Infinity;
+      for (const sample of samples) {
+        if (sample.bone !== ch.hand) continue;
+        const q = skinned(sample, at);
+        if (q.distanceTo(palm) > CONTACT_PALM_SKIN) continue;
+        const dq = skin.depth(q).depth;
+        if (Number.isFinite(dq)) skinGap = Math.min(skinGap, Math.max(0, -dq));
+      }
+      if (!Number.isFinite(skinGap)) skinGap = gap;
       k.frames += 1;
       const deep = deepest();
       k.gap = Math.max(k.gap, gap);
+      k.skinGap = Math.max(k.skinGap, skinGap);
       k.sink = Math.max(k.sink, deep);
-      k.byFrame.push({ t, gap, sink: deep, short });
+      k.byFrame.push({ t, gap, skinGap, sink: deep, short });
       k.short = Math.max(k.short, short);
       // The target moved out of her reach during the hold (a step away): no wrist or palm fit can close that gap.
       const far = ch.upperArm.getWorldPosition(new THREE.Vector3()).distanceTo(p);

@@ -50,10 +50,11 @@ set.
      process and a labelled first-pass-only look are added, and the tool turns the
      second picture to the view where the hand is not hidden.
 2. **Contact, as a trial.** One new direction:
-   `{ "contact": { "part": "rightPalm", "on": "him.leftUpperArm", "kind": "rest" } }`
-   with the usual beat times.
+   `{ "kind": "contact", "part": "rightPalm", "on": "him.leftUpperArm", "fit": "rest" }`
+   with the usual beat times. (The field is `fit`, not `kind`: each direction already
+   uses `kind` for its name, as in `"kind": "reach"`.)
    - `part` is a palm only in the trial.
-   - `kind` is `rest` or `grip`. They are two solves on one shared surface goal.
+   - `fit` is `rest` or `grip`. They are two solves on one shared surface goal.
      `rest`: the palm normal goes against the surface normal and the fingers follow
      the surface. `grip`: the hand aligns with an axis and the fingers wrap.
    - The tool finds the contact point in the target bone's local frame, from the bind

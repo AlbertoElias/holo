@@ -362,13 +362,14 @@ export const REVIEW_PAGE = String.raw`
       const canvas = document.createElement('canvas');
       canvas.width = size; canvas.height = size;
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      const count = () => {
+      // The hand pixels of the current render, as a mask.
+      const mask = () => {
         ctx.clearRect(0, 0, size, size);
         ctx.drawImage(r.domElement, 0, 0);
         const px = ctx.getImageData(0, 0, size, size).data;
-        let n = 0;
-        for (let k = 0; k < px.length; k += 4) if (px[k] > 128) n += 1;
-        return n;
+        const m = new Uint8Array(size * size);
+        for (let k = 0; k < m.length; k += 1) m[k] = px[k * 4] > 128 ? 1 : 0;
+        return m;
       };
       const out = [];
       try {
@@ -393,11 +394,14 @@ export const REVIEW_PAGE = String.raw`
             } else s.o.visible = false;
           }
           r.render(scene, cam);
-          const visible = count();
+          const inScene = mask();
           for (const s of saved) { (Array.isArray(s.mesh.material) ? s.mesh.material : [s.mesh.material]).forEach((c) => c.dispose()); s.mesh.material = Array.isArray(s.material) ? s.material.map((m) => unlit(m, true)) : unlit(s.material, true); }
           for (const s of otherSaved) s.o.visible = false;
           r.render(scene, cam);
-          const total = count();
+          // Count a pixel as seen only where the hand alone also covers it, so visible can never pass total.
+          const alone = mask();
+          let visible = 0, total = 0;
+          for (let k = 0; k < alone.length; k += 1) if (alone[k]) { total += 1; visible += inScene[k]; }
           for (const s of saved) (Array.isArray(s.mesh.material) ? s.mesh.material : [s.mesh.material]).forEach((c) => c.dispose());
           for (const s of otherSaved) { if (s.o.material !== s.material) { s.o.material.dispose(); s.o.material = s.material; } s.o.visible = s.visible; }
           out.push({ visible, total });
