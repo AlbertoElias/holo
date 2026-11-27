@@ -41,7 +41,10 @@ export const REVIEW_PAGE = String.raw`
   const NAMES = {
     head: /(^|[^a-z])head$/i, hips: /hips$/i, neck: /neck$/i,
     leftHand: /left_?hand$/i, rightHand: /right_?hand$/i,
-    leftFoot: /left_?foot$/i, rightFoot: /right_?foot$/i
+    leftFoot: /left_?foot$/i, rightFoot: /right_?foot$/i,
+    leftIndex: /left_?hand_?index_?1$/i, rightIndex: /right_?hand_?index_?1$/i,
+    leftMiddle: /left_?hand_?middle_?1$/i, rightMiddle: /right_?hand_?middle_?1$/i,
+    leftLittle: /left_?hand_?(pinky|little)_?1$/i, rightLittle: /right_?hand_?(pinky|little)_?1$/i
   };
   const state = { probe: null, performers: [], objects: [], regions: null };
   const V = () => new (state.probe.camera.position.constructor)();
@@ -302,11 +305,117 @@ export const REVIEW_PAGE = String.raw`
       const faceCentre = pts.length ? [0, 1, 2].map((a) => (Math.min(...pts.map((q) => q[a])) + Math.max(...pts.map((q) => q[a]))) / 2) : null;
       return { ...out, faceCentre, pixelRatio: state.probe.renderer.getPixelRatio() };
     },
-    /** Performer i's named bones (head, hips, neck, hands, feet) in world space, for placing a close camera. */
+    /** Performer i's named bones (head, hips, neck, hands, feet, the index, middle and little knuckles) in world space, for placing a close camera. */
     points(i) {
       state.probe.model.updateWorldMatrix(true, true);
       const out = {};
       for (const [k, b] of Object.entries(state.performers[i].bones)) { const w = b.getWorldPosition(V()); out[k] = [w.x, w.y, w.z]; }
+      return out;
+    },
+    /**
+     * How much of performer i's hand (\`side\`: the skin that the hand and finger bones move most) each view sees.
+     * Each view is { position, target, fov }. Two small unlit renders per view: the hand with everything else drawn
+     * black and both-sided (so a body or an object in front of the hand hides it, and a camera inside a body sees
+     * nothing), then the hand alone. Returns per view { visible, total } in pixels of a \`size\`-pixel square.
+     */
+    handView(i, side, views, size) {
+      const r = state.probe.renderer, scene = state.probe.scene;
+      const p = state.performers[i];
+      const handBone = new RegExp('^' + side + '_?hand', 'i');
+      const own = [];
+      p.wrapper.traverse((o) => { if (o.isSkinnedMesh && o.visible) own.push(o); });
+      const others = [];
+      scene.traverse((o) => { if (o.visible && (o.isMesh || o.isPoints || o.isLine || o.isSprite) && !own.includes(o)) others.push(o); });
+      const unlit = (m, discardRest) => {
+        const c = m.clone();
+        for (const k of ['map', 'emissiveMap', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'alphaMap']) if (k in c) c[k] = null;
+        if (c.color) c.color.setRGB(1, 1, 1);
+        c.vertexColors = true; c.transparent = false; c.opacity = 1; c.side = 2; c.needsUpdate = true;
+        c.onBeforeCompile = (shader) => { shader.fragmentShader = shader.fragmentShader.replace('#include <dithering_fragment>', '#include <dithering_fragment>\n  ' + (discardRest ? 'if (vColor.r < 0.5) discard;\n  ' : '') + 'gl_FragColor = vec4(vColor.r, 0.0, 0.0, 1.0);'); };
+        c.customProgramCacheKey = () => 'holoim-hand-view-' + (discardRest ? 'alone' : 'scene');
+        return c;
+      };
+      const saved = [], geometries = new Map();
+      for (const mesh of own) {
+        const g = mesh.geometry;
+        if (!geometries.has(g)) {
+          const si = g.attributes.skinIndex, sw = g.attributes.skinWeight;
+          const colour = g.attributes.position.clone();
+          for (let k = 0; k < colour.count; k += 1) {
+            let best = 0, bone = -1;
+            for (let a = 0; a < 4; a += 1) { const w = sw.getComponent(k, a); if (w > best) { best = w; bone = si.getComponent(k, a); } }
+            const b = bone >= 0 ? mesh.skeleton.bones[bone] : null;
+            colour.setXYZ(k, b && handBone.test(b.name) ? 1 : 0, 0, 0);
+          }
+          geometries.set(g, g.attributes.color);
+          g.setAttribute('color', colour);
+        }
+        saved.push({ mesh, material: mesh.material });
+      }
+      const otherSaved = others.map((o) => ({ o, material: o.material, visible: o.visible }));
+      const prev = { pr: r.getPixelRatio(), alpha: r.getClearAlpha() };
+      const sz = { x: 0, y: 0, set(x, y) { this.x = x; this.y = y; return this; } };
+      r.getSize(sz);
+      let clearColour = null;
+      state.probe.model.traverse((o) => { if (!clearColour && o.material && o.material.color) clearColour = o.material.color.clone(); });
+      if (clearColour) r.getClearColor(clearColour);
+      const background = scene.background, fog = scene.fog;
+      scene.background = null; scene.fog = null;
+      r.setPixelRatio(1); r.setSize(size, size, false); r.setClearColor(0x000000, 1);
+      const canvas = document.createElement('canvas');
+      canvas.width = size; canvas.height = size;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      // The hand pixels of the current render, as a mask.
+      const mask = () => {
+        ctx.clearRect(0, 0, size, size);
+        ctx.drawImage(r.domElement, 0, 0);
+        const px = ctx.getImageData(0, 0, size, size).data;
+        const m = new Uint8Array(size * size);
+        for (let k = 0; k < m.length; k += 1) m[k] = px[k * 4] > 128 ? 1 : 0;
+        return m;
+      };
+      const out = [];
+      try {
+        for (const view of views) {
+          const cam = state.probe.camera.clone();
+          if (cam.clearViewOffset) cam.clearViewOffset();
+          cam.zoom = 1; cam.fov = view.fov; cam.aspect = 1; cam.near = 0.01; cam.far = 100;
+          cam.position.set(...view.position); cam.lookAt(V().set(...view.target));
+          cam.updateProjectionMatrix(); cam.updateMatrixWorld();
+          // The hand in the scene: every other mesh is a black occluder.
+          for (const s of saved) s.mesh.material = Array.isArray(s.material) ? s.material.map((m) => unlit(m, false)) : unlit(s.material, false);
+          for (const s of otherSaved) {
+            if (s.o.isMesh) {
+              const m = (Array.isArray(s.material) ? s.material[0] : s.material).clone();
+              for (const k of ['map', 'emissiveMap']) if (k in m) m[k] = null;
+              if (m.color) m.color.setRGB(0, 0, 0);
+              if (m.emissive) m.emissive.setRGB(0, 0, 0);
+              m.vertexColors = false; m.transparent = false; m.opacity = 1; m.side = 2;
+              m.onBeforeCompile = (shader) => { shader.fragmentShader = shader.fragmentShader.replace('#include <dithering_fragment>', '#include <dithering_fragment>\n  gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);'); };
+              m.customProgramCacheKey = () => 'holoim-hand-view-black';
+              s.o.material = m;
+            } else s.o.visible = false;
+          }
+          r.render(scene, cam);
+          const inScene = mask();
+          for (const s of saved) { (Array.isArray(s.mesh.material) ? s.mesh.material : [s.mesh.material]).forEach((c) => c.dispose()); s.mesh.material = Array.isArray(s.material) ? s.material.map((m) => unlit(m, true)) : unlit(s.material, true); }
+          for (const s of otherSaved) s.o.visible = false;
+          r.render(scene, cam);
+          // Count a pixel as seen only where the hand alone also covers it, so visible can never pass total.
+          const alone = mask();
+          let visible = 0, total = 0;
+          for (let k = 0; k < alone.length; k += 1) if (alone[k]) { total += 1; visible += inScene[k]; }
+          for (const s of saved) (Array.isArray(s.mesh.material) ? s.mesh.material : [s.mesh.material]).forEach((c) => c.dispose());
+          for (const s of otherSaved) { if (s.o.material !== s.material) { s.o.material.dispose(); s.o.material = s.material; } s.o.visible = s.visible; }
+          out.push({ visible, total });
+        }
+      } finally {
+        for (const s of saved) s.mesh.material = s.material;
+        for (const s of otherSaved) { s.o.material = s.material; s.o.visible = s.visible; }
+        for (const [g, colour] of geometries) if (colour) g.setAttribute('color', colour); else g.deleteAttribute('color');
+        scene.background = background; scene.fog = fog;
+        r.setSize(sz.x, sz.y, false); r.setPixelRatio(prev.pr); r.setClearColor(clearColour || 0x000000, prev.alpha);
+      }
       return out;
     },
     bodies() {

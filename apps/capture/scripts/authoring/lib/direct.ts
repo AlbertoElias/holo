@@ -294,7 +294,7 @@ export function solveTake(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, 
   const first = phaseSync('solve pass 1', () => solveOnce(sheet, avatars, sources, speech, options));
   const record = clearing.record;
   clearing.record = undefined;
-  if (![...record.values()].some((moves) => moves.some((m) => turned(m) > 1e-5))) return first;
+  if (options.firstPassOnly || ![...record.values()].some((moves) => moves.some((m) => turned(m) > 1e-5))) return first;
   clearing.plan = smoothClearing(record, first.times.length);
   try {
     // Where the smoothed plan leaves an arm more than CLEAR.deep in, the solve clears that rest frame by frame, and
@@ -322,6 +322,12 @@ export interface SolveOptions {
    * are the same as in the full take; the solve stops early.
    */
   readonly frames?: number;
+  /**
+   * Stop after the first pass, with no clearing round. Only for a quick look
+   * that says "first pass only": the arms are not cleared from the bodies as
+   * in the full take. The full take never sets it.
+   */
+  readonly firstPassOnly?: boolean;
 }
 
 function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources: ReadonlyMap<string, LoadedSource>, speech: ReadonlyMap<string, readonly Speech[]>, options: SolveOptions = {}): SolvedTake {
