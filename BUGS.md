@@ -51,10 +51,6 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   jump.props 2.18 m/s at B-095, 3.66 m/s at B-096 (68558995a9e2); after B-103 0.4 mm 8.1°, turn.him 515°/s,
   jump.props 2.55 m/s at 1.70 s, held 9.3 mm, support 0 %. Baker: jump.b 3.71 m/s and jump.props 4.80 m/s at 4.53 s,
   held 78 mm, support 3 %.
-- **Since B-112 (2026-11-26):** the avatar's jumper rim is 3 to 15 mm nearer the body at the neck, and the stone sD
-  solve comes out of the same snap in a different pose. Pins, with the owner's yes for the three that are less
-  strict: jump.me 4.69 → 5.49 m/s (3 → 2 frames over), jump.props 5.73 → 6.93 m/s (7 → 5 frames over), support
-  3 → 0 % (at 0 % this row cannot fail; give it a floor again with the fix), turn.me 1008 → 740°/s, prop 15 → 14 mm.
 - **Expected:** stone sD and goodbye v35 pass their arm bars again with no bar change.
 - **Next fix:** trace the stone at 4.6 to 5.1 s (`HB_TRACE`-style per-frame logs, as in B-103) and find which B-095
   change moves the left hand off the stone after its grip; for the goodbye, find why the bag fist stays 8° off and
@@ -271,12 +267,12 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   that already waits for the owner. The render tool and the before/after crops are in the shared notes
   (`b101-cuff/`).
 
-### B-113 — VR spatial audio check: the bell is not louder in the right ear (seen once under load)
+### B-115 — VR spatial audio check: the bell is not louder in the right ear (seen once under load)
 
 - **Area:** apps/viewer-web (`e2e/xr-viewer.spec.ts:731`, VR spatial audio)
 - **Severity:** P3 (a check failure seen once; no person has heard a wrong side)
 - **Observed:** 2026-11-26, once, in a `verify:pr` run on `bug/face-avatar-faults` (macOS, loaded, on battery). That
-  branch changes only the house avatar and its pins. The spec passed in the next run with the same inputs.
+  branch changes only the house avatar. The spec passed in the next run with the same inputs.
 - **Evidence:** "bell on the right: -16.9/-16.3 dB": the side difference was 0.59 dB against the bar of more than
   3 dB (line 782). The checks before it in the spec passed (the head is the ear, the sounds stay on their nodes).
 - **Expected:** with the bell on the right of the head, the right ear is more than 3 dB louder.

@@ -2276,12 +2276,15 @@ bug above.)
   rim's edges 10 mm → 5 mm; examined in the six styles. Neck: the rim's clearance 0 to 14.6 mm → 0.0 mm all
   round; 100 of 100 neckline vertices on the plane (the build stops if one cannot move); examined in clay, ink and light. `house-base.glb` 1,559,348 →
   1,582,852 bytes (bar 1,800,000); her look (wavyBob) 1,613,284 → 1,663,428 bytes; each wardrobe 1.97 → 2.17 MB.
-- **Pins:** the solver regression holds on baker, crouch v43, goodbye v35, pinch v14 and slip sO. On stone sD three
-  rows of the snap at 4.77 s (open as B-104) moved and are pinned again: `jump.me` 4.69 → 5.49 m/s (3 → 2 frames
-  over), `jump.props` 5.73 → 6.93 m/s (7 → 5 frames over), `arms.support.me` 3 → 0 %. The reason: the arm solve
-  keeps the arm clear of the body's skin, and the jumper's front rim is now 3 to 15 mm nearer the body, so the
-  solve comes out of the same snap in a different pose. Two rows got better and are pinned tighter: `turn.me`
-  1008 → 740°/s and `arms.prop.me` 15 → 14 mm. A build without the new hair columns gives the same numbers.
-  `grip.find` did not move (0.3 mm, 4.5°). At 0 % the `arms.support.me` row cannot fail any more; it gets a
-  floor again when B-104 is fixed. The pins were written with `--write-pins`.
+- **Jumper away from the collar:** the first build of this fix also moved 40 sleeve points by 3 to 16.5 mm (medium
+  build, y 0.95 to 1.15 m, both arms), and the solver reads the arm's skin from those points: stone sD, stone sE and
+  baker left their pins. The cause was not the brows, the fringe or the whole-rim taper. It was the neckline slide.
+  The fit's rounds push each jumper point out of the body point by point, and a point in the narrow gap between the
+  arm and the side can go to one wall or the other. The smoothing carried the collar's small change to the sleeves
+  and some points went to the other wall. Now the collar's fit holds only near the collar: from `keepBeyond` (0.10
+  to 0.18 m along the cloth from the neck rim) the jumper is the one fitted without the slide and without the
+  whole-rim taper. Against the build before B-112, the medium jumper moves only above y 1.24 m (402 points, 18.4 mm
+  at the rim) and no point moves below y 1.2 m.
+- **Pins:** none moved. Every case of the solver regression (baker, crouch v43, goodbye v35, pinch v14, slip sO,
+  stone sD, stone sE) is at or under the pins of `main`.
 - **Not fixed:** the brows do not bend and the lids do not slant (no such shapes).

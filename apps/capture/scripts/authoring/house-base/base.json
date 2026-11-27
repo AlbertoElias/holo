@@ -603,7 +603,7 @@
     }
   },
   "garments": {
-    "$comment": "A loose jumper and trousers made from the body's top and trouser faces (painted by bone): each vertex eased out along the body's normal (m; limb = sleeves or trouser legs), the ease tapering to nothing over `taper` (m) from the openings that close on the body (dominant bone named in taperAt; an opening with a taperWhole bone on it is tapered all the way round, so the neck's rim lies on the skin at the front and the back too), kept under gapShare of the gap to another part (inner thighs, arms by the side), then smoothed (`rounds` of `smooth` passes) and pushed back out to `clear` of the ease from the body; the jumper's hem takes the trouser faces within `hem` (m) of the waist and stays `overTrousers` (m) outside them. The body under both is removed.",
+    "$comment": "A loose jumper and trousers made from the body's top and trouser faces (painted by bone): each vertex eased out along the body's normal (m; limb = sleeves or trouser legs), the ease tapering to nothing over `taper` (m) from the openings that close on the body (dominant bone named in taperAt; an opening with a taperWhole bone on it is tapered all the way round, so the neck's rim lies on the skin at the front and the back too), kept under gapShare of the gap to another part (inner thighs, arms by the side), then smoothed (`rounds` of `smooth` passes) and pushed back out to `clear` of the ease from the body; that push is point by point, and a point in a narrow gap (an arm by the side) can go to one wall or the other, so a small change at the collar could move sleeve points by more than a centimetre: thus the collar's fit (the taperWhole rim and the neckline moved onto the collar plane) holds only near the collar, and from `keepBeyond` (m along the cloth from that rim; the change is gradual between the two values) the jumper is the one fitted without them; the jumper's hem takes the trouser faces within `hem` (m) of the waist and stays `overTrousers` (m) outside them. The body under both is removed.",
     "top": {
       "easeBody": 0.016,
       "easeLimb": 0.016,
@@ -620,6 +620,10 @@
       "taperWhole": [
         "Neck",
         "Head"
+      ],
+      "keepBeyond": [
+        0.1,
+        0.18
       ],
       "limbBones": [
         "LeftArm",

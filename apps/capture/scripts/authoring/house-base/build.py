@@ -951,6 +951,8 @@ for poly in human.data.polygons:
 # crosses the plane most squarely), in every face shape alike, and the neckline is a level line.
 above = lambda p: p[2] - (z0 + cl["tilt"] * (p[1] - y0))
 co = np.array([v.co[:] for v in human.data.vertices])
+human.data.update()  # the normals of these points, not of an earlier state
+unslid = (co, np.array([v.normal[:] for v in human.data.vertices]))  # for the jumper's fit away from the collar (dress.py)
 of = {"skin": set(), "top": set()}
 nbr = {}
 for poly in human.data.polygons:
@@ -999,6 +1001,8 @@ bm.verts.ensure_lookup_table()
 bmesh.ops.delete(bm, geom=[bm.verts[i] for i in drop], context="VERTS")
 bm.to_mesh(human.data)
 bm.free()
+kept = np.array(sorted(set(range(len(unslid[0]))) - drop))
+unslid = (unslid[0][kept], unslid[1][kept])
 for gr in list(human.vertex_groups):
     if gr.name.startswith(("helper", "joint", "Helper", "Joint")) or gr.name in ("body", "Left", "Right", "Mid"):
         human.vertex_groups.remove(gr)
@@ -1019,7 +1023,7 @@ land = {
     "chinZ": float(vb[(w_hd > 0.99) & (vb[:, 1] < eyes["Left"][1] + 0.02), 2].min()),
     "shoulderZ": float(vb[w_arm > 0.5, 2].max()),
 }
-wear, garment_report = dress.garments(human, rig, slots, P["garments"])
+wear, garment_report = dress.garments(human, rig, slots, P["garments"], unslid)
 bvh = dress.mesh_bvh(np.array([v.co[:] for v in human.data.vertices]), [list(p.vertices) for p in human.data.polygons])
 C = dress.head_centre(bvh, cx, ze, eyes["Left"][1])
 hair_mat = material("HouseBase_hair", col["hair"])

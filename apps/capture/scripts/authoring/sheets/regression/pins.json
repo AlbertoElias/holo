@@ -793,7 +793,7 @@
       "pass": false,
       "numbers": [
         [
-          5.49,
+          4.69,
           "m/s"
         ]
       ]
@@ -802,7 +802,7 @@
       "pass": false,
       "numbers": [
         [
-          740,
+          1008,
           "°/s"
         ]
       ]
@@ -811,7 +811,7 @@
       "pass": false,
       "numbers": [
         [
-          6.93,
+          5.73,
           "m/s"
         ]
       ]
@@ -829,7 +829,7 @@
       "pass": false,
       "numbers": [
         [
-          14,
+          15,
           "mm"
         ]
       ]
@@ -878,7 +878,7 @@
       "pass": false,
       "numbers": [
         [
-          0,
+          3,
           "%"
         ]
       ]

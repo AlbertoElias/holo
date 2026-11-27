@@ -137,15 +137,16 @@ def hang(P, P0, used_dom, _unused, toMesh, rig, spec):
 
 
 # --- Garments ---------------------------------------------------------------------------------
-def garments(human, rig, slots, G):
+def garments(human, rig, slots, G, unslid=None):
     """Replaces the body's top, trouser and (with `shoes` in G) shoe faces with garment meshes; returns them
-    and a report."""
+    and a report. `unslid` is the body's (points, normals) before the neckline was made level (build.py)."""
     me = human.data
     V = np.array([v.co[:] for v in me.vertices])
     NRM = np.array([v.normal[:] for v in me.vertices])
     polys = [list(p.vertices) for p in me.polygons]
     mat = np.array([p.material_index for p in me.polygons])
     full = mesh_bvh(V, polys)  # the body before anything is removed: what the garments stay outside of
+    body = (V, NRM, full)
     toMesh = human.matrix_world.inverted() @ rig.matrix_world
     names = {g.index: g.name for g in human.vertex_groups}
     bones = {b.name for b in rig.data.bones}
@@ -166,7 +167,8 @@ def garments(human, rig, slots, G):
     hem_f = [k for k in tr_f if max(d_w[v] for v in polys[k]) <= G["top"]["hem"]]
     hem_v = set(v for k in hem_f for v in polys[k])
 
-    def build(face_ids, spec, kind, outside):
+    def build(face_ids, spec, kind, outside, body=body, whole=True):
+        V, NRM, full = body
         used = sorted(set(v for k in face_ids for v in polys[k]))
         loc = {v: i for i, v in enumerate(used)}
         n = len(used)
@@ -176,7 +178,8 @@ def garments(human, rig, slots, G):
         gdom = [dom[v] for v in used]
         # Openings that close on the body (the neck, the wrists; the ankles, the waist under the hem) taper to it.
         taper = [v for v in boundary if gdom[v].startswith(tuple(spec["taperAt"]))]
-        if spec.get("taperWhole"):
+        rim = []
+        if spec.get("taperWhole") and whole:
             # A neck opening closes on the body all the way round. By its points' own bones only the sides of
             # the collar did (the neck carries them); the front and the back (the chest carries them) kept
             # their ease, so the rim stood off the neck there and lay on it at the sides, with the inside
@@ -189,6 +192,8 @@ def garments(human, rig, slots, G):
                     if j in on_rim and j not in seen:
                         seen.add(j)
                         todo.append(j)
+            rim = sorted(seen - set(taper))
+            rim += [v for v in taper if gdom[v].startswith(tuple(spec["taperWhole"]))]
             taper = sorted(seen)
         dist = dijkstra(n, adj, taper)
         limb = np.array([gdom[i].startswith(tuple(spec["limbBones"])) for i in range(n)])
@@ -221,6 +226,17 @@ def garments(human, rig, slots, G):
         P = P0 + NRM[used] * ease[:, None]
         if "hang" in spec:
             P = hang(P, P0, gdom, None, toMesh, rig, spec)
+        if rim and "keepBeyond" in spec:
+            # The rounds below push the cloth out of the body point by point, and a point in a narrow gap (an arm
+            # by the side) can go to either wall: a change at the collar, carried there by the smoothing as a
+            # change of a millionth, moved sleeve points by up to 16 mm. So the collar's fit (the level neckline,
+            # the whole rim on the neck) holds near the collar only. Beyond `keepBeyond` (m along the cloth from
+            # the rim; a blend between its two distances) the jumper is the one fitted without them.
+            lo, hi = spec["keepBeyond"]
+            keep = smoothstep(lo, hi, dijkstra(n, adj, rim))[:, None]
+            plain = build(face_ids, spec, kind, outside, (unslid[0], unslid[1], mesh_bvh(unslid[0], polys)), False)[0]
+        else:
+            keep = None
         for _ in range(spec["rounds"]):
             P = smooth(P, adj, pinned, spec["smooth"], mu=spec["taubin"])
             for i in range(n):
@@ -233,6 +249,8 @@ def garments(human, rig, slots, G):
                         continue
                     if (Vector(P[i]) - hit).dot(nrm) < want:
                         P[i] = np.array(hit + nrm * want)
+        if keep is not None:
+            P = P * (1 - keep) + np.asarray(plain) * keep
         weights = {}
         for i, v in enumerate(used):
             for g in me.vertices[v].groups:
