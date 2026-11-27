@@ -35,7 +35,8 @@ import { fileURLToPath } from 'node:url';
 import * as THREE from 'three';
 
 import { build } from './direct.ts';
-import { holdingsOf, parseSheetText, resolveTiming, type BeatSheet } from './lib/beats.ts';
+import type { ContactRow } from './lib/direct.ts';
+import { handSideOf, holdingsOf, parseSheetText, resolveTiming, type BeatSheet } from './lib/beats.ts';
 import { findPerformers, parents, parseGlb, readChannels, sampleChannel, type GltfDoc } from './lib/gltf-read.ts';
 import { phase, phaseLine } from './lib/phases.ts';
 import { REVIEW_PAGE } from './lib/review-page.ts';
@@ -57,7 +58,7 @@ const SCORE_SIZE = 128;
 /** The best picture is at least this far round from the card picture, so the two show different sides. */
 const MIN_APART_DEG = 60;
 export const FIRST_PASS_ONLY = 'first-pass-only';
-const HAND_KINDS = new Set(['reach', 'take', 'put', 'aim', 'drop']);
+const HAND_KINDS = new Set(['reach', 'take', 'put', 'aim', 'drop', 'contact']);
 
 type Side = 'left' | 'right';
 interface Hand { readonly performer: string; readonly side: Side; readonly why: string }
@@ -69,9 +70,11 @@ export function touchingHands(sheet: BeatSheet, t: number): Hand[] {
   const out = new Map<string, Hand>();
   const add = (h: Hand) => { const k = `${h.performer}.${h.side}`; if (!out.has(k)) out.set(k, h); };
   for (const b of sheet.beats) for (const d of b.directions) {
-    if (!HAND_KINDS.has(d.kind) || !('side' in d) || !d.side) continue;
+    if (!HAND_KINDS.has(d.kind)) continue;
+    const side = handSideOf(d);
+    if (!side) continue;
     const r = resolveTiming(b, d);
-    if (t >= r.start && t <= r.end) add({ performer: b.performer, side: d.side as Side, why: `${d.kind} in beat ${b.id} (${r.start.toFixed(2)}-${r.end.toFixed(2)} s)` });
+    if (t >= r.start && t <= r.end) add({ performer: b.performer, side: side as Side, why: `${d.kind} in beat ${b.id} (${r.start.toFixed(2)}-${r.end.toFixed(2)} s)` });
   }
   for (const h of holdingsOf(sheet).holdings) if (t >= h.from && t <= h.to) add({ performer: h.performer, side: h.side as Side, why: `holds ${h.object}` });
   return [...out.values()];
@@ -161,6 +164,8 @@ export interface PoseLook {
   readonly phases: readonly { name: string; seconds: number }[];
   readonly hands: readonly Shown[];
   readonly note?: string;
+  /** Each contact's row over the hold frames solved (the frames after the look are part of it). */
+  readonly contacts?: readonly ContactRow[];
   readonly compare?: PoseDiff & { readonly take: string };
   /** Set when the solve stopped after its first pass: "first pass only". */
   readonly solve: 'full' | 'first pass only';
@@ -258,7 +263,7 @@ export async function poseLook(sheetFile: string, at: number, options: LookOptio
     const full = parseGlb(new Uint8Array(await readFile(options.compare)));
     compare = { take: resolve(options.compare), ...poseDiff(parseGlb(new Uint8Array(await readFile(glb))), full, t) };
   }
-  const look: PoseLook = { sheet: resolve(sheetFile), at: t, frame, framesSolved, seconds: (performance.now() - started) / 1000, phases, hands: shown, solve: options.firstPassOnly ? 'first pass only' : 'full', ...(note ? { note } : {}), ...(compare ? { compare } : {}) };
+  const look: PoseLook = { sheet: resolve(sheetFile), at: t, frame, framesSolved, seconds: (performance.now() - started) / 1000, phases, hands: shown, ...(built.take.objects.contacts.length ? { contacts: built.take.objects.contacts } : {}), solve: options.firstPassOnly ? 'first pass only' : 'full', ...(note ? { note } : {}), ...(compare ? { compare } : {}) };
   await writeFile(join(out, 'pose-look.json'), `${JSON.stringify(look, null, 2)}\n`);
   return look;
 }
@@ -267,6 +272,7 @@ function print(look: PoseLook): void {
   console.log(`pose look at ${look.at.toFixed(2)} s (frame ${look.frame}, ${look.framesSolved} frames solved, ${look.solve}) in ${look.seconds.toFixed(1)} s`);
   console.log(`  phases: ${phaseLine(look.phases)}`);
   if (look.note) console.log(`  ${look.note}`);
+  for (const k of look.contacts ?? []) console.log(`  contact ${k.beat}: gap ${(k.gap * 1000).toFixed(1)} mm, sink ${(k.sink * 1000).toFixed(1)} mm, short ${k.short.toFixed(0)}° over ${k.frames} hold frames${k.notPossible ? `; ${k.notPossible}` : ''}`);
   for (const h of look.hands) console.log(`  ${h.performer} ${h.side} (${h.why}; seen card ${h.seen.card}, best ${h.seen.best} at turn ${h.bestTurn}°): ${h.pictures.join(', ')}`);
   if (look.compare) {
     const c = look.compare;

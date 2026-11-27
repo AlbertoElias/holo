@@ -160,6 +160,8 @@ const CROUCH_OVER = 0.06;
 const SHRUG_FACE: Partial<Record<FaceChannel, number>> = { browInnerUp: 0.4, browOuterUpLeft: 0.45, browOuterUpRight: 0.45, mouthShrugLower: 0.5, mouthPressLeft: 0.2, mouthPressRight: 0.2 };
 const RUB_HAND = { low: { thumb: 0.5, index: 0.45, middle: 0.66 }, high: { thumb: 0.75, index: 0.62, middle: 0.5 }, ring: 0.7, little: 0.74, spread: 0.05 } as const;
 const CHEST_PALM: HandPose = { curl: { thumb: 0.15, index: 0.1, middle: 0.12, ring: 0.16, little: 0.2 }, spread: 0.2 };
+/** A palm at rest on a surface (a contact): flatter than on a chest, so curled fingers do not go into a round limb. */
+const REST_PALM: HandPose = { curl: { thumb: 0.08, index: 0.02, middle: 0.02, ring: 0.02, little: 0.02 }, spread: 0.15 };
 const CLASP_HAND: HandPose = { curl: { thumb: 0.3, index: 0.35, middle: 0.4, ring: 0.45, little: 0.5 }, spread: 0.08 };
 
 export interface PerformerTrack {
@@ -236,6 +238,8 @@ export interface ContactRow {
   /** The most the hand ended short of lying flat on the surface (degrees), and the wrist limits that stopped it. */
   readonly short: number;
   readonly notPossible?: string;
+  /** Each hold frame: time (s), gap and sink (mm), short (degrees). */
+  readonly byFrame: readonly { readonly t: number; readonly gap: number; readonly sink: number; readonly short: number }[];
 }
 
 export interface SolvedTake {
@@ -532,7 +536,8 @@ function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources
       beat: r.beat.id, performer: c.spec.id, part: d.part, on: d.on, fit: d.fit,
       point: k ? [mm(k.local.x), mm(k.local.y), mm(k.local.z)] : [0, 0, 0], chosenAt: k ? round(k.chosenAt, 1000) : NaN,
       frames: k?.frames ?? 0, gap: mm(k?.gap ?? NaN), sink: mm(k?.sink ?? NaN), short: round(k?.short ?? 0, 10),
-      ...(k?.need ? { notPossible: k.need } : {})
+      ...(k?.need ? { notPossible: k.need } : {}),
+      byFrame: (k?.byFrame ?? []).map((x) => ({ t: round(x.t, 1000), gap: round(x.gap * 1000, 10), sink: round(x.sink * 1000, 10), short: round(x.short, 10) }))
     });
   }));
   return { sheet, fps, times, tracks, props, objects: stage.report, pairs: pairMeter.report() };
@@ -610,7 +615,7 @@ const stage = {
   goals: new Map<Direction, { point: THREE.Vector3; axis?: THREE.Vector3; upright?: THREE.Quaternion }>(),
   report: { grips: [], puts: [], aims: [], contacts: [] } as ObjectReport,
   /** Each contact's skin point, chosen once in the target bone's frame, and its measure so far. */
-  contacts: new Map<Direction, { bone: THREE.Object3D; local: THREE.Vector3; localN: THREE.Vector3; chosenAt: number; frames: number; gap: number; sink: number; short: number; need?: string }>(),
+  contacts: new Map<Direction, { bone: THREE.Object3D; local: THREE.Vector3; localN: THREE.Vector3; chosenAt: number; frames: number; gap: number; sink: number; short: number; need?: string; byFrame: { t: number; gap: number; sink: number; short: number }[] }>(),
   /** Each target's skin, posed once a frame (the take time it was posed at). */
   contactSkins: new Map<object, { t: number; skin: BodySkin }>(),
   swivels: new Map<Direction, number>(),
@@ -801,8 +806,20 @@ const LEG_CLEAR_OUT = 0.5;
  */
 /** How far the palm's center sits out from the skin point it rests on, metres (the palm's own skin). */
 const CONTACT_REST = 0.001;
+/** The straightest finger curl a resting palm takes: the knuckles bend back about 29°, as a hand pressed flat does. */
+const FINGER_FLAT = -0.35;
+/** The thumb's: it swings back off the palm side about 15° (its joints turn less than a finger's). */
+const THUMB_FLAT = -0.6;
 /** A contact that ends more than this short of lying flat (degrees) is reported as not possible at this angle. */
 const CONTACT_SHORT = 10;
+/** The cosine between a contact's skin normal and the line to the toucher's shoulder that the point is picked for. */
+const CONTACT_FACING = 0.25;
+/** The share of the toucher's arm length (shoulder to palm centre) that a contact point may be from the shoulder. */
+const CONTACT_REACH = 0.92;
+/** The hand skin a contact's fit lets into the target's skin (the bar is 3 mm). */
+const CONTACT_SINK = 0.0025;
+/** The palm lifts a contact tries, millimetres off the skin point, lowest first. */
+const CONTACT_LIFTS = [1, 2, 3, 4, 5, 6, 8, 10, 13, 16, 20, 25, 30, 40];
 type ContactDirection = Extract<Direction, { kind: 'contact' }>;
 
 function contactTarget(cast: Cast[], d: ContactDirection): Cast {
@@ -857,19 +874,30 @@ function contactSurface(cast: Cast[], c: Cast, r: Resolved): { p: THREE.Vector3;
     target.a.scene.updateMatrixWorld(true);
     const samples = [...target.armBody.body, ...target.armBody.arm.left, ...target.armBody.arm.right].filter((x) => x.bone === bone);
     if (!samples.length) throw new Error(`contact on ${d.on}: no skin of its own to touch (${CONTACT_SURFACES.join(', ')})`);
-    const shoulder = c.a.arms[contactSide(d)].upperArm.getWorldPosition(new THREE.Vector3());
+    const side = contactSide(d);
+    const ch = c.a.arms[side];
+    const shoulder = ch.upperArm.getWorldPosition(new THREE.Vector3());
+    const elbow = ch.foreArm.getWorldPosition(new THREE.Vector3());
+    const wrist = ch.hand.getWorldPosition(new THREE.Vector3());
+    const palm = c.a.hands[side]?.palmCenter(new THREE.Vector3()) ?? wrist.clone();
+    // Her reach to the palm's center, less a margin so the arm does not lock straight.
+    const reach = CONTACT_REACH * (shoulder.distanceTo(elbow) + elbow.distanceTo(wrist) + wrist.distanceTo(palm));
     let best: { p: THREE.Vector3; n: THREE.Vector3; score: number } | undefined;
     for (const x of samples) {
       const p = new THREE.Vector3(); const n = new THREE.Vector3();
       skinned(x, p, n);
       const to = shoulder.clone().sub(p);
       const dist = to.length();
-      // Facing the shoulder first (a cosine), then near it: 10 cm nearer weighs as much as 0.2 of facing.
-      const score = n.dot(to.divideScalar(dist)) - 2 * dist;
+      // Out of reach scores below every point in reach, and the nearest of those first.
+      if (dist > reach) { const score = -10 - dist; if (!best || score > best.score) best = { p, n, score }; continue; }
+      // A palm lies on the side of the surface that her forearm runs along, so the skin normal is nearly across the
+      // line from her shoulder (a normal that faces the shoulder asks the palm to face along the forearm: past any wrist).
+      // A little toward her (cos 0.25, about 75°), then near: 10 cm nearer weighs as much as 0.2 of that cosine.
+      const score = -Math.abs(n.dot(to.divideScalar(dist)) - CONTACT_FACING) - 2 * dist;
       if (!best || score > best.score) best = { p, n, score };
     }
     const q = bone.getWorldQuaternion(new THREE.Quaternion()).invert();
-    k = { bone, local: bone.worldToLocal(best!.p.clone()), localN: best!.n.clone().applyQuaternion(q), chosenAt: solving.t, frames: 0, gap: 0, sink: 0, short: 0 };
+    k = { bone, local: bone.worldToLocal(best!.p.clone()), localN: best!.n.clone().applyQuaternion(q), chosenAt: solving.t, frames: 0, gap: 0, sink: 0, short: 0, byFrame: [] };
     stage.contacts.set(d, k);
   }
   const p = k.bone.localToWorld(k.local.clone());
@@ -882,10 +910,10 @@ function contactSurface(cast: Cast[], c: Cast, r: Resolved): { p: THREE.Vector3;
  * degrees, as `orientHand` splits it (roll about the forearm, then flex and
  * deviation), and the limits it goes past.
  */
-function wristNeed(a: LoadedAvatar, s: Side, wanted: THREE.Quaternion): string[] {
+function wristTurn(a: LoadedAvatar, s: Side, wanted: THREE.Quaternion): { roll: number; flex: number; radial: number } {
   const chain = a.arms[s];
   const rig = a.hands[s];
-  if (!rig) return [];
+  if (!rig) return { roll: 0, flex: 0, radial: 0 };
   const parent = chain.hand.parent!.getWorldQuaternion(new THREE.Quaternion());
   const neutral = parent.clone().multiply(chain.handBindQuaternion);
   const delta = wanted.clone().multiply(neutral.clone().invert());
@@ -907,6 +935,20 @@ function wristNeed(a: LoadedAvatar, s: Side, wanted: THREE.Quaternion): string[]
   const vec = sn > 1e-8 ? new THREE.Vector3(swing.x / sn, swing.y / sn, swing.z / sn).multiplyScalar(angle) : new THREE.Vector3();
   const flex = vec.dot(new THREE.Vector3().crossVectors(fingers, normal).normalize()) / DEG;
   const radial = vec.dot(new THREE.Vector3().crossVectors(fingers, thumbSide).normalize()) / DEG;
+  return { roll, flex, radial };
+}
+
+/** How far, in degrees, a wanted hand orientation goes past the wrist limits in all (0 when inside them). */
+function wristExcess(a: LoadedAvatar, s: Side, wanted: THREE.Quaternion): number {
+  const { roll, flex, radial } = wristTurn(a, s, wanted);
+  const L = WRIST_LIMITS;
+  const over = (v: number, lim: number): number => Math.max(0, v - lim);
+  return over(Math.abs(roll), L.roll) + over(flex, L.flex) + over(-flex, L.extend) + over(radial, L.radial) + over(-radial, L.ulnar);
+}
+
+/** The wrist limits a wanted hand orientation goes past, as words. */
+function wristNeed(a: LoadedAvatar, s: Side, wanted: THREE.Quaternion): string[] {
+  const { roll, flex, radial } = wristTurn(a, s, wanted);
   const L = WRIST_LIMITS;
   const out: string[] = [];
   if (Math.abs(roll) > L.roll) out.push(`roll ${Math.abs(roll).toFixed(0)}° (limit ${L.roll}°)`);
@@ -920,7 +962,7 @@ function wristNeed(a: LoadedAvatar, s: Side, wanted: THREE.Quaternion): string[]
 /**
  * Lays each contact's palm on its surface, after arm clearing: the palm's
  * center onto the skin point, the palm against the skin's normal, the fingers
- * along the surface (the target bone's line, the way the fingers point now).
+ * in the surface, turned the way the wrist turns least past its limits.
  * The elbow keeps the swing that clearing gave it. The fit is solved at full
  * contact and eased in by the contact's own curve, so the hand arrives onto
  * the surface. The wrist stays inside its limits; a flat palm it cannot make
@@ -939,24 +981,72 @@ function fitContacts(cast: Cast[], c: Cast, t: number): void {
     a.frame.updateMatrixWorld(true);
     const { p, n } = contactSurface(cast, c, r);
     const k = stage.contacts.get(d)!;
-    const bones = [ch.shoulder, ch.upperArm, ch.foreArm, ch.hand];
+    const bones = [ch.shoulder, ch.upperArm, ch.foreArm, ch.hand, ...hand.bones()];
     const before = bones.map((b) => b.quaternion.clone());
     // The wanted palm frame: +Z the palm normal (into the skin for the right hand; the left hand's normal is -Z).
-    const palmQ = hand.palmFrame(new THREE.Quaternion());
-    const handQ = ch.hand.getWorldQuaternion(new THREE.Quaternion());
-    const into = n.clone().negate();
-    const z = s === 'right' ? into.clone() : n.clone();
-    const fingersNow = new THREE.Vector3(0, 1, 0).applyQuaternion(palmQ);
-    const child = k.bone.children.find((o) => (o as THREE.Bone).isBone);
-    const along = child ? child.getWorldPosition(new THREE.Vector3()).sub(k.bone.getWorldPosition(new THREE.Vector3())) : fingersNow.clone();
-    along.addScaledVector(n, -along.dot(n));
-    if (along.lengthSq() < 1e-8) along.copy(fingersNow).addScaledVector(n, -fingersNow.dot(n));
-    along.normalize();
-    if (along.dot(fingersNow) < 0) along.negate();
-    const x = new THREE.Vector3().crossVectors(along, z).normalize();
-    const y = new THREE.Vector3().crossVectors(z, x).normalize();
-    const wantedPalm = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
-    const wanted = wantedPalm.multiply(palmQ.clone().invert()).multiply(handQ);
+    // The fingers lie in the surface; which way round is free, so it is the way the wrist turns least past its limits
+    // (the forearm's line laid onto the surface fails when the forearm points into the surface).
+    const z = s === 'right' ? n.clone().negate() : n.clone();
+    const seed = new THREE.Vector3(0, 1, 0);
+    if (Math.abs(seed.dot(n)) > 0.9) seed.set(1, 0, 0);
+    const u = seed.addScaledVector(n, -seed.dot(n)).normalize();
+    const v = new THREE.Vector3().crossVectors(n, u);
+    const wantedFor = (deg: number): THREE.Quaternion => {
+      const y = u.clone().multiplyScalar(Math.cos(deg * DEG)).addScaledVector(v, Math.sin(deg * DEG));
+      const x = new THREE.Vector3().crossVectors(y, z).normalize();
+      const palmQ = hand.palmFrame(new THREE.Quaternion());
+      const handQ = ch.hand.getWorldQuaternion(new THREE.Quaternion());
+      return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z)).multiply(palmQ.invert()).multiply(handQ);
+    };
+    // The hand skin, laid with its palm on the point, must stay out of the target (his torso beside the arm, the
+    // arm's own curve): a millimetre inside weighs as much as a degree past a wrist limit. The hand's own shape
+    // (fingers that curl toward the palm side) is read from its present pose in the palm frame.
+    const skin = contactSkin(contactTarget(cast, d), t);
+    const samples = c.armBody.hand[s];
+    const probe = new THREE.Vector3();
+    // Each finger follows the surface: it wraps as far as the skin lets it, from straight (a flat palm on a flat
+    // surface) to round a curve; a finger that sinks even when straight stays straight.
+    const fingerSamples = FINGERS.map((f) => {
+      const own = new Set<THREE.Object3D>(hand.fingerBones(f));
+      return { f, joints: hand.fingerBones(f).length, samples: samples.filter((x) => own.has(x.bone)) };
+    });
+    const fingerIn = (list: typeof samples): number => {
+      a.frame.updateMatrixWorld(true);
+      let most = -Infinity;
+      for (const sample of list) most = Math.max(most, skin.depth(skinned(sample, probe)).depth);
+      return most;
+    };
+    const fitFingers = (): void => {
+      for (const { f, joints, samples: own } of fingerSamples) {
+        if (own.length === 0) continue;
+        const flat = f === 'thumb' ? THUMB_FLAT : FINGER_FLAT;
+        let best = flat;
+        for (let k = flat; k <= 0.8 + 1e-9; k += 0.1) {
+          hand.applyFinger(f, Array.from({ length: joints }, (_, i) => (i === 0 ? k : Math.pow(Math.max(k, 0), 1 + 0.25 * i))), REST_PALM.spread);
+          if (fingerIn(own) > CONTACT_SINK) break;
+          best = k;
+        }
+        hand.applyFinger(f, Array.from({ length: joints }, (_, i) => (i === 0 ? best : Math.pow(Math.max(best, 0), 1 + 0.25 * i))), REST_PALM.spread);
+      }
+      a.frame.updateMatrixWorld(true);
+    };
+    const handShape = (): THREE.Vector3[] => {
+      hand.apply({ ...REST_PALM, curl: { ...REST_PALM.curl, thumb: THUMB_FLAT, index: FINGER_FLAT, middle: FINGER_FLAT, ring: FINGER_FLAT, little: FINGER_FLAT } });
+      a.frame.updateMatrixWorld(true);
+      const center = hand.palmCenter(new THREE.Vector3());
+      const toPalm = hand.palmFrame(new THREE.Quaternion()).invert();
+      return samples.filter((_, i) => i % 6 === 0).map((sample) => skinned(sample, new THREE.Vector3()).sub(center).applyQuaternion(toPalm));
+    };
+    const handIn = (deg: number, shape: THREE.Vector3[]): number => {
+      const y = u.clone().multiplyScalar(Math.cos(deg * DEG)).addScaledVector(v, Math.sin(deg * DEG));
+      const x = new THREE.Vector3().crossVectors(y, z).normalize();
+      let most = 0;
+      for (const o of shape) {
+        probe.copy(p).addScaledVector(n, CONTACT_REST).addScaledVector(x, o.x).addScaledVector(y, o.y).addScaledVector(z, o.z);
+        most = Math.max(most, skin.depth(probe).depth);
+      }
+      return most;
+    };
     // The elbow's swing as clearing left it, about the shoulder-to-wrist line, in the avatar's frame.
     const sh = ch.upperArm.getWorldPosition(new THREE.Vector3());
     const el = ch.foreArm.getWorldPosition(new THREE.Vector3());
@@ -964,20 +1054,33 @@ function fitContacts(cast: Cast[], c: Cast, t: number): void {
     const line = wr.clone().sub(sh).normalize();
     const hint = el.clone().sub(sh);
     hint.addScaledVector(line, -hint.dot(line)).normalize().applyQuaternion(a.frame.getWorldQuaternion(new THREE.Quaternion()).invert());
-    const skin = contactSkin(contactTarget(cast, d), t);
-    const samples = c.armBody.hand[s];
+    const pick = (): THREE.Quaternion => {
+      const shape = handShape();
+      let best: { q: THREE.Quaternion; e: number } | undefined;
+      for (let deg = 0; deg < 360; deg += 15) {
+        const q = wantedFor(deg);
+        const e = wristExcess(a, s, q) + Math.max(0, handIn(deg, shape)) * 1000;
+        if (!best || e < best.e) best = { q, e };
+      }
+      return best!.q;
+    };
+    let wanted = new THREE.Quaternion();
+    let picked = false;
     const at = new THREE.Vector3();
     const deepest = (): number => {
       let most = 0;
       for (const sample of samples) most = Math.max(most, skin.depth(skinned(sample, at)).depth);
       return most;
     };
-    const goal = p.clone().addScaledVector(n, CONTACT_REST);
+    const goal = new THREE.Vector3();
     let short = 0;
-    let sink = 0;
-    for (let round = 0; round < 3; round += 1) {
+    // Lays the palm with its center `out` metres off the skin point; gives the deepest hand skin inside him.
+    const place = (out: number): number => {
+      goal.copy(p).addScaledVector(n, out);
       for (let i = 0; i < EFFECTOR_STEPS; i += 1) {
         solveArm(a, s, wr, { elbowHint: hint });
+        a.frame.updateMatrixWorld(true);
+        if (i === 0 && !picked) { wanted = pick(); picked = true; }
         a.frame.updateMatrixWorld(true);
         short = orientHand(a, s, wanted);
         a.frame.updateMatrixWorld(true);
@@ -985,22 +1088,45 @@ function fitContacts(cast: Cast[], c: Cast, t: number): void {
         if (err.length() < 2e-4) break;
         wr.add(err);
       }
-      // A hand skin point under his skin (a finger round the curve of the arm): the palm goes out by that much.
-      sink = deepest();
-      if (sink <= 5e-4) break;
-      goal.addScaledVector(n, sink);
+      fitFingers();
+      return deepest();
+    };
+    // A hand skin point under his skin (the thumb, a finger that sinks even straight, the heel of a palm the wrist
+    // cannot lay flat) lifts the palm: the least lift in CONTACT_LIFTS that keeps the sink within CONTACT_SINK, or
+    // else the one with the least sink. The fingers fit again at each lift, so the sink does not fall steadily as the
+    // lift grows, and a search by halves can miss a low lift that works.
+    let sink = Infinity;
+    let lift = CONTACT_REST;
+    for (const mm of CONTACT_LIFTS) {
+      const d0 = place(mm / 1000);
+      if (d0 < sink - 1e-6) { sink = d0; lift = mm / 1000; }
+      if (d0 <= CONTACT_SINK) break;
     }
+    sink = place(lift);
     // Eased in by the contact's curve, from the lift's pose.
     const after = bones.map((b) => b.quaternion.clone());
     bones.forEach((b, i) => b.quaternion.copy(before[i]!).slerp(after[i]!, e));
     a.frame.updateMatrixWorld(true);
     const arrive = r.at + r.attack;
     if (t >= arrive - 1e-6 && t <= arrive + r.hold + 1e-6) {
-      const gap = Math.max(0, -skin.depth(hand.palmCenter(at)).depth);
+      // Past the skin's nearby cells the depth is -Infinity: the gap is then the distance to the contact point.
+      const palm = hand.palmCenter(new THREE.Vector3());
+      const inside = skin.depth(palm).depth;
+      const gap = Number.isFinite(inside) ? Math.max(0, -inside) : palm.distanceTo(p);
       k.frames += 1;
+      const deep = deepest();
       k.gap = Math.max(k.gap, gap);
-      k.sink = Math.max(k.sink, deepest());
+      k.sink = Math.max(k.sink, deep);
+      k.byFrame.push({ t, gap, sink: deep, short });
       k.short = Math.max(k.short, short);
+      // The target moved out of her reach during the hold (a step away): no wrist or palm fit can close that gap.
+      const far = ch.upperArm.getWorldPosition(new THREE.Vector3()).distanceTo(p);
+      const length = ch.upperArm.getWorldPosition(new THREE.Vector3()).distanceTo(ch.foreArm.getWorldPosition(new THREE.Vector3()))
+        + ch.foreArm.getWorldPosition(new THREE.Vector3()).distanceTo(ch.hand.getWorldPosition(new THREE.Vector3()))
+        + ch.hand.getWorldPosition(new THREE.Vector3()).distanceTo(palm);
+      if (far > length && !k.need) {
+        k.need = `out of reach at ${t.toFixed(2)} s: the point on ${d.on} is ${(far * 100).toFixed(0)} cm from the shoulder and the arm is ${(length * 100).toFixed(0)} cm to the palm; move the contact to a time when ${d.on.slice(0, d.on.indexOf('.'))} is nearer, or bring the performers closer`;
+      }
       if (short > CONTACT_SHORT && !k.need) {
         const over = wristNeed(a, s, wanted);
         k.need = `not possible at this angle: a flat palm on ${d.on} needs ${over.length ? over.join(', ') : 'more turn than the wrist and forearm give together'} (limits: roll ${WRIST_LIMITS.roll}°, flex ${WRIST_LIMITS.flex}°, extend ${WRIST_LIMITS.extend}°, radial ${WRIST_LIMITS.radial}°, ulnar ${WRIST_LIMITS.ulnar}°); nearest pose: the palm ${short.toFixed(0)}° from flat at ${t.toFixed(2)} s`;
@@ -2398,10 +2524,10 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
       }
       pose = { curl, spread: lerp(pose.spread, target.spread, env(r, t, false)) };
     }
-    // A palm at rest on a surface is flat, as on a chest.
+    // A palm at rest on a surface is flat.
     for (const r of c.dirs) {
       const d = r.direction;
-      if (d.kind === 'contact' && contactSide(d) === s) pose = blendPose(pose, CHEST_PALM, clamp01(handEnv(r, t, false)));
+      if (d.kind === 'contact' && contactSide(d) === s) pose = blendPose(pose, REST_PALM, clamp01(handEnv(r, t, false)));
     }
     // Gestures shape the hand: open for a shrug or a wave, flat on the chest, fingertips rubbing (the wrist rolling a little with them).
     let rubRoll = 0;
