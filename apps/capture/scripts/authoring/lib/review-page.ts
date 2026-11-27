@@ -41,7 +41,10 @@ export const REVIEW_PAGE = String.raw`
   const NAMES = {
     head: /(^|[^a-z])head$/i, hips: /hips$/i, neck: /neck$/i,
     leftHand: /left_?hand$/i, rightHand: /right_?hand$/i,
-    leftFoot: /left_?foot$/i, rightFoot: /right_?foot$/i
+    leftFoot: /left_?foot$/i, rightFoot: /right_?foot$/i,
+    leftIndex: /left_?hand_?index_?1$/i, rightIndex: /right_?hand_?index_?1$/i,
+    leftMiddle: /left_?hand_?middle_?1$/i, rightMiddle: /right_?hand_?middle_?1$/i,
+    leftLittle: /left_?hand_?(pinky|little)_?1$/i, rightLittle: /right_?hand_?(pinky|little)_?1$/i
   };
   const state = { probe: null, performers: [], objects: [], regions: null };
   const V = () => new (state.probe.camera.position.constructor)();
@@ -302,7 +305,7 @@ export const REVIEW_PAGE = String.raw`
       const faceCentre = pts.length ? [0, 1, 2].map((a) => (Math.min(...pts.map((q) => q[a])) + Math.max(...pts.map((q) => q[a]))) / 2) : null;
       return { ...out, faceCentre, pixelRatio: state.probe.renderer.getPixelRatio() };
     },
-    /** Performer i's named bones (head, hips, neck, hands, feet) in world space, for placing a close camera. */
+    /** Performer i's named bones (head, hips, neck, hands, feet, the index, middle and little knuckles) in world space, for placing a close camera. */
     points(i) {
       state.probe.model.updateWorldMatrix(true, true);
       const out = {};

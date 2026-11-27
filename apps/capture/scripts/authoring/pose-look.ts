@@ -8,10 +8,13 @@
  * last frame), so one frame solved alone does not give the pose of the full
  * build. This command solves frames 0 to f + 13 with every solve pass of the
  * full build, exports that window, opens it in the viewer and saves close
- * pictures of each hand that touches something at that moment, from two
- * angles: from the side the card sees ("card"), and from the view around the
+ * pictures of each hand that touches something at that moment, from three
+ * angles: from the side the card sees ("card"); from the view around the
  * hand where the least of it is hidden ("best": 24 views are scored with an
- * id render, and a body or an object in front of the hand hides it).
+ * id render, and a body or an object in front of the hand hides it), at
+ * least 30° out of the palm's plane, so it does not look along the palm; and
+ * from the side of the palm, edge-on ("profile": the camera in the palm's
+ * plane, so the gap between the palm and what it lies on shows directly).
  *
  * `--first-pass-only` stops the solve after its first pass, with no clearing
  * round, for a faster look. The arms are then not cleared from the bodies as
@@ -57,13 +60,19 @@ const HEIGHTS = [0.12, 0.4];
 const SCORE_SIZE = 128;
 /** The best picture is at least this far round from the card picture, so the two show different sides. */
 const MIN_APART_DEG = 60;
+/** The best picture looks at the palm's plane from at least 30° out of it (sine), not along the palm. */
+const OUT_OF_PALM = 0.5;
+/** Views scored for the profile picture: turns about the palm's normal, in the palm's plane. */
+const PROFILE_TURNS = 12;
+/** The profile camera is not more than about 55° above or below the level (sine), so the view's up stays defined. */
+const PROFILE_MAX_UP = 0.8;
 export const FIRST_PASS_ONLY = 'first-pass-only';
 const HAND_KINDS = new Set(['reach', 'take', 'put', 'aim', 'drop', 'contact']);
 
 type Side = 'left' | 'right';
 interface Hand { readonly performer: string; readonly side: Side; readonly why: string }
 /** A hand with its pictures (card, best), the share of the hand each one sees, and where the best view is. */
-type Shown = Hand & { pictures: string[]; seen: Record<string, number>; bestTurn: number; bestUp: number };
+type Shown = Hand & { pictures: string[]; seen: Record<string, number>; bestTurn: number; bestUp: number; profileTurn?: number };
 
 /** The hands that touch or hold something at `t`: a hand direction under way, or an object held. */
 export function touchingHands(sheet: BeatSheet, t: number): Hand[] {
@@ -231,24 +240,51 @@ export async function poseLook(sheetFile: string, at: number, options: LookOptio
             const dir = toCard.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), turn * THREE.MathUtils.DEG2RAD);
             return { turn, up, position: target.clone().addScaledVector(dir, DISTANCE).add(new THREE.Vector3(0, up, 0)).toArray(), target: target.toArray(), fov: FOV };
           };
+          // The palm's normal and its two in-plane axes, from the wrist and the index, middle and little knuckles.
+          const at = (name: string) => (pts[`${h.side}${name}`] ? new THREE.Vector3(...pts[`${h.side}${name}`]!) : undefined);
+          const [index, middle, little] = [at('Index'), at('Middle'), at('Little')];
+          const palm = index && middle && little ? (() => {
+            const across = index.clone().sub(little).normalize();
+            const up = middle.clone().sub(target).normalize();
+            return { across, up, normal: new THREE.Vector3().crossVectors(across, up).normalize() };
+          })() : undefined;
           const views = HEIGHTS.flatMap((up) => Array.from({ length: TURNS }, (_, k) => viewAt((360 / TURNS) * k - 180, up)));
           const scores = await R('handView', i, h.side, views, SCORE_SIZE) as { visible: number; total: number }[];
           const scored = views.map((v, k) => ({ ...v, ...scores[k]!, seen: scores[k]!.total ? scores[k]!.visible / scores[k]!.total : 0 }));
           const apart = (turn: number) => Math.abs(((turn % 360) + 540) % 360 - 180);
-          const best = scored.filter((v) => apart(v.turn) >= MIN_APART_DEG).sort((a, b) => b.seen - a.seen || b.visible - a.visible)[0]!;
+          const outOfPalm = (v: { position: number[] }) => !palm || Math.abs(new THREE.Vector3(...v.position).sub(target).normalize().dot(palm.normal)) >= OUT_OF_PALM;
+          const order = (a: { seen: number; visible: number }, b: { seen: number; visible: number }) => b.seen - a.seen || b.visible - a.visible;
+          const best = scored.filter((v) => apart(v.turn) >= MIN_APART_DEG && outOfPalm(v)).sort(order)[0]
+            ?? scored.filter((v) => outOfPalm(v)).sort(order)[0] ?? scored.sort(order)[0]!;
           const card = { ...viewAt(0, HEIGHTS[0]!), ...(await R('handView', i, h.side, [viewAt(0, HEIGHTS[0]!)], SCORE_SIZE) as { visible: number; total: number }[])[0]! };
           const pictures: string[] = [];
           const seen: Record<string, number> = {};
-          for (const [name, v] of [['card', card], ['best', best]] as const) {
+          const chosen: [string, { turn: number; position: number[]; target: number[]; visible: number; total: number }][] = [['card', card], ['best', best]];
+          let profileTurn: number | undefined;
+          if (palm) {
+            // In the palm's plane, edge-on: turns about the normal from the palm's sideways axis.
+            const sides = Array.from({ length: PROFILE_TURNS }, (_, k) => {
+              const turn = (360 / PROFILE_TURNS) * k;
+              const dir = palm.across.clone().applyAxisAngle(palm.normal, turn * THREE.MathUtils.DEG2RAD);
+              return { turn, dir, position: target.clone().addScaledVector(dir, DISTANCE).toArray(), target: target.toArray(), fov: FOV };
+            }).filter((v) => Math.abs(v.dir.y) <= PROFILE_MAX_UP);
+            if (sides.length) {
+              const ps = await R('handView', i, h.side, sides, SCORE_SIZE) as { visible: number; total: number }[];
+              const profile = sides.map((v, k) => ({ ...v, ...ps[k]!, seen: ps[k]!.total ? ps[k]!.visible / ps[k]!.total : 0 })).sort(order)[0]!;
+              profileTurn = profile.turn;
+              chosen.push(['profile', profile]);
+            }
+          }
+          for (const [name, v] of chosen) {
             const share = v.total ? v.visible / v.total : 0;
             seen[name] = Math.round(share * 1000) / 1000;
-            const label = `${h.performer} ${h.side} hand, ${t.toFixed(2)} s, ${name} (turn ${v.turn}°, ${Math.round(share * 100)}% seen)${options.firstPassOnly ? ', first pass only' : ''}`;
+            const label = `${h.performer} ${h.side} hand, ${t.toFixed(2)} s, ${name} (${name === 'profile' ? 'edge-on to the palm' : `turn ${v.turn}°`}, ${Math.round(share * 100)}% seen)${options.firstPassOnly ? ', first pass only' : ''}`;
             const shot = await R('close', i, { position: v.position, target: v.target, fov: FOV, width: SIZE, height: SIZE, background: BACKGROUND, label }) as { image: string };
             const file = join(out, `${h.performer}-${h.side}-${name}${tag}.jpg`);
             await writeFile(file, Buffer.from(shot.image.slice(shot.image.indexOf(',') + 1), 'base64'));
             pictures.push(file);
           }
-          shown.push({ ...h, pictures, seen, bestTurn: best.turn, bestUp: best.up });
+          shown.push({ ...h, pictures, seen, bestTurn: best.turn, bestUp: best.up, ...(profileTurn !== undefined ? { profileTurn } : {}) });
         }
       });
     } finally {
