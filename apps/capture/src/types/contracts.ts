@@ -6,6 +6,7 @@ export type AppMode = 'desktop-third' | 'desktop-first' | 'vr' | 'mock-vr' | 'ar
 
 /** `selfie`: the phone journey's view (docs/features/phone-capture.md), in front of the avatar, waist up; view only, so exports are unchanged. */
 export type DesktopViewMode = 'third' | 'first' | 'selfie';
+export type StageSpot = 'auto' | 'left' | 'right' | 'front';
 export type VrHandSide = 'left' | 'right';
 
 export const TRACKED_HAND_JOINT_NAMES = [
@@ -256,4 +257,6 @@ export interface TrayUiState {
   holding: boolean;
   /** The slot a held prop would go back into now (headset, over the arc), or one a put-back just went into; else null. */
   returnSlot: number | null;
+  /** Number of event props currently staged in the scene (docs/features/selfie-prop-staging.md). */
+  stagedCount: number;
 }

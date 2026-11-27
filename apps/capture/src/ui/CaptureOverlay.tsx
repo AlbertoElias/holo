@@ -20,7 +20,7 @@ import {
 
 import { ObjectFinder } from './ObjectFinder';
 import { DockGlyphButton, TrayRow, useAboveDock, useTrayGlyph } from './TrayRow';
-import type { UiViewModel, XrEntryOffer } from '../types/contracts';
+import type { StageSpot, UiViewModel, XrEntryOffer } from '../types/contracts';
 import type { CaptureUiBridge } from './captureUiBridge';
 import { captureHelp, isTouchDevice } from './captureHelp';
 import { PostPanel } from './PostPanel';
@@ -125,14 +125,19 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
   const trayOpenedByUi = useRef(false);
   const aboveDock = useAboveDock(input);
   const selfie = touch && isSelfieJourney();
+  const [stageSpot, setStageSpot] = useState<StageSpot>('auto');
   // In selfie mode the count waits for the camera (and body/hand models when enabled) so the avatar is live from frame one.
   const cameraStarting = state.faceCamera === 'starting' || (state.bodycam.enabled && state.bodycam.status === 'starting');
   const countdown = useCountdown(3, cameraStarting, () => bridge.toggleRecording());
-  const trayGlyph = useTrayGlyph(bridge, state.tray.open, touch, trayOpenedByUi);
+  const activateSlot = (slot: number): void => {
+    if (selfie) bridge.stageTraySlot(slot, stageSpot);
+    else bridge.summonTraySlot(slot);
+  };
+  const trayGlyph = useTrayGlyph(bridge, state.tray.open, touch, trayOpenedByUi, activateSlot);
   const trayOpen = state.tray.open;
 
   const summonSlot = (slot: number): void => {
-    bridge.summonTraySlot(slot);
+    activateSlot(slot);
     trayOpenedByUi.current = false;
     bridge.setTrayOpen(false);
   };
@@ -312,7 +317,29 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
 
       <KeyHaloRing bridge={bridge} />
 
-      {flat ? <TrayRow tray={state.tray} touch={touch} input={input} armedSlot={trayGlyph.armedSlot} bottom={aboveDock} addFiles={<TrayFilesPicker bridge={bridge} tray={state.tray} input={input} />} onSummon={summonSlot} onRemove={(slot) => bridge.removeTraySlot(slot)} /> : null}
+      {flat ? (
+        <TrayRow
+          tray={state.tray}
+          touch={touch}
+          input={input}
+          armedSlot={trayGlyph.armedSlot}
+          bottom={aboveDock}
+          stageControls={
+            selfie ? (
+              <SelfieStageBar
+                spot={stageSpot}
+                stagedCount={state.tray.stagedCount}
+                target={target}
+                onSpot={setStageSpot}
+                onClear={bridge.clearStagedProps}
+              />
+            ) : undefined
+          }
+          addFiles={<TrayFilesPicker bridge={bridge} tray={state.tray} input={input} />}
+          onSummon={summonSlot}
+          onRemove={(slot) => bridge.removeTraySlot(slot)}
+        />
+      ) : null}
 
       <PostPanel input={input} target={target} bottom={aboveDock} hidden={isRecording || findOpen || trayOpen || lookShown} exporting={state.recordingState === 'exporting'} />
 
@@ -325,7 +352,15 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
           bottom={aboveDock}
           raised={trayOpen}
           loading={state.tray.loading}
-          onPick={(url) => bridge.loadTrayUrls([url])}
+          selfie={selfie}
+          onPick={(url) => {
+            if (selfie) {
+              bridge.stagePropUrl(url, stageSpot);
+              setFindOpen(false);
+            } else {
+              bridge.loadTrayUrls([url]);
+            }
+          }}
         />
       ) : null}
 
@@ -338,15 +373,89 @@ export function CaptureOverlay({ bridge }: { bridge: CaptureUiBridge }) {
   );
 }
 
+const STAGE_SPOT_OPTIONS: ReadonlyArray<{ value: StageSpot; label: string }> = [
+  { value: 'auto', label: 'Auto' },
+  { value: 'left', label: 'Left' },
+  { value: 'right', label: 'Right' },
+  { value: 'front', label: 'Front' }
+];
+
+function SelfieStageBar({
+  spot,
+  stagedCount,
+  target,
+  onSpot,
+  onClear
+}: {
+  spot: StageSpot;
+  stagedCount: number;
+  target: ViewTarget;
+  onSpot: (spot: StageSpot) => void;
+  onClear: () => void;
+}) {
+  return (
+    <Chip target={target} data-testid="selfie-stage-bar" role="group" aria-label="Stage spot" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 6px' }}>
+      {STAGE_SPOT_OPTIONS.map((option) => {
+        const active = spot === option.value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            data-testid={`stage-spot-${option.value}`}
+            aria-pressed={active}
+            onClick={() => onSpot(option.value)}
+            style={{
+              minHeight: 32,
+              paddingInline: 9,
+              borderRadius: tokens.chip.radius - 2,
+              border: `1px solid ${active ? 'var(--holoim-color-highlight)' : 'transparent'}`,
+              background: active ? 'rgb(var(--holoim-color-gold-rgb) / 18%)' : 'transparent',
+              color: active ? 'var(--holoim-color-highlight)' : 'var(--holoim-color-text-muted)',
+              font: 'inherit',
+              fontSize: 12.5,
+              cursor: 'pointer',
+              WebkitTapHighlightColor: 'transparent'
+            }}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+      {stagedCount > 0 ? (
+        <button
+          type="button"
+          data-testid="clear-staged-props"
+          onClick={onClear}
+          style={{
+            minHeight: 32,
+            paddingInline: 9,
+            marginLeft: 2,
+            borderRadius: tokens.chip.radius - 2,
+            border: '1px solid rgb(var(--holoim-color-gold-rgb) / 40%)',
+            background: 'transparent',
+            color: 'var(--holoim-color-text)',
+            font: 'inherit',
+            fontSize: 12.5,
+            cursor: 'pointer',
+            WebkitTapHighlightColor: 'transparent'
+          }}
+        >
+          Clear ({stagedCount})
+        </button>
+      ) : null}
+    </Chip>
+  );
+}
+
 // Find on a flat screen: the object finder in a small sheet above the dock, so
 // it stays reachable during a take, when the Settings sheet is closed.
-function FindSheet({ input, target, bottom, raised, loading, onPick }: { input: HitInput; target: ViewTarget; bottom: string; raised: boolean; loading: boolean; onPick: (url: string) => void }) {
+function FindSheet({ input, target, bottom, raised, loading, selfie, onPick }: { input: HitInput; target: ViewTarget; bottom: string; raised: boolean; loading: boolean; selfie: boolean; onPick: (url: string) => void }) {
   const gap = glyphMetrics({ headset: false }).gapApx;
   return (
     <div style={{ position: 'absolute', left: 0, right: 0, bottom: raised ? `calc(${bottom} + 96px)` : bottom, display: 'flex', justifyContent: 'center', paddingInline: `max(env(safe-area-inset-left), ${PHONE_EDGES.side}px)`, pointerEvents: 'none' }}>
       <div style={{ pointerEvents: 'auto', width: 'min(100%, 28rem)', maxHeight: '60vh', overflowY: 'auto', borderRadius: tokens.chip.radius }}>
         <Chip target={target} role="dialog" aria-label="Find an object" data-testid="find-sheet" style={{ display: 'grid', gap, padding: gap * 1.5 }}>
-          <ObjectFinder disabled={loading} input={input} onPick={onPick} />
+          <ObjectFinder disabled={loading} input={input} quickPicks={selfie} stageOnPick={selfie} onPick={onPick} />
         </Chip>
       </div>
     </div>

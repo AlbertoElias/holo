@@ -1,7 +1,7 @@
 import type { HaloAction, HaloLayout, Handedness } from "@holoim/xr-ui-core";
 
 import type { HouseLook } from "../avatar/houseLook";
-import type { UiViewModel } from "../types/contracts";
+import type { StageSpot, UiViewModel } from "../types/contracts";
 import type { FlatHaloView } from "./flatHalo";
 
 export interface CaptureUiBridge {
@@ -22,6 +22,12 @@ export interface CaptureUiBridge {
   setTrayOpen: (open: boolean) => void;
   /** A click or tap on a tray slot summons it. */
   summonTraySlot: (slot: number) => void;
+  /** Selfie mode: 1-tap stages a tray slot beside the avatar in frame (docs/features/selfie-prop-staging.md). */
+  stageTraySlot: (slot: number, spot: StageSpot) => void;
+  /** Selfie mode: loads a prop URL into the tray and stages it immediately in 1 tap. */
+  stagePropUrl: (url: string, spot: StageSpot) => void;
+  /** Puts all staged event props back into the tray (undoable). */
+  clearStagedProps: () => void;
   /** A tray slot dragged up off the row: its item leaves the tray (docs/features/archive/tray-remove.md). */
   removeTraySlot: (slot: number) => void;
   /** The dock's Put back: the held prop goes back into the tray. */

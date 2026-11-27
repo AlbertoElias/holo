@@ -11,6 +11,8 @@ import { ObjectSearchSession } from '../objects/objectSearchSession';
 import { SHOW_CAPABILITIES, capabilityLine } from '../objects/findCapabilities';
 
 const THUMBNAIL_APX = 56;
+/** 1-tap starter prop queries shown in mobile selfie mode (docs/features/selfie-prop-staging.md). */
+const QUICK_PROPS = ['Coffee', 'Laptop', 'Plant', 'Chair', 'Lamp', 'Mic'] as const;
 
 function sizeLabel(dimensionsM: ObjectSearchResult['dimensionsM']): string | null {
   if (!dimensionsM) return null;
@@ -67,7 +69,21 @@ function ResultButton({ label, disabled, hit, gap, onPress, children }: { label:
 // Find an object by asking (PRD-060): a text or spoken query, up to six
 // registry results, one click to put a result in the tray. Picking goes
 // through the tray's loader, so its limits and messages apply unchanged.
-export function ObjectFinder({ disabled, input, onPick }: { disabled: boolean; input: HitInput; onPick: (url: string) => void }) {
+export function ObjectFinder({
+  disabled,
+  input,
+  quickPicks = false,
+  stageOnPick = false,
+  onPick
+}: {
+  disabled: boolean;
+  input: HitInput;
+  /** Shows 1-tap starter prop chips under the search bar (mobile selfie mode). */
+  quickPicks?: boolean;
+  /** Labels results for immediate staging instead of tray-only add. */
+  stageOnPick?: boolean;
+  onPick: (url: string) => void;
+}) {
   const [session] = useState(() => new ObjectSearchSession());
   const { query, finding, voice, notice } = useSyncExternalStore(session.subscribe, session.getState);
   const hit = hitAreaApx(input, 0);
@@ -139,6 +155,40 @@ export function ObjectFinder({ disabled, input, onPick }: { disabled: boolean; i
           onPress={toggleVoice}
         />
       </form>
+      {quickPicks ? (
+        <div data-testid="quick-props" role="group" aria-label="Quick props" style={{ display: 'flex', flexWrap: 'wrap', gap: Math.max(6, Math.round(gap * 0.75)) }}>
+          {QUICK_PROPS.map((word) => {
+            const active = query.trim().toLowerCase() === word.toLowerCase();
+            return (
+              <button
+                key={word}
+                type="button"
+                data-testid={`quick-prop-${word.toLowerCase()}`}
+                aria-label={`Search ${word}`}
+                disabled={disabled || voice !== 'idle'}
+                onClick={() => {
+                  session.setQuery(word);
+                  run();
+                }}
+                style={{
+                  minHeight: input === 'touch' ? Math.max(36, Math.round(hit * 0.82)) : 30,
+                  paddingInline: 12,
+                  borderRadius: tokens.chip.radius,
+                  border: `1px solid ${active ? 'var(--holoim-color-highlight)' : 'rgb(var(--holoim-color-gold-rgb) / 45%)'}`,
+                  background: active ? 'rgb(var(--holoim-color-gold-rgb) / 18%)' : 'transparent',
+                  color: active ? 'var(--holoim-color-highlight)' : 'var(--holoim-color-text)',
+                  font: 'inherit',
+                  fontSize: 13,
+                  cursor: disabled ? 'default' : 'pointer',
+                  WebkitTapHighlightColor: 'transparent'
+                }}
+              >
+                {word}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
       {voice === 'listening' ? note('Listening…') : null}
       {notice ? note(notice, 'status') : null}
       {SHOW_CAPABILITIES ? (
@@ -155,7 +205,7 @@ export function ObjectFinder({ disabled, input, onPick }: { disabled: boolean; i
             const size = sizeLabel(result.dimensionsM);
             return (
               <li key={result.id}>
-                <ResultButton label={`Add ${result.title} to the tray`} disabled={disabled} hit={hit} gap={gap} onPress={() => onPick(objectGlbUrl(result))}>
+                <ResultButton label={stageOnPick ? `Stage ${result.title}` : `Add ${result.title} to the tray`} disabled={disabled} hit={hit} gap={gap} onPress={() => onPick(objectGlbUrl(result))}>
                   <img src={result.thumbnailUrl} alt="" loading="lazy" width={THUMBNAIL_APX} height={THUMBNAIL_APX} style={{ objectFit: 'cover', flex: 'none', borderRadius: tokens.chip.radius / 2 }} />
                   <span style={{ display: 'grid', minWidth: 0, gap: 2 }}>
                     <Type variant="controlLabel" style={{ color: 'inherit' }}>

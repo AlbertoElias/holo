@@ -2,7 +2,7 @@ import { dominantHand, nonDominantHand, type Handedness } from '@holoim/xr-ui-co
 import * as THREE from 'three';
 
 import type { AuthoringFrame } from '../recording/authoringSpans';
-import type { HandPoseSource, TrayUiState } from '../types/contracts';
+import type { HandPoseSource, StageSpot, TrayUiState } from '../types/contracts';
 import type { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 import type { AvatarRig } from '../avatar/AvatarRig';
@@ -66,7 +66,8 @@ export class CaptureObjects {
   // Tray loads run one after another, so a pick made while another loads is never dropped.
   private trayLoads: Promise<unknown> = Promise.resolve();
   private trayLoadsPending = 0;
-  private trayLive = { open: false, blocked: false, reachableSlot: null as number | null, holding: false, returnSlot: null as number | null };
+  private stageCycle = 0;
+  private trayLive = { open: false, blocked: false, reachableSlot: null as number | null, holding: false, returnSlot: null as number | null, stagedCount: 0 };
   private readonly palm = new THREE.Vector3();
   private readonly box = new THREE.Box3();
   private readonly liftScale = new THREE.Vector3();
@@ -499,6 +500,62 @@ export class CaptureObjects {
     return object;
   }
 
+  /**
+   * Selfie 1-tap staging (docs/features/selfie-prop-staging.md): places tray
+   * slot `slot` beside or in front of the avatar so it reads cleanly in the
+   * portrait selfie frame without gluing to the right hand. Small props lift to
+   * waist height; tall props stand on the ground.
+   */
+  stageFromTray(slot: number, spot: StageSpot, lookYaw: number, timeSec = this.lastTimeSec): SceneObject | null {
+    if (this.exporting()) return null;
+    const order: ReadonlyArray<'left' | 'right' | 'front'> = ['left', 'right', 'front'];
+    const resolved = spot === 'auto' ? order[this.stageCycle++ % order.length]! : spot;
+    const avatarHeight = this.deps.avatar.avatarHeight || 1.65;
+    const rootWorld = this.deps.avatar.avatarRoot.position;
+    const fx = -Math.sin(lookYaw);
+    const fz = -Math.cos(lookYaw);
+    const rx = Math.cos(lookYaw);
+    const rz = -Math.sin(lookYaw);
+    const sideDist = resolved === 'left' ? -0.58 : resolved === 'right' ? 0.58 : 0;
+    const fwdDist = resolved === 'front' ? 0.65 : 0.22;
+    const worldPoint = new THREE.Vector3(rootWorld.x + rx * sideDist + fx * fwdDist, rootWorld.y, rootWorld.z + rz * sideDist + fz * fwdDist);
+    const localPoint = this.deps.worldGroup.worldToLocal(worldPoint);
+    const yaw = lookYaw + (resolved === 'left' ? 0.25 : resolved === 'right' ? -0.25 : 0);
+    const object = this.placeFromTray(slot, localPoint, yaw, timeSec);
+    if (!object) return null;
+    const bounds = new THREE.Box3().setFromObject(object.wrapper);
+    const height = bounds.max.y - bounds.min.y;
+    if (height < 0.75) {
+      object.wrapper.position.y += avatarHeight * (resolved === 'front' ? 0.42 : 0.52);
+      object.wrapper.updateMatrixWorld(true);
+    }
+    this.publishTray();
+    return object;
+  }
+
+  /** Loads a prop URL into the tray and stages the new slot immediately in 1 tap. */
+  async stageUrl(url: string, spot: StageSpot, lookYaw: number): Promise<boolean> {
+    const before = this.tray.getItems().length;
+    const ok = await this.loadTrayUrls([url]);
+    if (!ok) return false;
+    const items = this.tray.getItems();
+    if (items.length <= before) return false;
+    const added = items[items.length - 1]!;
+    return this.stageFromTray(added.slot, spot, lookYaw) !== null;
+  }
+
+  /** Puts every staged event prop back into the tray (each joins the undo history). */
+  clearStagedProps(timeSec = this.lastTimeSec): number {
+    if (this.exporting()) return 0;
+    const staged = [...this.registry.eventObjects()];
+    let count = 0;
+    for (const object of staged) {
+      if (this.putBack(object, timeSec)) count += 1;
+    }
+    if (count > 0) this.publishTray();
+    return count;
+  }
+
   /** The scene the world group is drawn in (a structural check: three copies may differ). */
   private liveScene(): THREE.Scene | undefined {
     let root: THREE.Object3D = this.deps.worldGroup;
@@ -639,9 +696,10 @@ export class CaptureObjects {
       if (performance.now() < this.returnFlash.untilMs) returnSlot = this.returnFlash.slot;
       else this.returnFlash = null;
     }
+    const stagedCount = this.registry.eventObjects().length;
     const live = this.trayLive;
-    if (live.open === open && live.blocked === blocked && live.reachableSlot === reachableSlot && live.holding === holding && live.returnSlot === returnSlot) return;
-    this.trayLive = { open, blocked, reachableSlot, holding, returnSlot };
+    if (live.open === open && live.blocked === blocked && live.reachableSlot === reachableSlot && live.holding === holding && live.returnSlot === returnSlot && live.stagedCount === stagedCount) return;
+    this.trayLive = { open, blocked, reachableSlot, holding, returnSlot, stagedCount };
     const current = this.deps.ui.getState().tray;
     this.deps.ui.setTrayState({ ...current, ...this.trayLive });
   }
