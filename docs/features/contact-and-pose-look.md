@@ -32,7 +32,9 @@ set.
 **Included:** two parts, built in this order.
 
 1. **Pose look.** A command that shows one moment (frame `f`) of a sheet.
-   - It solves frames 0 to `f + 13` with the full two-pass solve (`solveTake`). The
+   - It solves frames 0 to `f + 13` with the full solve (`solveTake`: pass 1, then up
+     to 3 clearing rounds). The sheet keeps its duration, and only the frame loop
+     stops early, because the life schedule depends on the duration. The
      solver carries state between frames (the clearing plan, the lift ease, the twist
      rate limit, goals fixed at first use, the other performer's last frame), so one
      frame alone does not give the pose of the full build.
@@ -42,6 +44,11 @@ set.
      export, viewer start). The 30-second target below is a measured gate. If the gate
      fails, the fallbacks are a warm process between looks, or a first-pass-only
      picture that says so in its file name and its report.
+   - Measured 2026-11-27 (goodbye, 2.90 s): 83.7 s against a full build of about
+     142 s, and the same pose to 0.000 mm. The 30-second gate failed, because the 4
+     solve passes take 67 s. Decision: the full look stays the default, a warm
+     process and a labelled first-pass-only look are added, and the tool turns the
+     second picture to the view where the hand is not hidden.
 2. **Contact, as a trial.** One new direction:
    `{ "contact": { "part": "rightPalm", "on": "him.leftUpperArm", "kind": "rest" } }`
    with the usual beat times.
