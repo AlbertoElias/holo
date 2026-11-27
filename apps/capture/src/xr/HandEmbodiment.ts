@@ -26,18 +26,6 @@ const REFERENCE_ARM_PER_EYE_HEIGHT = 0.3222;
 // recorded arm model; past full reach it may stretch by this small reserve,
 // for both sources (under AvatarColliders' 2% rebuild step, and not visible).
 const VR_REACH_RESERVE = 0.018;
-// A VR target past the arm's reach leans the chest toward it (T-18dd51), as a
-// person does: the chest bone (the arms' torso frame) turns about its own
-// joint, so the shoulder comes closer. The lean starts at full reach and turns
-// the shoulder as far as the target is out of reach, within these limits: a
-// twist about the torso's up axis (it moves one shoulder forward and, with an
-// upright spine, keeps the head on its axis) and a bend (it moves both shoulders and carries the head
-// with them, a few centimetres off the tracked head). Pending owner confirmation.
-const CHEST_LEAN_START = 1;
-const CHEST_TWIST_MAX_RAD = THREE.MathUtils.degToRad(25);
-const CHEST_BEND_MAX_RAD = THREE.MathUtils.degToRad(12);
-// The lean eases with this time constant (s), so a target that jumps does not snap the chest.
-const CHEST_LEAN_EASE_SEC = 0.15;
 
 // Avatar bones that sit on the same anatomical joint as each WebXR hand joint;
 // tips are the distal bones' end sites, when the rig has them.
@@ -88,23 +76,6 @@ export class HandEmbodiment {
   private readonly tmpQuat = new THREE.Quaternion();
   private readonly handWorldScratch = new THREE.Quaternion();
   private readonly palmJointScratch = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()] as const;
-  // The chest lean toward far VR targets: its eased rotation vector (world, radians), the chest's local rotation
-  // before and after the lean (the lean is taken back next frame if nothing else posed the chest since).
-  private readonly chestLean = new THREE.Vector3();
-  private readonly chestLeanWanted = new THREE.Vector3();
-  private chestLeanBone: THREE.Object3D | undefined;
-  private readonly chestBefore = new THREE.Quaternion();
-  private readonly chestAfter = new THREE.Quaternion();
-  private readonly headBefore = new THREE.Quaternion();
-  private readonly headAfter = new THREE.Quaternion(NaN, NaN, NaN, NaN);
-  private readonly leanVecA = new THREE.Vector3();
-  private readonly leanVecB = new THREE.Vector3();
-  private readonly leanPivot = new THREE.Vector3();
-  private readonly leanAxis = new THREE.Vector3();
-  private readonly leanUp = new THREE.Vector3();
-  private readonly leanQuat = new THREE.Quaternion();
-  private readonly leanQuatB = new THREE.Quaternion();
-  private readonly headWorldBefore = new THREE.Quaternion();
 
   constructor(
     private readonly tracking: XrTracking,
@@ -210,7 +181,6 @@ export class HandEmbodiment {
 
     this.tracking.updateHandTrackingTargets(headAnchor);
     this.ensureSensors();
-    this.leanChest(vr);
 
     for (const side of SIDES) {
       const chain = this.armChains[side];
@@ -259,79 +229,6 @@ export class HandEmbodiment {
       chain.hand.getWorldPosition(this.tmpHandWorld);
       if (isFiniteVector3Like(this.tmpHandWorld)) this.moveSensor(side, this.tmpHandWorld);
     }
-  }
-
-  /**
-   * Leans the chest toward VR targets past the arm's reach (see CHEST_LEAN_START). Each such arm asks for the turn
-   * about the chest joint that brings its shoulder toward its target by the distance it is out of reach; the sum is
-   * split into a twist about the torso's up axis and a bend, each limited, and eased. The head keeps its world rotation.
-   */
-  private leanChest(vr: { deltaSec: number } | undefined): void {
-    const bone = this.armChains.left?.torso;
-    if (!bone || bone !== this.armChains.right?.torso || !bone.parent) return;
-    // Take back last frame's lean when nothing posed the chest since (the body solver poses it from bind each frame).
-    const head = this.avatar.humanoid?.bone('head');
-    if (this.chestLeanBone === bone && bone.quaternion.equals(this.chestAfter)) {
-      bone.quaternion.copy(this.chestBefore);
-      // The head too, when nothing posed it since: else it turns a little further each frame.
-      if (head && head.quaternion.equals(this.headAfter)) head.quaternion.copy(this.headBefore);
-    }
-    this.chestLeanBone = bone;
-    this.chestBefore.copy(bone.quaternion);
-    const wanted = this.chestLeanWanted.set(0, 0, 0);
-    if (vr) {
-      bone.updateWorldMatrix(true, false);
-      const pivot = bone.getWorldPosition(this.leanPivot);
-      for (const side of SIDES) {
-        const chain = this.armChains[side]!;
-        const state = this.tracking.getHandTrackingState(side);
-        if (!state.poseValid) continue;
-        chain.shoulder.quaternion.copy(chain.shoulderBindQuaternion);
-        chain.shoulder.updateMatrixWorld(true);
-        const shoulder = chain.upperArm.getWorldPosition(this.leanVecA);
-        const reach = (chain.upperLength + chain.lowerLength) * this.vrArmFit(chain) * (1 + VR_REACH_RESERVE);
-        const past = shoulder.distanceTo(state.targetPosition) - reach * CHEST_LEAN_START;
-        if (!(past > 0)) continue;
-        const arm = shoulder.sub(pivot);
-        const toTarget = this.leanVecB.copy(state.targetPosition).sub(pivot);
-        const lever = arm.length();
-        if (!(lever > 1e-3) || toTarget.lengthSq() < 1e-6) continue;
-        const axis = this.leanAxis.crossVectors(arm, toTarget);
-        if (axis.lengthSq() < 1e-10) continue;
-        const angle = Math.min(arm.angleTo(toTarget), past / lever);
-        wanted.addScaledVector(axis.normalize(), angle);
-      }
-      // Split into the twist about the avatar's up axis and the bend, each within its limit.
-      const up = this.leanUp.set(0, 1, 0).applyQuaternion(this.avatar.avatarRoot.getWorldQuaternion(this.leanQuat));
-      const twist = THREE.MathUtils.clamp(wanted.dot(up), -CHEST_TWIST_MAX_RAD, CHEST_TWIST_MAX_RAD);
-      wanted.addScaledVector(up, -wanted.dot(up));
-      if (wanted.length() > CHEST_BEND_MAX_RAD) wanted.setLength(CHEST_BEND_MAX_RAD);
-      wanted.addScaledVector(up, twist);
-    }
-    const dt = Math.max(0, vr?.deltaSec ?? 1);
-    this.chestLean.lerp(wanted, 1 - Math.exp(-dt / CHEST_LEAN_EASE_SEC));
-    const angle = this.chestLean.length();
-    if (!vr && angle < 1e-4) this.chestLean.set(0, 0, 0);
-    if (angle < 1e-4) {
-      this.chestAfter.copy(bone.quaternion);
-      if (head) this.headAfter.set(NaN, NaN, NaN, NaN);
-      return;
-    }
-    if (head) {
-      this.headBefore.copy(head.quaternion);
-      head.getWorldQuaternion(this.headWorldBefore);
-    }
-    // world' = lean · world; local' = parentWorld⁻¹ · world'.
-    const lean = this.leanQuat.setFromAxisAngle(this.leanVecA.copy(this.chestLean).divideScalar(angle), angle);
-    const world = bone.getWorldQuaternion(this.leanQuatB).premultiply(lean);
-    bone.quaternion.copy(bone.parent.getWorldQuaternion(this.leanQuat).invert().multiply(world));
-    bone.updateMatrixWorld(true);
-    if (head?.parent) {
-      head.quaternion.copy(head.parent.getWorldQuaternion(this.leanQuat).invert().multiply(this.headWorldBefore));
-      head.updateMatrixWorld(true);
-      this.headAfter.copy(head.quaternion);
-    }
-    this.chestAfter.copy(bone.quaternion);
   }
 
   /** Tracked joints and the avatar bones on the same anatomical joints, in world space. */

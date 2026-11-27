@@ -36,12 +36,17 @@ it from the item below instead of duplicating its status here.
 
 - [ ] VR arms, the gaps left by <!-- T-18dd51 -->
   [`docs/features/archive/vr-arm-natural.md`](docs/features/archive/vr-arm-natural.md):
-  the chest now leans toward a reach past the arm (2026-11-24,
-  [`vr-motion-gaps.md`](docs/features/archive/vr-motion-gaps.md); the limits are
-  pending owner confirmation), and a partial `ARM_REACH_ONLY` run judges only
-  its own segments. Still open: with a still head the controller wrist stays
-  10–11 cm short on the far forward and overhead reaches (the hand 3–4 cm;
-  a larger bend would move the avatar's head off the tracked head); a wrist
+  a partial `ARM_REACH_ONLY` run judges only its own segments, and the arms
+  check measures the clavicle in the chest's frame (2026-11-27,
+  [`vr-motion-gaps.md`](docs/features/archive/vr-motion-gaps.md)). Still open:
+  with a still head the controller wrist stays 12 cm short on the far forward
+  and overhead reaches (the hand 5 cm). A chest lean after the body solve did
+  not ship: its bend (12°) brought the controller wrist 1.3 cm closer and the
+  hand 1.3 cm, but carried the avatar's eyes 3 cm off the tracked head (the
+  height check holds 2 mm) and changed a held prop's throw; a twist about the
+  chest → neck axis alone, which keeps the eyes, gains nothing. A lean must
+  come from the body solver, bending the spine below the neck while the neck
+  stays under the tracked head; a wrist
   behind the back lies outside the recorded arms, where hands put the elbow up
   (swivel 157°) and controllers do not (80°, the more natural pose for a back
   pocket), and both flip twice there, which fails the arms check's flip gate
