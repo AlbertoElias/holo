@@ -193,6 +193,13 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   - Other runs of the same file pass all four cases.
 - **Expected:** the CPU budget (`ITIMER_PROF`) fires only when the conversion itself spends 100 s of CPU.
 - **Reproduction:** `bash apps/viewer-api/tools/check_usdz_tools.sh <watering.glb> <out>` on a loaded Mac. It is intermittent (about 1 run in 3 so far). The case with audio is the one that fails, so the ffmpeg child or its teardown is a suspect.
+- **Seen again:** 2026-11-26, in 2 of 4 `verify:pr` runs on `bug/face-avatar-faults` (macOS, loaded, on battery).
+  - In the pipeline step: `e2e/capture-to-viewer.pipeline.spec.ts:20` got `usdzStatus` "failed" from the API.
+  - In `usdz-tools`: case `silent-animated-ancestor-and-face`, which has no audio. Its conversion log has
+    "Successfully converted …", then the budget message.
+  - By hand: 1 of 4 conversions of the pipeline spec's take failed with the budget message after about 5 s of CPU
+    (`time`: 4.88 s user). A take with the earlier avatar failed the same way, so the take is not the cause.
+  - So the fault is not only in the audio case, and the ffmpeg child is not the only suspect.
 
 ### B-085 — Deep zoom: the camera mode is "follow", not "free", when the wheel stops (hosted 3 times; reproduces in CI emulation)
 
@@ -275,6 +282,19 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   for every case (a re-pin that waits for the owner). Otherwise accept stone-sD smooth.me 11 % in the stone re-pin
   that already waits for the owner. The render tool and the before/after crops are in the shared notes
   (`b101-cuff/`).
+
+### B-115 — VR spatial audio check: the bell is not louder in the right ear (seen once under load)
+
+- **Area:** apps/viewer-web (`e2e/xr-viewer.spec.ts:731`, VR spatial audio)
+- **Severity:** P3 (a check failure seen once; no person has heard a wrong side)
+- **Observed:** 2026-11-26, once, in a `verify:pr` run on `bug/face-avatar-faults` (macOS, loaded, on battery). That
+  branch changes only the house avatar. The spec passed in the next run with the same inputs.
+- **Evidence:** "bell on the right: -16.9/-16.3 dB": the side difference was 0.59 dB against the bar of more than
+  3 dB (line 782). The checks before it in the spec passed (the head is the ear, the sounds stay on their nodes).
+- **Expected:** with the bell on the right of the head, the right ear is more than 3 dB louder.
+- **Reproduction:** not found. `pnpm run test:xr:viewer` on a loaded Mac; 1 failure in 2 runs of the spec so far.
+- **Next fix:** find what the measurement waits on after the head turn (the panner's position and the analyser
+  window). Verify under `CI_EMULATE_LOAD=2 scripts/ci-emulate.sh … --repeat-each=5`.
 
 ## Entry template
 

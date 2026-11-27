@@ -1835,7 +1835,7 @@ bug above.)
   the torso leaned back to reach the head. Sideways, the feet also trailed (as in B-078).
 - **Fix:** `MovementSystem` records the rig's move in `BodyTracking.carried`, and `planRoot` takes it out of the root
   plan. Side cadence and the travel-side first step as in B-078. The stick strafe moves at 65% of the forward speed
-  (`STICK_STRAFE_SHARE`), so a sideways stride can keep pace (pending owner confirmation).
+  (`STICK_STRAFE_SHARE`), so a sideways stride can keep pace (confirmed by the owner on 2026-11-27).
 - **Closed:** 2026-11-20.
 
 ### B-077 — VR head walk start: the body jumps from rest to full speed in one frame (arms pop)
@@ -2260,3 +2260,48 @@ bug above.)
   and asked for the laugh's lower lid higher (done).
 - **Not fixed (model):** the lids cannot slant and the brows do not bend (no such shapes); the grey teeth band and
   the thin lower lip at the laugh corners are in the approved mouth and stay.
+
+### B-112 — House avatar: brows in pieces, a hard fringe edge, a gap at the neck
+
+- **Found:** 2026-11-24, by the owner on a goodbye draft (her face at 5.2 s, head down, camera high). The story
+  session made the first renders.
+- **Area:** `apps/capture/scripts/authoring/house-base` (`build.py`, `dress.py`, `base.json`),
+  `apps/capture/assets/house-base`, `apps/capture/public/gltf/models/house-base.glb`, `public/look-pictures`
+- **Cause, brows:** not the camera and not the 3 mm lift. Each brow shape is "the point moved in the face's plane,
+  put back on the skin, less the rest point", and shapes add as straight lines on a face that is not flat.
+  `browDown` takes the inner end back into the socket's hollow; with `browInnerUp` added the brow is at its own
+  height again but still that deep. At rest and in each shape alone the ribbon is 0.8 mm or more clear. With
+  `browInnerUp` 1 and `browDown` 1, 40 of the 102 brow vertices are under the skin (to 8.7 mm, 40 % hidden). In the
+  "concerned" state face (inner up 0.6, down 0.3), 24 are under (1.75 mm, 21 % hidden), from every camera.
+- **Cause, fringe:** not mainly the 56 columns. In the curtain styles (wavyBob, centrePart) the curtain's flare and
+  wave were added over the face too, where the curtain has no length: a flat sheet with no thickness stood out
+  from the hairline, as far as 4 cm, with a polygon edge, and hung across the brows from a high camera. In every
+  style the front rim was a slab's corner, and a lock had 4 columns.
+- **Cause, neck:** the ease did not go to nothing all round. Only the rim vertices whose main bone is the neck or
+  the head were tapered (the sides, 0 mm). The front and the back of the rim (main bone Spine2) kept 3 to 14.6 mm
+  of ease, so the rim was on the neck in two places and off it in two, with the inside in view. The neckline also
+  went up and down in steps (z 1.382 to 1.408 m), because a plane test on face centres decides whole faces.
+- **Fix:** brows: `build.py` examines every mix of the three brow shapes (each at 0, 0.5 and 1) and, where a brow
+  point would go under the skin, the shape that goes deepest gives way (`face.browShapes.mixSteps`). Fringe:
+  `dress.py` flares and waves the curtain only where it hangs; the shell has twice the columns within 90° of the
+  front (`hair.fine`, `fineWithin`), and where no curtain hangs the thickness comes down to half in a quarter round
+  at the hairline (`rim`, `rimOver`). Neck: an opening with a `taperWhole` bone is tapered and pinned all the way
+  round, and `build.py` slides each neckline vertex along its own edge onto the collar plane, in every face shape.
+- **Proof:** brows: 0 of 102 vertices under the skin, 1.0 mm or more clear, 0 % hidden, at rest, in the concerned
+  face and in each tested mix (inner up + down at 1, with outer up, at 0.5, and 0.3 + 0.8), on the slight, medium
+  and broad builds. Fringe: no sheet in wavyBob or centrePart; no hair vertex below the top of the brows; the front
+  rim's edges 10 mm → 5 mm; examined in the six styles. Neck: the rim's clearance 0 to 14.6 mm → 0.0 mm all
+  round; 100 of 100 neckline vertices on the plane (the build stops if one cannot move); examined in clay, ink and light. `house-base.glb` 1,559,348 →
+  1,582,852 bytes (bar 1,800,000); her look (wavyBob) 1,613,284 → 1,663,428 bytes; each wardrobe 1.97 → 2.17 MB.
+- **Jumper away from the collar:** the first build of this fix also moved 40 sleeve points by 3 to 16.5 mm (medium
+  build, y 0.95 to 1.15 m, both arms), and the solver reads the arm's skin from those points: stone sD, stone sE and
+  baker left their pins. The cause was not the brows, the fringe or the whole-rim taper. It was the neckline slide.
+  The fit's rounds push each jumper point out of the body point by point, and a point in the narrow gap between the
+  arm and the side can go to one wall or the other. The smoothing carried the collar's small change to the sleeves
+  and some points went to the other wall. Now the collar's fit holds only near the collar: from `keepBeyond` (0.10
+  to 0.18 m along the cloth from the neck rim) the jumper is the one fitted without the slide and without the
+  whole-rim taper. Against the build before B-112, the medium jumper moves only above y 1.24 m (402 points, 18.4 mm
+  at the rim) and no point moves below y 1.2 m.
+- **Pins:** none moved. Every case of the solver regression (baker, crouch v43, goodbye v35, pinch v14, slip sO,
+  stone sD, stone sE) is at or under the pins of `main`.
+- **Not fixed:** the brows do not bend and the lids do not slant (no such shapes).

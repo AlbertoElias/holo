@@ -85,7 +85,10 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     embodyOffset: config.embodyOffset,
     rigYaw: () => locomotion.turnYaw
   });
+  const inputParam = new URLSearchParams(window.location.search).get('input');
+  const bodycamByDefault = inputParam === 'camera' || (inputParam !== 'face' && isSelfieJourney());
   if (isSelfieJourney()) camera.desktopViewMode = 'selfie';
+  camera.selfieBodyFraming = bodycamByDefault;
   const tracking = new XrTracking(renderer, config.mockVrEnabledFromQuery, {
     handPitchDeg: config.handTrackPitchDeg,
     handYawDeg: config.handTrackYawDeg,
@@ -94,8 +97,9 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     controllerPitchDeg: config.controllerTrackPitchDeg,
     controllerYawDeg: config.controllerTrackYawDeg,
     controllerRollDeg: config.controllerTrackRollDeg
-  }, new URLSearchParams(window.location.search).get('input') === 'camera');
+  }, bodycamByDefault);
   const ui = new UIStateStore();
+  ui.setBodycamState({ enabled: bodycamByDefault, status: 'off', handsVisible: false });
   ui.setXrEntry(xrEntry.offers);
   xrEntry.onChange(() => ui.setXrEntry(xrEntry.offers));
   const touchStick = new TouchStickView(container);
@@ -293,7 +297,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     crouch: new CrouchState(),
     hands,
     objects,
-    face: new FaceDriver(cameraRig, (state) => ui.setFaceCamera(state), tracking.camera),
+    face: new FaceDriver(cameraRig, (state) => ui.setFaceCamera(state), tracking.camera, (status) => ui.setBodycamState({ status })),
     animator: new LocomotionAnimator(),
     terrainLegs: new TerrainLegSolver(),
     armClearance: new ArmClearance(),
@@ -420,7 +424,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
         avatar.humanoid.warnOnce();
         houseLook.attach();
         // On by default: a refusal or a missing camera only changes the state the settings sheet shows.
-        if (faceCameraOnByDefault()) void capture.face.webcam.start();
+        if (faceCameraOnByDefault()) void capture.face.startCamera();
       }
       // The supplied object loads after the avatar, so its bone names never shadow the avatar's.
       if (config.objectUrl) await objects.loadUrl(config.objectUrl);
@@ -454,6 +458,11 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       removeTraySlot: (slot) => input.queueTrayRemove(slot),
       putBackHeld: () => input.queuePutBack(),
       toggleFaceCamera: () => capture.face.toggleCamera(),
+      setBodycamEnabled: (enabled) => {
+        camera.selfieBodyFraming = enabled;
+        ui.setBodycamState({ enabled, handsVisible: enabled ? ui.getState().bodycam.handsVisible : false });
+        capture.face.setBodycamEnabled(enabled);
+      },
       setHandedness,
       toggleXr: (mode) => {
         const entering = !world.session;

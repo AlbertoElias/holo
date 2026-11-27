@@ -113,9 +113,15 @@ function git(args: string[]): string {
   return result.stdout;
 }
 
-/** The arm solve and the pieces that pin it (scripts/authoring/solver-regression.ts). */
+/**
+ * The arm solve and the pieces that pin it (scripts/authoring/solver-regression.ts): the solver, its sheets, and the
+ * avatars it solves on (the shown and collision wardrobes, the public base, their build scripts and the look package).
+ */
 export function touchesSolver(file: string): boolean {
-  return /^apps\/capture\/scripts\/authoring\/(lib\/|make\.ts$|solver-regression\.ts$|sheets\/regression\/)/.test(file);
+  return /^apps\/capture\/scripts\/authoring\/(lib\/|make\.ts$|solver-regression\.ts$|sheets\/regression\/|house-base\.ts$|house-base\/)/.test(file)
+    || /^apps\/capture\/assets\/house-base\//.test(file)
+    || file === "apps/capture/public/gltf/models/house-base.glb"
+    || /^packages\/avatar-look\//.test(file);
 }
 
 function changedFiles(base: string): string[] {
