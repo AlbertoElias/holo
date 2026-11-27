@@ -9,8 +9,8 @@
 # Each file selects only the suites that actually exercise it, and the apps
 # whose build it changes. Docs, CI/deploy workflows, shell scripts and tool
 # configuration have no suite, so they select nothing (the changes job itself
-# runs the selection scripts on every push; dispatch CI to exercise an edited
-# job). Lockfile changes alter every app's dependencies and select every
+# runs the selection scripts on every push; to exercise an edited job, run
+# the hosted gate, pnpm run verify:hosted, or dispatch CI). Lockfile changes alter every app's dependencies and select every
 # area; unclassified files fail closed the same way. Keep this mapping in sync
 # with the test and deploy jobs in .github/workflows/ci.yml.
 #
@@ -108,7 +108,7 @@ else
       scripts/test-api.ts)
         saw_code=true; quality=true; pipeline=true; portal=true ;;
       # Lint, typecheck and tooling unit tests cover these.
-      scripts/*.ts|tsconfig*.json|eslint.config.*)
+      scripts/*.ts|tsconfig*.json|.oxlintrc.json)
         saw_code=true; quality=true ;;
       pnpm-lock.yaml)
         saw_code=true; all ;;

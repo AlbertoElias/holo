@@ -3,6 +3,60 @@
 Closed entries moved from `BUGS.md` so the live tracker stays scannable.
 `BUGS.md` remains the authority for open, verified defects.
 
+### B-114 — CI: packages.microsoft.com answers 403 and the Playwright browser install fails
+
+- **Area:** CI (`scripts/ci-apt.sh`, called by `.github/actions/setup`)
+- **Severity:** P2 (two red `main` runs; no product effect)
+- **Observed:** 2026-11-27, hosted run 46036780190 (8b258730, job "Portal view end-to-end") and run
+  46037776491 (b15acf58, "Viewer VR gallery … shard 2/2"): `playwright install --with-deps chromium` failed
+  with "Failed to fetch https://packages.microsoft.com/…/InRelease 403 Forbidden" and "The repository … is
+  no longer signed", exit 100. The other 24 jobs of the first run got past the same step.
+- **Cause:** the runner image lists Microsoft's apt repository, and its index is already cached. When that
+  host answers 403, `apt-get update` fails, so the install fails. The retry in `ci-apt.sh` changes only the
+  Ubuntu mirror (B-024), so it failed the same way.
+- **Fix:** before its first apt call, `ci-apt.sh` renames each apt source file that names packages.microsoft.com
+  to `*.ci-disabled`, which apt ignores. The install needs only Ubuntu's packages.
+- **Proof:** in an Ubuntu 24.04 container with the Microsoft source cached and a local server answering
+  403 for that host, the old script exits 100 with the two errors above; the new one turns the source off
+  and exits 0 on the first attempt. From a Mac the same URL returns 200: the 403 hits only runner IPs.
+
+### B-087 — VR head walk: the pelvis drops in one frame at each foot landing
+
+- **Area:** apps/capture (`VrBodySolver` pelvis height in the gait)
+- **Severity:** P3 (found by measurement, not yet seen by the owner)
+- **Observed:** 2026-11-20, on `bug/vr-legs-direction`
+- **Evidence:** `test:xr:walk-direction`, head rows, with the head moved on every XR frame. In the steady walk the hips'
+  vertical acceleration averages 1.8–4.1 m/s², but single frames at a foot landing reach 12.8 (forward), 20.7 (left),
+  16.8 (back), 20.2 (right), 18.8 and 18.6 m/s² (diagonals). The head bobs smoothly (2 cm).
+- **Expected:** the pelvis rises and falls smoothly with the stride, with no single-frame drop.
+- **Reproduction:** `pnpm --filter @holoim/capture run test:xr:walk-direction`, then the hips' vertical second
+  difference against the sample time `t` in `output/ci-walk-direction/head-samples.json`.
+- **Cause:** when the trailing planted foot ran out of reach before push-off, the pelvis reach drop's target jumped
+  about 3 cm, and its first-order ease (0.06 s) made the pelvis speed jump. On the stick walk, the recorded hips
+  bob's sharp heel-strike dip added to it.
+- **Fix:** the reach drop follows its target on a critically damped spring (ω 30 rad/s while the drop grows, 14 while it shrinks), and the recorded bob that
+  only the VR solver reads is smoothed (circular Gaussian, σ 6 samples). The walk-direction check fails a phase
+  whose hips move more than 12 m/s² up or down in one frame.
+- **Proof:** head 14.0–20.0 → 5.1–10.7 m/s², stick 16.3–27.2 → 5.3–9.3 m/s²; the new gate fails all 12 rows on the
+  old solver. Brief: `docs/features/archive/vr-motion-gaps.md`.
+
+### B-111 — Authored face: held lids cover the iris when the eyes look up (goodbye white eyes)
+
+- **Area:** apps/capture (`scripts/authoring/lib/direct.ts` the face pass, `scripts/authoring/lib/eye-view.ts`)
+- **Severity:** P2 (the owner saw white eyes in the goodbye piece)
+- **Observed:** 2026-11-24, goodbye v39 at 4.9 to 6.1 s: her eyes show only white.
+- **Evidence:** at 5.2 s her eyeBlink is 0.53 (held 0.2 and eyes-down 0.55 × 0.6), while the look of beat r-after turns
+  the gaze up. The upper lid covers the iris. The eyes bar passed, because the eye meter measured open lids.
+- **Cause:** the director had no lid-gaze coupling. A held blink stayed the same at any gaze pitch, and the eye meter
+  sampled the aperture with the lids open.
+- **Fix:** `eyeView` measures the eye aperture at five blink levels. `blinkCap(view, pitch)` gives the largest held
+  blink that keeps the pupil in view at that pitch, and the face pass lowers a held blink (below `BLINK_SHUT` 0.85) to
+  that cap. A full blink and the life blink do not change. `EyeMeter.sample` now uses the held lids, so the eyes bar
+  sees what the card shows.
+- **Proof:** goodbye v40 (the same sheet): the only morph change is her eyeBlink L/R at 4.90 to 6.10 s; renders at 4.9,
+  5.2 and 5.6 s show the iris. The approved faces do not change: slip sO (laugh), stone sD (sad, smile, hope,
+  eyes-down) and expressions.json have max |Δ| 0.0000 on every morph channel over 169, 301 and 421 frames.
+
 ### B-100 — Authored crouch: the right arm steps about 8 mm in one frame as the take starts (1.73 s)
 
 - **Area:** `apps/capture/scripts/authoring` (`lib/direct.ts` reach solve, `src/ik/ArmIkSolver.ts` reach stop)
@@ -1781,7 +1835,7 @@ bug above.)
   the torso leaned back to reach the head. Sideways, the feet also trailed (as in B-078).
 - **Fix:** `MovementSystem` records the rig's move in `BodyTracking.carried`, and `planRoot` takes it out of the root
   plan. Side cadence and the travel-side first step as in B-078. The stick strafe moves at 65% of the forward speed
-  (`STICK_STRAFE_SHARE`), so a sideways stride can keep pace (pending owner confirmation).
+  (`STICK_STRAFE_SHARE`), so a sideways stride can keep pace (confirmed by the owner on 2026-11-27).
 - **Closed:** 2026-11-20.
 
 ### B-077 — VR head walk start: the body jumps from rest to full speed in one frame (arms pop)
@@ -2206,3 +2260,48 @@ bug above.)
   and asked for the laugh's lower lid higher (done).
 - **Not fixed (model):** the lids cannot slant and the brows do not bend (no such shapes); the grey teeth band and
   the thin lower lip at the laugh corners are in the approved mouth and stay.
+
+### B-112 — House avatar: brows in pieces, a hard fringe edge, a gap at the neck
+
+- **Found:** 2026-11-24, by the owner on a goodbye draft (her face at 5.2 s, head down, camera high). The story
+  session made the first renders.
+- **Area:** `apps/capture/scripts/authoring/house-base` (`build.py`, `dress.py`, `base.json`),
+  `apps/capture/assets/house-base`, `apps/capture/public/gltf/models/house-base.glb`, `public/look-pictures`
+- **Cause, brows:** not the camera and not the 3 mm lift. Each brow shape is "the point moved in the face's plane,
+  put back on the skin, less the rest point", and shapes add as straight lines on a face that is not flat.
+  `browDown` takes the inner end back into the socket's hollow; with `browInnerUp` added the brow is at its own
+  height again but still that deep. At rest and in each shape alone the ribbon is 0.8 mm or more clear. With
+  `browInnerUp` 1 and `browDown` 1, 40 of the 102 brow vertices are under the skin (to 8.7 mm, 40 % hidden). In the
+  "concerned" state face (inner up 0.6, down 0.3), 24 are under (1.75 mm, 21 % hidden), from every camera.
+- **Cause, fringe:** not mainly the 56 columns. In the curtain styles (wavyBob, centrePart) the curtain's flare and
+  wave were added over the face too, where the curtain has no length: a flat sheet with no thickness stood out
+  from the hairline, as far as 4 cm, with a polygon edge, and hung across the brows from a high camera. In every
+  style the front rim was a slab's corner, and a lock had 4 columns.
+- **Cause, neck:** the ease did not go to nothing all round. Only the rim vertices whose main bone is the neck or
+  the head were tapered (the sides, 0 mm). The front and the back of the rim (main bone Spine2) kept 3 to 14.6 mm
+  of ease, so the rim was on the neck in two places and off it in two, with the inside in view. The neckline also
+  went up and down in steps (z 1.382 to 1.408 m), because a plane test on face centres decides whole faces.
+- **Fix:** brows: `build.py` examines every mix of the three brow shapes (each at 0, 0.5 and 1) and, where a brow
+  point would go under the skin, the shape that goes deepest gives way (`face.browShapes.mixSteps`). Fringe:
+  `dress.py` flares and waves the curtain only where it hangs; the shell has twice the columns within 90° of the
+  front (`hair.fine`, `fineWithin`), and where no curtain hangs the thickness comes down to half in a quarter round
+  at the hairline (`rim`, `rimOver`). Neck: an opening with a `taperWhole` bone is tapered and pinned all the way
+  round, and `build.py` slides each neckline vertex along its own edge onto the collar plane, in every face shape.
+- **Proof:** brows: 0 of 102 vertices under the skin, 1.0 mm or more clear, 0 % hidden, at rest, in the concerned
+  face and in each tested mix (inner up + down at 1, with outer up, at 0.5, and 0.3 + 0.8), on the slight, medium
+  and broad builds. Fringe: no sheet in wavyBob or centrePart; no hair vertex below the top of the brows; the front
+  rim's edges 10 mm → 5 mm; examined in the six styles. Neck: the rim's clearance 0 to 14.6 mm → 0.0 mm all
+  round; 100 of 100 neckline vertices on the plane (the build stops if one cannot move); examined in clay, ink and light. `house-base.glb` 1,559,348 →
+  1,582,852 bytes (bar 1,800,000); her look (wavyBob) 1,613,284 → 1,663,428 bytes; each wardrobe 1.97 → 2.17 MB.
+- **Jumper away from the collar:** the first build of this fix also moved 40 sleeve points by 3 to 16.5 mm (medium
+  build, y 0.95 to 1.15 m, both arms), and the solver reads the arm's skin from those points: stone sD, stone sE and
+  baker left their pins. The cause was not the brows, the fringe or the whole-rim taper. It was the neckline slide.
+  The fit's rounds push each jumper point out of the body point by point, and a point in the narrow gap between the
+  arm and the side can go to one wall or the other. The smoothing carried the collar's small change to the sleeves
+  and some points went to the other wall. Now the collar's fit holds only near the collar: from `keepBeyond` (0.10
+  to 0.18 m along the cloth from the neck rim) the jumper is the one fitted without the slide and without the
+  whole-rim taper. Against the build before B-112, the medium jumper moves only above y 1.24 m (402 points, 18.4 mm
+  at the rim) and no point moves below y 1.2 m.
+- **Pins:** none moved. Every case of the solver regression (baker, crouch v43, goodbye v35, pinch v14, slip sO,
+  stone sD, stone sE) is at or under the pins of `main`.
+- **Not fixed:** the brows do not bend and the lids do not slant (no such shapes).

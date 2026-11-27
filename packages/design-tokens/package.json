@@ -16,7 +16,7 @@
   },
   "scripts": {
     "generate": "tsx scripts/generate.ts",
-    "lint": "eslint .",
+    "lint": "oxlint",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "tsx scripts/generate.ts --check && vitest run",
     "verify:fast": "pnpm run lint && pnpm run typecheck",
@@ -37,7 +37,7 @@
     "@types/node": "^24.0.0",
     "@types/three": "catalog:",
     "@zappar/msdf-generator": "^1.2.4",
-    "eslint": "catalog:",
+    "oxlint": "catalog:",
     "three": "catalog:",
     "tsx": "^4.19.2",
     "typescript": "catalog:",

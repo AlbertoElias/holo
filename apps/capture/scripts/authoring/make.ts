@@ -606,7 +606,7 @@ async function make(sheetFile: string, quick: boolean): Promise<boolean> {
     const lim = Object.entries(e.limitsDeg).map(([s, l]) => `${s} up ${l[0]}° down ${l[1]}° left ${l[2]}° right ${l[3]}°`).join('; ');
     const first = e.first ? `, first at ${e.first.t.toFixed(2)} s, ${e.first.side} eye at yaw ${e.first.yawDeg}° pitch ${e.first.pitchDeg}°` : '';
     const pass = e.out <= IRIS_OUT_MAX_FRAMES;
-    rows.push({ id: `eyes.${t.spec.id}`, bar: `each pupil in view between the lids (neutral lids, from in front); out on at most ${IRIS_OUT_MAX_FRAMES} frames`, value: `${e.out} of ${e.frames} frames out${first} (in view up to: ${lim || 'no eye bones'})`, pass, ...(pass ? {} : { fix: 'an eye turns past its lids: the look solve keeps the gaze in view, so something else turns the eye bones (an imported take, or an eye pose): report it with the sheet' }) });
+    rows.push({ id: `eyes.${t.spec.id}`, bar: `each pupil in view between the lids (the held lids, from in front); out on at most ${IRIS_OUT_MAX_FRAMES} frames`, value: `${e.out} of ${e.frames} frames out${first} (in view up to: ${lim || 'no eye bones'})`, pass, ...(pass ? {} : { fix: 'an eye turns past its lids: the look solve keeps the gaze in view, so something else turns the eye bones (an imported take, or an eye pose): report it with the sheet' }) });
   }
 
   // 4. Size per avatar file, and the Quick Look budget.

@@ -321,8 +321,8 @@ fs.writeFileSync(process.argv[4], Buffer.concat([Buffer.from("fixture-usdz:"), f
     expect(json.extensions?.HOLOIM_objects).toEqual(original.json.extensions?.HOLOIM_objects);
     expect(json.nodes.map((node) => node.name)).toEqual(original.json.nodes.map((node) => node.name));
     expect(json.nodes[4]!.name).toBe("RecordedObject");
-    const audio = (json.extensions?.KHR_audio as { audio: Array<{ bufferView: number }> }).audio[0]!.bufferView;
-    const originalAudio = (original.json.extensions?.KHR_audio as { audio: Array<{ bufferView: number }> }).audio[0]!.bufferView;
+    const audio = (json.extensions!.KHR_audio as { audio: Array<{ bufferView: number }> }).audio[0]!.bufferView;
+    const originalAudio = (original.json.extensions!.KHR_audio as { audio: Array<{ bufferView: number }> }).audio[0]!.bufferView;
     expect(processed.view(audio)).toEqual(original.view(originalAudio));
     expect(json.extensionsUsed).toEqual(expect.arrayContaining(["HOLOIM_meaning", "HOLOIM_objects", "HOLOIM_place", "KHR_audio", "KHR_texture_basisu"]));
 

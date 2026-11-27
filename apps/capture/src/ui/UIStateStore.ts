@@ -21,12 +21,14 @@ export class UIStateStore {
     place: { enabled: false, status: 'none', name: null, message: null },
     tray: { names: [], slots: [], loading: false, message: null, open: false, blocked: false, reachableSlot: null, holding: false, returnSlot: null },
     faceCamera: 'off',
+    bodycam: { enabled: false, status: 'off', handsVisible: false },
     handedness: loadHandedness(),
     recordingElapsedMs: 0,
     tracingElapsedMs: null,
     xrEntry: { vr: 'unknown', ar: 'unknown' },
     notice: null,
-    houseLook: null
+    houseLook: null,
+    lookPhoto: { status: 'idle', message: null, kept: null, previous: false }
   };
   private noticeTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -36,6 +38,11 @@ export class UIStateStore {
     this.listeners.add(listener);
     listener(this.value);
     return () => this.listeners.delete(listener);
+  }
+
+  setLookPhoto(lookPhoto: UiViewModel['lookPhoto']): void {
+    this.value = { ...this.value, lookPhoto };
+    this.emit();
   }
 
   setHouseLook(houseLook: UiViewModel['houseLook']): void {
@@ -140,6 +147,14 @@ export class UIStateStore {
   setFaceCamera(faceCamera: UiViewModel['faceCamera']): void {
     if (this.value.faceCamera === faceCamera) return;
     this.value = { ...this.value, faceCamera };
+    this.emit();
+  }
+
+  setBodycamState(patch: Partial<UiViewModel['bodycam']>): void {
+    const prev = this.value.bodycam;
+    const next = { ...prev, ...patch };
+    if (prev.enabled === next.enabled && prev.status === next.status && prev.handsVisible === next.handsVisible) return;
+    this.value = { ...this.value, bodycam: next };
     this.emit();
   }
 

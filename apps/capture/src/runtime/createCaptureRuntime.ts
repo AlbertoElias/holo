@@ -10,6 +10,7 @@ import { JumpArms } from '../animation/JumpArms';
 import { TerrainLegSolver } from '../animation/TerrainLegSolver';
 import { AvatarRig } from '../avatar/AvatarRig';
 import { HouseLookController } from '../avatar/HouseLookController';
+import { PhotoLookController } from '../avatar/photoLook';
 import { currentHouseLook, dressHouseBase, resolveHouseLook, sameHouseLook, wantedHouseLook } from '../avatar/houseLook';
 import { BodyTracking } from '../body/BodyTracking';
 import { CrouchState } from '../body/crouch';
@@ -84,7 +85,10 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     embodyOffset: config.embodyOffset,
     rigYaw: () => locomotion.turnYaw
   });
+  const inputParam = new URLSearchParams(window.location.search).get('input');
+  const bodycamByDefault = inputParam === 'camera' || (inputParam !== 'face' && isSelfieJourney());
   if (isSelfieJourney()) camera.desktopViewMode = 'selfie';
+  camera.selfieBodyFraming = bodycamByDefault;
   const tracking = new XrTracking(renderer, config.mockVrEnabledFromQuery, {
     handPitchDeg: config.handTrackPitchDeg,
     handYawDeg: config.handTrackYawDeg,
@@ -93,8 +97,9 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     controllerPitchDeg: config.controllerTrackPitchDeg,
     controllerYawDeg: config.controllerTrackYawDeg,
     controllerRollDeg: config.controllerTrackRollDeg
-  }, new URLSearchParams(window.location.search).get('input') === 'camera');
+  }, bodycamByDefault);
   const ui = new UIStateStore();
+  ui.setBodycamState({ enabled: bodycamByDefault, status: 'off', handsVisible: false });
   ui.setXrEntry(xrEntry.offers);
   xrEntry.onChange(() => ui.setXrEntry(xrEntry.offers));
   const touchStick = new TouchStickView(container);
@@ -213,7 +218,12 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     getAvatarRoot: () => avatar.avatarRoot,
     getOpenTrace: () => recording.recorder.pointSamples.openTrace(),
     // `houseLook` is built below; these run only once Look opens.
-    setLook: (next) => void houseLook.setLook(next),
+    setLook: (next) => {
+      photoLook.forget();
+      houseLook.setLook(next);
+    },
+    pickLookPhoto: () => photoLook.pick(),
+    previousLook: () => photoLook.previous(),
     withHeadShown: (draw, layer) => avatar.withFirstPersonHeadShown(draw, layer),
     headVisibleToEye: () => avatar.firstPersonHeadVisibleToEye()
   });
@@ -287,7 +297,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
     crouch: new CrouchState(),
     hands,
     objects,
-    face: new FaceDriver(cameraRig, (state) => ui.setFaceCamera(state), tracking.camera),
+    face: new FaceDriver(cameraRig, (state) => ui.setFaceCamera(state), tracking.camera, (status) => ui.setBodycamState({ status })),
     animator: new LocomotionAnimator(),
     terrainLegs: new TerrainLegSolver(),
     armClearance: new ArmClearance(),
@@ -359,6 +369,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
   const houseLook = new HouseLookController({
     loader: stage.loader, avatar, face: capture.face, armClearance: capture.armClearance, recording, ui
   });
+  const photoLook = new PhotoLookController({ houseLook, recording, ui });
 
   const chromeProbe = new ChromeProbe();
   const onResize = (): void => camera.onResize();
@@ -413,7 +424,7 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
         avatar.humanoid.warnOnce();
         houseLook.attach();
         // On by default: a refusal or a missing camera only changes the state the settings sheet shows.
-        if (faceCameraOnByDefault()) void capture.face.webcam.start();
+        if (faceCameraOnByDefault()) void capture.face.startCamera();
       }
       // The supplied object loads after the avatar, so its bone names never shadow the avatar's.
       if (config.objectUrl) await objects.loadUrl(config.objectUrl);
@@ -447,6 +458,11 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       removeTraySlot: (slot) => input.queueTrayRemove(slot),
       putBackHeld: () => input.queuePutBack(),
       toggleFaceCamera: () => capture.face.toggleCamera(),
+      setBodycamEnabled: (enabled) => {
+        camera.selfieBodyFraming = enabled;
+        ui.setBodycamState({ enabled, handsVisible: enabled ? ui.getState().bodycam.handsVisible : false });
+        capture.face.setBodycamEnabled(enabled);
+      },
       setHandedness,
       toggleXr: (mode) => {
         const entering = !world.session;
@@ -457,7 +473,12 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
         if (entering && mode === 'ar') recording.holdMicForArTake();
       },
       recenterAr,
-      setLook: (next) => houseLook.setLook(next),
+      setLook: (next) => {
+        photoLook.forget();
+        return houseLook.setLook(next);
+      },
+      pickLookPhoto: () => photoLook.pick(),
+      previousLook: () => photoLook.previous(),
       setLookPanelHeight: (px) => {
         camera.lookPanelPx = px;
       }
@@ -498,7 +519,9 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
         __resetHandCalibrationPose: () => hands.resetCalibrationPose(),
         __loadObjectUrl: (url) => objects.loadUrl(url),
         __sampleHouseLook: () => ({ ...houseLook.sample(), memory: { ...renderer.info.memory } }),
+        __samplePhotoLook: () => photoLook.sample(),
         __setHouseLook: async (next) => {
+          photoLook.forget();
           if (!houseLook.setLook(next)) return false;
           await houseLook.settled();
           return true;

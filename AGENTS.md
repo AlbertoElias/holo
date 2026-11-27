@@ -10,9 +10,13 @@
   exists. If isolated testing is genuinely necessary, first enumerate all
   plausible system failure modes and use that list to drive the test design and
   implementation.
-- Do not count on hosted CI. It is only the final check for changes that land
-  on `main`, before deployment. Reproduce, fix and verify everything locally;
-  never push or dispatch CI to find out whether something works.
+- Do not use hosted CI to debug. Reproduce, fix and verify everything
+  locally; never push or dispatch CI to find out whether something works.
+  Hosted CI has two uses: the check of each push to `main` before deployment,
+  and `pnpm run verify:hosted`, a permitted pre-merge gate for a finished
+  change. After a red gate run, reproduce the failure locally (with
+  `scripts/ci-emulate.sh` when a direct run does not show it), fix it, then
+  run the gate again.
 - When running a test directly does not reproduce a problem (for example a
   failure seen only on CI), emulate CI in Docker with `scripts/ci-emulate.sh
   <command>`: a 4-CPU, 16 GB Linux container with Node 24 and Chromium, like a
@@ -38,13 +42,18 @@ share cross-app code through workspace packages. Keep API endpoints backward com
 unless versioning is explicit. Preserve GLTF export → upload → render compatibility.
 
 Read `AGENT_CONTRACT.md` when selecting commands, validation scope, or XR environment
-settings. Use `pnpm run verify:agent` in the edit loop and `pnpm run verify:pr`
-locally before merging. `verify:pr` skips a check that already passed with the
-same inputs, so a rerun after a small change is short. `--no-cache` runs every
-selected check (see "Pre-Handoff Check Policy" in `AGENT_CONTRACT.md`). Hosted
-CI runs only on pushes to `main` (only the suites relevant to the merged
-files) and on manual dispatch; it never runs on branches, so local
-verification is the pre-merge gate.
+settings. Use `pnpm run verify:agent` in the edit loop. Before merging, pass
+one of the two pre-merge gates: `pnpm run verify:pr` locally, or
+`pnpm run verify:hosted`, which runs the fast local checks and then the hosted
+test jobs on your branch merged with `origin/main` (run it in the background;
+it waits by itself and prints the failed jobs and tests). `verify:pr` skips a
+check that already passed with the same inputs, so a rerun after a small
+change is short. `--no-cache` runs every selected check (see "Pre-Handoff
+Check Policy" in `AGENT_CONTRACT.md`). Hosted CI runs on pushes to `main`
+(only the suites relevant to the merged files, minus the suites that a green
+gate run passed on the same tree), on `gate/<tree>` refs that
+`verify:hosted` pushes, and on manual dispatch. It never runs on other
+branches.
 Documentation-only edits need documentation checks, not every application test.
 Complete relevant checks and fixes before handoff.
 A pre-push git hook (`scripts/hooks/pre-push-checks.mjs`, installed by `pnpm install`
@@ -228,7 +237,7 @@ for git-ignored files and while resolving a merge, cherry-pick or rebase.
   --repeat-each=5` (see "Emulating CI" in `AGENT_CONTRACT.md`).
 - As soon as your change is working and verified, commit and push your branch.
   You are pre-authorized to commit, push your branch, and merge it into
-  `main` locally once `pnpm run verify:pr` passes, without asking; do not stop
+  `main` locally once `pnpm run verify:pr` or `pnpm run verify:hosted` passes, without asking; do not stop
   for approval on those steps. Never open pull requests: verified work lands
   by merging the branch into `main` locally. After the push to `main`, confirm
   the automated deploy health checks passed and report the live URLs. Still ask
@@ -282,8 +291,11 @@ is convention.
   handed to you (a brief from another session) has no repo line to fix: tell
   that session which part was wrong. `pnpm run doctor` (in `verify:pr`) fails
   on any `--filter` naming a package that does not exist.
-- Typecheck with each package's own `typecheck` script (root uses `tsc`;
-  `apps/knowledge` uses `tsgo`).
+- Lint and typecheck with each package's own `lint` and `typecheck` scripts.
+  Lint is Oxlint (rules in `packages/config-eslint/oxlint/`, one
+  `.oxlintrc.json` per linted package, checked by `pnpm run doctor`);
+  typecheck is `tsc` from TypeScript 7, the native compiler, in every
+  package and at the root.
 - Skills: add skill directories under `.agents/skills/`. `.claude/skills` is a
   symlink to that directory, so never create files inside `.claude/skills` directly.
 - MCP servers: put launch logic in an executable `scripts/mcp/<name>.sh`, then

@@ -7,6 +7,38 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 
 ## Open
 
+### B-113 — Pipeline e2e: an unknown hologram id shows "You're offline" on a heavily loaded Mac (once)
+
+- **Area:** apps/viewer-web (`e2e/profiles.pipeline.spec.ts:124`, the `/h/<id>` page of an unknown id)
+- **Severity:** P3 (test flake; no person has seen it)
+- **Observed:** 2026-11-26, once, in `verify:pr --no-cache` on `infra/hosted-branch-gate` (no viewer-web change);
+  lint and typecheck took 28 minutes in the same run. The status said "You're offline. The feed loads again when
+  you're back online." for the 20 s of the check, not "not here any more". The 12 other pipeline spec files passed,
+  and the hosted gate run 45852488789 passed this spec on the same tree.
+- **Expected:** a 404 for an unknown id shows "not here any more", also when the API answers slowly.
+- **Reproduction:** not reproduced. A suspect: a slow or failed request that the page takes as offline, not as a 404.
+
+### B-112 — viewer-api unit test "waits past the deadline" times out on a heavily loaded Mac (once)
+
+- **Area:** apps/viewer-api (`test/object-routes.test.ts`, "object search with a stalled Poly Pizza download")
+- **Severity:** P3 (test flake; no product effect)
+- **Observed:** 2026-11-26, once, in `verify:pr --no-cache` on `infra/hosted-branch-gate` (no viewer-api change)
+  at load average 22: "Test timed out in 5000ms" after 54.9 s. In the same run, lint and typecheck took 29 minutes.
+- **Expected:** the test finishes inside its limit on a loaded machine, or its limit fits a loaded machine.
+- **Reproduction:** not reproduced. Alone, the file passes in 4.5 s (this test takes 1.5 s).
+
+### B-111 — Viewer browser shard hits its 10-minute limit when the Playwright cache misses and apt is slow (once)
+
+- **Area:** CI (`.github/actions/setup`, job "Viewer and Knowledge browser checks")
+- **Severity:** P3 (CI flake; no product effect)
+- **Observed:** 2026-11-24, hosted run 45330508669 (af3e48fa), attempt 1, shard 2/4: the job was cancelled at
+  `timeout-minutes: 10`. The Playwright Chromium cache missed, and `playwright install --with-deps chromium`
+  took about 7 minutes on a slow apt mirror, so the tests did not finish. Attempt 2 passed.
+- **Expected:** a cache miss costs at most a few minutes and never takes a shard past its limit.
+- **Reproduction:** not reproduced; it needs a cold Playwright cache and a slow Ubuntu mirror at the same time.
+  `scripts/ci-apt.sh 240` bounds only the apt part with a fallback mirror (B-024).
+- **Found by:** the first-attempt failure count in `docs/features/archive/hosted-branch-gate.md`.
+
 ### B-104 — Authored takes: held grips drift since B-092 (stone sD snap, goodbye grip turn, held and support)
 
 - **Area:** apps/capture (`scripts/authoring/lib/direct.ts`: the arm solve and the clearing plan), the sheets
@@ -105,18 +137,6 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
 - **Reproduction:** none known. If it shows again, keep the run's `test-results` trace and note the load and
   the other specs in the same worker.
 
-### B-087 — VR head walk: the pelvis drops in one frame at each foot landing
-
-- **Area:** apps/capture (`VrBodySolver` pelvis height in the gait)
-- **Severity:** P3 (found by measurement, not yet seen by the owner)
-- **Observed:** 2026-11-20, on `bug/vr-legs-direction`
-- **Evidence:** `test:xr:walk-direction`, head rows, with the head moved on every XR frame. In the steady walk the hips'
-  vertical acceleration averages 1.8–4.1 m/s², but single frames at a foot landing reach 12.8 (forward), 20.7 (left),
-  16.8 (back), 20.2 (right), 18.8 and 18.6 m/s² (diagonals). The head bobs smoothly (2 cm).
-- **Expected:** the pelvis rises and falls smoothly with the stride, with no single-frame drop.
-- **Reproduction:** `pnpm --filter @holoim/capture run test:xr:walk-direction`, then the hips' vertical second
-  difference against the sample time `t` in `output/ci-walk-direction/head-samples.json`.
-
 ### B-076 — No-fingers avatar's desktop take diverges from the shipped avatar on `main`
 
 - **Area:** apps/capture (`scripts/ci-avatar-formats-playwright.ts`, desktop locomotion take)
@@ -173,6 +193,13 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   - Other runs of the same file pass all four cases.
 - **Expected:** the CPU budget (`ITIMER_PROF`) fires only when the conversion itself spends 100 s of CPU.
 - **Reproduction:** `bash apps/viewer-api/tools/check_usdz_tools.sh <watering.glb> <out>` on a loaded Mac. It is intermittent (about 1 run in 3 so far). The case with audio is the one that fails, so the ffmpeg child or its teardown is a suspect.
+- **Seen again:** 2026-11-26, in 2 of 4 `verify:pr` runs on `bug/face-avatar-faults` (macOS, loaded, on battery).
+  - In the pipeline step: `e2e/capture-to-viewer.pipeline.spec.ts:20` got `usdzStatus` "failed" from the API.
+  - In `usdz-tools`: case `silent-animated-ancestor-and-face`, which has no audio. Its conversion log has
+    "Successfully converted …", then the budget message.
+  - By hand: 1 of 4 conversions of the pipeline spec's take failed with the budget message after about 5 s of CPU
+    (`time`: 4.88 s user). A take with the earlier avatar failed the same way, so the take is not the cause.
+  - So the fault is not only in the audio case, and the ffmpeg child is not the only suspect.
 
 ### B-085 — Deep zoom: the camera mode is "follow", not "free", when the wheel stops (hosted 3 times; reproduces in CI emulation)
 
@@ -183,8 +210,8 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   (44826449489, 12b0a45) passed the same job. caf7cad holds the performer floor (85ee704b62ba, B-083), which
   changes the card's camera fit, so a slow fit is a suspect.
 - **Expected:** the wheel gesture that stops at the inside end leaves the camera in free mode on every run.
-- **Observed again:** 2026-11-23, hosted runs 45195106971 (22199d76) and the run on 79475539, same job and line.
-  Later runs on `main` passed it.
+- **Observed again:** 2026-11-23, hosted run 45195106971 (22199d76), same job and line. Later runs on `main` passed it.
+  (An earlier line also named run 45269930460 on 79475539; its log shows `portal.spec.ts:214`, which is B-090.)
 - **Reproduction:** `scripts/ci-emulate.sh bash -c "cd apps/viewer-web && VITE_IWER_SEM_SCENE=office_small XR_TEST_MODE=iwer pnpm exec playwright test e2e/deep-zoom.spec.ts --workers=1 --repeat-each=5"`
   with no extra load fails at line 241 in 5 of 5 runs on 9cc877c5 and 4 of 5 on 22199d76. On a Mac it passes.
   So the failure is in the code before 22199d76; the render-order change there (avatar see-through parts) is not the cause.
@@ -193,6 +220,9 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   stayed 7.14 (expected the inside distance, 1.6) for the 10 s of the poll. `deep-zoom.spec.ts` passed in that
   attempt. Attempt 2 of the same commit passed the job, and four local runs of the file passed that day. It is
   possibly the same cause (a wheel on the hologram that the slow runner does not take as a zoom); not examined.
+- **`portal.pipeline.spec.ts:120` observed again (2026-11-26):** gate run 45847778751 (`verify:hosted`, tree a7cd7367,
+  `infra/hosted-branch-gate`, no viewer-web change), attempt 1: the same numbers (7.14 against 1.6 for the 10 s poll).
+  The gate's one rerun of the job passed.
 
 ### B-101 — House avatar: the jumper's sleeve end has a jagged edge at the wrist
 
@@ -236,6 +266,19 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   for every case (a re-pin that waits for the owner). Otherwise accept stone-sD smooth.me 11 % in the stone re-pin
   that already waits for the owner. The render tool and the before/after crops are in the shared notes
   (`b101-cuff/`).
+
+### B-115 — VR spatial audio check: the bell is not louder in the right ear (seen once under load)
+
+- **Area:** apps/viewer-web (`e2e/xr-viewer.spec.ts:731`, VR spatial audio)
+- **Severity:** P3 (a check failure seen once; no person has heard a wrong side)
+- **Observed:** 2026-11-26, once, in a `verify:pr` run on `bug/face-avatar-faults` (macOS, loaded, on battery). That
+  branch changes only the house avatar. The spec passed in the next run with the same inputs.
+- **Evidence:** "bell on the right: -16.9/-16.3 dB": the side difference was 0.59 dB against the bar of more than
+  3 dB (line 782). The checks before it in the spec passed (the head is the ear, the sounds stay on their nodes).
+- **Expected:** with the bell on the right of the head, the right ear is more than 3 dB louder.
+- **Reproduction:** not found. `pnpm run test:xr:viewer` on a loaded Mac; 1 failure in 2 runs of the spec so far.
+- **Next fix:** find what the measurement waits on after the head turn (the panner's position and the analyser
+  window). Verify under `CI_EMULATE_LOAD=2 scripts/ci-emulate.sh … --repeat-each=5`.
 
 ## Entry template
 

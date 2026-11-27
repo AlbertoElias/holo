@@ -27,10 +27,16 @@ export interface CaptureUiBridge {
   /** The dock's Put back: the held prop goes back into the tray. */
   putBackHeld: () => void;
   toggleFaceCamera: () => void;
+  /** Switches between face + hands tracking and face-only without reloading (docs/features/selfie-gestures.md). */
+  setBodycamEnabled: (enabled: boolean) => void;
   setHandedness: (handedness: Handedness) => void;
   toggleXr: (mode: "vr" | "ar") => void;
   /** The look panel picked a look for the house base; false when refused (docs/features/your-look.md). */
   setLook: (next: HouseLook) => boolean;
+  /** "From a photo" in the look panel: the device's picker opens (docs/features/directed-performance.md, slice 5b). */
+  pickLookPhoto: () => void;
+  /** "Previous look": the look from before the last photo. */
+  previousLook: () => void;
   /** The look panel's height from the screen's bottom in CSS pixels, 0 when closed: the view frames the avatar above it. */
   setLookPanelHeight: (px: number) => void;
 }

@@ -31,7 +31,22 @@ export class BodycamSource {
   /** The avatar's shoulder width, metres: also what the rest pose scales by. */
   shoulderWidth = 0;
 
-  constructor(readonly enabled: boolean) {}
+  private _enabled: boolean;
+
+  constructor(enabled: boolean) {
+    this._enabled = enabled;
+  }
+
+  get enabled(): boolean {
+    return this._enabled;
+  }
+
+  /** Turns camera body tracking on or off at runtime (docs/features/selfie-gestures.md). */
+  setEnabled(enabled: boolean): void {
+    if (this._enabled === enabled) return;
+    this._enabled = enabled;
+    if (!enabled) this.release();
+  }
 
   /** True once a frame has arrived and until the source is released. */
   isActive(): boolean {

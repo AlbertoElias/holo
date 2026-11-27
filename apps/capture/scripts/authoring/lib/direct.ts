@@ -14,7 +14,7 @@ import { LivenessFace } from '../../../src/face/LivenessFace.ts';
 import type { JointName, MotionFrame, Vec3 } from '../../lib/motion-quality.ts';
 import type { FaceGaze, FaceWeights } from '../../../src/face/faceTypes.ts';
 import { resetPose, type LoadedAvatar } from './avatar.ts';
-import { bothEyes, clampGaze, EyeMeter, eyeView, type EyeReport, type EyeView } from './eye-view.ts';
+import { blinkCap, bothEyes, BLINK_SHUT, clampGaze, EyeMeter, eyeView, type EyeReport, type EyeView } from './eye-view.ts';
 import { armAngles, ArmMeter, PairMeter, armPoints, armSkin, BodySkin, measureArmBody, partDepth, skinned, propNormal, propParts, propSurface, type ArmBody, type ArmReport, type PairReport } from './arm-quality.ts';
 import { FACE_MIXES, GESTURES, cueTime, STATE_FACES, envelope, gestureCycle, holdingsOf, pointObjects, resolveTiming, contactSide, handSideOf, CONTACT_SURFACES, validateSheet, type BeatSheet, type Direction, type Holding, type ObjectSpec, type PerformerSpec, type Place, type Point, type Resolved, type Side } from './beats.ts';
 import { FINGERS, HAND_SHAPES, blendPose, shapePose, type FingerName, type HandPose } from './hands.ts';
@@ -292,6 +292,8 @@ interface Cast {
   /** Each eye's opening and how far it turns with the pupil in view (`eye-view.ts`). */
   readonly eyeView: EyeView;
   readonly skin: BodySkin;
+  /** The upper lids' held closure at the frame just solved (expressions, after `blinkCap`; not a passing blink), for the eyes bar. */
+  heldBlink: number;
 }
 
 /** A spoken line's lips, starting at take time `at`. */
@@ -418,7 +420,7 @@ function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources
       turnDeg: new Map(), stepWorld: new Map(), fixed: { next: 0, yaw: spec.facing }, ankles0,
       feetMid0: ankles0.left.clone().add(ankles0.right).multiplyScalar(0.5),
       seen: new Map(), seenBefore: new Map(), seenAt: { t: -Infinity, before: -Infinity }, shortfall: new Map(), morphing, speech: speech.get(spec.id) ?? [],
-      armBody, skin: new BodySkin(armBody.body), eyeView: eyes
+      armBody, skin: new BodySkin(armBody.body), eyeView: eyes, heldBlink: 0
     };
   });
   // A hand someone reaches to keeps still while they do (its fidget would move what they touch).
@@ -504,7 +506,7 @@ function solveOnce(sheet: BeatSheet, avatars: Map<string, LoadedAvatar>, sources
       // A hand is measured against what it holds by its skin (the held bar): fingers may rest on it, not sink into it.
       // The prop bar's few hand points do not count against it: a finger that lies on a ball has its middle point in the ball's chord.
       meters[ci]!.sample(t, [...stage.props.values()].map((st) => st.prop), (s, prop) => mayTouch(c, s, prop, t), (s) => gripOf(c.spec.id, s, t)?.prop);
-      eyeMeters[ci]!.sample(t);
+      eyeMeters[ci]!.sample(t, c.heldBlink);
       see(c, t);
     });
     // Performer against performer, once every performer stands at this frame.
@@ -2847,13 +2849,14 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
     if (k > 0) for (const [ch, v] of Object.entries(faceAt(c.events, t, glanceK)) as [FaceChannel, number][]) weights[ch] = Math.min(1, (weights[ch] ?? 0) + v * k);
   }
   const liveSample = life ? c.live.sample(t, dt, 0) : undefined;
+  // A passing blink (life's, a look's, a glance's) closes over everything; it joins the held lids after they follow the gaze.
+  let lifeBlink = 0;
   if (liveSample) {
     let blink = liveSample.weights.eyeBlinkLeft ?? 0;
     for (const r of c.dirs) if (r.direction.kind === 'look' && (r.direction.head ?? 0.6) > 0.3) blink = Math.max(blink, blinkAt(t - r.at + 0.02));
     // A glance that turns the head far brings a blink with it.
     if (glance?.onset !== undefined && glance.size * glanceK > GLANCE_BLINK_DEG) blink = Math.max(blink, blinkAt(t - glance.onset - 0.02));
-    weights.eyeBlinkLeft = Math.max(weights.eyeBlinkLeft ?? 0, blink);
-    weights.eyeBlinkRight = Math.max(weights.eyeBlinkRight ?? 0, blink);
+    lifeBlink = blink;
   }
   const neutral: FaceGaze = { left: { yaw: 0, pitch: 0 }, right: { yaw: 0, pitch: 0 } };
   let gaze: FaceGaze = neutral;
@@ -2909,6 +2912,20 @@ function solveFrame(cast: Cast[], c: Cast, t: number, dt: number, life: boolean,
         return Math.hypot(g.yaw, g.pitch) > 1e-9 ? Math.hypot(cl.yaw, cl.pitch) / Math.hypot(g.yaw, g.pitch) : 1;
       }));
       if (k < 1) gaze = { left: { yaw: gaze.left.yaw * k, pitch: gaze.left.pitch * k }, right: { yaw: gaze.right.yaw * k, pitch: gaze.right.pitch * k } };
+    }
+  }
+  // The upper lids follow the eyes up: a held closure (an expression's) that would cover the pupil at this gaze opens
+  // until it shows (B-111: 'held' and 'eyes-down' lids stayed half shut over eyes that looked up at the viewer, and the
+  // eyes read as white). A closure of BLINK_SHUT or more means shut eyes and stays.
+  {
+    const held = Math.max(weights.eyeBlinkLeft ?? 0, weights.eyeBlinkRight ?? 0);
+    const cap = held > 0 && held < BLINK_SHUT ? blinkCap(c.eyeView, Math.max(gaze.left.pitch, gaze.right.pitch)) : 1;
+    const lid = Math.min(held, cap);
+    c.heldBlink = lid;
+    if (held > 0) { weights.eyeBlinkLeft = lid; weights.eyeBlinkRight = lid; }
+    if (lifeBlink > 0) {
+      weights.eyeBlinkLeft = Math.max(weights.eyeBlinkLeft ?? 0, lifeBlink);
+      weights.eyeBlinkRight = Math.max(weights.eyeBlinkRight ?? 0, lifeBlink);
     }
   }
   // Both lids blink and squint together: one lid alone reads as a wink or a fault.

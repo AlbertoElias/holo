@@ -5,7 +5,7 @@ import { chromium } from 'playwright';
 import { launchXrBrowser } from '@holoim/tooling-testing/xr-env';
 import { writeContactSheet } from '@holoim/tooling-testing/preview';
 
-import { runIwerLookTake } from './lib/look-take.mjs';
+import { runIwerLookTake, runIwerPhotoLookTake } from './lib/look-take.mjs';
 import { VOICE_BROWSER_ARGS, runDesktopVoiceOrdersTake, runDesktopVoiceTake, runIwerFindTake, runIwerVoiceTake } from './lib/find-take.mjs';
 import { runDesktopFindTake, runDesktopSummonTake, runIwerHandsSummonTake, runIwerSummonTake } from './lib/summon-take.mjs';
 import { runIwerHandsPutBackTake, runIwerPutBackTake } from './lib/put-back-xr-take.mjs';
@@ -44,6 +44,8 @@ try {
     ['headset-find', () => runIwerFindTake({ browser, baseUrl, captureRoot: process.cwd(), artifactDir, consoleErrors })],
     // The house avatar's look in a headset (docs/features/your-look.md, slice 2).
     ['headset-look', () => runIwerLookTake({ browser, baseUrl, artifactDir, consoleErrors })],
+    // "From a photo" on the mirror's panel (docs/features/directed-performance.md, slice 5b).
+    ['headset-photo-look', () => runIwerPhotoLookTake({ browser, baseUrl, artifactDir, consoleErrors })],
     ['headset-voice', async () => runIwerVoiceTake({ browser: await withMic(), baseUrl, captureRoot: process.cwd(), artifactDir, consoleErrors })],
     ['desktop-voice', async () => runDesktopVoiceTake({ browser: await withMic(), baseUrl, captureRoot: process.cwd(), artifactDir, consoleErrors })],
     // Voice's answer orders (B-062): a refused recognition with no recorder.
@@ -78,7 +80,9 @@ try {
   const takes = [];
   for (const [name, run] of phases) if (!only || only.split(',').includes(name)) takes.push(await run());
   const sheet = writeContactSheet(artifactDir, path.join(artifactDir, 'summon-sheet.jpg'));
-  const failures = [...takes.flatMap((take) => take.failures.map((message) => `${take.label}: ${message}`)), ...consoleErrors.map((error) => `console: ${error}`)];
+  // MediaPipe logs its CPU delegate as an error (the photo read in headset-photo-look); the face and bodycam checks pass it too.
+  const errors = consoleErrors.filter((line) => !/INFO: Created TensorFlow Lite/.test(line));
+  const failures = [...takes.flatMap((take) => take.failures.map((message) => `${take.label}: ${message}`)), ...errors.map((error) => `console: ${error}`)];
   const report = { status: failures.length ? 'fail' : 'pass', failures, takes, sheet: sheet ?? null };
   await writeFile(path.join(artifactDir, 'report.json'), JSON.stringify(report, null, 2));
   for (const take of takes) console.log(`[summon] ${take.label}: ${take.status ?? 'fail'}${take.failures.length ? `\n  ${take.failures.join('\n  ')}` : ''}`);
