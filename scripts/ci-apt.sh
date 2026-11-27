@@ -40,6 +40,18 @@ run_limited() {
   return "$status"
 }
 
+# The runner image also lists packages.microsoft.com, which answers the
+# runners with 403, and apt-get update then fails at once (B-114). The install
+# needs only Ubuntu's packages, so turn that source off first. apt reads only
+# *.list and *.sources files, so the renamed file is ignored.
+for file in /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
+  [ -f "$file" ] || continue
+  if grep -q 'packages\.microsoft\.com' "$file"; then
+    echo "turning off the apt source $file"
+    sudo mv "$file" "$file.ci-disabled"
+  fi
+done
+
 if run_limited "$limit" "$@"; then
   exit 0
 fi
