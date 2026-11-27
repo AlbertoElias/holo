@@ -68,6 +68,10 @@ consume the agreed contract.
    `output/`, never committed, and sent to the user before handoff.
 5. **Integration.** The lead resolves findings, runs the commands required by
    [`../AGENT_CONTRACT.md`](../AGENT_CONTRACT.md), and records device-only gaps.
+   The merge needs one pre-merge gate: `pnpm run verify:pr` locally, or
+   `pnpm run verify:hosted`, the hosted test jobs on the branch merged with
+   `origin/main`. A red gate run is reproduced and fixed locally, never
+   debugged on hosted CI.
 6. **Close.** Mark the brief Complete, move it to `docs/features/archive/`,
    update the index in `docs/features/README.md`, check off the `TODOS.md`
    item if one exists, and move any closed bugs to

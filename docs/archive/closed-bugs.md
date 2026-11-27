@@ -70,6 +70,30 @@ Closed entries moved from `BUGS.md` so the live tracker stays scannable.
     and that changes the approved crouch v43, so it needs the owner's choice.
 - **Closed (2026-11-24):** crouch v43 stays as it is; the owner accepted it ("crouch accepter"). The 8 mm elbow step
   at 1.77 s stays. No fix tried above kept the pinned crouch numbers, and the owner judged the take as good.
+### B-107 — Quick Look check: the cloche refit is 9 cm off the baked cloche on walk takes
+
+- **Area:** apps/viewer-api/tools (`glb_to_usdz.py` `fit_points`, `inspect_usdz.py` cloche refit, `cloche.py`)
+- **Severity:** P3 (a false failure of the usdz-tools gate; no person has seen a wrong cloche)
+- **Observed:** 2026-11-23 once, then from 2026-11-24 on every local `test:usdz-tools` run on the owner's Mac,
+  on new takes and on a clean `origin/main`. Hosted Linux CI passed.
+- **Evidence:** all five challenged cases: "Cloche foot exceeds tolerance 0.005" (0.0887) and "Cloche radii exceeds
+  tolerance 0.0387" (0.104); the refit foot's z moved from −0.328 to −0.417.
+- **Cause:** the diorama clip scales each cut point of the environment onto the bubble's sphere and stores it as
+  float32, so those points are on the edge to within micrometres. Both fits keep a point only if it is not further
+  from the bubble's centre than its radius, and the two sides compose that centre from different matrices (about
+  4e-9 m apart). On the kept take one boundary point at z 5.789 m was 3e-10 m inside for the converter and
+  2.7e-9 m outside for the inspector. The fit is a bounding box, so that one point moved the dome's far side and
+  foot by 9 cm. Which side of the edge a point lands on depends on the last bits of the arithmetic, so it changed
+  with the take and the machine.
+- **Fix:** `cloche.inside_bubble` is the one bubble test for both sides; it counts points up to
+  `BUBBLE_EDGE_METERS` (0.1 mm) past the radius as inside. The check tolerances did not change. The web's
+  `drawnPoints` still uses the strict test; 0.1 mm does not change a visible dome.
+- **Also seen:** the challenged face's points differ by up to 1.3 cm between the two sides. They are inside the
+  box on this take, so the fit does not change, but the same kind of failure can come back if the face sets an
+  extreme.
+- **Proof:** on the kept failing take (the main checkout's ignored `apps/viewer-api/output/b107-2026-11-24/walk.glb`),
+  three `test:usdz-tools` runs in a row pass; the refit foot matches the baked foot to 8e-7 m and the radii to
+  1.4e-6 m (before: 0.089 m and 0.104 m). No proof video: the change is in a Python gate with no visible behavior.
 
 ### B-110 — verify:pr lock: waiters do not get the lock in arrival order
 
