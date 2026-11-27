@@ -12,7 +12,7 @@ Monorepo for creating, uploading, and viewing holographic 3D content.
 ## Packages
 
 - `packages/contracts`: shared DTO and schema contracts.
-- `packages/config-eslint`: shared ESLint config.
+- `packages/config-eslint`: shared Oxlint config and the design-token lint rule.
 - `packages/config-ts`: shared TS config.
 - `packages/tooling-testing`: reusable test/dev-server helpers.
 - `packages/tooling-scripts`: reusable script helpers.

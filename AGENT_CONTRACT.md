@@ -354,8 +354,8 @@ holograms to the agent account (dry run without `--apply`). Background:
   passes on skips: docs and `.md`, workflows and `.github/actions`, shell
   and Node scripts, agent tooling, editor and package-manager config, and
   `package.json` / `pnpm-workspace.yaml` (dependency edits also change
-  `pnpm-lock.yaml`). `scripts/*.ts`, `tsconfig*.json` and `eslint.config.*`
-  select quality only; `fly.toml` and `.dockerignore` select only the API
+  `pnpm-lock.yaml`). `scripts/*.ts`, `tsconfig*.json` and the root
+  `.oxlintrc.json` select quality only; `fly.toml` and `.dockerignore` select only the API
   deploy. `pnpm-lock.yaml`, shared packages (`contracts`, `tooling-testing`,
   `ui-dom`, `xr-*`) and unclassified
   files select every suite (fail closed). The `changes` job runs the
@@ -367,7 +367,7 @@ holograms to the agent account (dry run without `--apply`). Background:
   There is no separate heavy tier and no weekly schedule; dispatch CI
   manually to check runner-image or dependency drift on unchanged code.
 - Hosted gate: `pnpm run verify:hosted` (`scripts/verify-hosted.ts`,
-  design in `docs/features/hosted-branch-gate.md`). It needs a committed,
+  design in `docs/features/archive/hosted-branch-gate.md`). It needs a committed,
   clean tree on a branch. It runs doctor, `check:ci-areas`, lint and
   typecheck, unit tests and (when `verify:pr` would) the solver regression
   for the changed areas, with the `verify:pr` result cache and no lock. Then

@@ -235,7 +235,7 @@ try {
   await waitForIwerRuntime(page);
   const humanoid = await page.evaluate(() => window.__sampleHumanoid());
   check(Boolean(humanoid), 'no humanoid binding');
-  const boneNode = (bone: string): string | undefined => (humanoid?.bones as Record<string, string | undefined>)[bone];
+  const boneNode = (bone: string): string | undefined => (humanoid!.bones as Record<string, string | undefined>)[bone];
 
   // Before any frame the source is idle: the desktop path is untouched.
   await page.evaluate(() => window.advanceTime(200));

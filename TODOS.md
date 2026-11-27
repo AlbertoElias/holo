@@ -499,6 +499,8 @@ session, not a child of the review.
   [`docs/features/archive/tsgo-typescript7-migration.md`](docs/features/archive/tsgo-typescript7-migration.md):
   catalog `typescript@^7.0.2` everywhere, `typescript-eslint` 8.71.2 bridged
   on the `@typescript/typescript6` sidecar until it supports the TS7 API.
+  The sidecar and `typescript-eslint` left on 2026-11-24, when lint moved to
+  Oxlint ([brief](docs/features/archive/oxlint-tsgo.md)).
 - [x] Decide whether the capture app needs a user-visible AR recenter control for <!-- T-dc56b7 -->
   device-specific placement recovery. Delivered as a "Recenter AR" overlay
   button shown only in AR mode in

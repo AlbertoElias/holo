@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # On a push to main, turn off the suites that a green gate run already passed
-# on the same tree (docs/features/hosted-branch-gate.md).
+# on the same tree (docs/features/archive/hosted-branch-gate.md).
 #
 # Usage: ci-gate-reuse.sh <areas-file> [head]
 #   areas-file  the key=true|false lines of scripts/ci-changed-areas.sh
