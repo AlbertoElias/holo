@@ -922,6 +922,11 @@ const CLEAR_ROUNDS = 3;
 const clearWays = new Map<string, { way: THREE.Vector3; f: number }>();
 /** Frames on each side over which a clearing move holds (widen) and then blends (Gaussian sigma), at 30 fps. */
 const CLEAR_SMOOTH = { widen: 4, sigma: 3 } as const;
+/**
+ * Frames after a frame that can still change its pose. Each plan smoothing reaches widen + 3 sigma frames ahead, and the
+ * plan is smoothed once for each of the CLEAR_ROUNDS solves that add to it; a later frame can move each one.
+ */
+export const CLEAR_LOOKAHEAD = CLEAR_ROUNDS * (CLEAR_SMOOTH.widen + Math.ceil(3 * CLEAR_SMOOTH.sigma));
 /** Degrees: how far past straight a clearing may bend an elbow (the bar allows 10°). */
 const CLEAR_BACKWARD = 5;
 

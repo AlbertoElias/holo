@@ -6,7 +6,7 @@
  * The solver carries state from frame to frame (the clearing plan, the lift
  * ease, the twist rate limit, goals fixed at first use, the other performer's
  * last frame), so one frame solved alone does not give the pose of the full
- * build. This command solves frames 0 to f + 13 with every solve pass of the
+ * build. This command solves frames 0 to f + CLEAR_LOOKAHEAD (39) with every solve pass of the
  * full build, exports that window, opens it in the viewer and saves close
  * pictures of each hand that touches something at that moment, from three
  * angles: from the side the card sees ("card"); from the view around the
@@ -38,6 +38,7 @@ import { fileURLToPath } from 'node:url';
 import * as THREE from 'three';
 
 import { build } from './direct.ts';
+import { CLEAR_LOOKAHEAD } from './lib/direct.ts';
 import { holdingsOf, parseSheetText, resolveTiming, type BeatSheet } from './lib/beats.ts';
 import { findPerformers, parents, parseGlb, readChannels, sampleChannel, type GltfDoc } from './lib/gltf-read.ts';
 import { phase, phaseLine } from './lib/phases.ts';
@@ -46,8 +47,8 @@ import { openTake, startViewer, type ViewerServers } from './lib/viewer-session.
 import { BACKGROUND } from './review.ts';
 
 const OUTPUT = fileURLToPath(new URL('../../output/authoring/pose-look/', import.meta.url));
-/** Frames solved after the one looked at: the clearing plan is widened 4 frames and smoothed with a sigma of 3 frames, so later frames still change it. */
-export const AFTER = 13;
+/** Frames solved after the one looked at: later frames change the clearing plan of each round (CLEAR_LOOKAHEAD). */
+export const AFTER = CLEAR_LOOKAHEAD;
 const SIZE = 720;
 const FOV = 40;
 /** Camera distance from the hand, metres. */
