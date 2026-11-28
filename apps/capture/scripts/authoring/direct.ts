@@ -16,7 +16,8 @@
  * than 1 cm or 5° off, a put more than 1 cm off or 3° from upright, or an aim
  * more than 10° off its target.
  */
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -57,15 +58,15 @@ export async function resolveAvatar(spec: string, sheetFile: string, look?: Look
 
 /**
  * Loaded avatars that a long-running process (pose-look.ts --watch) keeps between builds, so that
- * each avatar's eye view is measured one time. The key is the performer, the avatar file, its size
- * and its change time: a changed file or look loads again. Each build puts the avatar back at bind pose.
+ * each avatar's eye view is measured one time. The key is the performer, the avatar file and a hash
+ * of its bytes (a dressed avatar is written again in each build), so a changed file or look loads again.
+ * Each build puts the avatar back at bind pose.
  */
 export type AvatarCache = Map<string, LoadedAvatar>;
 
 async function loadCached(performer: string, file: string, cache?: AvatarCache): Promise<LoadedAvatar> {
   if (!cache) return loadAvatar(file);
-  const s = await stat(file);
-  const key = `${performer}\0${file}\0${s.size}\0${s.mtimeMs}`;
+  const key = `${performer}\0${file}\0${createHash('sha256').update(await readFile(file)).digest('hex')}`;
   const known = cache.get(key);
   if (known) return known;
   for (const k of cache.keys()) if (k.startsWith(`${performer}\0`)) cache.delete(k);
