@@ -8,6 +8,7 @@ it is in flight: scope, acceptance criteria, and evidence live there, not in
 
 | Feature | Status | Brief |
 | --- | --- | --- |
+| AI prompt to hologram on mobile (BYOK + cheap LLM, Kokoro voice, private preview → revise → Post) | Delivered 2026-11-27 | [prompt-to-hologram.md](prompt-to-hologram.md) |
 | 1-tap prop staging in mobile selfie (Option 2, Slice 2B) | Verifying | [selfie-prop-staging.md](selfie-prop-staging.md) |
 | Live face and gestures in mobile selfie (Option 2, Slice 1) | Implementing | [selfie-gestures.md](selfie-gestures.md) |
 | Lint with Oxlint and typecheck with the stable native `tsc` in every package (same rules on the same files; lint 6 to 8 times faster) | Delivered 2026-11-26 | [oxlint-tsgo.md](archive/oxlint-tsgo.md) |

@@ -48,7 +48,7 @@ const MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
  * Folders no suite reads: a change there keeps every "code" key.
  * scripts/check-ci-areas.ts fails when code outside one of them names it.
  */
-export const NOT_SUITE_INPUTS = ["apps/capture/scripts/authoring/"];
+export const NOT_SUITE_INPUTS: string[] = [];
 
 const REFERENCE_SCAN = /\.([cm]?[jt]sx?|json|jsonc|sh|ya?ml|html|toml|py)$/;
 const HASH_COMMENTS = /\.(sh|ya?ml|toml|py)$/;

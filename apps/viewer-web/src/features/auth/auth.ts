@@ -34,8 +34,8 @@ async function readError(response: Response, fallback: string): Promise<string> 
 export async function requestMagicLink(input: {
   email: string;
   displayName?: string;
-  /** Where the emailed link goes after signing in: "record" opens capture. */
-  next?: "record";
+  /** Where the emailed link goes after signing in: "record" opens capture, "create" opens AI prompt creation. */
+  next?: "record" | "create";
 }): Promise<{ devMagicLinkToken?: string }> {
   const response = await fetch(`${apiBase}/auth/magic-link`, {
     method: "POST",

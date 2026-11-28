@@ -9,7 +9,7 @@ type SignInFormProps = {
   /** One line above the fields: why signing in is asked of this person here. */
   intro?: string;
   /** Where the emailed link returns to after sign-in. */
-  next?: "record";
+  next?: "record" | "create";
 };
 
 // The sign-in form, in the same fields and word-and-glyph control as the

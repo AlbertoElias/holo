@@ -99,7 +99,7 @@ export async function deliverMagicLink(email: string, url: string): Promise<void
 export async function requestMagicLink(input: {
   email: string;
   displayName?: string;
-  next?: "record";
+  next?: "record" | "create";
 }): Promise<{ token: string; url: string }> {
   const token = newToken();
   const email = input.email.toLowerCase();

@@ -352,8 +352,9 @@ test.describe("phone by touch", () => {
     await assertViewerShell(page);
     await waitForPortalReady(page, long.id, long.url);
     const dock = page.getByRole("toolbar", { name: "Feed" });
-    await expect(dock.getByRole("button"), "the dock holds making alone: Record, then Upload").toHaveCount(2);
+    await expect(dock.getByRole("button"), "the dock holds making alone: Record, Create with AI, then Upload").toHaveCount(3);
     await expect(dock.getByRole("button", { name: "Record a hologram" })).toBeVisible();
+    await expect(dock.getByRole("button", { name: "Create with AI" })).toBeVisible();
     await expect(dock.getByRole("button", { name: "Upload a hologram" })).toBeVisible();
     const settings = page.getByRole("button", { name: "Settings" });
     const search = page.getByRole("button", { name: "Search" });
