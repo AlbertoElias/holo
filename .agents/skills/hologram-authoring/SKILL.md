@@ -215,7 +215,7 @@ over the 40 px bar (36 px when two performers share the card).
    (in `apps/capture`). It gives the same pose as the full build and saves
    three pictures of each hand that touches something: from the card, the
    view that shows most of the hand, and edge-on to the palm. It takes about
-   as long as `--quick` (about 5 minutes for goodbye), so use it for the
+   as long as `--quick` (about 2 minutes for goodbye), so use it for the
    close pictures, not to save time.
 4. **Review.** `M <sheet>` without `--quick` also records the review pack in
    real time: about 6 to 12 minutes for an 8 s take, so run it in the background
