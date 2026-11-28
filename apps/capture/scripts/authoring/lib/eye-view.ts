@@ -200,8 +200,23 @@ function upLimit(ap: EyeAperture): number {
   return last * Math.PI / 180;
 }
 
-/** The apertures and limits of an avatar; call at bind pose, before the solve. */
+/** Each loaded avatar's view, measured once: every solve pass of a build starts from the same bind pose. */
+const views = new WeakMap<LoadedAvatar, EyeView>();
+
+/**
+ * The apertures and limits of an avatar; call at bind pose, before the solve.
+ * The first call measures them (most of a solve pass's time); a later call on
+ * the same loaded avatar gives the same view and puts the avatar back at bind
+ * pose with a neutral face, as the first call does.
+ */
 export function eyeView(a: LoadedAvatar): EyeView {
+  const known = views.get(a);
+  if (known) {
+    resetPose(a);
+    a.face.apply({}, NEUTRAL);
+    a.frame.updateMatrixWorld(true);
+    return known;
+  }
   const apertures = eyeApertures(a);
   const limits: Partial<Record<Side, IrisLimit>> = {};
   for (const side of ['left', 'right'] as const) { const ap = apertures[side]; if (ap) limits[side] = irisLimits(ap); }
@@ -214,7 +229,9 @@ export function eyeView(a: LoadedAvatar): EyeView {
   resetPose(a);
   a.face.apply({}, NEUTRAL);
   a.frame.updateMatrixWorld(true);
-  return { apertures, limits, lids };
+  const view = { apertures, limits, lids };
+  views.set(a, view);
+  return view;
 }
 
 /**
