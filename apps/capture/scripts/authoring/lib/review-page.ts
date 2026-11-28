@@ -375,6 +375,22 @@ export const REVIEW_PAGE = String.raw`
         return m;
       };
       const out = [];
+      // Make the replacement materials once per call: disposing of the last material of a shader program deletes
+      // the program, so new clones for each view would compile the shaders again for each view.
+      const both = (s, discardRest) => Array.isArray(s.material) ? s.material.map((m) => unlit(m, discardRest)) : unlit(s.material, discardRest);
+      const inSceneMaterials = saved.map((s) => both(s, false));
+      const aloneMaterials = saved.map((s) => both(s, true));
+      const blackMaterials = otherSaved.map((s) => {
+        if (!s.o.isMesh) return null;
+        const m = (Array.isArray(s.material) ? s.material[0] : s.material).clone();
+        for (const k of ['map', 'emissiveMap']) if (k in m) m[k] = null;
+        if (m.color) m.color.setRGB(0, 0, 0);
+        if (m.emissive) m.emissive.setRGB(0, 0, 0);
+        m.vertexColors = false; m.transparent = false; m.opacity = 1; m.side = 2;
+        m.onBeforeCompile = (shader) => { shader.fragmentShader = shader.fragmentShader.replace('#include <dithering_fragment>', '#include <dithering_fragment>\n  gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);'); };
+        m.customProgramCacheKey = () => 'holoim-hand-view-black';
+        return m;
+      });
       try {
         for (const view of views) {
           const cam = state.probe.camera.clone();
@@ -383,35 +399,24 @@ export const REVIEW_PAGE = String.raw`
           cam.position.set(...view.position); cam.lookAt(V().set(...view.target));
           cam.updateProjectionMatrix(); cam.updateMatrixWorld();
           // The hand in the scene: every other mesh is a black occluder.
-          for (const s of saved) s.mesh.material = Array.isArray(s.material) ? s.material.map((m) => unlit(m, false)) : unlit(s.material, false);
-          for (const s of otherSaved) {
-            if (s.o.isMesh) {
-              const m = (Array.isArray(s.material) ? s.material[0] : s.material).clone();
-              for (const k of ['map', 'emissiveMap']) if (k in m) m[k] = null;
-              if (m.color) m.color.setRGB(0, 0, 0);
-              if (m.emissive) m.emissive.setRGB(0, 0, 0);
-              m.vertexColors = false; m.transparent = false; m.opacity = 1; m.side = 2;
-              m.onBeforeCompile = (shader) => { shader.fragmentShader = shader.fragmentShader.replace('#include <dithering_fragment>', '#include <dithering_fragment>\n  gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);'); };
-              m.customProgramCacheKey = () => 'holoim-hand-view-black';
-              s.o.material = m;
-            } else s.o.visible = false;
-          }
+          saved.forEach((s, k) => { s.mesh.material = inSceneMaterials[k]; });
+          otherSaved.forEach((s, k) => { if (blackMaterials[k]) s.o.material = blackMaterials[k]; else s.o.visible = false; });
           r.render(scene, cam);
           const inScene = mask();
-          for (const s of saved) { (Array.isArray(s.mesh.material) ? s.mesh.material : [s.mesh.material]).forEach((c) => c.dispose()); s.mesh.material = Array.isArray(s.material) ? s.material.map((m) => unlit(m, true)) : unlit(s.material, true); }
+          saved.forEach((s, k) => { s.mesh.material = aloneMaterials[k]; });
           for (const s of otherSaved) s.o.visible = false;
           r.render(scene, cam);
           // Count a pixel as seen only where the hand alone also covers it, so visible can never pass total.
           const alone = mask();
           let visible = 0, total = 0;
           for (let k = 0; k < alone.length; k += 1) if (alone[k]) { total += 1; visible += inScene[k]; }
-          for (const s of saved) (Array.isArray(s.mesh.material) ? s.mesh.material : [s.mesh.material]).forEach((c) => c.dispose());
-          for (const s of otherSaved) { if (s.o.material !== s.material) { s.o.material.dispose(); s.o.material = s.material; } s.o.visible = s.visible; }
+          for (const s of otherSaved) { s.o.material = s.material; s.o.visible = s.visible; }
           out.push({ visible, total });
         }
       } finally {
         for (const s of saved) s.mesh.material = s.material;
         for (const s of otherSaved) { s.o.material = s.material; s.o.visible = s.visible; }
+        for (const m of [...inSceneMaterials, ...aloneMaterials, ...blackMaterials].flat()) if (m) m.dispose();
         for (const [g, colour] of geometries) if (colour) g.setAttribute('color', colour); else g.deleteAttribute('color');
         scene.background = background; scene.fog = fog;
         r.setSize(sz.x, sz.y, false); r.setPixelRatio(prev.pr); r.setClearColor(clearColour || 0x000000, prev.alpha);
