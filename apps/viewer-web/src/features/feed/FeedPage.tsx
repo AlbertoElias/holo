@@ -365,6 +365,7 @@ export function FeedPage({ source = { kind: "all" } }: { source?: FeedSource }) 
       {/* A sheet answers Upload, Search or Settings; on a phone it covers the screen, and the dock would show through it. */}
       <Dock className="feed-dock" aria-label="Feed" ground="horizon" style={sheetOpen ? { visibility: "hidden" } : undefined}>
         <GlyphControl glyph="record" label={VIEWER_CONTROL_NAMES.record} onPress={() => navigate("/record")} />
+        <GlyphControl glyph={null} showLabel label={VIEWER_CONTROL_NAMES.createPrompt} word="AI" onPress={() => navigate("/create")} />
         <GlyphControl glyph="upload" label={VIEWER_CONTROL_NAMES.openUpload} onPress={() => setUploadOpen(true)} />
       </Dock>
       {/* Where the feed is narrowed to: a creator's name or the search words. The word closes the narrowing. */}

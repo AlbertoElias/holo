@@ -19,7 +19,7 @@ export class UIStateStore {
     micPermission: 'pending',
     object: { status: 'none', name: null, message: null },
     place: { enabled: false, status: 'none', name: null, message: null },
-    tray: { names: [], slots: [], loading: false, message: null, open: false, blocked: false, reachableSlot: null, holding: false, returnSlot: null },
+    tray: { names: [], slots: [], loading: false, message: null, open: false, blocked: false, reachableSlot: null, holding: false, returnSlot: null, stagedCount: 0 },
     faceCamera: 'off',
     bodycam: { enabled: false, status: 'off', handsVisible: false },
     handedness: loadHandedness(),

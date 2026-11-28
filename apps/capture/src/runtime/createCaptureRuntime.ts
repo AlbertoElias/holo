@@ -455,6 +455,18 @@ export async function createCaptureRuntime(container: HTMLElement): Promise<Capt
       loadTrayUrls: (urls) => void objects.loadTrayUrls(urls),
       setTrayOpen: (open) => input.setTrayOpenFromUi(open),
       summonTraySlot: (slot) => input.queueSummonSlot(slot),
+      stageTraySlot: (slot, spot) => {
+        if (objects.stageFromTray(slot, spot, camera.lookYaw)) ui.flashNotice('Prop staged');
+      },
+      stagePropUrl: (url, spot) => {
+        void objects.stageUrl(url, spot, camera.lookYaw).then((staged) => {
+          if (staged) ui.flashNotice('Prop staged');
+        });
+      },
+      clearStagedProps: () => {
+        const cleared = objects.clearStagedProps();
+        if (cleared > 0) ui.flashNotice(cleared === 1 ? 'Prop put back' : `${cleared} props put back`);
+      },
       removeTraySlot: (slot) => input.queueTrayRemove(slot),
       putBackHeld: () => input.queuePutBack(),
       toggleFaceCamera: () => capture.face.toggleCamera(),

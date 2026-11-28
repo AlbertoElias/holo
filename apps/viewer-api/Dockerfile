@@ -27,9 +27,11 @@ COPY . .
 RUN python3 -m venv /opt/usdz-venv \
   && /opt/usdz-venv/bin/pip install --no-cache-dir -r apps/viewer-api/tools/requirements.txt
 
-RUN pnpm install --frozen-lockfile --filter @holoim/api...
+RUN pnpm install --frozen-lockfile --filter @holoim/api... --filter @holoim/capture...
 RUN pnpm --filter @holoim/contracts build \
   && pnpm --filter @holoim/objects build \
+  && pnpm --filter @holoim/avatar-look build \
+  && pnpm --filter @holoim/avatar-face build \
   && pnpm --filter @holoim/api build
 
 ENV NODE_ENV=production \

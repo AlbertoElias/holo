@@ -3,6 +3,7 @@ import { createBrowserRouter, useParams, useSearchParams } from "react-router-do
 
 import { FeedPage } from "../features/feed/FeedPage";
 import { AuthVerifyPage } from "../features/auth/AuthVerifyPage";
+import { CreatePage } from "../features/prompt/CreatePage";
 import { RecordPage } from "../features/record/RecordPage";
 
 // The IWSDK World only loads on the immersive routes.
@@ -66,6 +67,10 @@ export const router = createBrowserRouter([
   {
     path: "/record",
     element: <RecordPage />
+  },
+  {
+    path: "/create",
+    element: <CreatePage />
   },
   {
     path: "/auth/verify",

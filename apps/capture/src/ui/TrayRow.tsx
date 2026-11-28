@@ -174,7 +174,13 @@ export function DockGlyphButton({
  * captures the pointer, so the slot under the finger is found with
  * `elementFromPoint` (the glyph's own events are the only ones that arrive).
  */
-export function useTrayGlyph(bridge: CaptureUiBridge, open: boolean, touch: boolean, openedByUi: React.MutableRefObject<boolean>) {
+export function useTrayGlyph(
+  bridge: CaptureUiBridge,
+  open: boolean,
+  touch: boolean,
+  openedByUi: React.MutableRefObject<boolean>,
+  onSlot?: (slot: number) => void
+) {
   const [armedSlot, setArmedSlot] = useState<number | null>(null);
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const holding = useRef(false);
@@ -230,7 +236,7 @@ export function useTrayGlyph(bridge: CaptureUiBridge, open: boolean, touch: bool
         // The click that follows this lift must not toggle the tray again.
         swallowClick.current = true;
         setTimeout(() => { swallowClick.current = false; }, 0);
-        if (slot !== null) bridge.summonTraySlot(slot);
+        if (slot !== null) (onSlot ?? bridge.summonTraySlot)(slot);
         setOpen(false);
       },
       onPointerCancel: () => clear()
@@ -460,6 +466,7 @@ export function TrayRow({
   input,
   armedSlot,
   bottom,
+  stageControls,
   addFiles,
   onSummon,
   onRemove
@@ -469,6 +476,8 @@ export function TrayRow({
   input: HitInput;
   armedSlot: number | null;
   bottom: string;
+  /** Selfie staging bar (spot selector + clear) drawn above the slots. */
+  stageControls?: ReactNode;
   /** The control that adds the user's own files to the tray, drawn under the slots. */
   addFiles?: ReactNode;
   onSummon: (slot: number) => void;
@@ -527,6 +536,11 @@ export function TrayRow({
           : { opacity: shown ? 1 : 0, transition: `opacity ${motion.durationMs}ms ${easing}` })
       }}
     >
+      {stageControls ? (
+        <div style={{ pointerEvents: tray.open ? 'auto' : 'none' }}>
+          {stageControls}
+        </div>
+      ) : null}
       <div style={{ display: 'flex', gap: rowGap, flexShrink: 0, pointerEvents: tray.open ? 'auto' : 'none' }}>
         {Array.from({ length: SLOTS }, (_, index) => {
           const slot = index + 1;

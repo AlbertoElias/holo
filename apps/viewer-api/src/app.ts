@@ -10,7 +10,10 @@ import { registerStaticUploads } from "./plugins/static-uploads.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerHologramRoutes } from "./routes/holograms.js";
 import { registerObjectRoutes } from "./routes/objects.js";
+import { registerPromptRoutes } from "./routes/prompts.js";
 import { createMediaStorage, type MediaStorage } from "./services/media-storage.js";
+import type { PromptBuildFn } from "./services/prompt-builder.js";
+import type { PromptRunner } from "./services/prompt-runner.js";
 
 type BuildAppOptions = {
   logger?: boolean;
@@ -19,6 +22,10 @@ type BuildAppOptions = {
   /** Searches per client per minute, and sign-in emails per client per ten minutes; tests lower them. */
   searchLimit?: number;
   magicLinkLimit?: number;
+  /** Test hooks for prompt-to-hologram generation. */
+  promptRunner?: PromptRunner;
+  promptBuildTake?: PromptBuildFn;
+  promptFetch?: typeof fetch;
 };
 
 export function buildApp(options: BuildAppOptions = {}) {
@@ -74,6 +81,12 @@ export function buildApp(options: BuildAppOptions = {}) {
         ...(options.searchLimit === undefined ? {} : { searchLimit: options.searchLimit })
       });
       await registerObjectRoutes(instance);
+      await registerPromptRoutes(instance, {
+        storage,
+        runner: options.promptRunner,
+        buildTake: options.promptBuildTake,
+        fetchImpl: options.promptFetch
+      });
     },
     { prefix: API_PREFIX }
   );

@@ -25,8 +25,9 @@ export function AuthVerifyPage() {
     // the one real exchange, and the ref guard blocks a second attempt.
     verifyMagicLink(token)
       .then(() => {
-        // A link asked for from Record goes on to recording, not the feed.
-        navigate(params.get("next") === "record" ? "/record" : "/", { replace: true });
+        // A link asked for from Record or Create returns there, not the feed.
+        const next = params.get("next");
+        navigate(next === "record" ? "/record" : next === "create" ? "/create" : "/", { replace: true });
       })
       .catch((caught: unknown) => {
         setError(caught instanceof Error ? caught.message : "This sign-in link is invalid or expired.");

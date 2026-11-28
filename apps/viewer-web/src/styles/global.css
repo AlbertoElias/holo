@@ -798,3 +798,133 @@ body::before {
 .ar-flat-notice p {
   margin: 0;
 }
+
+/* AI prompt-to-hologram mobile creation page (docs/features/prompt-to-hologram.md). */
+.prompt-page {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: var(--holoim-hit-phone-side-edge);
+  padding-bottom: calc(var(--holoim-hit-touch) * 2);
+  display: grid;
+  gap: var(--holoim-glyph-gap);
+  color: var(--holoim-color-text);
+}
+
+.prompt-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--holoim-glyph-gap);
+}
+
+.prompt-back {
+  color: var(--holoim-color-text-muted);
+  text-decoration: none;
+  font-size: var(--holoim-type-byline-font-size);
+}
+
+.prompt-back:hover {
+  color: var(--holoim-color-text);
+}
+
+.prompt-form,
+.prompt-result,
+.prompt-revise,
+.prompt-byok,
+.prompt-byok-fields {
+  display: grid;
+  gap: var(--holoim-glyph-gap);
+}
+
+.prompt-textarea {
+  padding: var(--holoim-glyph-gap);
+  resize: vertical;
+  min-height: 5.5rem;
+}
+
+.prompt-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--holoim-glyph-gap) / 2);
+}
+
+.prompt-chip,
+.prompt-pill,
+.prompt-byok-toggle,
+.prompt-byok-clear {
+  appearance: none;
+  font: inherit;
+  font-size: var(--holoim-type-byline-font-size);
+  color: var(--holoim-color-text);
+  background: rgb(var(--holoim-color-text-rgb) / 0.06);
+  border: 1px solid rgb(var(--holoim-color-text-muted-rgb) / 0.3);
+  border-radius: var(--holoim-chip-radius);
+  padding: calc(var(--holoim-glyph-gap) / 2) var(--holoim-glyph-gap);
+  cursor: pointer;
+  text-align: left;
+}
+
+.prompt-pill[aria-pressed="true"] {
+  border-color: var(--holoim-glyph-color);
+  background: rgb(var(--holoim-color-gold-rgb) / 0.14);
+}
+
+.prompt-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--holoim-glyph-gap);
+}
+
+.prompt-finish {
+  display: flex;
+  gap: calc(var(--holoim-glyph-gap) / 2);
+}
+
+.prompt-byok-fields {
+  padding: var(--holoim-glyph-gap);
+  border: 1px solid rgb(var(--holoim-color-text-muted-rgb) / 0.25);
+  border-radius: calc(var(--holoim-chip-radius) * 2 / 3);
+  background: rgb(var(--holoim-color-text-rgb) / 0.03);
+}
+
+.prompt-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  border-radius: var(--holoim-chip-radius);
+  overflow: hidden;
+  border: 1px solid rgb(var(--holoim-color-text-muted-rgb) / 0.25);
+  background: var(--holoim-color-ground);
+}
+
+.prompt-caption {
+  position: absolute;
+  left: var(--holoim-glyph-gap);
+  right: var(--holoim-glyph-gap);
+  bottom: var(--holoim-glyph-gap);
+  padding: calc(var(--holoim-glyph-gap) / 2) var(--holoim-glyph-gap);
+  border-radius: calc(var(--holoim-chip-radius) / 2);
+  background: rgb(var(--holoim-color-ground-rgb) / 0.78);
+  color: var(--holoim-color-text);
+  font-size: var(--holoim-type-caption-under-card-font-size);
+  text-align: center;
+  pointer-events: none;
+}
+
+.prompt-stage-controls {
+  position: absolute;
+  top: var(--holoim-glyph-gap);
+  right: var(--holoim-glyph-gap);
+}
+
+.prompt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--holoim-glyph-gap);
+}

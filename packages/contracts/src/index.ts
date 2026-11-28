@@ -50,8 +50,8 @@ export const userDtoSchema = z.object({
 export const requestMagicLinkSchema = z.object({
   email: z.string().trim().email().max(254),
   displayName: z.string().trim().min(1).max(80).optional(),
-  // Where the emailed link continues after sign-in. "record" opens capture.
-  next: z.enum(["record"]).optional()
+  // Where the emailed link continues after sign-in. "record" opens capture, "create" opens prompt creation.
+  next: z.enum(["record", "create"]).optional()
 });
 
 /**
@@ -197,3 +197,4 @@ export const objectTranscribeResponseSchema = z.object({
 export type ObjectTranscribeResponse = z.infer<typeof objectTranscribeResponseSchema>;
 export * from "./place.js";
 export * from "./captions.js";
+export * from "./prompt.js";

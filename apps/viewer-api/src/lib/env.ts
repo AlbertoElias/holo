@@ -74,7 +74,16 @@ const envSchema = z.object({
   // Origins besides the web origins that may call /api/objects/* (the
   // capture app). Poly Pizza's terms forbid offering its models to third
   // parties, so these routes do not answer any origin.
-  CAPTURE_ORIGINS: z.string().default("https://holoim-capture.pages.dev,https://*.holoim-capture.pages.dev")
+  CAPTURE_ORIGINS: z.string().default("https://holoim-capture.pages.dev,https://*.holoim-capture.pages.dev"),
+  // AI prompt-to-hologram (docs/features/prompt-to-hologram.md): optional server
+  // LLM defaults (users may also pass BYOK headers per request).
+  PROMPT_LLM_PROVIDER: z.enum(["anthropic", "openai", "openrouter", "workers-ai", "mock"]).optional(),
+  PROMPT_LLM_MODEL: optionalSecret,
+  ANTHROPIC_API_KEY: optionalSecret,
+  OPENAI_API_KEY: optionalSecret,
+  OPENROUTER_API_KEY: optionalSecret,
+  PROMPT_ENABLE_VOICE: boolFromEnv,
+  PROMPT_BUILD_TIMEOUT_MS: z.coerce.number().int().positive().default(180_000)
 });
 
 const parsed = envSchema.parse({
@@ -115,7 +124,14 @@ const parsed = envSchema.parse({
   WORKERS_AI_ACCOUNT_ID: process.env.WORKERS_AI_ACCOUNT_ID,
   WORKERS_AI_API_TOKEN: process.env.WORKERS_AI_API_TOKEN,
   WORKERS_AI_API_ORIGIN: process.env.WORKERS_AI_API_ORIGIN,
-  CAPTURE_ORIGINS: process.env.CAPTURE_ORIGINS
+  CAPTURE_ORIGINS: process.env.CAPTURE_ORIGINS,
+  PROMPT_LLM_PROVIDER: process.env.PROMPT_LLM_PROVIDER || undefined,
+  PROMPT_LLM_MODEL: process.env.PROMPT_LLM_MODEL,
+  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+  OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
+  PROMPT_ENABLE_VOICE: process.env.PROMPT_ENABLE_VOICE,
+  PROMPT_BUILD_TIMEOUT_MS: process.env.PROMPT_BUILD_TIMEOUT_MS
 });
 
 if (parsed.STORAGE_DRIVER === "s3") {
