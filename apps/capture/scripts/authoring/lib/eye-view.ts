@@ -107,11 +107,25 @@ export function eyeApertures(a: LoadedAvatar, weights: FaceWeights = {}): Partia
     const open = new Uint8Array((n + 1) * (n + 1));
     const o = new Float64Array(3);
     const dir = [0, 0, -1];
+    // Each ray is parallel to -z, so it can meet only a triangle whose xy box covers it. Each grid
+    // point lists those triangles (the box one cell wider each way), in `kept` order, so that a tie
+    // keeps the same first hit as a test of every triangle.
+    const bins: number[][] = Array.from({ length: (n + 1) * (n + 1) }, () => []);
+    const x0 = centre.x - half, y0 = centre.y - half;
+    kept.forEach((k, idx) => {
+      const b = k.t * 9, tr = k.tri;
+      const i0 = Math.max(0, Math.floor((Math.min(tr[b]!, tr[b + 3]!, tr[b + 6]!) - x0) / STEP) - 1);
+      const i1 = Math.min(n, Math.ceil((Math.max(tr[b]!, tr[b + 3]!, tr[b + 6]!) - x0) / STEP) + 1);
+      const j0 = Math.max(0, Math.floor((Math.min(tr[b + 1]!, tr[b + 4]!, tr[b + 7]!) - y0) / STEP) - 1);
+      const j1 = Math.min(n, Math.ceil((Math.max(tr[b + 1]!, tr[b + 4]!, tr[b + 7]!) - y0) / STEP) + 1);
+      for (let i = i0; i <= i1; i += 1) for (let j = j0; j <= j1; j += 1) bins[i * (n + 1) + j]!.push(idx);
+    });
     for (let i = 0; i <= n; i += 1) {
       for (let j = 0; j <= n; j += 1) {
         o[0] = centre.x - half + i * STEP; o[1] = centre.y - half + j * STEP; o[2] = centre.z + 1;
         let near = Infinity, eye = false;
-        for (const k of kept) {
+        for (const idx of bins[i * (n + 1) + j]!) {
+          const k = kept[idx]!;
           const r = hitUv(k.tri, k.t, o, dir);
           if (r && r[0] > 0 && r[0] < near) { near = r[0]; eye = k.eye; }
         }
