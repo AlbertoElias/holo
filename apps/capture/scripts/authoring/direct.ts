@@ -16,7 +16,7 @@
  * than 1 cm or 5° off, a put more than 1 cm off or 3° from upright, or an aim
  * more than 10° off its target.
  */
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -55,14 +55,33 @@ export async function resolveAvatar(spec: string, sheetFile: string, look?: Look
   return resolve(dirname(sheetFile), spec);
 }
 
-export async function loadSheet(sheetFile: string, avatarOverride?: string): Promise<{ sheet: BeatSheet; avatars: Map<string, LoadedAvatar>; sources: Map<string, LoadedSource> }> {
+/**
+ * Loaded avatars that a long-running process (pose-look.ts --watch) keeps between builds, so that
+ * each avatar's eye view is measured one time. The key is the performer, the avatar file, its size
+ * and its change time: a changed file or look loads again. Each build puts the avatar back at bind pose.
+ */
+export type AvatarCache = Map<string, LoadedAvatar>;
+
+async function loadCached(performer: string, file: string, cache?: AvatarCache): Promise<LoadedAvatar> {
+  if (!cache) return loadAvatar(file);
+  const s = await stat(file);
+  const key = `${performer}\0${file}\0${s.size}\0${s.mtimeMs}`;
+  const known = cache.get(key);
+  if (known) return known;
+  for (const k of cache.keys()) if (k.startsWith(`${performer}\0`)) cache.delete(k);
+  const loaded = await loadAvatar(file);
+  cache.set(key, loaded);
+  return loaded;
+}
+
+export async function loadSheet(sheetFile: string, avatarOverride?: string, cache?: AvatarCache): Promise<{ sheet: BeatSheet; avatars: Map<string, LoadedAvatar>; sources: Map<string, LoadedSource> }> {
   const parsed = parseSheetText(await readFile(sheetFile, 'utf8'), basename(sheetFile));
   // An override dresses every performer in it alone, so the take records what they wear.
   const sheet: BeatSheet = avatarOverride ? { ...parsed, performers: parsed.performers.map(({ look: _look, ...p }) => ({ ...p, avatar: avatarOverride })) } : parsed;
   const problems = validateSheet(sheet);
   if (problems.length) throw new Error(`${basename(sheetFile)}:\n  ${problems.join('\n  ')}`);
   const avatars = new Map<string, LoadedAvatar>();
-  for (const p of sheet.performers) avatars.set(p.id, await loadAvatar(await resolveAvatar(p.avatar, avatarOverride ? join(process.cwd(), 'x') : sheetFile, p.look)));
+  for (const p of sheet.performers) avatars.set(p.id, await loadCached(p.id, await resolveAvatar(p.avatar, avatarOverride ? join(process.cwd(), 'x') : sheetFile, p.look), cache));
   const sources = await loadSources(sheet.objects ?? {}, sheetFile, join(OUTPUT, 'objects'));
   return { sheet, avatars, sources };
 }
@@ -106,10 +125,10 @@ export interface BuildResult {
   readonly phases: readonly Phase[];
 }
 
-export async function build(sheetFile: string, out?: string, style?: BeatSheet['style'], avatarOverride?: string, solve: SolveOptions = {}): Promise<BuildResult> {
+export async function build(sheetFile: string, out?: string, style?: BeatSheet['style'], avatarOverride?: string, solve: SolveOptions = {}, cache?: AvatarCache): Promise<BuildResult> {
   const started = performance.now();
   const phases = startPhases();
-  const loaded = await loadSheet(sheetFile, avatarOverride);
+  const loaded = await loadSheet(sheetFile, avatarOverride, cache);
   const sheet: BeatSheet = style ? { ...loaded.sheet, style } : loaded.sheet;
   const { avatars, sources } = loaded;
   const soundCache = join(OUTPUT, 'sound');

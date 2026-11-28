@@ -21,8 +21,9 @@
  * in the full take, so its folder, its picture names and its report say
  * "first pass only".
  *
- * `--watch` keeps the viewer servers running and makes the look again each
- * time the sheet file changes (a warm process between looks; Ctrl-C stops it).
+ * `--watch` keeps the viewer servers and the loaded avatars between looks and
+ * makes the look again each time the sheet file changes (Ctrl-C stops it).
+ * Only the first look measures each avatar's eye view.
  *
  * `--compare take.glb` reads the same frame of a full build and gives the
  * largest bone turn difference (degrees) and the largest palm centre
@@ -37,7 +38,7 @@ import { basename, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as THREE from 'three';
 
-import { build } from './direct.ts';
+import { build, type AvatarCache } from './direct.ts';
 import { CLEAR_LOOKAHEAD } from './lib/direct.ts';
 import { holdingsOf, parseSheetText, resolveTiming, type BeatSheet } from './lib/beats.ts';
 import { findPerformers, parents, parseGlb, readChannels, sampleChannel, type GltfDoc } from './lib/gltf-read.ts';
@@ -183,6 +184,8 @@ export interface LookOptions {
   readonly firstPassOnly?: boolean;
   /** Running viewer servers to use (a warm process); without them the look starts and stops its own. */
   readonly servers?: ViewerServers;
+  /** Loaded avatars to keep between looks (a warm process), so that only the first look measures each eye view. */
+  readonly avatars?: AvatarCache;
 }
 
 export async function poseLook(sheetFile: string, at: number, options: LookOptions = {}): Promise<PoseLook> {
@@ -198,7 +201,7 @@ export async function poseLook(sheetFile: string, at: number, options: LookOptio
   await mkdir(out, { recursive: true });
   const glb = join(out, `window${tag}.glb`);
   const framesSolved = Math.min(total, frame + AFTER + 1);
-  const built = await build(sheetFile, glb, undefined, undefined, { frames: framesSolved, ...(options.firstPassOnly ? { firstPassOnly: true } : {}) });
+  const built = await build(sheetFile, glb, undefined, undefined, { frames: framesSolved, ...(options.firstPassOnly ? { firstPassOnly: true } : {}) }, options.avatars);
   const phases = built.phases as { name: string; seconds: number }[];
 
   let hands = touchingHands(sheet, t);
@@ -301,7 +304,7 @@ export async function poseLook(sheetFile: string, at: number, options: LookOptio
   return look;
 }
 
-function print(look: PoseLook): void {
+export function print(look: PoseLook): void {
   console.log(`pose look at ${look.at.toFixed(2)} s (frame ${look.frame}, ${look.framesSolved} frames solved, ${look.solve}) in ${look.seconds.toFixed(1)} s`);
   console.log(`  phases: ${phaseLine(look.phases)}`);
   if (look.note) console.log(`  ${look.note}`);
@@ -329,11 +332,12 @@ async function main(): Promise<void> {
   const options: LookOptions = { ...(out ? { out } : {}), ...(compare ? { compare } : {}), ...(firstPassOnly ? { firstPassOnly } : {}) };
   if (!watching) { print(await poseLook(sheetFile, Number(at), options)); return; }
   const servers = await phase('viewer start', () => startViewer());
+  const avatars: AvatarCache = new Map();
   let running = false, again = false;
   const look = async (): Promise<void> => {
     if (running) { again = true; return; }
     running = true;
-    try { print(await poseLook(sheetFile, Number(at), { ...options, servers })); } catch (e) { console.error(`look failed: ${(e as Error).message}`); }
+    try { print(await poseLook(sheetFile, Number(at), { ...options, servers, avatars })); } catch (e) { console.error(`look failed: ${(e as Error).message}`); }
     running = false;
     if (again) { again = false; await look(); }
   };
