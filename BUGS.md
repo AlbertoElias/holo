@@ -283,6 +283,27 @@ entry to [`docs/archive/closed-bugs.md`](docs/archive/closed-bugs.md).
   that already waits for the owner. The render tool and the before/after crops are in the shared notes
   (`b101-cuff/`).
 
+### B-116 — Authoring: a taken object jumps when the arm clears the torso at the take
+
+- **Area:** apps/capture (`scripts/authoring/lib/direct.ts`: `moveHeld`, `clearArms`, `swivelClear`)
+- **Severity:** P2 (a visible glitch in a piece; the owner saw it in the stone final)
+- **Observed:** 2026-11-27, in `output/final/stone/stone-final.mp4`: the stone jumps at 4.40 s, when the left hand
+  takes it. `jump.props` 3.86 m/s at 4.40 s on the merged state (bar 2 m/s).
+- **Cause:** before the take, the left forearm is about 4 cm in the torso on each frame. `moveHeld` fixed the
+  take's offset before `clearArms`. Each clearing move (`keepingTwist` and `solveArm`) then turned the hand about
+  53° in the world, and the stone, about 17 cm from the wrist, swung 14 cm with it.
+- **Expected:** the object stays where the fist closes on it.
+- **Reproduction:** `make.ts` on the stone sheet before the fix (`output/final/stone2/stone.json` in the sleeve-end worktree);
+  read `jump.props` and `grip.find`.
+- **Fix (sheet only, `bug/sleeve-end`):** the solver does not change. The stone final sheet
+  (`output/final/stone3/stone.json`) sets the table, the box, the stone and the lid 12 cm more forward, so that
+  the forearm stays out of the torso before the take, and slows the look-at-it reach (attack 1.0 s). Result:
+  `jump.props` 1.42 m/s at 4.40 s, `arms.body` 1.4 cm. Two solver changes also remove the jump, but each makes
+  pinned regression rows worse, so they wait for the owner. (A) Fix the take's offset after the clearing:
+  baker `grip.take` 15.7 mm (pin 0.3), goodbye `grip.h-bag` 38.4 mm (pin 0.4), stone-sD `grip.find` 4.1 mm
+  (pin 0.3). (B) Keep the hand's world turn for 0.2 s after the take, then fade it over 0.7 s: baker
+  `arms.held` 95.2 mm (pin 80.5), stone-sE `arms.body` 30 mm (pin 20), `jump.me` 5.1 m/s (pin 4.85).
+
 ### B-115 — VR spatial audio check: the bell is not louder in the right ear (seen once under load)
 
 - **Area:** apps/viewer-web (`e2e/xr-viewer.spec.ts:731`, VR spatial audio)
